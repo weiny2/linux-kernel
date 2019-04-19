@@ -152,8 +152,8 @@ qla2x00_chk_ms_status(scsi_qla_host_t *vha, ms_iocb_entry_t *ms_pkt,
 				    vha->d_id.b.area, vha->d_id.b.al_pa,
 				    comp_status, ct_rsp->header.response);
 				ql_dump_buffer(ql_dbg_disc + ql_dbg_buffer, vha,
-				    0x2078, (uint8_t *)&ct_rsp->header,
-				    sizeof(struct ct_rsp_hdr));
+				    0x2078, ct_rsp,
+				    offsetof(typeof(*ct_rsp), rsp));
 				rval = QLA_INVALID_COMMAND;
 			} else
 				rval = QLA_SUCCESS;
@@ -1385,6 +1385,7 @@ qla2x00_mgmt_svr_login(scsi_qla_host_t *vha)
 	int ret, rval;
 	uint16_t mb[MAILBOX_REGISTER_COUNT];
 	struct qla_hw_data *ha = vha->hw;
+
 	ret = QLA_SUCCESS;
 	if (vha->flags.management_server_logged_in)
 		return ret;
@@ -1423,6 +1424,7 @@ qla2x00_prep_ms_fdmi_iocb(scsi_qla_host_t *vha, uint32_t req_size,
 {
 	ms_iocb_entry_t *ms_pkt;
 	struct qla_hw_data *ha = vha->hw;
+
 	ms_pkt = ha->ms_iocb;
 	memset(ms_pkt, 0, sizeof(ms_iocb_entry_t));
 
@@ -1794,7 +1796,7 @@ qla2x00_fdmi_rpa(scsi_qla_host_t *vha)
 	if (IS_CNA_CAPABLE(ha))
 		eiter->a.sup_speed = cpu_to_be32(
 		    FDMI_PORT_SPEED_10GB);
-	else if (IS_QLA27XX(ha))
+	else if (IS_QLA27XX(ha) || IS_QLA28XX(ha))
 		eiter->a.sup_speed = cpu_to_be32(
 		    FDMI_PORT_SPEED_32GB|
 		    FDMI_PORT_SPEED_16GB|
@@ -2373,7 +2375,7 @@ qla2x00_fdmiv2_rpa(scsi_qla_host_t *vha)
 	if (IS_CNA_CAPABLE(ha))
 		eiter->a.sup_speed = cpu_to_be32(
 		    FDMI_PORT_SPEED_10GB);
-	else if (IS_QLA27XX(ha))
+	else if (IS_QLA27XX(ha) || IS_QLA28XX(ha))
 		eiter->a.sup_speed = cpu_to_be32(
 		    FDMI_PORT_SPEED_32GB|
 		    FDMI_PORT_SPEED_16GB|
@@ -2446,7 +2448,7 @@ qla2x00_fdmiv2_rpa(scsi_qla_host_t *vha)
 	eiter->type = cpu_to_be16(FDMI_PORT_MAX_FRAME_SIZE);
 	eiter->len = cpu_to_be16(4 + 4);
 	eiter->a.max_frame_size = IS_FWI2_CAPABLE(ha) ?
-	    le16_to_cpu(icb24->frame_payload_size):
+	    le16_to_cpu(icb24->frame_payload_size) :
 	    le16_to_cpu(ha->init_cb->frame_payload_size);
 	eiter->a.max_frame_size = cpu_to_be32(eiter->a.max_frame_size);
 	size += 4 + 4;
@@ -2783,6 +2785,31 @@ qla24xx_prep_ct_fm_req(struct ct_sns_pkt *p, uint16_t cmd,
 	return &p->p.req;
 }
 
+static uint16_t
+qla2x00_port_speed_capability(uint16_t speed)
+{
+	switch (speed) {
+	case BIT_15:
+		return PORT_SPEED_1GB;
+	case BIT_14:
+		return PORT_SPEED_2GB;
+	case BIT_13:
+		return PORT_SPEED_4GB;
+	case BIT_12:
+		return PORT_SPEED_10GB;
+	case BIT_11:
+		return PORT_SPEED_8GB;
+	case BIT_10:
+		return PORT_SPEED_16GB;
+	case BIT_8:
+		return PORT_SPEED_32GB;
+	case BIT_7:
+		return PORT_SPEED_64GB;
+	default:
+		return PORT_SPEED_UNKNOWN;
+	}
+}
+
 /**
  * qla2x00_gpsc() - FCS Get Port Speed Capabilities (GPSC) query.
  * @vha: HA context
@@ -2855,31 +2882,8 @@ qla2x00_gpsc(scsi_qla_host_t *vha, sw_info_t *list)
 			}
 			rval = QLA_FUNCTION_FAILED;
 		} else {
-			/* Save port-speed */
-			switch (be16_to_cpu(ct_rsp->rsp.gpsc.speed)) {
-			case BIT_15:
-				list[i].fp_speed = PORT_SPEED_1GB;
-				break;
-			case BIT_14:
-				list[i].fp_speed = PORT_SPEED_2GB;
-				break;
-			case BIT_13:
-				list[i].fp_speed = PORT_SPEED_4GB;
-				break;
-			case BIT_12:
-				list[i].fp_speed = PORT_SPEED_10GB;
-				break;
-			case BIT_11:
-				list[i].fp_speed = PORT_SPEED_8GB;
-				break;
-			case BIT_10:
-				list[i].fp_speed = PORT_SPEED_16GB;
-				break;
-			case BIT_8:
-				list[i].fp_speed = PORT_SPEED_32GB;
-				break;
-			}
-
+			list->fp_speed = qla2x00_port_speed_capability(
+			    be16_to_cpu(ct_rsp->rsp.gpsc.speed));
 			ql_dbg(ql_dbg_disc, vha, 0x205b,
 			    "GPSC ext entry - fpn "
 			    "%8phN speeds=%04x speed=%04x.\n",
@@ -3031,6 +3035,8 @@ static void qla24xx_async_gpsc_sp_done(void *s, int res)
 	    "Async done-%s res %x, WWPN %8phC \n",
 	    sp->name, res, fcport->port_name);
 
+	fcport->flags &= ~(FCF_ASYNC_SENT | FCF_ASYNC_ACTIVE);
+
 	if (res == QLA_FUNCTION_TIMEOUT)
 		return;
 
@@ -3048,29 +3054,8 @@ static void qla24xx_async_gpsc_sp_done(void *s, int res)
 			goto done;
 		}
 	} else {
-		switch (be16_to_cpu(ct_rsp->rsp.gpsc.speed)) {
-		case BIT_15:
-			fcport->fp_speed = PORT_SPEED_1GB;
-			break;
-		case BIT_14:
-			fcport->fp_speed = PORT_SPEED_2GB;
-			break;
-		case BIT_13:
-			fcport->fp_speed = PORT_SPEED_4GB;
-			break;
-		case BIT_12:
-			fcport->fp_speed = PORT_SPEED_10GB;
-			break;
-		case BIT_11:
-			fcport->fp_speed = PORT_SPEED_8GB;
-			break;
-		case BIT_10:
-			fcport->fp_speed = PORT_SPEED_16GB;
-			break;
-		case BIT_8:
-			fcport->fp_speed = PORT_SPEED_32GB;
-			break;
-		}
+		fcport->fp_speed = qla2x00_port_speed_capability(
+		    be16_to_cpu(ct_rsp->rsp.gpsc.speed));
 
 		ql_dbg(ql_dbg_disc, vha, 0x2054,
 		    "Async-%s OUT WWPN %8phC speeds=%04x speed=%04x.\n",
@@ -4370,6 +4355,7 @@ int qla24xx_async_gnnid(scsi_qla_host_t *vha, fc_port_t *fcport)
 
 done_free_sp:
 	sp->free(sp);
+	fcport->flags &= ~FCF_ASYNC_SENT;
 done:
 	return rval;
 }

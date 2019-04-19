@@ -14,12 +14,6 @@ config LOCKDEP_SUPPORT
 config STACKTRACE_SUPPORT
 	def_bool y
 
-config RWSEM_GENERIC_SPINLOCK
-	bool
-
-config RWSEM_XCHGADD_ALGORITHM
-	def_bool y
-
 config ARCH_HAS_ILOG2_U32
 	def_bool n
 
@@ -164,11 +158,13 @@ config S390
 	select HAVE_PERF_USER_STACK_DUMP
 	select HAVE_MEMBLOCK_NODE_MAP
 	select HAVE_MEMBLOCK_PHYS_MAP
+	select HAVE_MMU_GATHER_NO_GATHER
 	select HAVE_MOD_ARCH_SPECIFIC
 	select HAVE_NOP_MCOUNT
 	select HAVE_OPROFILE
 	select HAVE_PCI
 	select HAVE_PERF_EVENTS
+	select HAVE_RCU_TABLE_FREE
 	select HAVE_REGS_AND_STACK_ACCESS_API
 	select HAVE_RSEQ
 	select HAVE_SYSCALL_TRACEPOINTS
@@ -387,6 +383,9 @@ config COMPAT
 	  handle system-calls from ELF binaries for 31 bit ESA.  This option
 	  (and some other stuff like libraries and such) is needed for
 	  executing 31 bit applications.  It is safe to say "Y".
+
+config COMPAT_VDSO
+	def_bool COMPAT && !CC_IS_CLANG
 
 config SYSVIPC_COMPAT
 	def_bool y if COMPAT && SYSVIPC
@@ -836,6 +835,17 @@ config HAVE_PNETID
 	default (SMC || CCWGROUP)
 
 menu "Virtualization"
+
+config PROTECTED_VIRTUALIZATION_GUEST
+	def_bool n
+	prompt "Protected virtualization guest support"
+	help
+	  Select this option, if you want to be able to run this
+	  kernel as a protected virtualization KVM guest.
+	  Protected virtualization capable machines have a mini hypervisor
+	  located at machine level (an ultravisor). With help of the
+	  Ultravisor, KVM will be able to run "protected" VMs, special
+	  VMs whose memory and management data are unavailable to KVM.
 
 config PFAULT
 	def_bool y

@@ -22,18 +22,16 @@ static void chacha_docrypt(u32 *state, u8 *dst, const u8 *src,
 	/* aligned to potentially speed up crypto_xor() */
 	u8 stream[CHACHA_BLOCK_SIZE] __aligned(sizeof(long));
 
-	if (dst != src)
-		memcpy(dst, src, bytes);
-
 	while (bytes >= CHACHA_BLOCK_SIZE) {
 		chacha_block(state, stream, nrounds);
-		crypto_xor(dst, stream, CHACHA_BLOCK_SIZE);
+		crypto_xor_cpy(dst, src, stream, CHACHA_BLOCK_SIZE);
 		bytes -= CHACHA_BLOCK_SIZE;
 		dst += CHACHA_BLOCK_SIZE;
+		src += CHACHA_BLOCK_SIZE;
 	}
 	if (bytes) {
 		chacha_block(state, stream, nrounds);
-		crypto_xor(dst, stream, bytes);
+		crypto_xor_cpy(dst, src, stream, bytes);
 	}
 }
 
@@ -52,7 +50,7 @@ static int chacha_stream_xor(struct skcipher_request *req,
 		unsigned int nbytes = walk.nbytes;
 
 		if (nbytes < walk.total)
-			nbytes = round_down(nbytes, walk.stride);
+			nbytes = round_down(nbytes, CHACHA_BLOCK_SIZE);
 
 		chacha_docrypt(state, walk.dst.virt.addr, walk.src.virt.addr,
 			       nbytes, ctx->nrounds);

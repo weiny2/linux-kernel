@@ -600,7 +600,7 @@ static void clean_keys(struct mlx5_ib_dev *dev, int c)
 
 static void mlx5_mr_cache_debugfs_cleanup(struct mlx5_ib_dev *dev)
 {
-	if (!mlx5_debugfs_root || dev->rep)
+	if (!mlx5_debugfs_root || dev->is_rep)
 		return;
 
 	debugfs_remove_recursive(dev->cache.root);
@@ -614,7 +614,7 @@ static void mlx5_mr_cache_debugfs_init(struct mlx5_ib_dev *dev)
 	struct dentry *dir;
 	int i;
 
-	if (!mlx5_debugfs_root || dev->rep)
+	if (!mlx5_debugfs_root || dev->is_rep)
 		return;
 
 	cache->root = debugfs_create_dir("mr_cache", dev->mdev->priv.dbg_root);
@@ -677,7 +677,7 @@ int mlx5_mr_cache_init(struct mlx5_ib_dev *dev)
 			   MLX5_IB_UMR_OCTOWORD;
 		ent->access_mode = MLX5_MKC_ACCESS_MODE_MTT;
 		if ((dev->mdev->profile->mask & MLX5_PROF_MASK_MR_CACHE) &&
-		    !dev->rep &&
+		    !dev->is_rep &&
 		    mlx5_core_is_pf(dev->mdev))
 			ent->limit = dev->mdev->profile->mr_cache[i].limit;
 		else
@@ -1194,8 +1194,7 @@ static struct ib_mr *mlx5_ib_get_memic_mr(struct ib_pd *pd, u64 memic_addr,
 	MLX5_SET64(mkc, mkc, len, length);
 	MLX5_SET(mkc, mkc, pd, to_mpd(pd)->pdn);
 	MLX5_SET(mkc, mkc, qpn, 0xffffff);
-	MLX5_SET64(mkc, mkc, start_addr,
-		   memic_addr - pci_resource_start(dev->mdev->pdev, 0));
+	MLX5_SET64(mkc, mkc, start_addr, memic_addr - dev->mdev->bar_addr);
 
 	err = mlx5_core_create_mkey(mdev, &mr->mmkey, in, inlen);
 	if (err)
@@ -1623,15 +1622,14 @@ static void dereg_mr(struct mlx5_ib_dev *dev, struct mlx5_ib_mr *mr)
 		kfree(mr);
 }
 
-int mlx5_ib_dereg_mr(struct ib_mr *ibmr)
+int mlx5_ib_dereg_mr(struct ib_mr *ibmr, struct ib_udata *udata)
 {
 	dereg_mr(to_mdev(ibmr->device), to_mmr(ibmr));
 	return 0;
 }
 
-struct ib_mr *mlx5_ib_alloc_mr(struct ib_pd *pd,
-			       enum ib_mr_type mr_type,
-			       u32 max_num_sg)
+struct ib_mr *mlx5_ib_alloc_mr(struct ib_pd *pd, enum ib_mr_type mr_type,
+			       u32 max_num_sg, struct ib_udata *udata)
 {
 	struct mlx5_ib_dev *dev = to_mdev(pd->device);
 	int inlen = MLX5_ST_SZ_BYTES(create_mkey_in);

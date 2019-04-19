@@ -2251,9 +2251,11 @@ static int __init ns_init_module(void)
 
 	switch (bbt) {
 	case 2:
-		 chip->bbt_options |= NAND_BBT_NO_OOB;
+		chip->bbt_options |= NAND_BBT_NO_OOB;
+		/* fall through */
 	case 1:
-		 chip->bbt_options |= NAND_BBT_USE_FLASH;
+		chip->bbt_options |= NAND_BBT_USE_FLASH;
+		/* fall through */
 	case 0:
 		break;
 	default:
@@ -2302,16 +2304,23 @@ static int __init ns_init_module(void)
 
 	if (overridesize) {
 		uint64_t new_size = (uint64_t)nsmtd->erasesize << overridesize;
+		struct nand_memory_organization *memorg;
+		u64 targetsize;
+
+		memorg = nanddev_get_memorg(&chip->base);
+
 		if (new_size >> overridesize != nsmtd->erasesize) {
 			NS_ERR("overridesize is too big\n");
 			retval = -EINVAL;
 			goto err_exit;
 		}
+
 		/* N.B. This relies on nand_scan not doing anything with the size before we change it */
 		nsmtd->size = new_size;
-		chip->chipsize = new_size;
+		memorg->eraseblocks_per_lun = 1 << overridesize;
+		targetsize = nanddev_target_size(&chip->base);
 		chip->chip_shift = ffs(nsmtd->erasesize) + overridesize - 1;
-		chip->pagemask = (chip->chipsize >> chip->page_shift) - 1;
+		chip->pagemask = (targetsize >> chip->page_shift) - 1;
 	}
 
 	if ((retval = setup_wear_reporting(nsmtd)) != 0)

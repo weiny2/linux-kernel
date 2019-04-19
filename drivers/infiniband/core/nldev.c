@@ -116,6 +116,9 @@ static const struct nla_policy nldev_policy[RDMA_NLDEV_ATTR_MAX] = {
 	[RDMA_NLDEV_ATTR_RES_CTXN]              = { .type = NLA_U32 },
 	[RDMA_NLDEV_ATTR_LINK_TYPE]		= { .type = NLA_NUL_STRING,
 				    .len = RDMA_NLDEV_ATTR_ENTRY_STRLEN },
+	[RDMA_NLDEV_SYS_ATTR_NETNS_MODE]	= { .type = NLA_U8 },
+	[RDMA_NLDEV_ATTR_DEV_PROTOCOL]		= { .type = NLA_NUL_STRING,
+				    .len = RDMA_NLDEV_ATTR_ENTRY_STRLEN },
 };
 
 static int put_driver_name_print_type(struct sk_buff *msg, const char *name,
@@ -198,6 +201,8 @@ static int fill_nldev_handle(struct sk_buff *msg, struct ib_device *device)
 static int fill_dev_info(struct sk_buff *msg, struct ib_device *device)
 {
 	char fw[IB_FW_VERSION_NAME_MAX];
+	int ret = 0;
+	u8 port;
 
 	if (fill_nldev_handle(msg, device))
 		return -EMSGSIZE;
@@ -226,7 +231,25 @@ static int fill_dev_info(struct sk_buff *msg, struct ib_device *device)
 		return -EMSGSIZE;
 	if (nla_put_u8(msg, RDMA_NLDEV_ATTR_DEV_NODE_TYPE, device->node_type))
 		return -EMSGSIZE;
-	return 0;
+
+	/*
+	 * Link type is determined on first port and mlx4 device
+	 * which can potentially have two different link type for the same
+	 * IB device is considered as better to be avoided in the future,
+	 */
+	port = rdma_start_port(device);
+	if (rdma_cap_opa_mad(device, port))
+		ret = nla_put_string(msg, RDMA_NLDEV_ATTR_DEV_PROTOCOL, "opa");
+	else if (rdma_protocol_ib(device, port))
+		ret = nla_put_string(msg, RDMA_NLDEV_ATTR_DEV_PROTOCOL, "ib");
+	else if (rdma_protocol_iwarp(device, port))
+		ret = nla_put_string(msg, RDMA_NLDEV_ATTR_DEV_PROTOCOL, "iw");
+	else if (rdma_protocol_roce(device, port))
+		ret = nla_put_string(msg, RDMA_NLDEV_ATTR_DEV_PROTOCOL, "roce");
+	else if (rdma_protocol_usnic(device, port))
+		ret = nla_put_string(msg, RDMA_NLDEV_ATTR_DEV_PROTOCOL,
+				     "usnic");
+	return ret;
 }
 
 static int fill_port_info(struct sk_buff *msg,
@@ -614,7 +637,7 @@ static int nldev_get_doit(struct sk_buff *skb, struct nlmsghdr *nlh,
 
 	index = nla_get_u32(tb[RDMA_NLDEV_ATTR_DEV_INDEX]);
 
-	device = ib_device_get_by_index(index);
+	device = ib_device_get_by_index(sock_net(skb->sk), index);
 	if (!device)
 		return -EINVAL;
 
@@ -658,7 +681,7 @@ static int nldev_set_doit(struct sk_buff *skb, struct nlmsghdr *nlh,
 		return -EINVAL;
 
 	index = nla_get_u32(tb[RDMA_NLDEV_ATTR_DEV_INDEX]);
-	device = ib_device_get_by_index(index);
+	device = ib_device_get_by_index(sock_net(skb->sk), index);
 	if (!device)
 		return -EINVAL;
 
@@ -706,7 +729,7 @@ static int nldev_get_dumpit(struct sk_buff *skb, struct netlink_callback *cb)
 {
 	/*
 	 * There is no need to take lock, because
-	 * we are relying on ib_core's lists_rwsem
+	 * we are relying on ib_core's locking.
 	 */
 	return ib_enum_all_devs(_nldev_get_dumpit, skb, cb);
 }
@@ -729,7 +752,7 @@ static int nldev_port_get_doit(struct sk_buff *skb, struct nlmsghdr *nlh,
 		return -EINVAL;
 
 	index = nla_get_u32(tb[RDMA_NLDEV_ATTR_DEV_INDEX]);
-	device = ib_device_get_by_index(index);
+	device = ib_device_get_by_index(sock_net(skb->sk), index);
 	if (!device)
 		return -EINVAL;
 
@@ -783,7 +806,7 @@ static int nldev_port_get_dumpit(struct sk_buff *skb,
 		return -EINVAL;
 
 	ifindex = nla_get_u32(tb[RDMA_NLDEV_ATTR_DEV_INDEX]);
-	device = ib_device_get_by_index(ifindex);
+	device = ib_device_get_by_index(sock_net(skb->sk), ifindex);
 	if (!device)
 		return -EINVAL;
 
@@ -838,7 +861,7 @@ static int nldev_res_get_doit(struct sk_buff *skb, struct nlmsghdr *nlh,
 		return -EINVAL;
 
 	index = nla_get_u32(tb[RDMA_NLDEV_ATTR_DEV_INDEX]);
-	device = ib_device_get_by_index(index);
+	device = ib_device_get_by_index(sock_net(skb->sk), index);
 	if (!device)
 		return -EINVAL;
 
@@ -987,7 +1010,7 @@ static int res_get_common_doit(struct sk_buff *skb, struct nlmsghdr *nlh,
 		return -EINVAL;
 
 	index = nla_get_u32(tb[RDMA_NLDEV_ATTR_DEV_INDEX]);
-	device = ib_device_get_by_index(index);
+	device = ib_device_get_by_index(sock_net(skb->sk), index);
 	if (!device)
 		return -EINVAL;
 
@@ -1084,7 +1107,7 @@ static int res_get_common_dumpit(struct sk_buff *skb,
 		return -EINVAL;
 
 	index = nla_get_u32(tb[RDMA_NLDEV_ATTR_DEV_INDEX]);
-	device = ib_device_get_by_index(index);
+	device = ib_device_get_by_index(sock_net(skb->sk), index);
 	if (!device)
 		return -EINVAL;
 
@@ -1299,7 +1322,7 @@ static int nldev_dellink(struct sk_buff *skb, struct nlmsghdr *nlh,
 		return -EINVAL;
 
 	index = nla_get_u32(tb[RDMA_NLDEV_ATTR_DEV_INDEX]);
-	device = ib_device_get_by_index(index);
+	device = ib_device_get_by_index(sock_net(skb->sk), index);
 	if (!device)
 		return -EINVAL;
 
@@ -1310,6 +1333,55 @@ static int nldev_dellink(struct sk_buff *skb, struct nlmsghdr *nlh,
 
 	ib_unregister_device_and_put(device);
 	return 0;
+}
+
+static int nldev_get_sys_get_dumpit(struct sk_buff *skb,
+				    struct netlink_callback *cb)
+{
+	struct nlattr *tb[RDMA_NLDEV_ATTR_MAX];
+	struct nlmsghdr *nlh;
+	int err;
+
+	err = nlmsg_parse(cb->nlh, 0, tb, RDMA_NLDEV_ATTR_MAX - 1,
+			  nldev_policy, NULL);
+	if (err)
+		return err;
+
+	nlh = nlmsg_put(skb, NETLINK_CB(cb->skb).portid, cb->nlh->nlmsg_seq,
+			RDMA_NL_GET_TYPE(RDMA_NL_NLDEV,
+					 RDMA_NLDEV_CMD_SYS_GET),
+			0, 0);
+
+	err = nla_put_u8(skb, RDMA_NLDEV_SYS_ATTR_NETNS_MODE,
+			 (u8)ib_devices_shared_netns);
+	if (err) {
+		nlmsg_cancel(skb, nlh);
+		return err;
+	}
+
+	nlmsg_end(skb, nlh);
+	return skb->len;
+}
+
+static int nldev_set_sys_set_doit(struct sk_buff *skb, struct nlmsghdr *nlh,
+				  struct netlink_ext_ack *extack)
+{
+	struct nlattr *tb[RDMA_NLDEV_ATTR_MAX];
+	u8 enable;
+	int err;
+
+	err = nlmsg_parse(nlh, 0, tb, RDMA_NLDEV_ATTR_MAX - 1,
+			  nldev_policy, extack);
+	if (err || !tb[RDMA_NLDEV_SYS_ATTR_NETNS_MODE])
+		return -EINVAL;
+
+	enable = nla_get_u8(tb[RDMA_NLDEV_SYS_ATTR_NETNS_MODE]);
+	/* Only 0 and 1 are supported */
+	if (enable > 1)
+		return -EINVAL;
+
+	err = rdma_compatdev_set(enable);
+	return err;
 }
 
 static const struct rdma_nl_cbs nldev_cb_table[RDMA_NLDEV_NUM_OPS] = {
@@ -1356,6 +1428,13 @@ static const struct rdma_nl_cbs nldev_cb_table[RDMA_NLDEV_NUM_OPS] = {
 	[RDMA_NLDEV_CMD_RES_PD_GET] = {
 		.doit = nldev_res_get_pd_doit,
 		.dump = nldev_res_get_pd_dumpit,
+	},
+	[RDMA_NLDEV_CMD_SYS_GET] = {
+		.dump = nldev_get_sys_get_dumpit,
+	},
+	[RDMA_NLDEV_CMD_SYS_SET] = {
+		.doit = nldev_set_sys_set_doit,
+		.flags = RDMA_NL_ADMIN_PERM,
 	},
 };
 

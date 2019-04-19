@@ -1382,6 +1382,26 @@ smb2_ioctl_query_info(const unsigned int xid,
 	oparms.fid = &fid;
 	oparms.reconnect = false;
 
+	/*
+	 * FSCTL codes encode the special access they need in the fsctl code.
+	 */
+	if (qi.flags & PASSTHRU_FSCTL) {
+		switch (qi.info_type & FSCTL_DEVICE_ACCESS_MASK) {
+		case FSCTL_DEVICE_ACCESS_FILE_READ_WRITE_ACCESS:
+			oparms.desired_access = FILE_READ_DATA | FILE_WRITE_DATA | FILE_READ_ATTRIBUTES | SYNCHRONIZE;
+			break;
+		case FSCTL_DEVICE_ACCESS_FILE_ANY_ACCESS:
+			oparms.desired_access = GENERIC_ALL;
+			break;
+		case FSCTL_DEVICE_ACCESS_FILE_READ_ACCESS:
+			oparms.desired_access = GENERIC_READ;
+			break;
+		case FSCTL_DEVICE_ACCESS_FILE_WRITE_ACCESS:
+			oparms.desired_access = GENERIC_WRITE;
+			break;
+		}
+	}
+
 	rc = SMB2_open_init(tcon, &rqst[0], &oplock, &oparms, path);
 	if (rc)
 		goto iqinf_exit;
@@ -1399,8 +1419,9 @@ smb2_ioctl_query_info(const unsigned int xid,
 
 			rc = SMB2_ioctl_init(tcon, &rqst[1],
 					     COMPOUND_FID, COMPOUND_FID,
-					     qi.info_type, true, NULL,
-					     0, CIFSMaxBufSize);
+					     qi.info_type, true, buffer,
+					     qi.output_buffer_length,
+					     CIFSMaxBufSize);
 		}
 	} else if (qi.flags == PASSTHRU_QUERY_INFO) {
 		memset(&qi_iov, 0, sizeof(qi_iov));
@@ -1441,12 +1462,19 @@ smb2_ioctl_query_info(const unsigned int xid,
 		io_rsp = (struct smb2_ioctl_rsp *)rsp_iov[1].iov_base;
 		if (le32_to_cpu(io_rsp->OutputCount) < qi.input_buffer_length)
 			qi.input_buffer_length = le32_to_cpu(io_rsp->OutputCount);
+		if (qi.input_buffer_length > 0 &&
+		    le32_to_cpu(io_rsp->OutputOffset) + qi.input_buffer_length > rsp_iov[1].iov_len) {
+			rc = -EFAULT;
+			goto iqinf_exit;
+		}
 		if (copy_to_user(&pqi->input_buffer_length, &qi.input_buffer_length,
 				 sizeof(qi.input_buffer_length))) {
 			rc = -EFAULT;
 			goto iqinf_exit;
 		}
-		if (copy_to_user(pqi + 1, &io_rsp[1], qi.input_buffer_length)) {
+		if (copy_to_user((void __user *)pqi + sizeof(struct smb_query_info),
+				 (const void *)io_rsp + le32_to_cpu(io_rsp->OutputOffset),
+				 qi.input_buffer_length)) {
 			rc = -EFAULT;
 			goto iqinf_exit;
 		}
@@ -1821,6 +1849,14 @@ smb3_enum_snapshots(const unsigned int xid, struct cifs_tcon *tcon,
 	u32 max_response_size;
 	struct smb_snapshot_array snapshot_in;
 
+	/*
+	 * On the first query to enumerate the list of snapshots available
+	 * for this volume the buffer begins with 0 (number of snapshots
+	 * which can be returned is zero since at that point we do not know
+	 * how big the buffer needs to be). On the second query,
+	 * it (ret_data_len) is set to number of snapshots so we can
+	 * know to set the maximum response size larger (see below).
+	 */
 	if (get_user(ret_data_len, (unsigned int __user *)ioc_buf))
 		return -EFAULT;
 

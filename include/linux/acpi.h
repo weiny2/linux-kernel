@@ -141,10 +141,14 @@ enum acpi_address_range_id {
 
 
 /* Table Handlers */
+union acpi_subtable_headers {
+	struct acpi_subtable_header common;
+	struct acpi_hmat_structure hmat;
+};
 
 typedef int (*acpi_tbl_table_handler)(struct acpi_table_header *table);
 
-typedef int (*acpi_tbl_entry_handler)(struct acpi_subtable_header *header,
+typedef int (*acpi_tbl_entry_handler)(union acpi_subtable_headers *header,
 				      const unsigned long end);
 
 /* Debugger support */
@@ -669,8 +673,8 @@ static inline bool acpi_dev_present(const char *hid, const char *uid, s64 hrv)
 	return false;
 }
 
-static inline const char *
-acpi_dev_get_first_match_name(const char *hid, const char *uid, s64 hrv)
+static inline struct acpi_device *
+acpi_dev_get_first_match_dev(const char *hid, const char *uid, s64 hrv)
 {
 	return NULL;
 }

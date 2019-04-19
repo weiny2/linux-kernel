@@ -27,8 +27,8 @@ config CRYPTO_FIPS
 	depends on (CRYPTO_ANSI_CPRNG || CRYPTO_DRBG) && !CRYPTO_MANAGER_DISABLE_TESTS
 	depends on (MODULE_SIG || !MODULES)
 	help
-	  This options enables the fips boot option which is
-	  required if you want to system to operate in a FIPS 200
+	  This option enables the fips boot option which is
+	  required if you want the system to operate in a FIPS 200
 	  certification.  You should say no unless you know what
 	  this is.
 
@@ -310,25 +310,25 @@ config CRYPTO_AEGIS128_AESNI_SSE2
 	tristate "AEGIS-128 AEAD algorithm (x86_64 AESNI+SSE2 implementation)"
 	depends on X86 && 64BIT
 	select CRYPTO_AEAD
-	select CRYPTO_CRYPTD
+	select CRYPTO_SIMD
 	help
-	 AESNI+SSE2 implementation of the AEGSI-128 dedicated AEAD algorithm.
+	 AESNI+SSE2 implementation of the AEGIS-128 dedicated AEAD algorithm.
 
 config CRYPTO_AEGIS128L_AESNI_SSE2
 	tristate "AEGIS-128L AEAD algorithm (x86_64 AESNI+SSE2 implementation)"
 	depends on X86 && 64BIT
 	select CRYPTO_AEAD
-	select CRYPTO_CRYPTD
+	select CRYPTO_SIMD
 	help
-	 AESNI+SSE2 implementation of the AEGSI-128L dedicated AEAD algorithm.
+	 AESNI+SSE2 implementation of the AEGIS-128L dedicated AEAD algorithm.
 
 config CRYPTO_AEGIS256_AESNI_SSE2
 	tristate "AEGIS-256 AEAD algorithm (x86_64 AESNI+SSE2 implementation)"
 	depends on X86 && 64BIT
 	select CRYPTO_AEAD
-	select CRYPTO_CRYPTD
+	select CRYPTO_SIMD
 	help
-	 AESNI+SSE2 implementation of the AEGSI-256 dedicated AEAD algorithm.
+	 AESNI+SSE2 implementation of the AEGIS-256 dedicated AEAD algorithm.
 
 config CRYPTO_MORUS640
 	tristate "MORUS-640 AEAD algorithm"
@@ -340,7 +340,7 @@ config CRYPTO_MORUS640_GLUE
 	tristate
 	depends on X86
 	select CRYPTO_AEAD
-	select CRYPTO_CRYPTD
+	select CRYPTO_SIMD
 	help
 	  Common glue for SIMD optimizations of the MORUS-640 dedicated AEAD
 	  algorithm.
@@ -363,7 +363,7 @@ config CRYPTO_MORUS1280_GLUE
 	tristate
 	depends on X86
 	select CRYPTO_AEAD
-	select CRYPTO_CRYPTD
+	select CRYPTO_SIMD
 	help
 	  Common glue for SIMD optimizations of the MORUS-1280 dedicated AEAD
 	  algorithm.

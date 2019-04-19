@@ -19,6 +19,7 @@
 #ifndef __ARM_KVM_HOST_H__
 #define __ARM_KVM_HOST_H__
 
+#include <linux/errno.h>
 #include <linux/types.h>
 #include <linux/kvm_types.h>
 #include <asm/cputype.h>
@@ -52,6 +53,8 @@
 #define KVM_REQ_VCPU_RESET	KVM_ARCH_REQ(2)
 
 DECLARE_STATIC_KEY_FALSE(userspace_irqchip_in_use);
+
+static inline int kvm_arm_init_arch_resources(void) { return 0; }
 
 u32 *kvm_vcpu_reg(struct kvm_vcpu *vcpu, u8 reg_num, u32 mode);
 int __attribute_const__ kvm_target_cpu(void);
@@ -408,5 +411,8 @@ static inline int kvm_arm_setup_stage2(struct kvm *kvm, unsigned long type)
 		return -EINVAL;
 	return 0;
 }
+
+#define kvm_arm_vcpu_finalize(vcpu, what) (-EINVAL)
+#define kvm_arm_vcpu_is_finalized(vcpu) true
 
 #endif /* __ARM_KVM_HOST_H__ */

@@ -1,6 +1,6 @@
+# SPDX-License-Identifier: GPL-2.0
 menuconfig STAGING
 	bool "Staging drivers"
-	default n
 	---help---
 	  This option allows you to select a number of drivers that are
 	  not of the "normal" Linux kernel quality level.  These drivers
@@ -96,8 +96,6 @@ source "drivers/staging/greybus/Kconfig"
 
 source "drivers/staging/vc04_services/Kconfig"
 
-source "drivers/staging/vboxvideo/Kconfig"
-
 source "drivers/staging/pi433/Kconfig"
 
 source "drivers/staging/mt7621-pci/Kconfig"
@@ -106,13 +104,9 @@ source "drivers/staging/mt7621-pci-phy/Kconfig"
 
 source "drivers/staging/mt7621-pinctrl/Kconfig"
 
-source "drivers/staging/mt7621-spi/Kconfig"
-
 source "drivers/staging/mt7621-dma/Kconfig"
 
 source "drivers/staging/ralink-gdma/Kconfig"
-
-source "drivers/staging/mt7621-mmc/Kconfig"
 
 source "drivers/staging/mt7621-dts/Kconfig"
 
@@ -121,5 +115,7 @@ source "drivers/staging/gasket/Kconfig"
 source "drivers/staging/axis-fifo/Kconfig"
 
 source "drivers/staging/erofs/Kconfig"
+
+source "drivers/staging/fieldbus/Kconfig"
 
 endif # STAGING

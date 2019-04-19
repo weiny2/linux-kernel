@@ -720,7 +720,7 @@ static ssize_t ib_uverbs_write(struct file *filp, const char __user *buf,
 			 * then the command request structure starts
 			 * with a '__aligned u64 response' member.
 			 */
-			ret = get_user(response, (const u64 *)buf);
+			ret = get_user(response, (const u64 __user *)buf);
 			if (ret)
 				goto out_unlock;
 
@@ -1045,6 +1045,11 @@ static int ib_uverbs_open(struct inode *inode, struct file *filp)
 				  &dev->disassociate_srcu);
 	if (!ib_dev) {
 		ret = -EIO;
+		goto err;
+	}
+
+	if (!rdma_dev_access_netns(ib_dev, current->nsproxy->net_ns)) {
+		ret = -EPERM;
 		goto err;
 	}
 

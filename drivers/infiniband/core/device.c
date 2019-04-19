@@ -38,6 +38,8 @@
 #include <linux/slab.h>
 #include <linux/init.h>
 #include <linux/netdevice.h>
+#include <net/net_namespace.h>
+#include <net/netns/generic.h>
 #include <linux/security.h>
 #include <linux/notifier.h>
 #include <linux/hashtable.h>
@@ -101,6 +103,54 @@ static DECLARE_RWSEM(clients_rwsem);
  * be registered.
  */
 #define CLIENT_DATA_REGISTERED XA_MARK_1
+
+/**
+ * struct rdma_dev_net - rdma net namespace metadata for a net
+ * @net:	Pointer to owner net namespace
+ * @id:		xarray id to identify the net namespace.
+ */
+struct rdma_dev_net {
+	possible_net_t net;
+	u32 id;
+};
+
+static unsigned int rdma_dev_net_id;
+
+/*
+ * A list of net namespaces is maintained in an xarray. This is necessary
+ * because we can't get the locking right using the existing net ns list. We
+ * would require a init_net callback after the list is updated.
+ */
+static DEFINE_XARRAY_FLAGS(rdma_nets, XA_FLAGS_ALLOC);
+/*
+ * rwsem to protect accessing the rdma_nets xarray entries.
+ */
+static DECLARE_RWSEM(rdma_nets_rwsem);
+
+bool ib_devices_shared_netns = true;
+module_param_named(netns_mode, ib_devices_shared_netns, bool, 0444);
+MODULE_PARM_DESC(netns_mode,
+		 "Share device among net namespaces; default=1 (shared)");
+/**
+ * rdma_dev_access_netns() - Return whether a rdma device can be accessed
+ *			     from a specified net namespace or not.
+ * @device:	Pointer to rdma device which needs to be checked
+ * @net:	Pointer to net namesapce for which access to be checked
+ *
+ * rdma_dev_access_netns() - Return whether a rdma device can be accessed
+ *			     from a specified net namespace or not. When
+ *			     rdma device is in shared mode, it ignores the
+ *			     net namespace. When rdma device is exclusive
+ *			     to a net namespace, rdma device net namespace is
+ *			     checked against the specified one.
+ */
+bool rdma_dev_access_netns(const struct ib_device *dev, const struct net *net)
+{
+	return (ib_devices_shared_netns ||
+		net_eq(read_pnet(&dev->coredev.rdma_net), net));
+}
+EXPORT_SYMBOL(rdma_dev_access_netns);
+
 /*
  * xarray has this behavior where it won't iterate over NULL values stored in
  * allocated arrays.  So we need our own iterator to see all values stored in
@@ -200,16 +250,22 @@ static int ib_device_check_mandatory(struct ib_device *device)
  * Caller must perform ib_device_put() to return the device reference count
  * when ib_device_get_by_index() returns valid device pointer.
  */
-struct ib_device *ib_device_get_by_index(u32 index)
+struct ib_device *ib_device_get_by_index(const struct net *net, u32 index)
 {
 	struct ib_device *device;
 
 	down_read(&devices_rwsem);
 	device = xa_load(&devices, index);
 	if (device) {
+		if (!rdma_dev_access_netns(device, net)) {
+			device = NULL;
+			goto out;
+		}
+
 		if (!ib_device_try_get(device))
 			device = NULL;
 	}
+out:
 	up_read(&devices_rwsem);
 	return device;
 }
@@ -268,6 +324,26 @@ struct ib_device *ib_device_get_by_name(const char *name,
 }
 EXPORT_SYMBOL(ib_device_get_by_name);
 
+static int rename_compat_devs(struct ib_device *device)
+{
+	struct ib_core_device *cdev;
+	unsigned long index;
+	int ret = 0;
+
+	mutex_lock(&device->compat_devs_mutex);
+	xa_for_each (&device->compat_devs, index, cdev) {
+		ret = device_rename(&cdev->dev, dev_name(&device->dev));
+		if (ret) {
+			dev_warn(&cdev->dev,
+				 "Fail to rename compatdev to new name %s\n",
+				 dev_name(&device->dev));
+			break;
+		}
+	}
+	mutex_unlock(&device->compat_devs_mutex);
+	return ret;
+}
+
 int ib_device_rename(struct ib_device *ibdev, const char *name)
 {
 	int ret;
@@ -287,6 +363,7 @@ int ib_device_rename(struct ib_device *ibdev, const char *name)
 	if (ret)
 		goto out;
 	strlcpy(ibdev->name, name, IB_DEVICE_NAME_MAX);
+	ret = rename_compat_devs(ibdev);
 out:
 	up_write(&devices_rwsem);
 	return ret;
@@ -336,6 +413,7 @@ static void ib_device_release(struct device *device)
 	WARN_ON(refcount_read(&dev->refcount));
 	ib_cache_release_one(dev);
 	ib_security_release_port_pkey_list(dev);
+	xa_destroy(&dev->compat_devs);
 	xa_destroy(&dev->client_data);
 	if (dev->port_data)
 		kfree_rcu(container_of(dev->port_data, struct ib_port_data_rcu,
@@ -357,11 +435,41 @@ static int ib_device_uevent(struct device *device,
 	return 0;
 }
 
+static const void *net_namespace(struct device *d)
+{
+	struct ib_core_device *coredev =
+			container_of(d, struct ib_core_device, dev);
+
+	return read_pnet(&coredev->rdma_net);
+}
+
 static struct class ib_class = {
 	.name    = "infiniband",
 	.dev_release = ib_device_release,
 	.dev_uevent = ib_device_uevent,
+	.ns_type = &net_ns_type_operations,
+	.namespace = net_namespace,
 };
+
+static void rdma_init_coredev(struct ib_core_device *coredev,
+			      struct ib_device *dev, struct net *net)
+{
+	/* This BUILD_BUG_ON is intended to catch layout change
+	 * of union of ib_core_device and device.
+	 * dev must be the first element as ib_core and providers
+	 * driver uses it. Adding anything in ib_core_device before
+	 * device will break this assumption.
+	 */
+	BUILD_BUG_ON(offsetof(struct ib_device, coredev.dev) !=
+		     offsetof(struct ib_device, dev));
+
+	coredev->dev.class = &ib_class;
+	coredev->dev.groups = dev->groups;
+	device_initialize(&coredev->dev);
+	coredev->owner = dev;
+	INIT_LIST_HEAD(&coredev->port_list);
+	write_pnet(&coredev->rdma_net, net);
+}
 
 /**
  * _ib_alloc_device - allocate an IB device struct
@@ -389,10 +497,8 @@ struct ib_device *_ib_alloc_device(size_t size)
 		return NULL;
 	}
 
-	device->dev.class = &ib_class;
 	device->groups[0] = &ib_dev_attr_group;
-	device->dev.groups = device->groups;
-	device_initialize(&device->dev);
+	rdma_init_coredev(&device->coredev, device, &init_net);
 
 	INIT_LIST_HEAD(&device->event_handler_list);
 	spin_lock_init(&device->event_handler_lock);
@@ -403,7 +509,8 @@ struct ib_device *_ib_alloc_device(size_t size)
 	 */
 	xa_init_flags(&device->client_data, XA_FLAGS_ALLOC);
 	init_rwsem(&device->client_data_rwsem);
-	INIT_LIST_HEAD(&device->port_list);
+	xa_init_flags(&device->compat_devs, XA_FLAGS_ALLOC);
+	mutex_init(&device->compat_devs_mutex);
 	init_completion(&device->unreg_completion);
 	INIT_WORK(&device->unregistration_work, ib_unregister_work);
 
@@ -436,6 +543,7 @@ void ib_dealloc_device(struct ib_device *device)
 	/* Expedite releasing netdev references */
 	free_netdevs(device);
 
+	WARN_ON(!xa_empty(&device->compat_devs));
 	WARN_ON(!xa_empty(&device->client_data));
 	WARN_ON(refcount_read(&device->refcount));
 	rdma_restrack_clean(device);
@@ -644,6 +752,276 @@ static int ib_security_change(struct notifier_block *nb, unsigned long event,
 	return NOTIFY_OK;
 }
 
+static void compatdev_release(struct device *dev)
+{
+	struct ib_core_device *cdev =
+		container_of(dev, struct ib_core_device, dev);
+
+	kfree(cdev);
+}
+
+static int add_one_compat_dev(struct ib_device *device,
+			      struct rdma_dev_net *rnet)
+{
+	struct ib_core_device *cdev;
+	int ret;
+
+	lockdep_assert_held(&rdma_nets_rwsem);
+	if (!ib_devices_shared_netns)
+		return 0;
+
+	/*
+	 * Create and add compat device in all namespaces other than where it
+	 * is currently bound to.
+	 */
+	if (net_eq(read_pnet(&rnet->net),
+		   read_pnet(&device->coredev.rdma_net)))
+		return 0;
+
+	/*
+	 * The first of init_net() or ib_register_device() to take the
+	 * compat_devs_mutex wins and gets to add the device. Others will wait
+	 * for completion here.
+	 */
+	mutex_lock(&device->compat_devs_mutex);
+	cdev = xa_load(&device->compat_devs, rnet->id);
+	if (cdev) {
+		ret = 0;
+		goto done;
+	}
+	ret = xa_reserve(&device->compat_devs, rnet->id, GFP_KERNEL);
+	if (ret)
+		goto done;
+
+	cdev = kzalloc(sizeof(*cdev), GFP_KERNEL);
+	if (!cdev) {
+		ret = -ENOMEM;
+		goto cdev_err;
+	}
+
+	cdev->dev.parent = device->dev.parent;
+	rdma_init_coredev(cdev, device, read_pnet(&rnet->net));
+	cdev->dev.release = compatdev_release;
+	dev_set_name(&cdev->dev, "%s", dev_name(&device->dev));
+
+	ret = device_add(&cdev->dev);
+	if (ret)
+		goto add_err;
+	ret = ib_setup_port_attrs(cdev, false);
+	if (ret)
+		goto port_err;
+
+	ret = xa_err(xa_store(&device->compat_devs, rnet->id,
+			      cdev, GFP_KERNEL));
+	if (ret)
+		goto insert_err;
+
+	mutex_unlock(&device->compat_devs_mutex);
+	return 0;
+
+insert_err:
+	ib_free_port_attrs(cdev);
+port_err:
+	device_del(&cdev->dev);
+add_err:
+	put_device(&cdev->dev);
+cdev_err:
+	xa_release(&device->compat_devs, rnet->id);
+done:
+	mutex_unlock(&device->compat_devs_mutex);
+	return ret;
+}
+
+static void remove_one_compat_dev(struct ib_device *device, u32 id)
+{
+	struct ib_core_device *cdev;
+
+	mutex_lock(&device->compat_devs_mutex);
+	cdev = xa_erase(&device->compat_devs, id);
+	mutex_unlock(&device->compat_devs_mutex);
+	if (cdev) {
+		ib_free_port_attrs(cdev);
+		device_del(&cdev->dev);
+		put_device(&cdev->dev);
+	}
+}
+
+static void remove_compat_devs(struct ib_device *device)
+{
+	struct ib_core_device *cdev;
+	unsigned long index;
+
+	xa_for_each (&device->compat_devs, index, cdev)
+		remove_one_compat_dev(device, index);
+}
+
+static int add_compat_devs(struct ib_device *device)
+{
+	struct rdma_dev_net *rnet;
+	unsigned long index;
+	int ret = 0;
+
+	down_read(&rdma_nets_rwsem);
+	xa_for_each (&rdma_nets, index, rnet) {
+		ret = add_one_compat_dev(device, rnet);
+		if (ret)
+			break;
+	}
+	up_read(&rdma_nets_rwsem);
+	return ret;
+}
+
+static void remove_all_compat_devs(void)
+{
+	struct ib_compat_device *cdev;
+	struct ib_device *dev;
+	unsigned long index;
+
+	down_read(&devices_rwsem);
+	xa_for_each (&devices, index, dev) {
+		unsigned long c_index = 0;
+
+		/* Hold nets_rwsem so that any other thread modifying this
+		 * system param can sync with this thread.
+		 */
+		down_read(&rdma_nets_rwsem);
+		xa_for_each (&dev->compat_devs, c_index, cdev)
+			remove_one_compat_dev(dev, c_index);
+		up_read(&rdma_nets_rwsem);
+	}
+	up_read(&devices_rwsem);
+}
+
+static int add_all_compat_devs(void)
+{
+	struct rdma_dev_net *rnet;
+	struct ib_device *dev;
+	unsigned long index;
+	int ret = 0;
+
+	down_read(&devices_rwsem);
+	xa_for_each_marked (&devices, index, dev, DEVICE_REGISTERED) {
+		unsigned long net_index = 0;
+
+		/* Hold nets_rwsem so that any other thread modifying this
+		 * system param can sync with this thread.
+		 */
+		down_read(&rdma_nets_rwsem);
+		xa_for_each (&rdma_nets, net_index, rnet) {
+			ret = add_one_compat_dev(dev, rnet);
+			if (ret)
+				break;
+		}
+		up_read(&rdma_nets_rwsem);
+	}
+	up_read(&devices_rwsem);
+	if (ret)
+		remove_all_compat_devs();
+	return ret;
+}
+
+int rdma_compatdev_set(u8 enable)
+{
+	struct rdma_dev_net *rnet;
+	unsigned long index;
+	int ret = 0;
+
+	down_write(&rdma_nets_rwsem);
+	if (ib_devices_shared_netns == enable) {
+		up_write(&rdma_nets_rwsem);
+		return 0;
+	}
+
+	/* enable/disable of compat devices is not supported
+	 * when more than default init_net exists.
+	 */
+	xa_for_each (&rdma_nets, index, rnet) {
+		ret++;
+		break;
+	}
+	if (!ret)
+		ib_devices_shared_netns = enable;
+	up_write(&rdma_nets_rwsem);
+	if (ret)
+		return -EBUSY;
+
+	if (enable)
+		ret = add_all_compat_devs();
+	else
+		remove_all_compat_devs();
+	return ret;
+}
+
+static void rdma_dev_exit_net(struct net *net)
+{
+	struct rdma_dev_net *rnet = net_generic(net, rdma_dev_net_id);
+	struct ib_device *dev;
+	unsigned long index;
+	int ret;
+
+	down_write(&rdma_nets_rwsem);
+	/*
+	 * Prevent the ID from being re-used and hide the id from xa_for_each.
+	 */
+	ret = xa_err(xa_store(&rdma_nets, rnet->id, NULL, GFP_KERNEL));
+	WARN_ON(ret);
+	up_write(&rdma_nets_rwsem);
+
+	down_read(&devices_rwsem);
+	xa_for_each (&devices, index, dev) {
+		get_device(&dev->dev);
+		/*
+		 * Release the devices_rwsem so that pontentially blocking
+		 * device_del, doesn't hold the devices_rwsem for too long.
+		 */
+		up_read(&devices_rwsem);
+
+		remove_one_compat_dev(dev, rnet->id);
+
+		put_device(&dev->dev);
+		down_read(&devices_rwsem);
+	}
+	up_read(&devices_rwsem);
+
+	xa_erase(&rdma_nets, rnet->id);
+}
+
+static __net_init int rdma_dev_init_net(struct net *net)
+{
+	struct rdma_dev_net *rnet = net_generic(net, rdma_dev_net_id);
+	unsigned long index;
+	struct ib_device *dev;
+	int ret;
+
+	/* No need to create any compat devices in default init_net. */
+	if (net_eq(net, &init_net))
+		return 0;
+
+	write_pnet(&rnet->net, net);
+
+	ret = xa_alloc(&rdma_nets, &rnet->id, rnet, xa_limit_32b, GFP_KERNEL);
+	if (ret)
+		return ret;
+
+	down_read(&devices_rwsem);
+	xa_for_each_marked (&devices, index, dev, DEVICE_REGISTERED) {
+		/* Hold nets_rwsem so that netlink command cannot change
+		 * system configuration for device sharing mode.
+		 */
+		down_read(&rdma_nets_rwsem);
+		ret = add_one_compat_dev(dev, rnet);
+		up_read(&rdma_nets_rwsem);
+		if (ret)
+			break;
+	}
+	up_read(&devices_rwsem);
+
+	if (ret)
+		rdma_dev_exit_net(net);
+
+	return ret;
+}
+
 /*
  * Assign the unique string device name and the unique device index. This is
  * undone by ib_dealloc_device.
@@ -711,6 +1089,9 @@ static void setup_dma_device(struct ib_device *device)
 		WARN_ON_ONCE(!parent);
 		device->dma_device = parent;
 	}
+	/* Setup default max segment size for all IB devices */
+	dma_set_max_seg_size(device->dma_device, SZ_2G);
+
 }
 
 /*
@@ -765,6 +1146,13 @@ static void disable_device(struct ib_device *device)
 	ib_device_put(device);
 	wait_for_completion(&device->unreg_completion);
 
+	/*
+	 * compat devices must be removed after device refcount drops to zero.
+	 * Otherwise init_net() may add more compatdevs after removing compat
+	 * devices and before device is disabled.
+	 */
+	remove_compat_devs(device);
+
 	/* Expedite removing unregistered pointers from the hash table */
 	free_netdevs(device);
 }
@@ -807,7 +1195,8 @@ static int enable_device_and_get(struct ib_device *device)
 			break;
 	}
 	up_read(&clients_rwsem);
-
+	if (!ret)
+		ret = add_compat_devs(device);
 out:
 	up_read(&devices_rwsem);
 	return ret;
@@ -1037,6 +1426,13 @@ void ib_unregister_device_queued(struct ib_device *ib_dev)
 		put_device(&ib_dev->dev);
 }
 EXPORT_SYMBOL(ib_unregister_device_queued);
+
+static struct pernet_operations rdma_dev_net_ops = {
+	.init = rdma_dev_init_net,
+	.exit = rdma_dev_exit_net,
+	.id = &rdma_dev_net_id,
+	.size = sizeof(struct rdma_dev_net),
+};
 
 static int assign_client_id(struct ib_client *client)
 {
@@ -1515,6 +1911,9 @@ int ib_enum_all_devs(nldev_callback nldev_cb, struct sk_buff *skb,
 
 	down_read(&devices_rwsem);
 	xa_for_each_marked (&devices, index, dev, DEVICE_REGISTERED) {
+		if (!rdma_dev_access_netns(dev, sock_net(skb->sk)))
+			continue;
+
 		ret = nldev_cb(dev, skb, cb, idx);
 		if (ret)
 			break;
@@ -1823,7 +2222,9 @@ void ib_set_device_ops(struct ib_device *dev, const struct ib_device_ops *ops)
 	SET_DEVICE_OP(dev_ops, set_vf_link_state);
 	SET_DEVICE_OP(dev_ops, unmap_fmr);
 
+	SET_OBJ_SIZE(dev_ops, ib_ah);
 	SET_OBJ_SIZE(dev_ops, ib_pd);
+	SET_OBJ_SIZE(dev_ops, ib_srq);
 	SET_OBJ_SIZE(dev_ops, ib_ucontext);
 }
 EXPORT_SYMBOL(ib_set_device_ops);
@@ -1903,12 +2304,20 @@ static int __init ib_core_init(void)
 		goto err_sa;
 	}
 
+	ret = register_pernet_device(&rdma_dev_net_ops);
+	if (ret) {
+		pr_warn("Couldn't init compat dev. ret %d\n", ret);
+		goto err_compat;
+	}
+
 	nldev_init();
 	rdma_nl_register(RDMA_NL_LS, ibnl_ls_cb_table);
 	roce_gid_mgmt_init();
 
 	return 0;
 
+err_compat:
+	unregister_lsm_notifier(&ibdev_lsm_nb);
 err_sa:
 	ib_sa_cleanup();
 err_mad:
@@ -1933,6 +2342,7 @@ static void __exit ib_core_cleanup(void)
 	roce_gid_mgmt_cleanup();
 	nldev_exit();
 	rdma_nl_unregister(RDMA_NL_LS);
+	unregister_pernet_device(&rdma_dev_net_ops);
 	unregister_lsm_notifier(&ibdev_lsm_nb);
 	ib_sa_cleanup();
 	ib_mad_cleanup();
@@ -1950,5 +2360,8 @@ static void __exit ib_core_cleanup(void)
 
 MODULE_ALIAS_RDMA_NETLINK(RDMA_NL_LS, 4);
 
-subsys_initcall(ib_core_init);
+/* ib core relies on netdev stack to first register net_ns_type_operations
+ * ns kobject type before ib_core initialization.
+ */
+fs_initcall(ib_core_init);
 module_exit(ib_core_cleanup);

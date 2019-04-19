@@ -1037,13 +1037,8 @@ static void fm10k_tx_map(struct fm10k_ring *tx_ring,
 	fm10k_maybe_stop_tx(tx_ring, DESC_NEEDED);
 
 	/* notify HW of packet */
-	if (netif_xmit_stopped(txring_txq(tx_ring)) || !skb->xmit_more) {
+	if (netif_xmit_stopped(txring_txq(tx_ring)) || !netdev_xmit_more()) {
 		writel(i, tx_ring->tail);
-
-		/* we need this if more than one processor can write to our tail
-		 * at a time, it synchronizes IO on IA64/Altix systems
-		 */
-		mmiowb();
 	}
 
 	return;

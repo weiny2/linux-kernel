@@ -33,6 +33,8 @@
 #include "xfs_fsmap.h"
 #include "scrub/xfs_scrub.h"
 #include "xfs_sb.h"
+#include "xfs_ag.h"
+#include "xfs_health.h"
 
 #include <linux/capability.h>
 #include <linux/cred.h>
@@ -779,40 +781,49 @@ xfs_ioc_bulkstat(
 }
 
 STATIC int
-xfs_ioc_fsgeometry_v1(
-	xfs_mount_t		*mp,
-	void			__user *arg)
+xfs_ioc_fsgeometry(
+	struct xfs_mount	*mp,
+	void			__user *arg,
+	int			struct_version)
 {
-	xfs_fsop_geom_t         fsgeo;
+	struct xfs_fsop_geom	fsgeo;
+	size_t			len;
 	int			error;
 
-	error = xfs_fs_geometry(&mp->m_sb, &fsgeo, 3);
+	error = xfs_fs_geometry(&mp->m_sb, &fsgeo, struct_version);
 	if (error)
 		return error;
 
-	/*
-	 * Caller should have passed an argument of type
-	 * xfs_fsop_geom_v1_t.  This is a proper subset of the
-	 * xfs_fsop_geom_t that xfs_fs_geometry() fills in.
-	 */
-	if (copy_to_user(arg, &fsgeo, sizeof(xfs_fsop_geom_v1_t)))
+	if (struct_version <= 3)
+		len = sizeof(struct xfs_fsop_geom_v1);
+	else if (struct_version == 4)
+		len = sizeof(struct xfs_fsop_geom_v4);
+	else {
+		xfs_fsop_geom_health(mp, &fsgeo);
+		len = sizeof(fsgeo);
+	}
+
+	if (copy_to_user(arg, &fsgeo, len))
 		return -EFAULT;
 	return 0;
 }
 
 STATIC int
-xfs_ioc_fsgeometry(
-	xfs_mount_t		*mp,
+xfs_ioc_ag_geometry(
+	struct xfs_mount	*mp,
 	void			__user *arg)
 {
-	xfs_fsop_geom_t		fsgeo;
+	struct xfs_ag_geometry	ageo;
 	int			error;
 
-	error = xfs_fs_geometry(&mp->m_sb, &fsgeo, 4);
+	if (copy_from_user(&ageo, arg, sizeof(ageo)))
+		return -EFAULT;
+
+	error = xfs_ag_get_geometry(mp, ageo.ag_number, &ageo);
 	if (error)
 		return error;
 
-	if (copy_to_user(arg, &fsgeo, sizeof(fsgeo)))
+	if (copy_to_user(arg, &ageo, sizeof(ageo)))
 		return -EFAULT;
 	return 0;
 }
@@ -1937,10 +1948,14 @@ xfs_file_ioctl(
 		return xfs_ioc_bulkstat(mp, cmd, arg);
 
 	case XFS_IOC_FSGEOMETRY_V1:
-		return xfs_ioc_fsgeometry_v1(mp, arg);
-
+		return xfs_ioc_fsgeometry(mp, arg, 3);
+	case XFS_IOC_FSGEOMETRY_V4:
+		return xfs_ioc_fsgeometry(mp, arg, 4);
 	case XFS_IOC_FSGEOMETRY:
-		return xfs_ioc_fsgeometry(mp, arg);
+		return xfs_ioc_fsgeometry(mp, arg, 5);
+
+	case XFS_IOC_AG_GEOMETRY:
+		return xfs_ioc_ag_geometry(mp, arg);
 
 	case XFS_IOC_GETVERSION:
 		return put_user(inode->i_generation, (int __user *)arg);

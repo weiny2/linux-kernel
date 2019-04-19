@@ -2530,6 +2530,8 @@ CIFSSMBLock(const unsigned int xid, struct cifs_tcon *tcon,
 	int bytes_returned;
 	int flags = 0;
 	__u16 count;
+	struct TCP_Server_Info *server = tcon->ses->server;
+	int *credits;
 
 	cifs_dbg(FYI, "CIFSSMBLock timeout %d numLock %d\n",
 		 (int)waitFlag, numLock);
@@ -2574,8 +2576,16 @@ CIFSSMBLock(const unsigned int xid, struct cifs_tcon *tcon,
 	if (waitFlag)
 		rc = SendReceiveBlockingLock(xid, tcon, (struct smb_hdr *) pSMB,
 			(struct smb_hdr *) pSMB, &bytes_returned);
-	else
+	else {
 		rc = SendReceiveNoRsp(xid, tcon->ses, (char *)pSMB, flags);
+		if (!rc) {
+			credits = server->ops->get_credits_field(server, flags & CIFS_OP_MASK);
+			spin_lock(&server->req_lock);
+			*credits += 1;
+			spin_unlock(&server->req_lock);
+			wake_up(&server->request_q);
+		}
+	}
 	cifs_small_buf_release(pSMB);
 	cifs_stats_inc(&tcon->stats.cifs_stats.num_locks);
 	if (rc)

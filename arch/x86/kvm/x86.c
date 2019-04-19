@@ -1258,31 +1258,49 @@ static int do_get_msr_feature(struct kvm_vcpu *vcpu, unsigned index, u64 *data)
 	return 0;
 }
 
+static bool __kvm_valid_efer(struct kvm_vcpu *vcpu, u64 efer)
+{
+	if (efer & EFER_FFXSR && !guest_cpuid_has(vcpu, X86_FEATURE_FXSR_OPT))
+		return false;
+
+	if (efer & EFER_SVME && !guest_cpuid_has(vcpu, X86_FEATURE_SVM))
+		return false;
+
+	if (efer & (EFER_LME | EFER_LMA) &&
+	    !guest_cpuid_has(vcpu, X86_FEATURE_LM))
+		return false;
+
+	if (efer & EFER_NX && !guest_cpuid_has(vcpu, X86_FEATURE_NX))
+		return false;
+
+	return true;
+
+}
 bool kvm_valid_efer(struct kvm_vcpu *vcpu, u64 efer)
 {
 	if (efer & efer_reserved_bits)
 		return false;
 
-	if (efer & EFER_FFXSR && !guest_cpuid_has(vcpu, X86_FEATURE_FXSR_OPT))
-			return false;
-
-	if (efer & EFER_SVME && !guest_cpuid_has(vcpu, X86_FEATURE_SVM))
-			return false;
-
-	return true;
+	return __kvm_valid_efer(vcpu, efer);
 }
 EXPORT_SYMBOL_GPL(kvm_valid_efer);
 
-static int set_efer(struct kvm_vcpu *vcpu, u64 efer)
+static int set_efer(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 {
 	u64 old_efer = vcpu->arch.efer;
+	u64 efer = msr_info->data;
 
-	if (!kvm_valid_efer(vcpu, efer))
-		return 1;
+	if (efer & efer_reserved_bits)
+		return false;
 
-	if (is_paging(vcpu)
-	    && (vcpu->arch.efer & EFER_LME) != (efer & EFER_LME))
-		return 1;
+	if (!msr_info->host_initiated) {
+		if (!__kvm_valid_efer(vcpu, efer))
+			return 1;
+
+		if (is_paging(vcpu) &&
+		    (vcpu->arch.efer & EFER_LME) != (efer & EFER_LME))
+			return 1;
+	}
 
 	efer &= ~EFER_LMA;
 	efer |= vcpu->arch.efer & EFER_LMA;
@@ -2452,7 +2470,7 @@ int kvm_set_msr_common(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 		vcpu->arch.arch_capabilities = data;
 		break;
 	case MSR_EFER:
-		return set_efer(vcpu, data);
+		return set_efer(vcpu, msr_info);
 	case MSR_K7_HWCR:
 		data &= ~(u64)0x40;	/* ignore flush filter disable */
 		data &= ~(u64)0x100;	/* ignore ignne emulation enable */
@@ -3075,9 +3093,6 @@ int kvm_vm_ioctl_check_extension(struct kvm *kvm, long ext)
 	case KVM_CAP_MAX_VCPUS:
 		r = KVM_MAX_VCPUS;
 		break;
-	case KVM_CAP_NR_MEMSLOTS:
-		r = KVM_USER_MEM_SLOTS;
-		break;
 	case KVM_CAP_PV_MMU:	/* obsolete */
 		r = 0;
 		break;
@@ -3677,15 +3692,15 @@ static void fill_xsave(u8 *dest, struct kvm_vcpu *vcpu)
 	 */
 	valid = xstate_bv & ~XFEATURE_MASK_FPSSE;
 	while (valid) {
-		u64 feature = valid & -valid;
-		int index = fls64(feature) - 1;
-		void *src = get_xsave_addr(xsave, feature);
+		u64 xfeature_mask = valid & -valid;
+		int xfeature_nr = fls64(xfeature_mask) - 1;
+		void *src = get_xsave_addr(xsave, xfeature_nr);
 
 		if (src) {
 			u32 size, offset, ecx, edx;
-			cpuid_count(XSTATE_CPUID, index,
+			cpuid_count(XSTATE_CPUID, xfeature_nr,
 				    &size, &offset, &ecx, &edx);
-			if (feature == XFEATURE_MASK_PKRU)
+			if (xfeature_nr == XFEATURE_PKRU)
 				memcpy(dest + offset, &vcpu->arch.pkru,
 				       sizeof(vcpu->arch.pkru));
 			else
@@ -3693,7 +3708,7 @@ static void fill_xsave(u8 *dest, struct kvm_vcpu *vcpu)
 
 		}
 
-		valid -= feature;
+		valid -= xfeature_mask;
 	}
 }
 
@@ -3720,22 +3735,22 @@ static void load_xsave(struct kvm_vcpu *vcpu, u8 *src)
 	 */
 	valid = xstate_bv & ~XFEATURE_MASK_FPSSE;
 	while (valid) {
-		u64 feature = valid & -valid;
-		int index = fls64(feature) - 1;
-		void *dest = get_xsave_addr(xsave, feature);
+		u64 xfeature_mask = valid & -valid;
+		int xfeature_nr = fls64(xfeature_mask) - 1;
+		void *dest = get_xsave_addr(xsave, xfeature_nr);
 
 		if (dest) {
 			u32 size, offset, ecx, edx;
-			cpuid_count(XSTATE_CPUID, index,
+			cpuid_count(XSTATE_CPUID, xfeature_nr,
 				    &size, &offset, &ecx, &edx);
-			if (feature == XFEATURE_MASK_PKRU)
+			if (xfeature_nr == XFEATURE_PKRU)
 				memcpy(&vcpu->arch.pkru, src + offset,
 				       sizeof(vcpu->arch.pkru));
 			else
 				memcpy(dest, src + offset, size);
 		}
 
-		valid -= feature;
+		valid -= xfeature_mask;
 	}
 }
 
@@ -7877,6 +7892,10 @@ static int vcpu_enter_guest(struct kvm_vcpu *vcpu)
 		wait_lapic_expire(vcpu);
 	guest_enter_irqoff();
 
+	fpregs_assert_state_consistent();
+	if (test_thread_flag(TIF_NEED_FPU_LOAD))
+		switch_fpu_return();
+
 	if (unlikely(vcpu->arch.switch_db_regs)) {
 		set_debugreg(0, 7);
 		set_debugreg(vcpu->arch.eff_db[0], 0);
@@ -8135,22 +8154,30 @@ static int complete_emulated_mmio(struct kvm_vcpu *vcpu)
 /* Swap (qemu) user FPU context for the guest FPU context. */
 static void kvm_load_guest_fpu(struct kvm_vcpu *vcpu)
 {
-	preempt_disable();
+	fpregs_lock();
+
 	copy_fpregs_to_fpstate(&current->thread.fpu);
 	/* PKRU is separately restored in kvm_x86_ops->run.  */
 	__copy_kernel_to_fpregs(&vcpu->arch.guest_fpu->state,
 				~XFEATURE_MASK_PKRU);
-	preempt_enable();
+
+	fpregs_mark_activate();
+	fpregs_unlock();
+
 	trace_kvm_fpu(1);
 }
 
 /* When vcpu_run ends, restore user space FPU context. */
 static void kvm_put_guest_fpu(struct kvm_vcpu *vcpu)
 {
-	preempt_disable();
+	fpregs_lock();
+
 	copy_fpregs_to_fpstate(vcpu->arch.guest_fpu);
 	copy_kernel_to_fpregs(&current->thread.fpu.state);
-	preempt_enable();
+
+	fpregs_mark_activate();
+	fpregs_unlock();
+
 	++vcpu->stat.fpu_reload;
 	trace_kvm_fpu(0);
 }
@@ -8848,11 +8875,11 @@ void kvm_vcpu_reset(struct kvm_vcpu *vcpu, bool init_event)
 		if (init_event)
 			kvm_put_guest_fpu(vcpu);
 		mpx_state_buffer = get_xsave_addr(&vcpu->arch.guest_fpu->state.xsave,
-					XFEATURE_MASK_BNDREGS);
+					XFEATURE_BNDREGS);
 		if (mpx_state_buffer)
 			memset(mpx_state_buffer, 0, sizeof(struct mpx_bndreg_state));
 		mpx_state_buffer = get_xsave_addr(&vcpu->arch.guest_fpu->state.xsave,
-					XFEATURE_MASK_BNDCSR);
+					XFEATURE_BNDCSR);
 		if (mpx_state_buffer)
 			memset(mpx_state_buffer, 0, sizeof(struct mpx_bndcsr));
 		if (init_event)

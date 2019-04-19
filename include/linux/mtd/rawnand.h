@@ -20,6 +20,7 @@
 #include <linux/mtd/flashchip.h>
 #include <linux/mtd/bbm.h>
 #include <linux/mtd/jedec.h>
+#include <linux/mtd/nand.h>
 #include <linux/mtd/onfi.h>
 #include <linux/mutex.h>
 #include <linux/of.h>
@@ -860,6 +861,7 @@ struct nand_operation {
 int nand_op_parser_exec_op(struct nand_chip *chip,
 			   const struct nand_op_parser *parser,
 			   const struct nand_operation *op, bool check_only);
+
 /**
  * struct nand_controller_ops - Controller operations
  *
@@ -962,7 +964,7 @@ struct nand_legacy {
 
 /**
  * struct nand_chip - NAND Private Flash Chip Data
- * @mtd:		MTD device registered to the MTD framework
+ * @base:		Inherit from the generic NAND device
  * @legacy:		All legacy fields/hooks. If you develop a new driver,
  *			don't even try to use any of these fields/hooks, and if
  *			you're modifying an existing driver that is using those
@@ -990,37 +992,26 @@ struct nand_legacy {
  * @badblockbits:	[INTERN] minimum number of set bits in a good block's
  *			bad block marker position; i.e., BBM == 11110111b is
  *			not bad when badblockbits == 7
- * @bits_per_cell:	[INTERN] number of bits per cell. i.e., 1 means SLC.
- * @ecc_strength_ds:	[INTERN] ECC correctability from the datasheet.
- *			Minimum amount of bit errors per @ecc_step_ds guaranteed
- *			to be correctable. If unknown, set to zero.
- * @ecc_step_ds:	[INTERN] ECC step required by the @ecc_strength_ds,
- *			also from the datasheet. It is the recommended ECC step
- *			size, if known; if unknown, set to zero.
  * @onfi_timing_mode_default: [INTERN] default ONFI timing mode. This field is
  *			      set to the actually used ONFI mode if the chip is
  *			      ONFI compliant or deduced from the datasheet if
  *			      the NAND chip is not ONFI compliant.
- * @numchips:		[INTERN] number of physical chips
- * @chipsize:		[INTERN] the size of one chip for multichip arrays
  * @pagemask:		[INTERN] page number mask = number of (pages / chip) - 1
  * @data_buf:		[INTERN] buffer for data, size is (page size + oobsize).
- * @pagebuf:		[INTERN] holds the pagenumber which is currently in
- *			data_buf.
- * @pagebuf_bitflips:	[INTERN] holds the bitflip count for the page which is
- *			currently in data_buf.
+ * @pagecache:		Structure containing page cache related fields
+ * @pagecache.bitflips:	Number of bitflips of the cached page
+ * @pagecache.page:	Page number currently in the cache. -1 means no page is
+ *			currently cached
  * @subpagesize:	[INTERN] holds the subpagesize
  * @id:			[INTERN] holds NAND ID
  * @parameters:		[INTERN] holds generic parameters under an easily
  *			readable form.
- * @max_bb_per_die:	[INTERN] the max number of bad blocks each die of a
- *			this nand device will encounter their life times.
- * @blocks_per_die:	[INTERN] The number of PEBs in a die
  * @data_interface:	[INTERN] NAND interface timing information
  * @cur_cs:		currently selected target. -1 means no target selected,
  *			otherwise we should always have cur_cs >= 0 &&
- *			cur_cs < numchips. NAND Controller drivers should not
- *			modify this value, but they're allowed to read it.
+ *			cur_cs < nanddev_ntargets(). NAND Controller drivers
+ *			should not modify this value, but they're allowed to
+ *			read it.
  * @read_retries:	[INTERN] the number of read retry modes supported
  * @lock:		lock protecting the suspended field. Also used to
  *			serialize accesses to the NAND device.
@@ -1041,7 +1032,7 @@ struct nand_legacy {
  */
 
 struct nand_chip {
-	struct mtd_info mtd;
+	struct nand_device base;
 
 	struct nand_legacy legacy;
 
@@ -1054,24 +1045,21 @@ struct nand_chip {
 	int phys_erase_shift;
 	int bbt_erase_shift;
 	int chip_shift;
-	int numchips;
-	uint64_t chipsize;
 	int pagemask;
 	u8 *data_buf;
-	int pagebuf;
-	unsigned int pagebuf_bitflips;
+
+	struct {
+		unsigned int bitflips;
+		int page;
+	} pagecache;
+
 	int subpagesize;
-	uint8_t bits_per_cell;
-	uint16_t ecc_strength_ds;
-	uint16_t ecc_step_ds;
 	int onfi_timing_mode_default;
 	int badblockpos;
 	int badblockbits;
 
 	struct nand_id id;
 	struct nand_parameters parameters;
-	u16 max_bb_per_die;
-	u32 blocks_per_die;
 
 	struct nand_data_interface data_interface;
 
@@ -1105,25 +1093,14 @@ struct nand_chip {
 extern const struct mtd_ooblayout_ops nand_ooblayout_sp_ops;
 extern const struct mtd_ooblayout_ops nand_ooblayout_lp_ops;
 
-static inline void nand_set_flash_node(struct nand_chip *chip,
-				       struct device_node *np)
-{
-	mtd_set_of_node(&chip->mtd, np);
-}
-
-static inline struct device_node *nand_get_flash_node(struct nand_chip *chip)
-{
-	return mtd_get_of_node(&chip->mtd);
-}
-
 static inline struct nand_chip *mtd_to_nand(struct mtd_info *mtd)
 {
-	return container_of(mtd, struct nand_chip, mtd);
+	return container_of(mtd, struct nand_chip, base.mtd);
 }
 
 static inline struct mtd_info *nand_to_mtd(struct nand_chip *chip)
 {
-	return &chip->mtd;
+	return &chip->base.mtd;
 }
 
 static inline void *nand_get_controller_data(struct nand_chip *chip)
@@ -1145,6 +1122,17 @@ static inline void nand_set_manufacturer_data(struct nand_chip *chip,
 static inline void *nand_get_manufacturer_data(struct nand_chip *chip)
 {
 	return chip->manufacturer.priv;
+}
+
+static inline void nand_set_flash_node(struct nand_chip *chip,
+				       struct device_node *np)
+{
+	mtd_set_of_node(nand_to_mtd(chip), np);
+}
+
+static inline struct device_node *nand_get_flash_node(struct nand_chip *chip)
+{
+	return mtd_get_of_node(nand_to_mtd(chip));
 }
 
 /*
@@ -1235,9 +1223,9 @@ int nand_create_bbt(struct nand_chip *chip);
  */
 static inline bool nand_is_slc(struct nand_chip *chip)
 {
-	WARN(chip->bits_per_cell == 0,
+	WARN(nanddev_bits_per_cell(&chip->base) == 0,
 	     "chip->bits_per_cell is used uninitialized\n");
-	return chip->bits_per_cell == 1;
+	return nanddev_bits_per_cell(&chip->base) == 1;
 }
 
 /**
@@ -1347,5 +1335,26 @@ int nand_gpio_waitrdy(struct nand_chip *chip, struct gpio_desc *gpiod,
 /* Select/deselect a NAND target. */
 void nand_select_target(struct nand_chip *chip, unsigned int cs);
 void nand_deselect_target(struct nand_chip *chip);
+
+/**
+ * nand_get_data_buf() - Get the internal page buffer
+ * @chip: NAND chip object
+ *
+ * Returns the pre-allocated page buffer after invalidating the cache. This
+ * function should be used by drivers that do not want to allocate their own
+ * bounce buffer and still need such a buffer for specific operations (most
+ * commonly when reading OOB data only).
+ *
+ * Be careful to never call this function in the write/write_oob path, because
+ * the core may have placed the data to be written out in this buffer.
+ *
+ * Return: pointer to the page cache buffer
+ */
+static inline void *nand_get_data_buf(struct nand_chip *chip)
+{
+	chip->pagecache.page = -1;
+
+	return chip->data_buf;
+}
 
 #endif /* __LINUX_MTD_RAWNAND_H */

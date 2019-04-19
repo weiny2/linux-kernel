@@ -2863,21 +2863,19 @@ int ocrdma_mbx_query_srq(struct ocrdma_srq *srq, struct ib_srq_attr *srq_attr)
 	return status;
 }
 
-int ocrdma_mbx_destroy_srq(struct ocrdma_dev *dev, struct ocrdma_srq *srq)
+void ocrdma_mbx_destroy_srq(struct ocrdma_dev *dev, struct ocrdma_srq *srq)
 {
-	int status = -ENOMEM;
 	struct ocrdma_destroy_srq *cmd;
 	struct pci_dev *pdev = dev->nic_info.pdev;
 	cmd = ocrdma_init_emb_mqe(OCRDMA_CMD_DELETE_SRQ, sizeof(*cmd));
 	if (!cmd)
-		return status;
+		return;
 	cmd->id = srq->id;
-	status = ocrdma_mbx_cmd(dev, (struct ocrdma_mqe *)cmd);
+	ocrdma_mbx_cmd(dev, (struct ocrdma_mqe *)cmd);
 	if (srq->rq.va)
 		dma_free_coherent(&pdev->dev, srq->rq.len,
 				  srq->rq.va, srq->rq.pa);
 	kfree(cmd);
-	return status;
 }
 
 static int ocrdma_mbx_get_dcbx_config(struct ocrdma_dev *dev, u32 ptype,
@@ -3067,13 +3065,12 @@ int ocrdma_alloc_av(struct ocrdma_dev *dev, struct ocrdma_ah *ah)
 	return status;
 }
 
-int ocrdma_free_av(struct ocrdma_dev *dev, struct ocrdma_ah *ah)
+void ocrdma_free_av(struct ocrdma_dev *dev, struct ocrdma_ah *ah)
 {
 	unsigned long flags;
 	spin_lock_irqsave(&dev->av_tbl.lock, flags);
 	ah->av->valid = 0;
 	spin_unlock_irqrestore(&dev->av_tbl.lock, flags);
-	return 0;
 }
 
 static int ocrdma_create_eqs(struct ocrdma_dev *dev)

@@ -1010,8 +1010,9 @@ static void nfsd4_cb_prepare(struct rpc_task *task, void *calldata)
 	cb->cb_seq_status = 1;
 	cb->cb_status = 0;
 	if (minorversion) {
-		if (!nfsd41_cb_get_slot(clp, task))
+		if (!cb->cb_holds_slot && !nfsd41_cb_get_slot(clp, task))
 			return;
+		cb->cb_holds_slot = true;
 	}
 	rpc_call_start(task);
 }
@@ -1032,11 +1033,14 @@ static bool nfsd4_cb_sequence_done(struct rpc_task *task, struct nfsd4_callback 
 		 * the submission code will error out, so we don't need to
 		 * handle that case here.
 		 */
-		if (task->tk_flags & RPC_TASK_KILLED)
+		if (RPC_SIGNALLED(task))
 			goto need_restart;
 
 		return true;
 	}
+
+	if (!cb->cb_holds_slot)
+		goto need_restart;
 
 	switch (cb->cb_seq_status) {
 	case 0:
@@ -1076,12 +1080,13 @@ static bool nfsd4_cb_sequence_done(struct rpc_task *task, struct nfsd4_callback 
 			cb->cb_seq_status);
 	}
 
+	cb->cb_holds_slot = false;
 	clear_bit(0, &clp->cl_cb_slot_busy);
 	rpc_wake_up_next(&clp->cl_cb_waitq);
 	dprintk("%s: freed slot, new seqid=%d\n", __func__,
 		clp->cl_cb_session->se_cb_seq_nr);
 
-	if (task->tk_flags & RPC_TASK_KILLED)
+	if (RPC_SIGNALLED(task))
 		goto need_restart;
 out:
 	return ret;
@@ -1283,6 +1288,7 @@ void nfsd4_init_cb(struct nfsd4_callback *cb, struct nfs4_client *clp,
 	cb->cb_seq_status = 1;
 	cb->cb_status = 0;
 	cb->cb_need_restart = false;
+	cb->cb_holds_slot = false;
 }
 
 void nfsd4_run_cb(struct nfsd4_callback *cb)

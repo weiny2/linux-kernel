@@ -321,6 +321,22 @@ static inline int plo_test_bit(unsigned char nr)
 	return cc == 0;
 }
 
+static inline void __insn32_query(unsigned int opcode, u8 query[32])
+{
+	register unsigned long r0 asm("0") = 0;	/* query function */
+	register unsigned long r1 asm("1") = (unsigned long) query;
+
+	asm volatile(
+		/* Parameter regs are ignored */
+		"	.insn	rrf,%[opc] << 16,2,4,6,0\n"
+		: "=m" (*query)
+		: "d" (r0), "a" (r1), [opc] "i" (opcode)
+		: "cc");
+}
+
+#define INSN_SORTL 0xb938
+#define INSN_DFLTCC 0xb939
+
 static void kvm_s390_cpu_feat_init(void)
 {
 	int i;
@@ -367,6 +383,16 @@ static void kvm_s390_cpu_feat_init(void)
 	if (test_facility(146)) /* MSA8 */
 		__cpacf_query(CPACF_KMA, (cpacf_mask_t *)
 			      kvm_s390_available_subfunc.kma);
+
+	if (test_facility(155)) /* MSA9 */
+		__cpacf_query(CPACF_KDSA, (cpacf_mask_t *)
+			      kvm_s390_available_subfunc.kdsa);
+
+	if (test_facility(150)) /* SORTL */
+		__insn32_query(INSN_SORTL, kvm_s390_available_subfunc.sortl);
+
+	if (test_facility(151)) /* DFLTCC */
+		__insn32_query(INSN_DFLTCC, kvm_s390_available_subfunc.dfltcc);
 
 	if (MACHINE_HAS_ESOP)
 		allow_cpu_feat(KVM_S390_VM_CPU_FEAT_ESOP);
@@ -513,9 +539,6 @@ int kvm_vm_ioctl_check_extension(struct kvm *kvm, long ext)
 		else if (sclp.has_esca && sclp.has_64bscao)
 			r = KVM_S390_ESCA_CPU_SLOTS;
 		break;
-	case KVM_CAP_NR_MEMSLOTS:
-		r = KVM_USER_MEM_SLOTS;
-		break;
 	case KVM_CAP_S390_COW:
 		r = MACHINE_HAS_ESOP;
 		break;
@@ -656,6 +679,14 @@ int kvm_vm_ioctl_enable_cap(struct kvm *kvm, struct kvm_enable_cap *cap)
 			if (test_facility(135)) {
 				set_kvm_facility(kvm->arch.model.fac_mask, 135);
 				set_kvm_facility(kvm->arch.model.fac_list, 135);
+			}
+			if (test_facility(148)) {
+				set_kvm_facility(kvm->arch.model.fac_mask, 148);
+				set_kvm_facility(kvm->arch.model.fac_list, 148);
+			}
+			if (test_facility(152)) {
+				set_kvm_facility(kvm->arch.model.fac_mask, 152);
+				set_kvm_facility(kvm->arch.model.fac_list, 152);
 			}
 			r = 0;
 		} else
@@ -1323,6 +1354,19 @@ static int kvm_s390_set_processor_subfunc(struct kvm *kvm,
 	VM_EVENT(kvm, 3, "SET: guest KMA    subfunc 0x%16.16lx.%16.16lx",
 		 ((unsigned long *) &kvm->arch.model.subfuncs.kma)[0],
 		 ((unsigned long *) &kvm->arch.model.subfuncs.kma)[1]);
+	VM_EVENT(kvm, 3, "SET: guest KDSA   subfunc 0x%16.16lx.%16.16lx",
+		 ((unsigned long *) &kvm->arch.model.subfuncs.kdsa)[0],
+		 ((unsigned long *) &kvm->arch.model.subfuncs.kdsa)[1]);
+	VM_EVENT(kvm, 3, "SET: guest SORTL  subfunc 0x%16.16lx.%16.16lx.%16.16lx.%16.16lx",
+		 ((unsigned long *) &kvm->arch.model.subfuncs.sortl)[0],
+		 ((unsigned long *) &kvm->arch.model.subfuncs.sortl)[1],
+		 ((unsigned long *) &kvm->arch.model.subfuncs.sortl)[2],
+		 ((unsigned long *) &kvm->arch.model.subfuncs.sortl)[3]);
+	VM_EVENT(kvm, 3, "SET: guest DFLTCC subfunc 0x%16.16lx.%16.16lx.%16.16lx.%16.16lx",
+		 ((unsigned long *) &kvm->arch.model.subfuncs.dfltcc)[0],
+		 ((unsigned long *) &kvm->arch.model.subfuncs.dfltcc)[1],
+		 ((unsigned long *) &kvm->arch.model.subfuncs.dfltcc)[2],
+		 ((unsigned long *) &kvm->arch.model.subfuncs.dfltcc)[3]);
 
 	return 0;
 }
@@ -1491,6 +1535,19 @@ static int kvm_s390_get_processor_subfunc(struct kvm *kvm,
 	VM_EVENT(kvm, 3, "GET: guest KMA    subfunc 0x%16.16lx.%16.16lx",
 		 ((unsigned long *) &kvm->arch.model.subfuncs.kma)[0],
 		 ((unsigned long *) &kvm->arch.model.subfuncs.kma)[1]);
+	VM_EVENT(kvm, 3, "GET: guest KDSA   subfunc 0x%16.16lx.%16.16lx",
+		 ((unsigned long *) &kvm->arch.model.subfuncs.kdsa)[0],
+		 ((unsigned long *) &kvm->arch.model.subfuncs.kdsa)[1]);
+	VM_EVENT(kvm, 3, "GET: guest SORTL  subfunc 0x%16.16lx.%16.16lx.%16.16lx.%16.16lx",
+		 ((unsigned long *) &kvm->arch.model.subfuncs.sortl)[0],
+		 ((unsigned long *) &kvm->arch.model.subfuncs.sortl)[1],
+		 ((unsigned long *) &kvm->arch.model.subfuncs.sortl)[2],
+		 ((unsigned long *) &kvm->arch.model.subfuncs.sortl)[3]);
+	VM_EVENT(kvm, 3, "GET: guest DFLTCC subfunc 0x%16.16lx.%16.16lx.%16.16lx.%16.16lx",
+		 ((unsigned long *) &kvm->arch.model.subfuncs.dfltcc)[0],
+		 ((unsigned long *) &kvm->arch.model.subfuncs.dfltcc)[1],
+		 ((unsigned long *) &kvm->arch.model.subfuncs.dfltcc)[2],
+		 ((unsigned long *) &kvm->arch.model.subfuncs.dfltcc)[3]);
 
 	return 0;
 }
@@ -1546,6 +1603,19 @@ static int kvm_s390_get_machine_subfunc(struct kvm *kvm,
 	VM_EVENT(kvm, 3, "GET: host  KMA    subfunc 0x%16.16lx.%16.16lx",
 		 ((unsigned long *) &kvm_s390_available_subfunc.kma)[0],
 		 ((unsigned long *) &kvm_s390_available_subfunc.kma)[1]);
+	VM_EVENT(kvm, 3, "GET: host  KDSA   subfunc 0x%16.16lx.%16.16lx",
+		 ((unsigned long *) &kvm_s390_available_subfunc.kdsa)[0],
+		 ((unsigned long *) &kvm_s390_available_subfunc.kdsa)[1]);
+	VM_EVENT(kvm, 3, "GET: host  SORTL  subfunc 0x%16.16lx.%16.16lx.%16.16lx.%16.16lx",
+		 ((unsigned long *) &kvm_s390_available_subfunc.sortl)[0],
+		 ((unsigned long *) &kvm_s390_available_subfunc.sortl)[1],
+		 ((unsigned long *) &kvm_s390_available_subfunc.sortl)[2],
+		 ((unsigned long *) &kvm_s390_available_subfunc.sortl)[3]);
+	VM_EVENT(kvm, 3, "GET: host  DFLTCC subfunc 0x%16.16lx.%16.16lx.%16.16lx.%16.16lx",
+		 ((unsigned long *) &kvm_s390_available_subfunc.dfltcc)[0],
+		 ((unsigned long *) &kvm_s390_available_subfunc.dfltcc)[1],
+		 ((unsigned long *) &kvm_s390_available_subfunc.dfltcc)[2],
+		 ((unsigned long *) &kvm_s390_available_subfunc.dfltcc)[3]);
 
 	return 0;
 }
@@ -2912,6 +2982,13 @@ int kvm_arch_vcpu_setup(struct kvm_vcpu *vcpu)
 		VCPU_EVENT(vcpu, 3, "AIV gisa format-%u enabled for cpu %03u",
 			   vcpu->arch.sie_block->gd & 0x3, vcpu->vcpu_id);
 	}
+	/*
+	 * if any of 32,33,34,40,41 is active in host AND guest,
+	 * we enable pckmo for ecc
+	 */
+	if ((vcpu->kvm->arch.model.subfuncs.pckmo[4] & kvm_s390_available_subfunc.pckmo[4] & 0xe0) ||
+	    (vcpu->kvm->arch.model.subfuncs.pckmo[5] & kvm_s390_available_subfunc.pckmo[5] & 0xc0))
+		vcpu->arch.sie_block->ecd |= ECD_ECC;
 	vcpu->arch.sie_block->sdnxo = ((unsigned long) &vcpu->run->s.regs.sdnx)
 					| SDNXC;
 	vcpu->arch.sie_block->riccbd = (unsigned long) &vcpu->run->s.regs.riccb;

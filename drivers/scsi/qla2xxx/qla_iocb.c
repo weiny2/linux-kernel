@@ -107,7 +107,7 @@ qla2x00_prep_cont_type0_iocb(struct scsi_qla_host *vha)
 	cont_pkt = (cont_entry_t *)req->ring_ptr;
 
 	/* Load packet defaults. */
-	*((uint32_t *)(&cont_pkt->entry_type)) = cpu_to_le32(CONTINUE_TYPE);
+	put_unaligned_le32(CONTINUE_TYPE, &cont_pkt->entry_type);
 
 	return (cont_pkt);
 }
@@ -136,9 +136,8 @@ qla2x00_prep_cont_type1_iocb(scsi_qla_host_t *vha, struct req_que *req)
 	cont_pkt = (cont_a64_entry_t *)req->ring_ptr;
 
 	/* Load packet defaults. */
-	*((uint32_t *)(&cont_pkt->entry_type)) = IS_QLAFX00(vha->hw) ?
-	    cpu_to_le32(CONTINUE_A64_TYPE_FX00) :
-	    cpu_to_le32(CONTINUE_A64_TYPE);
+	put_unaligned_le32(IS_QLAFX00(vha->hw) ? CONTINUE_A64_TYPE_FX00 :
+			   CONTINUE_A64_TYPE, &cont_pkt->entry_type);
 
 	return (cont_pkt);
 }
@@ -202,8 +201,7 @@ void qla2x00_build_scsi_iocbs_32(srb_t *sp, cmd_entry_t *cmd_pkt,
 	cmd = GET_CMD_SP(sp);
 
 	/* Update entry type to indicate Command Type 2 IOCB */
-	*((uint32_t *)(&cmd_pkt->entry_type)) =
-	    cpu_to_le32(COMMAND_TYPE);
+	put_unaligned_le32(COMMAND_TYPE, &cmd_pkt->entry_type);
 
 	/* No data transfer */
 	if (!scsi_bufflen(cmd) || cmd->sc_data_direction == DMA_NONE) {
@@ -260,7 +258,7 @@ void qla2x00_build_scsi_iocbs_64(srb_t *sp, cmd_entry_t *cmd_pkt,
 	cmd = GET_CMD_SP(sp);
 
 	/* Update entry type to indicate Command Type 3 IOCB */
-	*((uint32_t *)(&cmd_pkt->entry_type)) = cpu_to_le32(COMMAND_A64_TYPE);
+	put_unaligned_le32(COMMAND_A64_TYPE, &cmd_pkt->entry_type);
 
 	/* No data transfer */
 	if (!scsi_bufflen(cmd) || cmd->sc_data_direction == DMA_NONE) {
@@ -467,7 +465,7 @@ qla2x00_start_iocbs(struct scsi_qla_host *vha, struct req_que *req)
 			req->ring_ptr++;
 
 		/* Set chip new ring index. */
-		if (ha->mqenable || IS_QLA27XX(ha)) {
+		if (ha->mqenable || IS_QLA27XX(ha) || IS_QLA28XX(ha)) {
 			WRT_REG_DWORD(req->req_q_in, req->ring_index);
 		} else if (IS_QLA83XX(ha)) {
 			WRT_REG_DWORD(req->req_q_in, req->ring_index);
@@ -596,7 +594,7 @@ qla24xx_build_scsi_type_6_iocbs(srb_t *sp, struct cmd_type_6 *cmd_pkt,
 	cmd = GET_CMD_SP(sp);
 
 	/* Update entry type to indicate Command Type 3 IOCB */
-	*((uint32_t *)(&cmd_pkt->entry_type)) = cpu_to_le32(COMMAND_TYPE_6);
+	put_unaligned_le32(COMMAND_TYPE_6, &cmd_pkt->entry_type);
 
 	/* No data transfer */
 	if (!scsi_bufflen(cmd) || cmd->sc_data_direction == DMA_NONE) {
@@ -711,7 +709,7 @@ qla24xx_build_scsi_iocbs(srb_t *sp, struct cmd_type_7 *cmd_pkt,
 	cmd = GET_CMD_SP(sp);
 
 	/* Update entry type to indicate Command Type 3 IOCB */
-	*((uint32_t *)(&cmd_pkt->entry_type)) = cpu_to_le32(COMMAND_TYPE_7);
+	put_unaligned_le32(COMMAND_TYPE_7, &cmd_pkt->entry_type);
 
 	/* No data transfer */
 	if (!scsi_bufflen(cmd) || cmd->sc_data_direction == DMA_NONE) {
@@ -1109,6 +1107,7 @@ qla24xx_walk_and_build_prot_sglist(struct qla_hw_data *ha, srb_t *sp,
 
 	if (sp) {
 		struct scsi_cmnd *cmd = GET_CMD_SP(sp);
+
 		sgl = scsi_prot_sglist(cmd);
 		vha = sp->vha;
 		difctx = sp->u.scmd.ctx;
@@ -1405,7 +1404,7 @@ qla24xx_walk_and_build_prot_sglist(struct qla_hw_data *ha, srb_t *sp,
  * @tot_prot_dsds: Total number of segments with protection information
  * @fw_prot_opts: Protection options to be passed to firmware
  */
-inline int
+static inline int
 qla24xx_build_scsi_crc_2_iocbs(srb_t *sp, struct cmd_type_crc_2 *cmd_pkt,
     uint16_t tot_dsds, uint16_t tot_prot_dsds, uint16_t fw_prot_opts)
 {
@@ -1427,7 +1426,7 @@ qla24xx_build_scsi_crc_2_iocbs(srb_t *sp, struct cmd_type_crc_2 *cmd_pkt,
 	cmd = GET_CMD_SP(sp);
 
 	/* Update entry type to indicate Command Type CRC_2 IOCB */
-	*((uint32_t *)(&cmd_pkt->entry_type)) = cpu_to_le32(COMMAND_TYPE_CRC_2);
+	put_unaligned_le32(COMMAND_TYPE_CRC_2, &cmd_pkt->entry_type);
 
 	vha = sp->vha;
 	ha = vha->hw;
@@ -1520,18 +1519,18 @@ qla24xx_build_scsi_crc_2_iocbs(srb_t *sp, struct cmd_type_crc_2 *cmd_pkt,
 	switch (scsi_get_prot_op(GET_CMD_SP(sp))) {
 	case SCSI_PROT_READ_INSERT:
 	case SCSI_PROT_WRITE_STRIP:
-	    total_bytes = data_bytes;
-	    data_bytes += dif_bytes;
-	    break;
+		total_bytes = data_bytes;
+		data_bytes += dif_bytes;
+		break;
 
 	case SCSI_PROT_READ_STRIP:
 	case SCSI_PROT_WRITE_INSERT:
 	case SCSI_PROT_READ_PASS:
 	case SCSI_PROT_WRITE_PASS:
-	    total_bytes = data_bytes + dif_bytes;
-	    break;
+		total_bytes = data_bytes + dif_bytes;
+		break;
 	default:
-	    BUG();
+		BUG();
 	}
 
 	if (!qla2x00_hba_err_chk_enabled(sp))
@@ -2325,7 +2324,8 @@ __qla2x00_alloc_iocbs(struct qla_qpair *qpair, srb_t *sp)
 	if (req->cnt < req_cnt + 2) {
 		if (qpair->use_shadow_reg)
 			cnt = *req->out_ptr;
-		else if (ha->mqenable || IS_QLA83XX(ha) || IS_QLA27XX(ha))
+		else if (ha->mqenable || IS_QLA83XX(ha) || IS_QLA27XX(ha) ||
+		    IS_QLA28XX(ha))
 			cnt = RD_REG_DWORD(&reg->isp25mq.req_q_out);
 		else if (IS_P3P_TYPE(ha))
 			cnt = RD_REG_DWORD(&reg->isp82.req_q_out);
@@ -2494,7 +2494,7 @@ qla2x00_logout_iocb(srb_t *sp, struct mbx_entry *mbx)
 	SET_TARGET_ID(ha, mbx->loop_id, sp->fcport->loop_id);
 	mbx->mb0 = cpu_to_le16(MBC_LOGOUT_FABRIC_PORT);
 	mbx->mb1 = HAS_EXTENDED_IDS(ha) ?
-	    cpu_to_le16(sp->fcport->loop_id):
+	    cpu_to_le16(sp->fcport->loop_id) :
 	    cpu_to_le16(sp->fcport->loop_id << 8);
 	mbx->mb2 = cpu_to_le16(sp->fcport->d_id.b.domain);
 	mbx->mb3 = cpu_to_le16(sp->fcport->d_id.b.area << 8 |
@@ -3386,6 +3386,7 @@ sufficient_dsds:
 		cmd_pkt->entry_status = (uint8_t) rsp->id;
 	} else {
 		struct cmd_type_7 *cmd_pkt;
+
 		req_cnt = qla24xx_calc_iocbs(vha, tot_dsds);
 		if (req->cnt < (req_cnt + 2)) {
 			cnt = (uint16_t)RD_REG_DWORD_RELAXED(
@@ -3746,8 +3747,7 @@ qla25xx_build_bidir_iocb(srb_t *sp, struct scsi_qla_host *vha,
 	struct bsg_job *bsg_job = sp->u.bsg_job;
 
 	/*Update entry type to indicate bidir command */
-	*((uint32_t *)(&cmd_pkt->entry_type)) =
-		cpu_to_le32(COMMAND_BIDIRECTIONAL);
+	put_unaligned_le32(COMMAND_BIDIRECTIONAL, &cmd_pkt->entry_type);
 
 	/* Set the transfer direction, in this set both flags
 	 * Also set the BD_WRAP_BACK flag, firmware will take care

@@ -653,9 +653,9 @@ static int fsl_elbc_attach_chip(struct nand_chip *chip)
 	priv->fmr |= al << FMR_AL_SHIFT;
 
 	dev_dbg(priv->dev, "fsl_elbc_init: nand->numchips = %d\n",
-	        chip->numchips);
+	        nanddev_ntargets(&chip->base));
 	dev_dbg(priv->dev, "fsl_elbc_init: nand->chipsize = %lld\n",
-	        chip->chipsize);
+	        nanddev_target_size(&chip->base));
 	dev_dbg(priv->dev, "fsl_elbc_init: nand->pagemask = %8x\n",
 	        chip->pagemask);
 	dev_dbg(priv->dev, "fsl_elbc_init: nand->legacy.chip_delay = %d\n",

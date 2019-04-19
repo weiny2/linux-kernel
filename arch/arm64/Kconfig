@@ -149,8 +149,8 @@ config ARM64
 	select HAVE_PERF_REGS
 	select HAVE_PERF_USER_STACK_DUMP
 	select HAVE_REGS_AND_STACK_ACCESS_API
+	select HAVE_FUNCTION_ARG_ACCESS_API
 	select HAVE_RCU_TABLE_FREE
-	select HAVE_RCU_TABLE_INVALIDATE
 	select HAVE_RSEQ
 	select HAVE_STACKPROTECTOR
 	select HAVE_SYSCALL_TRACEPOINTS
@@ -236,9 +236,6 @@ config LOCKDEP_SUPPORT
 	def_bool y
 
 config TRACE_IRQFLAGS_SUPPORT
-	def_bool y
-
-config RWSEM_XCHGADD_ALGORITHM
 	def_bool y
 
 config GENERIC_BUG
@@ -889,6 +886,9 @@ config ARCH_WANT_HUGE_PMD_SHARE
 
 config ARCH_HAS_CACHE_LINE_SIZE
 	def_bool y
+
+config ARCH_ENABLE_SPLIT_PMD_PTLOCK
+	def_bool y if PGTABLE_LEVELS > 2
 
 config SECCOMP
 	bool "Enable seccomp to safely compute untrusted bytecode"

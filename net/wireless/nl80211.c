@@ -331,6 +331,11 @@ const struct nla_policy nl80211_policy[NUM_NL80211_ATTR] = {
 					       .len = NL80211_MAX_SUPP_RATES },
 	[NL80211_ATTR_STA_PLINK_ACTION] =
 		NLA_POLICY_MAX(NLA_U8, NUM_NL80211_PLINK_ACTIONS - 1),
+	[NL80211_ATTR_STA_TX_POWER_SETTING] =
+		NLA_POLICY_RANGE(NLA_U8,
+				 NL80211_TX_POWER_AUTOMATIC,
+				 NL80211_TX_POWER_FIXED),
+	[NL80211_ATTR_STA_TX_POWER] = { .type = NLA_S16 },
 	[NL80211_ATTR_STA_VLAN] = { .type = NLA_U32 },
 	[NL80211_ATTR_MNTR_FLAGS] = { /* NLA_NESTED can't be empty */ },
 	[NL80211_ATTR_MESH_ID] = { .type = NLA_BINARY,
@@ -553,6 +558,7 @@ static const struct nla_policy nl80211_key_policy[NL80211_KEY_MAX + 1] = {
 	[NL80211_KEY_DEFAULT_MGMT] = { .type = NLA_FLAG },
 	[NL80211_KEY_TYPE] = NLA_POLICY_MAX(NLA_U32, NUM_NL80211_KEYTYPES - 1),
 	[NL80211_KEY_DEFAULT_TYPES] = { .type = NLA_NESTED },
+	[NL80211_KEY_MODE] = NLA_POLICY_RANGE(NLA_U8, 0, NL80211_KEY_SET_TX),
 };
 
 /* policy for the key default flags */
@@ -618,11 +624,20 @@ nl80211_rekey_policy[NUM_NL80211_REKEY_DATA] = {
 };
 
 static const struct nla_policy
+nl80211_match_band_rssi_policy[NUM_NL80211_BANDS] = {
+	[NL80211_BAND_2GHZ] = { .type = NLA_S32 },
+	[NL80211_BAND_5GHZ] = { .type = NLA_S32 },
+	[NL80211_BAND_60GHZ] = { .type = NLA_S32 },
+};
+
+static const struct nla_policy
 nl80211_match_policy[NL80211_SCHED_SCAN_MATCH_ATTR_MAX + 1] = {
 	[NL80211_SCHED_SCAN_MATCH_ATTR_SSID] = { .type = NLA_BINARY,
 						 .len = IEEE80211_MAX_SSID_LEN },
 	[NL80211_SCHED_SCAN_MATCH_ATTR_BSSID] = { .len = ETH_ALEN },
 	[NL80211_SCHED_SCAN_MATCH_ATTR_RSSI] = { .type = NLA_U32 },
+	[NL80211_SCHED_SCAN_MATCH_PER_BAND_RSSI] =
+		NLA_POLICY_NESTED(nl80211_match_band_rssi_policy),
 };
 
 static const struct nla_policy
@@ -957,6 +972,9 @@ static int nl80211_parse_key_new(struct genl_info *info, struct nlattr *key,
 		k->def_uni = kdt[NL80211_KEY_DEFAULT_TYPE_UNICAST];
 		k->def_multi = kdt[NL80211_KEY_DEFAULT_TYPE_MULTICAST];
 	}
+
+	if (tb[NL80211_KEY_MODE])
+		k->p.mode = nla_get_u8(tb[NL80211_KEY_MODE]);
 
 	return 0;
 }
@@ -2724,7 +2742,8 @@ static int nl80211_set_wiphy(struct sk_buff *skb, struct genl_info *info)
 			return -EINVAL;
 
 		if (netdev->ieee80211_ptr->iftype != NL80211_IFTYPE_AP &&
-		    netdev->ieee80211_ptr->iftype != NL80211_IFTYPE_P2P_GO)
+		    netdev->ieee80211_ptr->iftype != NL80211_IFTYPE_P2P_GO &&
+		    netdev->ieee80211_ptr->iftype != NL80211_IFTYPE_ADHOC)
 			return -EINVAL;
 
 		if (!netif_running(netdev))
@@ -3634,8 +3653,11 @@ static int nl80211_set_key(struct sk_buff *skb, struct genl_info *info)
 	if (key.idx < 0)
 		return -EINVAL;
 
-	/* only support setting default key */
-	if (!key.def && !key.defmgmt)
+	/* Only support setting default key and
+	 * Extended Key ID action NL80211_KEY_SET_TX.
+	 */
+	if (!key.def && !key.defmgmt &&
+	    !(key.p.mode == NL80211_KEY_SET_TX))
 		return -EINVAL;
 
 	wdev_lock(dev->ieee80211_ptr);
@@ -3659,7 +3681,7 @@ static int nl80211_set_key(struct sk_buff *skb, struct genl_info *info)
 #ifdef CONFIG_CFG80211_WEXT
 		dev->ieee80211_ptr->wext.default_key = key.idx;
 #endif
-	} else {
+	} else if (key.defmgmt) {
 		if (key.def_uni || !key.def_multi) {
 			err = -EINVAL;
 			goto out;
@@ -3681,8 +3703,25 @@ static int nl80211_set_key(struct sk_buff *skb, struct genl_info *info)
 #ifdef CONFIG_CFG80211_WEXT
 		dev->ieee80211_ptr->wext.default_mgmt_key = key.idx;
 #endif
-	}
+	} else if (key.p.mode == NL80211_KEY_SET_TX &&
+		   wiphy_ext_feature_isset(&rdev->wiphy,
+					   NL80211_EXT_FEATURE_EXT_KEY_ID)) {
+		u8 *mac_addr = NULL;
 
+		if (info->attrs[NL80211_ATTR_MAC])
+			mac_addr = nla_data(info->attrs[NL80211_ATTR_MAC]);
+
+		if (!mac_addr || key.idx < 0 || key.idx > 1) {
+			err = -EINVAL;
+			goto out;
+		}
+
+		err = rdev_add_key(rdev, dev, key.idx,
+				   NL80211_KEYTYPE_PAIRWISE,
+				   mac_addr, &key.p);
+	} else {
+		err = -EINVAL;
+	}
  out:
 	wdev_unlock(dev->ieee80211_ptr);
 
@@ -3843,8 +3882,7 @@ static struct cfg80211_acl_data *parse_acl_data(struct wiphy *wiphy,
 	if (n_entries > wiphy->max_acl_mac_addrs)
 		return ERR_PTR(-ENOTSUPP);
 
-	acl = kzalloc(sizeof(*acl) + (sizeof(struct mac_address) * n_entries),
-		      GFP_KERNEL);
+	acl = kzalloc(struct_size(acl, mac_addrs, n_entries), GFP_KERNEL);
 	if (!acl)
 		return ERR_PTR(-ENOMEM);
 
@@ -4889,6 +4927,7 @@ static int nl80211_send_station(struct sk_buff *msg, u32 cmd, u32 portid,
 	PUT_SINFO(TX_RETRIES, tx_retries, u32);
 	PUT_SINFO(TX_FAILED, tx_failed, u32);
 	PUT_SINFO(EXPECTED_THROUGHPUT, expected_throughput, u32);
+	PUT_SINFO(AIRTIME_LINK_METRIC, airtime_link_metric, u32);
 	PUT_SINFO(BEACON_LOSS, beacon_loss_count, u32);
 	PUT_SINFO(LOCAL_PM, local_pm, u32);
 	PUT_SINFO(PEER_PM, peer_pm, u32);
@@ -5387,6 +5426,36 @@ static int nl80211_set_station_tdls(struct genl_info *info,
 	return nl80211_parse_sta_wme(info, params);
 }
 
+static int nl80211_parse_sta_txpower_setting(struct genl_info *info,
+					     struct station_parameters *params)
+{
+	struct cfg80211_registered_device *rdev = info->user_ptr[0];
+	int idx;
+
+	if (info->attrs[NL80211_ATTR_STA_TX_POWER_SETTING]) {
+		if (!rdev->ops->set_tx_power ||
+		    !wiphy_ext_feature_isset(&rdev->wiphy,
+					 NL80211_EXT_FEATURE_STA_TX_PWR))
+			return -EOPNOTSUPP;
+
+		idx = NL80211_ATTR_STA_TX_POWER_SETTING;
+		params->txpwr.type = nla_get_u8(info->attrs[idx]);
+
+		if (params->txpwr.type == NL80211_TX_POWER_LIMITED) {
+			idx = NL80211_ATTR_STA_TX_POWER;
+
+			if (info->attrs[idx])
+				params->txpwr.power =
+					nla_get_s16(info->attrs[idx]);
+			else
+				return -EINVAL;
+		}
+		params->sta_modify_mask |= STATION_PARAM_APPLY_STA_TXPOWER;
+	}
+
+	return 0;
+}
+
 static int nl80211_set_station(struct sk_buff *skb, struct genl_info *info)
 {
 	struct cfg80211_registered_device *rdev = info->user_ptr[0];
@@ -5479,6 +5548,10 @@ static int nl80211_set_station(struct sk_buff *skb, struct genl_info *info)
 	    !wiphy_ext_feature_isset(&rdev->wiphy,
 				     NL80211_EXT_FEATURE_AIRTIME_FAIRNESS))
 		return -EOPNOTSUPP;
+
+	err = nl80211_parse_sta_txpower_setting(info, &params);
+	if (err)
+		return err;
 
 	/* Include parameters for TDLS peer (will check later) */
 	err = nl80211_set_station_tdls(info, &params);
@@ -5616,6 +5689,10 @@ static int nl80211_new_station(struct sk_buff *skb, struct genl_info *info)
 	    !wiphy_ext_feature_isset(&rdev->wiphy,
 				     NL80211_EXT_FEATURE_AIRTIME_FAIRNESS))
 		return -EOPNOTSUPP;
+
+	err = nl80211_parse_sta_txpower_setting(info, &params);
+	if (err)
+		return err;
 
 	err = nl80211_parse_sta_channel_info(info, &params);
 	if (err)
@@ -6882,7 +6959,7 @@ static int nl80211_set_reg(struct sk_buff *skb, struct genl_info *info)
 	struct nlattr *nl_reg_rule;
 	char *alpha2;
 	int rem_reg_rules, r;
-	u32 num_rules = 0, rule_idx = 0, size_of_regd;
+	u32 num_rules = 0, rule_idx = 0;
 	enum nl80211_dfs_regions dfs_region = NL80211_DFS_UNSET;
 	struct ieee80211_regdomain *rd;
 
@@ -6907,10 +6984,7 @@ static int nl80211_set_reg(struct sk_buff *skb, struct genl_info *info)
 	if (!reg_is_valid_request(alpha2))
 		return -EINVAL;
 
-	size_of_regd = sizeof(struct ieee80211_regdomain) +
-		       num_rules * sizeof(struct ieee80211_reg_rule);
-
-	rd = kzalloc(size_of_regd, GFP_KERNEL);
+	rd = kzalloc(struct_size(rd, reg_rules, num_rules), GFP_KERNEL);
 	if (!rd)
 		return -ENOMEM;
 
@@ -7537,6 +7611,41 @@ nl80211_parse_sched_scan_plans(struct wiphy *wiphy, int n_plans,
 	return 0;
 }
 
+static int
+nl80211_parse_sched_scan_per_band_rssi(struct wiphy *wiphy,
+				       struct cfg80211_match_set *match_sets,
+				       struct nlattr *tb_band_rssi,
+				       s32 rssi_thold)
+{
+	struct nlattr *attr;
+	int i, tmp, ret = 0;
+
+	if (!wiphy_ext_feature_isset(wiphy,
+		    NL80211_EXT_FEATURE_SCHED_SCAN_BAND_SPECIFIC_RSSI_THOLD)) {
+		if (tb_band_rssi)
+			ret = -EOPNOTSUPP;
+		else
+			for (i = 0; i < NUM_NL80211_BANDS; i++)
+				match_sets->per_band_rssi_thold[i] =
+					NL80211_SCAN_RSSI_THOLD_OFF;
+		return ret;
+	}
+
+	for (i = 0; i < NUM_NL80211_BANDS; i++)
+		match_sets->per_band_rssi_thold[i] = rssi_thold;
+
+	nla_for_each_nested(attr, tb_band_rssi, tmp) {
+		enum nl80211_band band = nla_type(attr);
+
+		if (band < 0 || band >= NUM_NL80211_BANDS)
+			return -EINVAL;
+
+		match_sets->per_band_rssi_thold[band] =	nla_get_s32(attr);
+	}
+
+	return 0;
+}
+
 static struct cfg80211_sched_scan_request *
 nl80211_parse_sched_scan(struct wiphy *wiphy, struct wireless_dev *wdev,
 			 struct nlattr **attrs, int max_match_sets)
@@ -7776,43 +7885,55 @@ nl80211_parse_sched_scan(struct wiphy *wiphy, struct wireless_dev *wdev,
 				goto out_free;
 			ssid = tb[NL80211_SCHED_SCAN_MATCH_ATTR_SSID];
 			bssid = tb[NL80211_SCHED_SCAN_MATCH_ATTR_BSSID];
-			if (ssid || bssid) {
-				if (WARN_ON(i >= n_match_sets)) {
-					/* this indicates a programming error,
-					 * the loop above should have verified
-					 * things properly
-					 */
+
+			if (!ssid && !bssid) {
+				i++;
+				continue;
+			}
+
+			if (WARN_ON(i >= n_match_sets)) {
+				/* this indicates a programming error,
+				 * the loop above should have verified
+				 * things properly
+				 */
+				err = -EINVAL;
+				goto out_free;
+			}
+
+			if (ssid) {
+				if (nla_len(ssid) > IEEE80211_MAX_SSID_LEN) {
 					err = -EINVAL;
 					goto out_free;
 				}
-
-				if (ssid) {
-					if (nla_len(ssid) > IEEE80211_MAX_SSID_LEN) {
-						err = -EINVAL;
-						goto out_free;
-					}
-					memcpy(request->match_sets[i].ssid.ssid,
-					       nla_data(ssid), nla_len(ssid));
-					request->match_sets[i].ssid.ssid_len =
-						nla_len(ssid);
-				}
-				if (bssid) {
-					if (nla_len(bssid) != ETH_ALEN) {
-						err = -EINVAL;
-						goto out_free;
-					}
-					memcpy(request->match_sets[i].bssid,
-					       nla_data(bssid), ETH_ALEN);
-				}
-
-				/* special attribute - old implementation w/a */
-				request->match_sets[i].rssi_thold =
-					default_match_rssi;
-				rssi = tb[NL80211_SCHED_SCAN_MATCH_ATTR_RSSI];
-				if (rssi)
-					request->match_sets[i].rssi_thold =
-						nla_get_s32(rssi);
+				memcpy(request->match_sets[i].ssid.ssid,
+				       nla_data(ssid), nla_len(ssid));
+				request->match_sets[i].ssid.ssid_len =
+					nla_len(ssid);
 			}
+			if (bssid) {
+				if (nla_len(bssid) != ETH_ALEN) {
+					err = -EINVAL;
+					goto out_free;
+				}
+				memcpy(request->match_sets[i].bssid,
+				       nla_data(bssid), ETH_ALEN);
+			}
+
+			/* special attribute - old implementation w/a */
+			request->match_sets[i].rssi_thold = default_match_rssi;
+			rssi = tb[NL80211_SCHED_SCAN_MATCH_ATTR_RSSI];
+			if (rssi)
+				request->match_sets[i].rssi_thold =
+					nla_get_s32(rssi);
+
+			/* Parse per band RSSI attribute */
+			err = nl80211_parse_sched_scan_per_band_rssi(wiphy,
+				&request->match_sets[i],
+				tb[NL80211_SCHED_SCAN_MATCH_PER_BAND_RSSI],
+				request->match_sets[i].rssi_thold);
+			if (err)
+				goto out_free;
+
 			i++;
 		}
 
@@ -13259,6 +13380,31 @@ nla_put_failure:
 	return -ENOBUFS;
 }
 
+static int nl80211_update_owe_info(struct sk_buff *skb, struct genl_info *info)
+{
+	struct cfg80211_registered_device *rdev = info->user_ptr[0];
+	struct cfg80211_update_owe_info owe_info;
+	struct net_device *dev = info->user_ptr[1];
+
+	if (!rdev->ops->update_owe_info)
+		return -EOPNOTSUPP;
+
+	if (!info->attrs[NL80211_ATTR_STATUS_CODE] ||
+	    !info->attrs[NL80211_ATTR_MAC])
+		return -EINVAL;
+
+	memset(&owe_info, 0, sizeof(owe_info));
+	owe_info.status = nla_get_u16(info->attrs[NL80211_ATTR_STATUS_CODE]);
+	nla_memcpy(owe_info.peer, info->attrs[NL80211_ATTR_MAC], ETH_ALEN);
+
+	if (info->attrs[NL80211_ATTR_IE]) {
+		owe_info.ie = nla_data(info->attrs[NL80211_ATTR_IE]);
+		owe_info.ie_len = nla_len(info->attrs[NL80211_ATTR_IE]);
+	}
+
+	return rdev_update_owe_info(rdev, dev, &owe_info);
+}
+
 #define NL80211_FLAG_NEED_WIPHY		0x01
 #define NL80211_FLAG_NEED_NETDEV	0x02
 #define NL80211_FLAG_NEED_RTNL		0x04
@@ -13368,7 +13514,6 @@ static const struct genl_ops nl80211_ops[] = {
 		.doit = nl80211_get_wiphy,
 		.dumpit = nl80211_dump_wiphy,
 		.done = nl80211_dump_wiphy_done,
-		.policy = nl80211_policy,
 		/* can be retrieved by unprivileged users */
 		.internal_flags = NL80211_FLAG_NEED_WIPHY |
 				  NL80211_FLAG_NEED_RTNL,
@@ -13376,7 +13521,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_SET_WIPHY,
 		.doit = nl80211_set_wiphy,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_RTNL,
 	},
@@ -13384,7 +13528,6 @@ static const struct genl_ops nl80211_ops[] = {
 		.cmd = NL80211_CMD_GET_INTERFACE,
 		.doit = nl80211_get_interface,
 		.dumpit = nl80211_dump_interface,
-		.policy = nl80211_policy,
 		/* can be retrieved by unprivileged users */
 		.internal_flags = NL80211_FLAG_NEED_WDEV |
 				  NL80211_FLAG_NEED_RTNL,
@@ -13392,7 +13535,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_SET_INTERFACE,
 		.doit = nl80211_set_interface,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV |
 				  NL80211_FLAG_NEED_RTNL,
@@ -13400,7 +13542,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_NEW_INTERFACE,
 		.doit = nl80211_new_interface,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_WIPHY |
 				  NL80211_FLAG_NEED_RTNL,
@@ -13408,7 +13549,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_DEL_INTERFACE,
 		.doit = nl80211_del_interface,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_WDEV |
 				  NL80211_FLAG_NEED_RTNL,
@@ -13416,7 +13556,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_GET_KEY,
 		.doit = nl80211_get_key,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV_UP |
 				  NL80211_FLAG_NEED_RTNL,
@@ -13424,7 +13563,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_SET_KEY,
 		.doit = nl80211_set_key,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV_UP |
 				  NL80211_FLAG_NEED_RTNL |
@@ -13433,7 +13571,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_NEW_KEY,
 		.doit = nl80211_new_key,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV_UP |
 				  NL80211_FLAG_NEED_RTNL |
@@ -13442,14 +13579,12 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_DEL_KEY,
 		.doit = nl80211_del_key,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV_UP |
 				  NL80211_FLAG_NEED_RTNL,
 	},
 	{
 		.cmd = NL80211_CMD_SET_BEACON,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.doit = nl80211_set_beacon,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV_UP |
@@ -13457,7 +13592,6 @@ static const struct genl_ops nl80211_ops[] = {
 	},
 	{
 		.cmd = NL80211_CMD_START_AP,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.doit = nl80211_start_ap,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV_UP |
@@ -13465,7 +13599,6 @@ static const struct genl_ops nl80211_ops[] = {
 	},
 	{
 		.cmd = NL80211_CMD_STOP_AP,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.doit = nl80211_stop_ap,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV_UP |
@@ -13475,14 +13608,12 @@ static const struct genl_ops nl80211_ops[] = {
 		.cmd = NL80211_CMD_GET_STATION,
 		.doit = nl80211_get_station,
 		.dumpit = nl80211_dump_station,
-		.policy = nl80211_policy,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV |
 				  NL80211_FLAG_NEED_RTNL,
 	},
 	{
 		.cmd = NL80211_CMD_SET_STATION,
 		.doit = nl80211_set_station,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV_UP |
 				  NL80211_FLAG_NEED_RTNL,
@@ -13490,7 +13621,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_NEW_STATION,
 		.doit = nl80211_new_station,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV_UP |
 				  NL80211_FLAG_NEED_RTNL,
@@ -13498,7 +13628,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_DEL_STATION,
 		.doit = nl80211_del_station,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV_UP |
 				  NL80211_FLAG_NEED_RTNL,
@@ -13507,7 +13636,6 @@ static const struct genl_ops nl80211_ops[] = {
 		.cmd = NL80211_CMD_GET_MPATH,
 		.doit = nl80211_get_mpath,
 		.dumpit = nl80211_dump_mpath,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV_UP |
 				  NL80211_FLAG_NEED_RTNL,
@@ -13516,7 +13644,6 @@ static const struct genl_ops nl80211_ops[] = {
 		.cmd = NL80211_CMD_GET_MPP,
 		.doit = nl80211_get_mpp,
 		.dumpit = nl80211_dump_mpp,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV_UP |
 				  NL80211_FLAG_NEED_RTNL,
@@ -13524,7 +13651,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_SET_MPATH,
 		.doit = nl80211_set_mpath,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV_UP |
 				  NL80211_FLAG_NEED_RTNL,
@@ -13532,7 +13658,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_NEW_MPATH,
 		.doit = nl80211_new_mpath,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV_UP |
 				  NL80211_FLAG_NEED_RTNL,
@@ -13540,7 +13665,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_DEL_MPATH,
 		.doit = nl80211_del_mpath,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV_UP |
 				  NL80211_FLAG_NEED_RTNL,
@@ -13548,7 +13672,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_SET_BSS,
 		.doit = nl80211_set_bss,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV_UP |
 				  NL80211_FLAG_NEED_RTNL,
@@ -13557,7 +13680,6 @@ static const struct genl_ops nl80211_ops[] = {
 		.cmd = NL80211_CMD_GET_REG,
 		.doit = nl80211_get_reg_do,
 		.dumpit = nl80211_get_reg_dump,
-		.policy = nl80211_policy,
 		.internal_flags = NL80211_FLAG_NEED_RTNL,
 		/* can be retrieved by unprivileged users */
 	},
@@ -13565,7 +13687,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_SET_REG,
 		.doit = nl80211_set_reg,
-		.policy = nl80211_policy,
 		.flags = GENL_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_RTNL,
 	},
@@ -13573,19 +13694,16 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_REQ_SET_REG,
 		.doit = nl80211_req_set_reg,
-		.policy = nl80211_policy,
 		.flags = GENL_ADMIN_PERM,
 	},
 	{
 		.cmd = NL80211_CMD_RELOAD_REGDB,
 		.doit = nl80211_reload_regdb,
-		.policy = nl80211_policy,
 		.flags = GENL_ADMIN_PERM,
 	},
 	{
 		.cmd = NL80211_CMD_GET_MESH_CONFIG,
 		.doit = nl80211_get_mesh_config,
-		.policy = nl80211_policy,
 		/* can be retrieved by unprivileged users */
 		.internal_flags = NL80211_FLAG_NEED_NETDEV_UP |
 				  NL80211_FLAG_NEED_RTNL,
@@ -13593,7 +13711,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_SET_MESH_CONFIG,
 		.doit = nl80211_update_mesh_config,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV_UP |
 				  NL80211_FLAG_NEED_RTNL,
@@ -13601,7 +13718,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_TRIGGER_SCAN,
 		.doit = nl80211_trigger_scan,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_WDEV_UP |
 				  NL80211_FLAG_NEED_RTNL,
@@ -13609,20 +13725,17 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_ABORT_SCAN,
 		.doit = nl80211_abort_scan,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_WDEV_UP |
 				  NL80211_FLAG_NEED_RTNL,
 	},
 	{
 		.cmd = NL80211_CMD_GET_SCAN,
-		.policy = nl80211_policy,
 		.dumpit = nl80211_dump_scan,
 	},
 	{
 		.cmd = NL80211_CMD_START_SCHED_SCAN,
 		.doit = nl80211_start_sched_scan,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV_UP |
 				  NL80211_FLAG_NEED_RTNL,
@@ -13630,7 +13743,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_STOP_SCHED_SCAN,
 		.doit = nl80211_stop_sched_scan,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV_UP |
 				  NL80211_FLAG_NEED_RTNL,
@@ -13638,7 +13750,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_AUTHENTICATE,
 		.doit = nl80211_authenticate,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV_UP |
 				  NL80211_FLAG_NEED_RTNL |
@@ -13647,7 +13758,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_ASSOCIATE,
 		.doit = nl80211_associate,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV_UP |
 				  NL80211_FLAG_NEED_RTNL |
@@ -13656,7 +13766,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_DEAUTHENTICATE,
 		.doit = nl80211_deauthenticate,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV_UP |
 				  NL80211_FLAG_NEED_RTNL,
@@ -13664,7 +13773,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_DISASSOCIATE,
 		.doit = nl80211_disassociate,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV_UP |
 				  NL80211_FLAG_NEED_RTNL,
@@ -13672,7 +13780,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_JOIN_IBSS,
 		.doit = nl80211_join_ibss,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV_UP |
 				  NL80211_FLAG_NEED_RTNL,
@@ -13680,7 +13787,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_LEAVE_IBSS,
 		.doit = nl80211_leave_ibss,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV_UP |
 				  NL80211_FLAG_NEED_RTNL,
@@ -13690,7 +13796,6 @@ static const struct genl_ops nl80211_ops[] = {
 		.cmd = NL80211_CMD_TESTMODE,
 		.doit = nl80211_testmode_do,
 		.dumpit = nl80211_testmode_dump,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_WIPHY |
 				  NL80211_FLAG_NEED_RTNL,
@@ -13699,7 +13804,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_CONNECT,
 		.doit = nl80211_connect,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV_UP |
 				  NL80211_FLAG_NEED_RTNL |
@@ -13708,7 +13812,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_UPDATE_CONNECT_PARAMS,
 		.doit = nl80211_update_connect_params,
-		.policy = nl80211_policy,
 		.flags = GENL_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV_UP |
 				  NL80211_FLAG_NEED_RTNL |
@@ -13717,7 +13820,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_DISCONNECT,
 		.doit = nl80211_disconnect,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV_UP |
 				  NL80211_FLAG_NEED_RTNL,
@@ -13725,20 +13827,17 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_SET_WIPHY_NETNS,
 		.doit = nl80211_wiphy_netns,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_WIPHY |
 				  NL80211_FLAG_NEED_RTNL,
 	},
 	{
 		.cmd = NL80211_CMD_GET_SURVEY,
-		.policy = nl80211_policy,
 		.dumpit = nl80211_dump_survey,
 	},
 	{
 		.cmd = NL80211_CMD_SET_PMKSA,
 		.doit = nl80211_setdel_pmksa,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV_UP |
 				  NL80211_FLAG_NEED_RTNL |
@@ -13747,7 +13846,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_DEL_PMKSA,
 		.doit = nl80211_setdel_pmksa,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV_UP |
 				  NL80211_FLAG_NEED_RTNL,
@@ -13755,7 +13853,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_FLUSH_PMKSA,
 		.doit = nl80211_flush_pmksa,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV_UP |
 				  NL80211_FLAG_NEED_RTNL,
@@ -13763,7 +13860,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_REMAIN_ON_CHANNEL,
 		.doit = nl80211_remain_on_channel,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_WDEV_UP |
 				  NL80211_FLAG_NEED_RTNL,
@@ -13771,7 +13867,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_CANCEL_REMAIN_ON_CHANNEL,
 		.doit = nl80211_cancel_remain_on_channel,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_WDEV_UP |
 				  NL80211_FLAG_NEED_RTNL,
@@ -13779,7 +13874,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_SET_TX_BITRATE_MASK,
 		.doit = nl80211_set_tx_bitrate_mask,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV |
 				  NL80211_FLAG_NEED_RTNL,
@@ -13787,7 +13881,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_REGISTER_FRAME,
 		.doit = nl80211_register_mgmt,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_WDEV |
 				  NL80211_FLAG_NEED_RTNL,
@@ -13795,7 +13888,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_FRAME,
 		.doit = nl80211_tx_mgmt,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_WDEV_UP |
 				  NL80211_FLAG_NEED_RTNL,
@@ -13803,7 +13895,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_FRAME_WAIT_CANCEL,
 		.doit = nl80211_tx_mgmt_cancel_wait,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_WDEV_UP |
 				  NL80211_FLAG_NEED_RTNL,
@@ -13811,7 +13902,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_SET_POWER_SAVE,
 		.doit = nl80211_set_power_save,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV |
 				  NL80211_FLAG_NEED_RTNL,
@@ -13819,7 +13909,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_GET_POWER_SAVE,
 		.doit = nl80211_get_power_save,
-		.policy = nl80211_policy,
 		/* can be retrieved by unprivileged users */
 		.internal_flags = NL80211_FLAG_NEED_NETDEV |
 				  NL80211_FLAG_NEED_RTNL,
@@ -13827,7 +13916,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_SET_CQM,
 		.doit = nl80211_set_cqm,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV |
 				  NL80211_FLAG_NEED_RTNL,
@@ -13835,7 +13923,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_SET_CHANNEL,
 		.doit = nl80211_set_channel,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV |
 				  NL80211_FLAG_NEED_RTNL,
@@ -13843,7 +13930,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_SET_WDS_PEER,
 		.doit = nl80211_set_wds_peer,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV |
 				  NL80211_FLAG_NEED_RTNL,
@@ -13851,7 +13937,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_JOIN_MESH,
 		.doit = nl80211_join_mesh,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV_UP |
 				  NL80211_FLAG_NEED_RTNL,
@@ -13859,7 +13944,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_LEAVE_MESH,
 		.doit = nl80211_leave_mesh,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV_UP |
 				  NL80211_FLAG_NEED_RTNL,
@@ -13867,7 +13951,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_JOIN_OCB,
 		.doit = nl80211_join_ocb,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV_UP |
 				  NL80211_FLAG_NEED_RTNL,
@@ -13875,7 +13958,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_LEAVE_OCB,
 		.doit = nl80211_leave_ocb,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV_UP |
 				  NL80211_FLAG_NEED_RTNL,
@@ -13884,7 +13966,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_GET_WOWLAN,
 		.doit = nl80211_get_wowlan,
-		.policy = nl80211_policy,
 		/* can be retrieved by unprivileged users */
 		.internal_flags = NL80211_FLAG_NEED_WIPHY |
 				  NL80211_FLAG_NEED_RTNL,
@@ -13892,7 +13973,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_SET_WOWLAN,
 		.doit = nl80211_set_wowlan,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_WIPHY |
 				  NL80211_FLAG_NEED_RTNL,
@@ -13901,7 +13981,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_SET_REKEY_OFFLOAD,
 		.doit = nl80211_set_rekey_data,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV_UP |
 				  NL80211_FLAG_NEED_RTNL |
@@ -13910,7 +13989,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_TDLS_MGMT,
 		.doit = nl80211_tdls_mgmt,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV_UP |
 				  NL80211_FLAG_NEED_RTNL,
@@ -13918,7 +13996,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_TDLS_OPER,
 		.doit = nl80211_tdls_oper,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV_UP |
 				  NL80211_FLAG_NEED_RTNL,
@@ -13926,7 +14003,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_UNEXPECTED_FRAME,
 		.doit = nl80211_register_unexpected_frame,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV |
 				  NL80211_FLAG_NEED_RTNL,
@@ -13934,7 +14010,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_PROBE_CLIENT,
 		.doit = nl80211_probe_client,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV_UP |
 				  NL80211_FLAG_NEED_RTNL,
@@ -13942,7 +14017,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_REGISTER_BEACONS,
 		.doit = nl80211_register_beacons,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_WIPHY |
 				  NL80211_FLAG_NEED_RTNL,
@@ -13950,7 +14024,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_SET_NOACK_MAP,
 		.doit = nl80211_set_noack_map,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV |
 				  NL80211_FLAG_NEED_RTNL,
@@ -13958,7 +14031,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_START_P2P_DEVICE,
 		.doit = nl80211_start_p2p_device,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_WDEV |
 				  NL80211_FLAG_NEED_RTNL,
@@ -13966,7 +14038,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_STOP_P2P_DEVICE,
 		.doit = nl80211_stop_p2p_device,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_WDEV_UP |
 				  NL80211_FLAG_NEED_RTNL,
@@ -13974,7 +14045,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_START_NAN,
 		.doit = nl80211_start_nan,
-		.policy = nl80211_policy,
 		.flags = GENL_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_WDEV |
 				  NL80211_FLAG_NEED_RTNL,
@@ -13982,7 +14052,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_STOP_NAN,
 		.doit = nl80211_stop_nan,
-		.policy = nl80211_policy,
 		.flags = GENL_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_WDEV_UP |
 				  NL80211_FLAG_NEED_RTNL,
@@ -13990,7 +14059,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_ADD_NAN_FUNCTION,
 		.doit = nl80211_nan_add_func,
-		.policy = nl80211_policy,
 		.flags = GENL_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_WDEV_UP |
 				  NL80211_FLAG_NEED_RTNL,
@@ -13998,7 +14066,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_DEL_NAN_FUNCTION,
 		.doit = nl80211_nan_del_func,
-		.policy = nl80211_policy,
 		.flags = GENL_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_WDEV_UP |
 				  NL80211_FLAG_NEED_RTNL,
@@ -14006,7 +14073,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_CHANGE_NAN_CONFIG,
 		.doit = nl80211_nan_change_config,
-		.policy = nl80211_policy,
 		.flags = GENL_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_WDEV_UP |
 				  NL80211_FLAG_NEED_RTNL,
@@ -14014,7 +14080,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_SET_MCAST_RATE,
 		.doit = nl80211_set_mcast_rate,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV |
 				  NL80211_FLAG_NEED_RTNL,
@@ -14022,7 +14087,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_SET_MAC_ACL,
 		.doit = nl80211_set_mac_acl,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV |
 				  NL80211_FLAG_NEED_RTNL,
@@ -14030,7 +14094,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_RADAR_DETECT,
 		.doit = nl80211_start_radar_detection,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV_UP |
 				  NL80211_FLAG_NEED_RTNL,
@@ -14038,12 +14101,10 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_GET_PROTOCOL_FEATURES,
 		.doit = nl80211_get_protocol_features,
-		.policy = nl80211_policy,
 	},
 	{
 		.cmd = NL80211_CMD_UPDATE_FT_IES,
 		.doit = nl80211_update_ft_ies,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV_UP |
 				  NL80211_FLAG_NEED_RTNL,
@@ -14051,7 +14112,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_CRIT_PROTOCOL_START,
 		.doit = nl80211_crit_protocol_start,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_WDEV_UP |
 				  NL80211_FLAG_NEED_RTNL,
@@ -14059,7 +14119,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_CRIT_PROTOCOL_STOP,
 		.doit = nl80211_crit_protocol_stop,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_WDEV_UP |
 				  NL80211_FLAG_NEED_RTNL,
@@ -14067,14 +14126,12 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_GET_COALESCE,
 		.doit = nl80211_get_coalesce,
-		.policy = nl80211_policy,
 		.internal_flags = NL80211_FLAG_NEED_WIPHY |
 				  NL80211_FLAG_NEED_RTNL,
 	},
 	{
 		.cmd = NL80211_CMD_SET_COALESCE,
 		.doit = nl80211_set_coalesce,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_WIPHY |
 				  NL80211_FLAG_NEED_RTNL,
@@ -14082,7 +14139,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_CHANNEL_SWITCH,
 		.doit = nl80211_channel_switch,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV_UP |
 				  NL80211_FLAG_NEED_RTNL,
@@ -14091,7 +14147,6 @@ static const struct genl_ops nl80211_ops[] = {
 		.cmd = NL80211_CMD_VENDOR,
 		.doit = nl80211_vendor_cmd,
 		.dumpit = nl80211_vendor_cmd_dump,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_WIPHY |
 				  NL80211_FLAG_NEED_RTNL |
@@ -14100,7 +14155,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_SET_QOS_MAP,
 		.doit = nl80211_set_qos_map,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV_UP |
 				  NL80211_FLAG_NEED_RTNL,
@@ -14108,7 +14162,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_ADD_TX_TS,
 		.doit = nl80211_add_tx_ts,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV_UP |
 				  NL80211_FLAG_NEED_RTNL,
@@ -14116,7 +14169,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_DEL_TX_TS,
 		.doit = nl80211_del_tx_ts,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV_UP |
 				  NL80211_FLAG_NEED_RTNL,
@@ -14124,7 +14176,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_TDLS_CHANNEL_SWITCH,
 		.doit = nl80211_tdls_channel_switch,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV_UP |
 				  NL80211_FLAG_NEED_RTNL,
@@ -14132,7 +14183,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_TDLS_CANCEL_CHANNEL_SWITCH,
 		.doit = nl80211_tdls_cancel_channel_switch,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV_UP |
 				  NL80211_FLAG_NEED_RTNL,
@@ -14140,7 +14190,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_SET_MULTICAST_TO_UNICAST,
 		.doit = nl80211_set_multicast_to_unicast,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV |
 				  NL80211_FLAG_NEED_RTNL,
@@ -14148,7 +14197,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_SET_PMK,
 		.doit = nl80211_set_pmk,
-		.policy = nl80211_policy,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV_UP |
 				  NL80211_FLAG_NEED_RTNL |
 				  NL80211_FLAG_CLEAR_SKB,
@@ -14156,14 +14204,12 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_DEL_PMK,
 		.doit = nl80211_del_pmk,
-		.policy = nl80211_policy,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV_UP |
 				  NL80211_FLAG_NEED_RTNL,
 	},
 	{
 		.cmd = NL80211_CMD_EXTERNAL_AUTH,
 		.doit = nl80211_external_auth,
-		.policy = nl80211_policy,
 		.flags = GENL_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV_UP |
 				  NL80211_FLAG_NEED_RTNL,
@@ -14171,7 +14217,6 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_CONTROL_PORT_FRAME,
 		.doit = nl80211_tx_control_port,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV_UP |
 				  NL80211_FLAG_NEED_RTNL,
@@ -14179,14 +14224,12 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_GET_FTM_RESPONDER_STATS,
 		.doit = nl80211_get_ftm_responder_stats,
-		.policy = nl80211_policy,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV |
 				  NL80211_FLAG_NEED_RTNL,
 	},
 	{
 		.cmd = NL80211_CMD_PEER_MEASUREMENT_START,
 		.doit = nl80211_pmsr_start,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_WDEV_UP |
 				  NL80211_FLAG_NEED_RTNL,
@@ -14194,8 +14237,14 @@ static const struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_NOTIFY_RADAR,
 		.doit = nl80211_notify_radar_detection,
-		.policy = nl80211_policy,
 		.flags = GENL_UNS_ADMIN_PERM,
+		.internal_flags = NL80211_FLAG_NEED_NETDEV_UP |
+				  NL80211_FLAG_NEED_RTNL,
+	},
+	{
+		.cmd = NL80211_CMD_UPDATE_OWE_INFO,
+		.doit = nl80211_update_owe_info,
+		.flags = GENL_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_NETDEV_UP |
 				  NL80211_FLAG_NEED_RTNL,
 	},
@@ -14206,6 +14255,7 @@ static struct genl_family nl80211_fam __ro_after_init = {
 	.hdrsize = 0,			/* no private header */
 	.version = 1,			/* no particular meaning now */
 	.maxattr = NL80211_ATTR_MAX,
+	.policy = nl80211_policy,
 	.netnsok = true,
 	.pre_doit = nl80211_pre_doit,
 	.post_doit = nl80211_post_doit,
@@ -15727,6 +15777,11 @@ void cfg80211_ch_switch_notify(struct net_device *dev,
 
 	wdev->chandef = *chandef;
 	wdev->preset_chandef = *chandef;
+
+	if (wdev->iftype == NL80211_IFTYPE_STATION &&
+	    !WARN_ON(!wdev->current_bss))
+		wdev->current_bss->pub.channel = chandef->chan;
+
 	nl80211_ch_switch_notify(rdev, dev, chandef, GFP_KERNEL,
 				 NL80211_CMD_CH_SWITCH_NOTIFY, 0);
 }
@@ -16369,6 +16424,46 @@ int cfg80211_external_auth_request(struct net_device *dev,
 	return -ENOBUFS;
 }
 EXPORT_SYMBOL(cfg80211_external_auth_request);
+
+void cfg80211_update_owe_info_event(struct net_device *netdev,
+				    struct cfg80211_update_owe_info *owe_info,
+				    gfp_t gfp)
+{
+	struct wiphy *wiphy = netdev->ieee80211_ptr->wiphy;
+	struct cfg80211_registered_device *rdev = wiphy_to_rdev(wiphy);
+	struct sk_buff *msg;
+	void *hdr;
+
+	trace_cfg80211_update_owe_info_event(wiphy, netdev, owe_info);
+
+	msg = nlmsg_new(NLMSG_DEFAULT_SIZE, gfp);
+	if (!msg)
+		return;
+
+	hdr = nl80211hdr_put(msg, 0, 0, 0, NL80211_CMD_UPDATE_OWE_INFO);
+	if (!hdr)
+		goto nla_put_failure;
+
+	if (nla_put_u32(msg, NL80211_ATTR_WIPHY, rdev->wiphy_idx) ||
+	    nla_put_u32(msg, NL80211_ATTR_IFINDEX, netdev->ifindex) ||
+	    nla_put(msg, NL80211_ATTR_MAC, ETH_ALEN, owe_info->peer))
+		goto nla_put_failure;
+
+	if (!owe_info->ie_len ||
+	    nla_put(msg, NL80211_ATTR_IE, owe_info->ie_len, owe_info->ie))
+		goto nla_put_failure;
+
+	genlmsg_end(msg, hdr);
+
+	genlmsg_multicast_netns(&nl80211_fam, wiphy_net(&rdev->wiphy), msg, 0,
+				NL80211_MCGRP_MLME, gfp);
+	return;
+
+nla_put_failure:
+	genlmsg_cancel(msg, hdr);
+	nlmsg_free(msg);
+}
+EXPORT_SYMBOL(cfg80211_update_owe_info_event);
 
 /* initialisation/exit functions */
 

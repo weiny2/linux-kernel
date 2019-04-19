@@ -66,7 +66,7 @@ static struct page *__get_meta_page(struct f2fs_sb_info *sbi, pgoff_t index,
 		.old_blkaddr = index,
 		.new_blkaddr = index,
 		.encrypted_page = NULL,
-		.is_meta = is_meta,
+		.is_por = !is_meta,
 	};
 	int err;
 
@@ -130,6 +130,28 @@ struct page *f2fs_get_tmp_page(struct f2fs_sb_info *sbi, pgoff_t index)
 	return __get_meta_page(sbi, index, false);
 }
 
+static bool __is_bitmap_valid(struct f2fs_sb_info *sbi, block_t blkaddr)
+{
+	struct seg_entry *se;
+	unsigned int segno, offset;
+	bool exist;
+
+	segno = GET_SEGNO(sbi, blkaddr);
+	offset = GET_BLKOFF_FROM_SEG0(sbi, blkaddr);
+	se = get_seg_entry(sbi, segno);
+
+	exist = f2fs_test_bit(offset, se->cur_valid_map);
+
+	if (!exist) {
+		f2fs_msg(sbi->sb, KERN_ERR, "Inconsistent error "
+			"blkaddr:%u, sit bitmap:%d", blkaddr, exist);
+		set_sbi_flag(sbi, SBI_NEED_FSCK);
+		WARN_ON(1);
+		return false;
+	}
+	return true;
+}
+
 bool f2fs_is_valid_blkaddr(struct f2fs_sb_info *sbi,
 					block_t blkaddr, int type)
 {
@@ -152,14 +174,22 @@ bool f2fs_is_valid_blkaddr(struct f2fs_sb_info *sbi,
 		break;
 	case META_POR:
 	case DATA_GENERIC:
+	case DATA_GENERIC_ENHANCE:
 		if (unlikely(blkaddr >= MAX_BLKADDR(sbi) ||
 			blkaddr < MAIN_BLKADDR(sbi))) {
-			if (type == DATA_GENERIC) {
+			if (type == DATA_GENERIC ||
+				type == DATA_GENERIC_ENHANCE) {
 				f2fs_msg(sbi->sb, KERN_WARNING,
 					"access invalid blkaddr:%u", blkaddr);
+				set_sbi_flag(sbi, SBI_NEED_FSCK);
 				WARN_ON(1);
 			}
 			return false;
+		} else {
+			if (type == DATA_GENERIC_ENHANCE) {
+				if (!__is_bitmap_valid(sbi, blkaddr))
+					return false;
+			}
 		}
 		break;
 	case META_GENERIC:
@@ -189,7 +219,7 @@ int f2fs_ra_meta_pages(struct f2fs_sb_info *sbi, block_t start, int nrpages,
 		.op_flags = sync ? (REQ_META | REQ_PRIO) : REQ_RAHEAD,
 		.encrypted_page = NULL,
 		.in_list = false,
-		.is_meta = (type != META_POR),
+		.is_por = (type == META_POR),
 	};
 	struct blk_plug plug;
 
@@ -644,6 +674,12 @@ int f2fs_recover_orphan_inodes(struct f2fs_sb_info *sbi)
 	if (!is_set_ckpt_flags(sbi, CP_ORPHAN_PRESENT_FLAG))
 		return 0;
 
+	if (f2fs_hw_is_readonly(sbi)) {
+		f2fs_msg(sbi->sb, KERN_INFO, "write access "
+			"unavailable, skipping orphan cleanup");
+		return 0;
+	}
+
 	if (s_flags & SB_RDONLY) {
 		f2fs_msg(sbi->sb, KERN_INFO, "orphan cleanup on readonly fs");
 		sbi->sb->s_flags &= ~SB_RDONLY;
@@ -1009,13 +1045,11 @@ retry:
 	if (inode) {
 		unsigned long cur_ino = inode->i_ino;
 
-		if (is_dir)
-			F2FS_I(inode)->cp_task = current;
+		F2FS_I(inode)->cp_task = current;
 
 		filemap_fdatawrite(inode->i_mapping);
 
-		if (is_dir)
-			F2FS_I(inode)->cp_task = NULL;
+		F2FS_I(inode)->cp_task = NULL;
 
 		iput(inode);
 		/* We need to give cpu to another writers. */

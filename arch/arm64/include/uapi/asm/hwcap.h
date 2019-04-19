@@ -18,7 +18,7 @@
 #define _UAPI__ASM_HWCAP_H
 
 /*
- * HWCAP flags - for elf_hwcap (in kernel) and AT_HWCAP
+ * HWCAP flags - for AT_HWCAP
  */
 #define HWCAP_FP		(1 << 0)
 #define HWCAP_ASIMD		(1 << 1)
@@ -52,5 +52,10 @@
 #define HWCAP_SB		(1 << 29)
 #define HWCAP_PACA		(1 << 30)
 #define HWCAP_PACG		(1UL << 31)
+
+/*
+ * HWCAP2 flags - for AT_HWCAP2
+ */
+#define HWCAP2_DCPODP		(1 << 0)
 
 #endif /* _UAPI__ASM_HWCAP_H */

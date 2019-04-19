@@ -16,6 +16,7 @@
 
 #include "mtu3.h"
 #include "mtu3_dr.h"
+#include "mtu3_debug.h"
 
 /* u2-port0 should be powered on and enabled; */
 int ssusb_check_clocks(struct ssusb_mtk *ssusb, u32 ex_clks)
@@ -228,12 +229,11 @@ static int get_ssusb_rscs(struct platform_device *pdev, struct ssusb_mtk *ssusb)
 	struct device_node *node = pdev->dev.of_node;
 	struct otg_switch_mtk *otg_sx = &ssusb->otg_switch;
 	struct device *dev = &pdev->dev;
-	struct regulator *vbus;
 	struct resource *res;
 	int i;
 	int ret;
 
-	ssusb->vusb33 = devm_regulator_get(&pdev->dev, "vusb33");
+	ssusb->vusb33 = devm_regulator_get(dev, "vusb33");
 	if (IS_ERR(ssusb->vusb33)) {
 		dev_err(dev, "failed to get vusb33\n");
 		return PTR_ERR(ssusb->vusb33);
@@ -286,7 +286,7 @@ static int get_ssusb_rscs(struct platform_device *pdev, struct ssusb_mtk *ssusb)
 		ssusb->dr_mode = USB_DR_MODE_OTG;
 
 	if (ssusb->dr_mode == USB_DR_MODE_PERIPHERAL)
-		return 0;
+		goto out;
 
 	/* if host role is supported */
 	ret = ssusb_wakeup_of_property_parse(ssusb, node);
@@ -299,15 +299,14 @@ static int get_ssusb_rscs(struct platform_device *pdev, struct ssusb_mtk *ssusb)
 	of_property_read_u32(node, "mediatek,u3p-dis-msk",
 			     &ssusb->u3p_dis_msk);
 
-	vbus = devm_regulator_get(&pdev->dev, "vbus");
-	if (IS_ERR(vbus)) {
+	otg_sx->vbus = devm_regulator_get(dev, "vbus");
+	if (IS_ERR(otg_sx->vbus)) {
 		dev_err(dev, "failed to get vbus\n");
-		return PTR_ERR(vbus);
+		return PTR_ERR(otg_sx->vbus);
 	}
-	otg_sx->vbus = vbus;
 
 	if (ssusb->dr_mode == USB_DR_MODE_HOST)
-		return 0;
+		goto out;
 
 	/* if dual-role mode is supported */
 	otg_sx->is_u3_drd = of_property_read_bool(node, "mediatek,usb3-drd");
@@ -322,6 +321,7 @@ static int get_ssusb_rscs(struct platform_device *pdev, struct ssusb_mtk *ssusb)
 		}
 	}
 
+out:
 	dev_info(dev, "dr_mode: %d, is_u3_dr: %d, u3p_dis_msk: %x, drd: %s\n",
 		ssusb->dr_mode, otg_sx->is_u3_drd, ssusb->u3p_dis_msk,
 		otg_sx->manual_drd_enabled ? "manual" : "auto");
@@ -353,6 +353,8 @@ static int mtu3_probe(struct platform_device *pdev)
 	ret = get_ssusb_rscs(pdev, ssusb);
 	if (ret)
 		return ret;
+
+	ssusb_debugfs_create_root(ssusb);
 
 	/* enable power domain */
 	pm_runtime_enable(dev);
@@ -401,7 +403,11 @@ static int mtu3_probe(struct platform_device *pdev)
 			goto gadget_exit;
 		}
 
-		ssusb_otg_switch_init(ssusb);
+		ret = ssusb_otg_switch_init(ssusb);
+		if (ret) {
+			dev_err(dev, "failed to initialize switch\n");
+			goto host_exit;
+		}
 		break;
 	default:
 		dev_err(dev, "unsupported mode: %d\n", ssusb->dr_mode);
@@ -411,6 +417,8 @@ static int mtu3_probe(struct platform_device *pdev)
 
 	return 0;
 
+host_exit:
+	ssusb_host_exit(ssusb);
 gadget_exit:
 	ssusb_gadget_exit(ssusb);
 comm_exit:
@@ -418,6 +426,7 @@ comm_exit:
 comm_init_err:
 	pm_runtime_put_sync(dev);
 	pm_runtime_disable(dev);
+	ssusb_debugfs_remove_root(ssusb);
 
 	return ret;
 }
@@ -445,6 +454,7 @@ static int mtu3_remove(struct platform_device *pdev)
 	ssusb_rscs_exit(ssusb);
 	pm_runtime_put_sync(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
+	ssusb_debugfs_remove_root(ssusb);
 
 	return 0;
 }

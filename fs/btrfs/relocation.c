@@ -4222,7 +4222,7 @@ out:
 	return inode;
 }
 
-static struct reloc_control *alloc_reloc_control(void)
+static struct reloc_control *alloc_reloc_control(struct btrfs_fs_info *fs_info)
 {
 	struct reloc_control *rc;
 
@@ -4234,7 +4234,8 @@ static struct reloc_control *alloc_reloc_control(void)
 	INIT_LIST_HEAD(&rc->dirty_subvol_roots);
 	backref_cache_init(&rc->backref_cache);
 	mapping_tree_init(&rc->reloc_root_tree);
-	extent_io_tree_init(&rc->processed_blocks, NULL);
+	extent_io_tree_init(fs_info, &rc->processed_blocks,
+			    IO_TREE_RELOC_BLOCKS, NULL);
 	return rc;
 }
 
@@ -4276,7 +4277,7 @@ int btrfs_relocate_block_group(struct btrfs_fs_info *fs_info, u64 group_start)
 		return -ETXTBSY;
 	}
 
-	rc = alloc_reloc_control();
+	rc = alloc_reloc_control(fs_info);
 	if (!rc) {
 		btrfs_put_block_group(bg);
 		return -ENOMEM;
@@ -4298,7 +4299,7 @@ int btrfs_relocate_block_group(struct btrfs_fs_info *fs_info, u64 group_start)
 		goto out;
 	}
 
-	inode = lookup_free_space_inode(fs_info, rc->block_group, path);
+	inode = lookup_free_space_inode(rc->block_group, path);
 	btrfs_free_path(path);
 
 	if (!IS_ERR(inode))
@@ -4330,27 +4331,36 @@ int btrfs_relocate_block_group(struct btrfs_fs_info *fs_info, u64 group_start)
 		mutex_lock(&fs_info->cleaner_mutex);
 		ret = relocate_block_group(rc);
 		mutex_unlock(&fs_info->cleaner_mutex);
-		if (ret < 0) {
+		if (ret < 0)
 			err = ret;
-			goto out;
+
+		/*
+		 * We may have gotten ENOSPC after we already dirtied some
+		 * extents.  If writeout happens while we're relocating a
+		 * different block group we could end up hitting the
+		 * BUG_ON(rc->stage == UPDATE_DATA_PTRS) in
+		 * btrfs_reloc_cow_block.  Make sure we write everything out
+		 * properly so we don't trip over this problem, and then break
+		 * out of the loop if we hit an error.
+		 */
+		if (rc->stage == MOVE_DATA_EXTENTS && rc->found_file_extent) {
+			ret = btrfs_wait_ordered_range(rc->data_inode, 0,
+						       (u64)-1);
+			if (ret)
+				err = ret;
+			invalidate_mapping_pages(rc->data_inode->i_mapping,
+						 0, -1);
+			rc->stage = UPDATE_DATA_PTRS;
 		}
+
+		if (err < 0)
+			goto out;
 
 		if (rc->extents_found == 0)
 			break;
 
 		btrfs_info(fs_info, "found %llu extents", rc->extents_found);
 
-		if (rc->stage == MOVE_DATA_EXTENTS && rc->found_file_extent) {
-			ret = btrfs_wait_ordered_range(rc->data_inode, 0,
-						       (u64)-1);
-			if (ret) {
-				err = ret;
-				goto out;
-			}
-			invalidate_mapping_pages(rc->data_inode->i_mapping,
-						 0, -1);
-			rc->stage = UPDATE_DATA_PTRS;
-		}
 	}
 
 	WARN_ON(rc->block_group->pinned > 0);
@@ -4472,7 +4482,7 @@ int btrfs_recover_relocation(struct btrfs_root *root)
 	if (list_empty(&reloc_roots))
 		goto out;
 
-	rc = alloc_reloc_control();
+	rc = alloc_reloc_control(fs_info);
 	if (!rc) {
 		err = -ENOMEM;
 		goto out;
@@ -4594,7 +4604,7 @@ int btrfs_reloc_clone_csums(struct inode *inode, u64 file_pos, u64 len)
 		new_bytenr = ordered->start + (sums->bytenr - disk_bytenr);
 		sums->bytenr = new_bytenr;
 
-		btrfs_add_ordered_sum(inode, ordered, sums);
+		btrfs_add_ordered_sum(ordered, sums);
 	}
 out:
 	btrfs_put_ordered_extent(ordered);
@@ -4667,14 +4677,12 @@ int btrfs_reloc_cow_block(struct btrfs_trans_handle *trans,
 void btrfs_reloc_pre_snapshot(struct btrfs_pending_snapshot *pending,
 			      u64 *bytes_to_reserve)
 {
-	struct btrfs_root *root;
-	struct reloc_control *rc;
+	struct btrfs_root *root = pending->root;
+	struct reloc_control *rc = root->fs_info->reloc_ctl;
 
-	root = pending->root;
-	if (!root->reloc_root)
+	if (!root->reloc_root || !rc)
 		return;
 
-	rc = root->fs_info->reloc_ctl;
 	if (!rc->merge_reloc_tree)
 		return;
 
@@ -4703,10 +4711,10 @@ int btrfs_reloc_post_snapshot(struct btrfs_trans_handle *trans,
 	struct btrfs_root *root = pending->root;
 	struct btrfs_root *reloc_root;
 	struct btrfs_root *new_root;
-	struct reloc_control *rc;
+	struct reloc_control *rc = root->fs_info->reloc_ctl;
 	int ret;
 
-	if (!root->reloc_root)
+	if (!root->reloc_root || !rc)
 		return 0;
 
 	rc = root->fs_info->reloc_ctl;

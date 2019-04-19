@@ -37,10 +37,9 @@ static inline int ccp_copy_and_save_keypart(u8 **kpbuf, unsigned int *kplen,
 		if (buf[nskip])
 			break;
 	*kplen = sz - nskip;
-	*kpbuf = kzalloc(*kplen, GFP_KERNEL);
+	*kpbuf = kmemdup(buf + nskip, *kplen, GFP_KERNEL);
 	if (!*kpbuf)
 		return -ENOMEM;
-	memcpy(*kpbuf, buf + nskip, *kplen);
 
 	return 0;
 }
@@ -248,7 +247,8 @@ static struct ccp_rsa_def rsa_algs[] = {
 	}
 };
 
-int ccp_register_rsa_alg(struct list_head *head, const struct ccp_rsa_def *def)
+static int ccp_register_rsa_alg(struct list_head *head,
+			        const struct ccp_rsa_def *def)
 {
 	struct ccp_crypto_akcipher_alg *ccp_alg;
 	struct akcipher_alg *alg;

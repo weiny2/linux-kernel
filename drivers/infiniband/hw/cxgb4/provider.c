@@ -190,7 +190,7 @@ static int c4iw_mmap(struct ib_ucontext *context, struct vm_area_struct *vma)
 	return ret;
 }
 
-static void c4iw_deallocate_pd(struct ib_pd *pd)
+static void c4iw_deallocate_pd(struct ib_pd *pd, struct ib_udata *udata)
 {
 	struct c4iw_dev *rhp;
 	struct c4iw_pd *php;
@@ -204,8 +204,7 @@ static void c4iw_deallocate_pd(struct ib_pd *pd)
 	mutex_unlock(&rhp->rdev.stats.lock);
 }
 
-static int c4iw_allocate_pd(struct ib_pd *pd, struct ib_ucontext *context,
-			    struct ib_udata *udata)
+static int c4iw_allocate_pd(struct ib_pd *pd, struct ib_udata *udata)
 {
 	struct c4iw_pd *php = to_c4iw_pd(pd);
 	struct ib_device *ibdev = pd->device;
@@ -220,11 +219,11 @@ static int c4iw_allocate_pd(struct ib_pd *pd, struct ib_ucontext *context,
 
 	php->pdid = pdid;
 	php->rhp = rhp;
-	if (context) {
+	if (udata) {
 		struct c4iw_alloc_pd_resp uresp = {.pdid = php->pdid};
 
 		if (ib_copy_to_udata(udata, &uresp, sizeof(uresp))) {
-			c4iw_deallocate_pd(&php->ibpd);
+			c4iw_deallocate_pd(&php->ibpd, udata);
 			return -EFAULT;
 		}
 	}
@@ -483,24 +482,6 @@ static void get_dev_fw_str(struct ib_device *dev, char *str)
 		 FW_HDR_FW_VER_BUILD_G(c4iw_dev->rdev.lldi.fw_vers));
 }
 
-static struct net_device *get_netdev(struct ib_device *dev, u8 port)
-{
-	struct c4iw_dev *c4iw_dev = container_of(dev, struct c4iw_dev, ibdev);
-	struct c4iw_rdev *rdev = &c4iw_dev->rdev;
-	struct net_device *ndev;
-
-	if (!port || port > rdev->lldi.nports)
-		return NULL;
-
-	rcu_read_lock();
-	ndev = rdev->lldi.ports[port - 1];
-	if (ndev)
-		dev_hold(ndev);
-	rcu_read_unlock();
-
-	return ndev;
-}
-
 static int fill_res_entry(struct sk_buff *msg, struct rdma_restrack_entry *res)
 {
 	return (res->type < ARRAY_SIZE(c4iw_restrack_funcs) &&
@@ -528,7 +509,6 @@ static const struct ib_device_ops c4iw_dev_ops = {
 	.get_dev_fw_str = get_dev_fw_str,
 	.get_dma_mr = c4iw_get_dma_mr,
 	.get_hw_stats = c4iw_get_mib,
-	.get_netdev = get_netdev,
 	.get_port_immutable = c4iw_port_immutable,
 	.map_mr_sg = c4iw_map_mr_sg,
 	.mmap = c4iw_mmap,
@@ -546,8 +526,23 @@ static const struct ib_device_ops c4iw_dev_ops = {
 	.reg_user_mr = c4iw_reg_user_mr,
 	.req_notify_cq = c4iw_arm_cq,
 	INIT_RDMA_OBJ_SIZE(ib_pd, c4iw_pd, ibpd),
+	INIT_RDMA_OBJ_SIZE(ib_srq, c4iw_srq, ibsrq),
 	INIT_RDMA_OBJ_SIZE(ib_ucontext, c4iw_ucontext, ibucontext),
 };
+
+static int set_netdevs(struct ib_device *ib_dev, struct c4iw_rdev *rdev)
+{
+	int ret;
+	int i;
+
+	for (i = 0; i < rdev->lldi.nports; i++) {
+		ret = ib_device_set_netdev(ib_dev, rdev->lldi.ports[i],
+					   i + 1);
+		if (ret)
+			return ret;
+	}
+	return 0;
+}
 
 void c4iw_register_device(struct work_struct *work)
 {
@@ -613,6 +608,9 @@ void c4iw_register_device(struct work_struct *work)
 	rdma_set_device_sysfs_group(&dev->ibdev, &c4iw_attr_group);
 	dev->ibdev.driver_id = RDMA_DRIVER_CXGB4;
 	ib_set_device_ops(&dev->ibdev, &c4iw_dev_ops);
+	ret = set_netdevs(&dev->ibdev, &dev->rdev);
+	if (ret)
+		goto err_kfree_iwcm;
 	ret = ib_register_device(&dev->ibdev, "cxgb4_%d");
 	if (ret)
 		goto err_kfree_iwcm;

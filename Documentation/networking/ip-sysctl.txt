@@ -81,6 +81,11 @@ fib_multipath_hash_policy - INTEGER
 	0 - Layer 3
 	1 - Layer 4
 
+fib_sync_mem - UNSIGNED INTEGER
+	Amount of dirty memory from fib entries that can be backlogged before
+	synchronize_rcu is forced.
+	  Default: 512kB   Minimum: 64kB   Maximum: 64MB
+
 ip_forward_update_priority - INTEGER
 	Whether to update SKB priority from "TOS" field in IPv4 header after it
 	is forwarded. The new SKB priority is mapped from TOS field value
@@ -422,6 +427,7 @@ tcp_min_rtt_wlen - INTEGER
 	minimum RTT when it is moved to a longer path (e.g., due to traffic
 	engineering). A longer window makes the filter more resistant to RTT
 	inflations such as transient congestion. The unit is seconds.
+	Possible values: 0 - 86400 (1 day)
 	Default: 300
 
 tcp_moderate_rcvbuf - BOOLEAN
@@ -1336,6 +1342,7 @@ tag - INTEGER
 	Default value is 0.
 
 xfrm4_gc_thresh - INTEGER
+	(Obsolete since linux-4.14)
 	The threshold at which we will start garbage collecting for IPv4
 	destination cache entries.  At twice this value the system will
 	refuse new allocations.
@@ -1918,7 +1925,18 @@ echo_ignore_all - BOOLEAN
 	requests sent to it over the IPv6 protocol.
 	Default: 0
 
+echo_ignore_multicast - BOOLEAN
+	If set non-zero, then the kernel will ignore all ICMP ECHO
+	requests sent to it over the IPv6 protocol via multicast.
+	Default: 0
+
+echo_ignore_anycast - BOOLEAN
+	If set non-zero, then the kernel will ignore all ICMP ECHO
+	requests sent to it over the IPv6 protocol destined to anycast address.
+	Default: 0
+
 xfrm6_gc_thresh - INTEGER
+	(Obsolete since linux-4.14)
 	The threshold at which we will start garbage collecting for IPv6
 	destination cache entries.  At twice this value the system will
 	refuse new allocations.

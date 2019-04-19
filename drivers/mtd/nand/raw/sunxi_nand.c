@@ -1313,20 +1313,19 @@ pio_fallback:
 
 static int sunxi_nfc_hw_ecc_read_oob(struct nand_chip *nand, int page)
 {
-	nand->pagebuf = -1;
+	u8 *buf = nand_get_data_buf(nand);
 
-	return nand->ecc.read_page(nand, nand->data_buf, 1, page);
+	return nand->ecc.read_page(nand, buf, 1, page);
 }
 
 static int sunxi_nfc_hw_ecc_write_oob(struct nand_chip *nand, int page)
 {
 	struct mtd_info *mtd = nand_to_mtd(nand);
+	u8 *buf = nand_get_data_buf(nand);
 	int ret;
 
-	nand->pagebuf = -1;
-
-	memset(nand->data_buf, 0xff, mtd->writesize);
-	ret = nand->ecc.write_page(nand, nand->data_buf, 1, page);
+	memset(buf, 0xff, mtd->writesize);
+	ret = nand->ecc.write_page(nand, buf, 1, page);
 	if (ret)
 		return ret;
 
@@ -1724,8 +1723,8 @@ static int sunxi_nand_attach_chip(struct nand_chip *nand)
 	nand->options |= NAND_SUBPAGE_READ;
 
 	if (!ecc->size) {
-		ecc->size = nand->ecc_step_ds;
-		ecc->strength = nand->ecc_strength_ds;
+		ecc->size = nand->base.eccreq.step_size;
+		ecc->strength = nand->base.eccreq.strength;
 	}
 
 	if (!ecc->size || !ecc->strength)

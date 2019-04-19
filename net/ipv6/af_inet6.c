@@ -56,6 +56,7 @@
 #include <net/transp_v6.h>
 #include <net/ip6_route.h>
 #include <net/addrconf.h>
+#include <net/ipv6_stubs.h>
 #include <net/ndisc.h>
 #ifdef CONFIG_IPV6_TUNNEL
 #include <net/ip6_tunnel.h>
@@ -847,6 +848,8 @@ static int __net_init inet6_net_init(struct net *net)
 	net->ipv6.sysctl.bindv6only = 0;
 	net->ipv6.sysctl.icmpv6_time = 1*HZ;
 	net->ipv6.sysctl.icmpv6_echo_ignore_all = 0;
+	net->ipv6.sysctl.icmpv6_echo_ignore_multicast = 0;
+	net->ipv6.sysctl.icmpv6_echo_ignore_anycast = 0;
 	net->ipv6.sysctl.flowlabel_consistency = 1;
 	net->ipv6.sysctl.auto_flowlabels = IP6_DEFAULT_AUTO_FLOW_LABELS;
 	net->ipv6.sysctl.idgen_retries = 3;
@@ -916,6 +919,8 @@ static const struct ipv6_stub ipv6_stub_impl = {
 	.fib6_lookup       = fib6_lookup,
 	.fib6_multipath_select = fib6_multipath_select,
 	.ip6_mtu_from_fib6 = ip6_mtu_from_fib6,
+	.fib6_nh_init	   = fib6_nh_init,
+	.fib6_nh_release   = fib6_nh_release,
 	.udpv6_encap_enable = udpv6_encap_enable,
 	.ndisc_send_na = ndisc_send_na,
 	.nd_tbl	= &nd_tbl,

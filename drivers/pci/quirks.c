@@ -36,7 +36,7 @@ static ktime_t fixup_debug_start(struct pci_dev *dev,
 				 void (*fn)(struct pci_dev *dev))
 {
 	if (initcall_debug)
-		pci_info(dev, "calling  %pF @ %i\n", fn, task_pid_nr(current));
+		pci_info(dev, "calling  %pS @ %i\n", fn, task_pid_nr(current));
 
 	return ktime_get();
 }
@@ -51,7 +51,7 @@ static void fixup_debug_report(struct pci_dev *dev, ktime_t calltime,
 	delta = ktime_sub(rettime, calltime);
 	duration = (unsigned long long) ktime_to_ns(delta) >> 10;
 	if (initcall_debug || duration > 10000)
-		pci_info(dev, "%pF took %lld usecs\n", fn, duration);
+		pci_info(dev, "%pS took %lld usecs\n", fn, duration);
 }
 
 static void pci_do_fixups(struct pci_dev *dev, struct pci_fixup *f,
@@ -2244,6 +2244,23 @@ DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, 0x10ec, quirk_disable_aspm_l0s);
 DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, 0x10f1, quirk_disable_aspm_l0s);
 DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, 0x10f4, quirk_disable_aspm_l0s);
 DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, 0x1508, quirk_disable_aspm_l0s);
+
+/*
+ * Some Pericom PCIe-to-PCI bridges in reverse mode need the PCIe Retrain
+ * Link bit cleared after starting the link retrain process to allow this
+ * process to finish.
+ *
+ * Affected devices: PI7C9X110, PI7C9X111SL, PI7C9X130.  See also the
+ * Pericom Errata Sheet PI7C9X111SLB_errata_rev1.2_102711.pdf.
+ */
+static void quirk_enable_clear_retrain_link(struct pci_dev *dev)
+{
+	dev->clear_retrain_link = 1;
+	pci_info(dev, "Enable PCIe Retrain Link quirk\n");
+}
+DECLARE_PCI_FIXUP_HEADER(0x12d8, 0xe110, quirk_enable_clear_retrain_link);
+DECLARE_PCI_FIXUP_HEADER(0x12d8, 0xe111, quirk_enable_clear_retrain_link);
+DECLARE_PCI_FIXUP_HEADER(0x12d8, 0xe130, quirk_enable_clear_retrain_link);
 
 static void fixup_rev1_53c810(struct pci_dev *dev)
 {
@@ -4905,6 +4922,7 @@ static void quirk_no_ats(struct pci_dev *pdev)
 
 /* AMD Stoney platform GPU */
 DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_ATI, 0x98e4, quirk_no_ats);
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_ATI, 0x6900, quirk_no_ats);
 #endif /* CONFIG_PCI_ATS */
 
 /* Freescale PCIe doesn't support MSI in RC mode */

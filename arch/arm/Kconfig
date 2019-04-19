@@ -179,10 +179,6 @@ config TRACE_IRQFLAGS_SUPPORT
 	bool
 	default !CPU_V7M
 
-config RWSEM_XCHGADD_ALGORITHM
-	bool
-	default y
-
 config ARCH_HAS_ILOG2_U32
 	bool
 
@@ -900,8 +896,6 @@ config PLAT_PXA
 
 config PLAT_VERSATILE
 	bool
-
-source "arch/arm/firmware/Kconfig"
 
 source "arch/arm/mm/Kconfig"
 

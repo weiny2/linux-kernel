@@ -539,26 +539,18 @@ xfs_max_file_offset(
 
 	/* Figure out maximum filesize, on Linux this can depend on
 	 * the filesystem blocksize (on 32 bit platforms).
-	 * __block_write_begin does this in an [unsigned] long...
+	 * __block_write_begin does this in an [unsigned] long long...
 	 *      page->index << (PAGE_SHIFT - bbits)
 	 * So, for page sized blocks (4K on 32 bit platforms),
 	 * this wraps at around 8Tb (hence MAX_LFS_FILESIZE which is
 	 *      (((u64)PAGE_SIZE << (BITS_PER_LONG-1))-1)
 	 * but for smaller blocksizes it is less (bbits = log2 bsize).
-	 * Note1: get_block_t takes a long (implicit cast from above)
-	 * Note2: The Large Block Device (LBD and HAVE_SECTOR_T) patch
-	 * can optionally convert the [unsigned] long from above into
-	 * an [unsigned] long long.
 	 */
 
 #if BITS_PER_LONG == 32
-# if defined(CONFIG_LBDAF)
 	ASSERT(sizeof(sector_t) == 8);
 	pagefactor = PAGE_SIZE;
 	bitshift = BITS_PER_LONG;
-# else
-	pagefactor = PAGE_SIZE >> (PAGE_SHIFT - blockshift);
-# endif
 #endif
 
 	return (((uint64_t)pagefactor) << bitshift) - 1;
@@ -838,15 +830,10 @@ xfs_init_mount_workqueues(
 	if (!mp->m_buf_workqueue)
 		goto out;
 
-	mp->m_data_workqueue = alloc_workqueue("xfs-data/%s",
-			WQ_MEM_RECLAIM|WQ_FREEZABLE, 0, mp->m_fsname);
-	if (!mp->m_data_workqueue)
-		goto out_destroy_buf;
-
 	mp->m_unwritten_workqueue = alloc_workqueue("xfs-conv/%s",
 			WQ_MEM_RECLAIM|WQ_FREEZABLE, 0, mp->m_fsname);
 	if (!mp->m_unwritten_workqueue)
-		goto out_destroy_data_iodone_queue;
+		goto out_destroy_buf;
 
 	mp->m_cil_workqueue = alloc_workqueue("xfs-cil/%s",
 			WQ_MEM_RECLAIM|WQ_FREEZABLE, 0, mp->m_fsname);
@@ -886,8 +873,6 @@ out_destroy_cil:
 	destroy_workqueue(mp->m_cil_workqueue);
 out_destroy_unwritten:
 	destroy_workqueue(mp->m_unwritten_workqueue);
-out_destroy_data_iodone_queue:
-	destroy_workqueue(mp->m_data_workqueue);
 out_destroy_buf:
 	destroy_workqueue(mp->m_buf_workqueue);
 out:
@@ -903,7 +888,6 @@ xfs_destroy_mount_workqueues(
 	destroy_workqueue(mp->m_log_workqueue);
 	destroy_workqueue(mp->m_reclaim_workqueue);
 	destroy_workqueue(mp->m_cil_workqueue);
-	destroy_workqueue(mp->m_data_workqueue);
 	destroy_workqueue(mp->m_unwritten_workqueue);
 	destroy_workqueue(mp->m_buf_workqueue);
 }

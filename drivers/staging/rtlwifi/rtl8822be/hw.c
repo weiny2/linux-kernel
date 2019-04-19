@@ -219,21 +219,6 @@ static void _rtl8822be_set_fw_ps_rf_on(struct ieee80211_hw *hw)
 	_rtl8822be_set_fw_clock_on(hw, rpwm_val, true);
 }
 
-static void _rtl8822be_set_fw_ps_rf_off_low_power(struct ieee80211_hw *hw)
-{
-	u8 rpwm_val = 0;
-
-	rpwm_val |= FW_PS_STATE_RF_OFF_LOW_PWR;
-	_rtl8822be_set_fw_clock_off(hw, rpwm_val);
-}
-
-void rtl8822be_fw_clk_off_timer_callback(unsigned long data)
-{
-	struct ieee80211_hw *hw = (struct ieee80211_hw *)data;
-
-	_rtl8822be_set_fw_ps_rf_off_low_power(hw);
-}
-
 static void _rtl8822be_fwlps_leave(struct ieee80211_hw *hw)
 {
 	struct rtl_priv *rtlpriv = rtl_priv(hw);
@@ -2156,8 +2141,6 @@ static void rtl8822be_update_hal_rate_mask(struct ieee80211_hw *hw,
 	u32 ratr_bitmap, ratr_bitmap_msb = 0;
 	u8 ratr_index;
 	enum wireless_mode wirelessmode = 0;
-	u8 curtxbw_40mhz =
-		(sta->ht_cap.cap & IEEE80211_HT_CAP_SUP_WIDTH_20_40) ? 1 : 0;
 	bool b_shortgi = false;
 	u8 rate_mask[7];
 	u8 macid = 0;
@@ -2168,11 +2151,8 @@ static void rtl8822be_update_hal_rate_mask(struct ieee80211_hw *hw,
 
 	RT_TRACE(rtlpriv, COMP_RATR, DBG_LOUD, "wireless mode = 0x%x\n",
 		 wirelessmode);
-	if (mac->opmode == NL80211_IFTYPE_STATION ||
-	    mac->opmode == NL80211_IFTYPE_MESH_POINT) {
-		curtxbw_40mhz = mac->bw_40;
-	} else if (mac->opmode == NL80211_IFTYPE_AP ||
-		   mac->opmode == NL80211_IFTYPE_ADHOC)
+	if (mac->opmode == NL80211_IFTYPE_AP ||
+	    mac->opmode == NL80211_IFTYPE_ADHOC)
 		macid = sta->aid + 1;
 	if (wirelessmode == WIRELESS_MODE_N_5G ||
 	    wirelessmode == WIRELESS_MODE_AC_5G ||

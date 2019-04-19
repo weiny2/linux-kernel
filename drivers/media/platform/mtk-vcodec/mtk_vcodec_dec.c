@@ -133,8 +133,6 @@ static struct vb2_buffer *get_display_buffer(struct mtk_vcodec_ctx *ctx)
 		vb2_set_plane_payload(&dstbuf->vb.vb2_buf, 1,
 					ctx->picinfo.c_bs_sz);
 
-		dstbuf->ready_to_display = true;
-
 		mtk_v4l2_debug(2,
 				"[%d]status=%x queue id=%d to done_list %d",
 				ctx->id, disp_frame_buffer->status,
@@ -388,7 +386,7 @@ static void mtk_vdec_worker(struct work_struct *work)
 	}
 	buf.va = vb2_plane_vaddr(&src_buf->vb2_buf, 0);
 	buf.dma_addr = vb2_dma_contig_plane_dma_addr(&src_buf->vb2_buf, 0);
-	buf.size = (size_t)src_buf->planes[0].bytesused;
+	buf.size = (size_t)src_buf->vb2_buf.planes[0].bytesused;
 	if (!buf.va) {
 		v4l2_m2m_job_finish(dev->m2m_dev_dec, ctx->m2m_ctx);
 		mtk_v4l2_err("[%d] id=%d src_addr is NULL!!",
@@ -1122,11 +1120,9 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 			v4l2_m2m_buf_queue(ctx->m2m_ctx, vb2_v4l2);
 			buf->queued_in_vb2 = true;
 			buf->queued_in_v4l2 = true;
-			buf->ready_to_display = false;
 		} else {
 			buf->queued_in_vb2 = false;
 			buf->queued_in_v4l2 = true;
-			buf->ready_to_display = false;
 		}
 		mutex_unlock(&ctx->lock);
 		return;
@@ -1155,10 +1151,10 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 
 	src_mem.va = vb2_plane_vaddr(&src_buf->vb2_buf, 0);
 	src_mem.dma_addr = vb2_dma_contig_plane_dma_addr(&src_buf->vb2_buf, 0);
-	src_mem.size = (size_t)src_buf->planes[0].bytesused;
+	src_mem.size = (size_t)src_buf->vb2_buf.planes[0].bytesused;
 	mtk_v4l2_debug(2,
 			"[%d] buf id=%d va=%p dma=%pad size=%zx",
-			ctx->id, src_buf->index,
+			ctx->id, src_buf->vb2_buf.index,
 			src_mem.va, &src_mem.dma_addr,
 			src_mem.size);
 
@@ -1182,7 +1178,7 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 		}
 		mtk_v4l2_debug(ret ? 0 : 1,
 			       "[%d] vdec_if_decode() src_buf=%d, size=%zu, fail=%d, res_chg=%d",
-			       ctx->id, src_buf->index,
+			       ctx->id, src_buf->vb2_buf.index,
 			       src_mem.size, ret, res_chg);
 		return;
 	}
@@ -1253,7 +1249,6 @@ static int vb2ops_vdec_buf_init(struct vb2_buffer *vb)
 
 	if (vb->vb2_queue->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
 		buf->used = false;
-		buf->ready_to_display = false;
 		buf->queued_in_v4l2 = false;
 	} else {
 		buf->lastframe = false;

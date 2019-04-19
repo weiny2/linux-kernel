@@ -1025,7 +1025,7 @@ delete_extent_item:
 			continue;
 		}
 
-		BUG_ON(1);
+		BUG();
 	}
 
 	if (!ret && del_nr > 0) {
@@ -1050,7 +1050,7 @@ delete_extent_item:
 	if (!ret && replace_extent && leafs_visited == 1 &&
 	    (path->locks[0] == BTRFS_WRITE_LOCK_BLOCKING ||
 	     path->locks[0] == BTRFS_WRITE_LOCK) &&
-	    btrfs_leaf_free_space(fs_info, leaf) >=
+	    btrfs_leaf_free_space(leaf) >=
 	    sizeof(struct btrfs_item) + extent_item_size) {
 
 		key.objectid = ino;
@@ -1374,7 +1374,7 @@ again:
 	}
 out:
 	btrfs_free_path(path);
-	return 0;
+	return ret;
 }
 
 /*
@@ -2165,7 +2165,6 @@ int btrfs_sync_file(struct file *file, loff_t start, loff_t end, int datasync)
 		inode_unlock(inode);
 		goto out;
 	}
-	trans->sync = true;
 
 	ret = btrfs_log_dentry_safe(trans, dentry, start, end, &ctx);
 	if (ret < 0) {
@@ -3132,6 +3131,7 @@ static long btrfs_fallocate(struct file *file, int mode,
 			ret = btrfs_qgroup_reserve_data(inode, &data_reserved,
 					cur_offset, last_byte - cur_offset);
 			if (ret < 0) {
+				cur_offset = last_byte;
 				free_extent_map(em);
 				break;
 			}
@@ -3181,7 +3181,7 @@ out:
 	/* Let go of our reservation. */
 	if (ret != 0 && !(mode & FALLOC_FL_ZERO_RANGE))
 		btrfs_free_reserved_data_space(inode, data_reserved,
-				alloc_start, alloc_end - cur_offset);
+				cur_offset, alloc_end - cur_offset);
 	extent_changeset_free(data_reserved);
 	return ret;
 }

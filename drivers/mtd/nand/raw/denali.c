@@ -1096,6 +1096,9 @@ static int denali_multidev_fixup(struct denali_nand_info *denali)
 {
 	struct nand_chip *chip = &denali->nand;
 	struct mtd_info *mtd = nand_to_mtd(chip);
+	struct nand_memory_organization *memorg;
+
+	memorg = nanddev_get_memorg(&chip->base);
 
 	/*
 	 * Support for multi device:
@@ -1125,11 +1128,12 @@ static int denali_multidev_fixup(struct denali_nand_info *denali)
 	}
 
 	/* 2 chips in parallel */
+	memorg->pagesize <<= 1;
+	memorg->oobsize <<= 1;
 	mtd->size <<= 1;
 	mtd->erasesize <<= 1;
 	mtd->writesize <<= 1;
 	mtd->oobsize <<= 1;
-	chip->chipsize <<= 1;
 	chip->page_shift += 1;
 	chip->phys_erase_shift += 1;
 	chip->bbt_erase_shift += 1;

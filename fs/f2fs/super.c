@@ -1024,7 +1024,7 @@ static void destroy_device_list(struct f2fs_sb_info *sbi)
 	for (i = 0; i < sbi->s_ndevs; i++) {
 		blkdev_put(FDEV(i).bdev, FMODE_EXCL);
 #ifdef CONFIG_BLK_DEV_ZONED
-		kvfree(FDEV(i).blkz_type);
+		kvfree(FDEV(i).blkz_seq);
 #endif
 	}
 	kvfree(sbi->devs);
@@ -2276,7 +2276,7 @@ static const struct export_operations f2fs_export_ops = {
 static loff_t max_file_blocks(void)
 {
 	loff_t result = 0;
-	loff_t leaf_count = ADDRS_PER_BLOCK;
+	loff_t leaf_count = DEF_ADDRS_PER_BLOCK;
 
 	/*
 	 * note: previously, result is equal to (DEF_ADDRS_PER_INODE -
@@ -2454,7 +2454,7 @@ static int sanity_check_raw_super(struct f2fs_sb_info *sbi,
 	/* Currently, support only 4KB page cache size */
 	if (F2FS_BLKSIZE != PAGE_SIZE) {
 		f2fs_msg(sb, KERN_INFO,
-			"Invalid page_cache_size (%lu), supports only 4KB\n",
+			"Invalid page_cache_size (%lu), supports only 4KB",
 			PAGE_SIZE);
 		return 1;
 	}
@@ -2463,7 +2463,7 @@ static int sanity_check_raw_super(struct f2fs_sb_info *sbi,
 	blocksize = 1 << le32_to_cpu(raw_super->log_blocksize);
 	if (blocksize != F2FS_BLKSIZE) {
 		f2fs_msg(sb, KERN_INFO,
-			"Invalid blocksize (%u), supports only 4KB\n",
+			"Invalid blocksize (%u), supports only 4KB",
 			blocksize);
 		return 1;
 	}
@@ -2471,7 +2471,7 @@ static int sanity_check_raw_super(struct f2fs_sb_info *sbi,
 	/* check log blocks per segment */
 	if (le32_to_cpu(raw_super->log_blocks_per_seg) != 9) {
 		f2fs_msg(sb, KERN_INFO,
-			"Invalid log blocks per segment (%u)\n",
+			"Invalid log blocks per segment (%u)",
 			le32_to_cpu(raw_super->log_blocks_per_seg));
 		return 1;
 	}
@@ -2592,7 +2592,8 @@ int f2fs_sanity_check_ckpt(struct f2fs_sb_info *sbi)
 	unsigned int log_blocks_per_seg;
 	unsigned int segment_count_main;
 	unsigned int cp_pack_start_sum, cp_payload;
-	block_t user_block_count;
+	block_t user_block_count, valid_user_blocks;
+	block_t avail_node_count, valid_node_count;
 	int i, j;
 
 	total = le32_to_cpu(raw_super->segment_count);
@@ -2624,6 +2625,24 @@ int f2fs_sanity_check_ckpt(struct f2fs_sb_info *sbi)
 			segment_count_main << log_blocks_per_seg) {
 		f2fs_msg(sbi->sb, KERN_ERR,
 			"Wrong user_block_count: %u", user_block_count);
+		return 1;
+	}
+
+	valid_user_blocks = le64_to_cpu(ckpt->valid_block_count);
+	if (valid_user_blocks > user_block_count) {
+		f2fs_msg(sbi->sb, KERN_ERR,
+			"Wrong valid_user_blocks: %u, user_block_count: %u",
+			valid_user_blocks, user_block_count);
+		return 1;
+	}
+
+	valid_node_count = le32_to_cpu(ckpt->valid_node_count);
+	avail_node_count = sbi->total_node_count - sbi->nquota_files -
+						F2FS_RESERVED_NODE_NUM;
+	if (valid_node_count > avail_node_count) {
+		f2fs_msg(sbi->sb, KERN_ERR,
+			"Wrong valid_node_count: %u, avail_node_count: %u",
+			valid_node_count, avail_node_count);
 		return 1;
 	}
 
@@ -2798,9 +2817,11 @@ static int init_blkz_info(struct f2fs_sb_info *sbi, int devi)
 	if (nr_sectors & (bdev_zone_sectors(bdev) - 1))
 		FDEV(devi).nr_blkz++;
 
-	FDEV(devi).blkz_type = f2fs_kmalloc(sbi, FDEV(devi).nr_blkz,
-								GFP_KERNEL);
-	if (!FDEV(devi).blkz_type)
+	FDEV(devi).blkz_seq = f2fs_kzalloc(sbi,
+					BITS_TO_LONGS(FDEV(devi).nr_blkz)
+					* sizeof(unsigned long),
+					GFP_KERNEL);
+	if (!FDEV(devi).blkz_seq)
 		return -ENOMEM;
 
 #define F2FS_REPORT_NR_ZONES   4096
@@ -2827,7 +2848,8 @@ static int init_blkz_info(struct f2fs_sb_info *sbi, int devi)
 		}
 
 		for (i = 0; i < nr_zones; i++) {
-			FDEV(devi).blkz_type[n] = zones[i].type;
+			if (zones[i].type != BLK_ZONE_TYPE_CONVENTIONAL)
+				set_bit(n, FDEV(devi).blkz_seq);
 			sector += zones[i].len;
 			n++;
 		}
@@ -3110,7 +3132,7 @@ try_onemore:
 #ifndef CONFIG_BLK_DEV_ZONED
 	if (f2fs_sb_has_blkzoned(sbi)) {
 		f2fs_msg(sb, KERN_ERR,
-			 "Zoned block device support is not enabled\n");
+			 "Zoned block device support is not enabled");
 		err = -EOPNOTSUPP;
 		goto free_sb_buf;
 	}
@@ -3355,7 +3377,7 @@ try_onemore:
 		 * mount should be failed, when device has readonly mode, and
 		 * previous checkpoint was not done by clean system shutdown.
 		 */
-		if (bdev_read_only(sb->s_bdev) &&
+		if (f2fs_hw_is_readonly(sbi) &&
 				!is_set_ckpt_flags(sbi, CP_UMOUNT_FLAG)) {
 			err = -EROFS;
 			goto free_meta;
