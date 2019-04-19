@@ -542,7 +542,7 @@ static int hmm_vma_handle_pmd(struct mm_walk *walk,
 			if (unlikely(!hmm_vma_walk->pgmap))
 				return -EBUSY;
 		}
-		pfns[i] = hmm_pfn_from_pfn(range, pfn) | cpu_flags;
+		pfns[i] = hmm_device_entry_from_pfn(range, pfn) | cpu_flags;
 	}
 	if (hmm_vma_walk->pgmap) {
 		put_dev_pagemap(hmm_vma_walk->pgmap);
@@ -606,7 +606,8 @@ static int hmm_vma_handle_pte(struct mm_walk *walk, unsigned long addr,
 					   &fault, &write_fault);
 			if (fault || write_fault)
 				goto fault;
-			*pfn = hmm_pfn_from_pfn(range, swp_offset(entry));
+			*pfn = hmm_device_entry_from_pfn(range,
+					    swp_offset(entry));
 			*pfn |= cpu_flags;
 			return 0;
 		}
@@ -644,7 +645,7 @@ static int hmm_vma_handle_pte(struct mm_walk *walk, unsigned long addr,
 		return -EFAULT;
 	}
 
-	*pfn = hmm_pfn_from_pfn(range, pte_pfn(pte)) | cpu_flags;
+	*pfn = hmm_device_entry_from_pfn(range, pte_pfn(pte)) | cpu_flags;
 	return 0;
 
 fault:
@@ -797,7 +798,8 @@ again:
 					      hmm_vma_walk->pgmap);
 			if (unlikely(!hmm_vma_walk->pgmap))
 				return -EBUSY;
-			pfns[i] = hmm_pfn_from_pfn(range, pfn) | cpu_flags;
+			pfns[i] = hmm_device_entry_from_pfn(range, pfn) |
+				  cpu_flags;
 		}
 		if (hmm_vma_walk->pgmap) {
 			put_dev_pagemap(hmm_vma_walk->pgmap);
@@ -870,7 +872,8 @@ static int hmm_vma_walk_hugetlb_entry(pte_t *pte, unsigned long hmask,
 
 	pfn = pte_pfn(entry) + (start & mask);
 	for (; addr < end; addr += size, i++, pfn += pfn_inc)
-		range->pfns[i] = hmm_pfn_from_pfn(range, pfn) | cpu_flags;
+		range->pfns[i] = hmm_device_entry_from_pfn(range, pfn) |
+				 cpu_flags;
 	hmm_vma_walk->last = end;
 
 unlock:
@@ -1213,7 +1216,7 @@ long hmm_range_dma_map(struct hmm_range *range,
 		 */
 		daddrs[i] = 0;
 
-		page = hmm_pfn_to_page(range, range->pfns[i]);
+		page = hmm_device_entry_to_page(range, range->pfns[i]);
 		if (page == NULL)
 			continue;
 
@@ -1243,7 +1246,7 @@ unmap:
 		enum dma_data_direction dir = DMA_TO_DEVICE;
 		struct page *page;
 
-		page = hmm_pfn_to_page(range, range->pfns[i]);
+		page = hmm_device_entry_to_page(range, range->pfns[i]);
 		if (page == NULL)
 			continue;
 
@@ -1298,7 +1301,7 @@ long hmm_range_dma_unmap(struct hmm_range *range,
 		enum dma_data_direction dir = DMA_TO_DEVICE;
 		struct page *page;
 
-		page = hmm_pfn_to_page(range, range->pfns[i]);
+		page = hmm_device_entry_to_page(range, range->pfns[i]);
 		if (page == NULL)
 			continue;
 
