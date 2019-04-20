@@ -4241,6 +4241,10 @@ int ext4_break_layouts(struct inode *inode)
 	if (WARN_ON_ONCE(!rwsem_is_locked(&ei->i_mmap_sem)))
 		return -EINVAL;
 
+	/* Break layout leases if active */
+	if (dax_mapping_is_dax(inode->i_mapping))
+		break_layout(inode, true);
+
 	do {
 		page = dax_layout_busy_page(inode->i_mapping);
 		if (!page)
