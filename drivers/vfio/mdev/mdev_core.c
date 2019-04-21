@@ -404,6 +404,22 @@ struct device *mdev_get_iommu_device(struct device *dev)
 }
 EXPORT_SYMBOL(mdev_get_iommu_device);
 
+void mdev_set_iommu_domain(struct device *dev, void *domain)
+{
+	struct mdev_device *mdev = to_mdev_device(dev);
+
+	mdev->iommu_domain = domain;
+}
+EXPORT_SYMBOL(mdev_set_iommu_domain);
+
+void *mdev_get_iommu_domain(struct device *dev)
+{
+	struct mdev_device *mdev = to_mdev_device(dev);
+
+	return mdev->iommu_domain;
+}
+EXPORT_SYMBOL(mdev_get_iommu_domain);
+
 static int __init mdev_init(void)
 {
 	return mdev_bus_register();
