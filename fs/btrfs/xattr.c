@@ -174,7 +174,7 @@ static int do_setxattr(struct btrfs_trans_handle *trans,
 		char *ptr;
 
 		if (size > old_data_len) {
-			if (btrfs_leaf_free_space(fs_info, leaf) <
+			if (btrfs_leaf_free_space(leaf) <
 			    (size - old_data_len)) {
 				ret = -ENOSPC;
 				goto out;
@@ -379,7 +379,7 @@ static int btrfs_xattr_handler_set_prop(const struct xattr_handler *handler,
 					size_t size, int flags)
 {
 	name = xattr_full_name(handler, name);
-	return btrfs_set_prop(inode, name, value, size, flags);
+	return btrfs_set_prop_trans(inode, name, value, size, flags);
 }
 
 static const struct xattr_handler btrfs_security_xattr_handler = {
@@ -419,10 +419,10 @@ const struct xattr_handler *btrfs_xattr_handlers[] = {
 };
 
 static int btrfs_initxattrs(struct inode *inode,
-			    const struct xattr *xattr_array, void *fs_info)
+			    const struct xattr *xattr_array, void *fs_private)
 {
+	struct btrfs_trans_handle *trans = fs_private;
 	const struct xattr *xattr;
-	struct btrfs_trans_handle *trans = fs_info;
 	unsigned int nofs_flag;
 	char *name;
 	int err = 0;

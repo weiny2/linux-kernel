@@ -284,7 +284,8 @@ static int btrfs_ioctl_setflags(struct file *file, void __user *arg)
 		binode->flags &= ~BTRFS_INODE_COMPRESS;
 		binode->flags |= BTRFS_INODE_NOCOMPRESS;
 
-		ret = btrfs_set_prop(inode, "btrfs.compression", NULL, 0, 0);
+		ret = btrfs_set_prop_trans(inode, "btrfs.compression", NULL,
+					   0, 0);
 		if (ret && ret != -ENODATA)
 			goto out_drop;
 	} else if (fsflags & FS_COMPR_FL) {
@@ -302,13 +303,14 @@ static int btrfs_ioctl_setflags(struct file *file, void __user *arg)
 		if (!comp || comp[0] == 0)
 			comp = btrfs_compress_type2str(BTRFS_COMPRESS_ZLIB);
 
-		ret = btrfs_set_prop(inode, "btrfs.compression",
-				     comp, strlen(comp), 0);
+		ret = btrfs_set_prop_trans(inode, "btrfs.compression", comp,
+					   strlen(comp), 0);
 		if (ret)
 			goto out_drop;
 
 	} else {
-		ret = btrfs_set_prop(inode, "btrfs.compression", NULL, 0, 0);
+		ret = btrfs_set_prop_trans(inode, "btrfs.compression", NULL,
+					   0, 0);
 		if (ret && ret != -ENODATA)
 			goto out_drop;
 		binode->flags &= ~(BTRFS_INODE_COMPRESS | BTRFS_INODE_NOCOMPRESS);
@@ -1916,6 +1918,7 @@ static noinline int btrfs_ioctl_subvol_setflags(struct file *file,
 	struct btrfs_trans_handle *trans;
 	u64 root_flags;
 	u64 flags;
+	bool clear_received_state = false;
 	int ret = 0;
 
 	if (!inode_owner_or_capable(inode))
@@ -1965,6 +1968,7 @@ static noinline int btrfs_ioctl_subvol_setflags(struct file *file,
 			btrfs_set_root_flags(&root->root_item,
 				     root_flags & ~BTRFS_ROOT_SUBVOL_RDONLY);
 			spin_unlock(&root->root_item_lock);
+			clear_received_state = true;
 		} else {
 			spin_unlock(&root->root_item_lock);
 			btrfs_warn(fs_info,
@@ -1979,6 +1983,31 @@ static noinline int btrfs_ioctl_subvol_setflags(struct file *file,
 	if (IS_ERR(trans)) {
 		ret = PTR_ERR(trans);
 		goto out_reset;
+	}
+
+	if (clear_received_state) {
+	        if (!btrfs_is_empty_uuid(root->root_item.received_uuid)) {
+			struct btrfs_root_item *root_item = &root->root_item;
+
+	                ret = btrfs_uuid_tree_remove(trans,
+	                                root->root_item.received_uuid,
+	                                BTRFS_UUID_KEY_RECEIVED_SUBVOL,
+	                                root->root_key.objectid);
+
+	                if (ret && ret != -ENOENT) {
+	                        btrfs_abort_transaction(trans, ret);
+	                        btrfs_end_transaction(trans);
+	                        goto out_reset;
+	                }
+
+	                memset(root_item->received_uuid, 0, BTRFS_UUID_SIZE);
+			btrfs_set_root_stransid(root_item, 0);
+			btrfs_set_root_rtransid(root_item, 0);
+			btrfs_set_stack_timespec_sec(&root_item->stime, 0);
+			btrfs_set_stack_timespec_nsec(&root_item->stime, 0);
+			btrfs_set_stack_timespec_sec(&root_item->rtime, 0);
+			btrfs_set_stack_timespec_nsec(&root_item->rtime, 0);
+	        }
 	}
 
 	ret = btrfs_update_root(trans, fs_info->tree_root,
@@ -3948,16 +3977,10 @@ static int btrfs_remap_file_range_prep(struct file *file_in, loff_t pos_in,
 			return -EXDEV;
 	}
 
-	if (same_inode)
-		inode_lock(inode_in);
-	else
-		lock_two_nondirectories(inode_in, inode_out);
-
 	/* don't make the dst file partly checksummed */
 	if ((BTRFS_I(inode_in)->flags & BTRFS_INODE_NODATASUM) !=
 	    (BTRFS_I(inode_out)->flags & BTRFS_INODE_NODATASUM)) {
-		ret = -EINVAL;
-		goto out_unlock;
+		return -EINVAL;
 	}
 
 	/*
@@ -3991,26 +4014,14 @@ static int btrfs_remap_file_range_prep(struct file *file_in, loff_t pos_in,
 	ret = btrfs_wait_ordered_range(inode_in, ALIGN_DOWN(pos_in, bs),
 				       wb_len);
 	if (ret < 0)
-		goto out_unlock;
+		return ret;
 	ret = btrfs_wait_ordered_range(inode_out, ALIGN_DOWN(pos_out, bs),
 				       wb_len);
 	if (ret < 0)
-		goto out_unlock;
+		return ret;
 
-	ret = generic_remap_file_range_prep(file_in, pos_in, file_out, pos_out,
+	return generic_remap_file_range_prep(file_in, pos_in, file_out, pos_out,
 					    len, remap_flags);
-	if (ret < 0 || *len == 0)
-		goto out_unlock;
-
-	return 0;
-
- out_unlock:
-	if (same_inode)
-		inode_unlock(inode_in);
-	else
-		unlock_two_nondirectories(inode_in, inode_out);
-
-	return ret;
 }
 
 loff_t btrfs_remap_file_range(struct file *src_file, loff_t off,
@@ -4025,16 +4036,22 @@ loff_t btrfs_remap_file_range(struct file *src_file, loff_t off,
 	if (remap_flags & ~(REMAP_FILE_DEDUP | REMAP_FILE_ADVISORY))
 		return -EINVAL;
 
+	if (same_inode)
+		inode_lock(src_inode);
+	else
+		lock_two_nondirectories(src_inode, dst_inode);
+
 	ret = btrfs_remap_file_range_prep(src_file, off, dst_file, destoff,
 					  &len, remap_flags);
 	if (ret < 0 || len == 0)
-		return ret;
+		goto out_unlock;
 
 	if (remap_flags & REMAP_FILE_DEDUP)
 		ret = btrfs_extent_same(src_inode, off, len, dst_inode, destoff);
 	else
 		ret = btrfs_clone_files(dst_file, src_file, off, len, destoff);
 
+out_unlock:
 	if (same_inode)
 		inode_unlock(src_inode);
 	else
