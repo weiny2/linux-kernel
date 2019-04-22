@@ -388,6 +388,9 @@ config COMPAT
 	  (and some other stuff like libraries and such) is needed for
 	  executing 31 bit applications.  It is safe to say "Y".
 
+config COMPAT_VDSO
+	def_bool COMPAT && !CC_IS_CLANG
+
 config SYSVIPC_COMPAT
 	def_bool y if COMPAT && SYSVIPC
 
@@ -836,6 +839,17 @@ config HAVE_PNETID
 	default (SMC || CCWGROUP)
 
 menu "Virtualization"
+
+config PROTECTED_VIRTUALIZATION_GUEST
+	def_bool n
+	prompt "Protected virtualization guest support"
+	help
+	  Select this option, if you want to be able to run this
+	  kernel as a protected virtualization KVM guest.
+	  Protected virtualization capable machines have a mini hypervisor
+	  located at machine level (an ultravisor). With help of the
+	  Ultravisor, KVM will be able to run "protected" VMs, special
+	  VMs whose memory and management data are unavailable to KVM.
 
 config PFAULT
 	def_bool y

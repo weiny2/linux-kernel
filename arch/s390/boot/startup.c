@@ -2,10 +2,12 @@
 #include <linux/string.h>
 #include <asm/setup.h>
 #include <asm/sclp.h>
+#include <asm/uv.h>
 #include "compressed/decompressor.h"
 #include "boot.h"
 
 extern char __boot_data_start[], __boot_data_end[];
+extern char __boot_data_preserved_start[], __boot_data_preserved_end[];
 
 void error(char *x)
 {
@@ -43,12 +45,16 @@ static void copy_bootdata(void)
 	if (__boot_data_end - __boot_data_start != vmlinux.bootdata_size)
 		error(".boot.data section size mismatch");
 	memcpy((void *)vmlinux.bootdata_off, __boot_data_start, vmlinux.bootdata_size);
+	if (__boot_data_preserved_end - __boot_data_preserved_start != vmlinux.bootdata_preserved_size)
+		error(".boot.preserved.data section size mismatch");
+	memcpy((void *)vmlinux.bootdata_preserved_off, __boot_data_preserved_start, vmlinux.bootdata_preserved_size);
 }
 
 void startup_kernel(void)
 {
 	void *img;
 
+	uv_query_info();
 	rescue_initrd();
 	sclp_early_read_info();
 	store_ipl_parmblock();
