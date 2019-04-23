@@ -384,13 +384,14 @@ struct i915_ggtt {
 	u32 pin_bias;
 
 	struct drm_mm_node error_capture;
+	struct drm_mm_node uc_fw;
 };
 
 struct i915_hw_ppgtt {
 	struct i915_address_space vm;
 	struct kref ref;
 
-	unsigned long pd_dirty_engines;
+	intel_engine_mask_t pd_dirty_engines;
 	union {
 		struct i915_pml4 pml4;		/* GEN8+ & 48b PPGTT */
 		struct i915_page_directory_pointer pdp;	/* GEN8+ */
