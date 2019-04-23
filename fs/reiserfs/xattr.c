@@ -450,7 +450,7 @@ fail:
 
 static inline __u32 xattr_hash(const char *msg, int len)
 {
-	return csum_partial(msg, len, 0);
+	return (__force __u32)csum_partial(msg, len, 0);
 }
 
 int reiserfs_commit_write(struct file *f, struct page *page,
