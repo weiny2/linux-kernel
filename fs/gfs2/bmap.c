@@ -142,7 +142,7 @@ int gfs2_unstuff_dinode(struct gfs2_inode *ip, struct page *page)
 		if (error)
 			goto out_brelse;
 		if (isdir) {
-			gfs2_trans_add_unrevoke(GFS2_SB(&ip->i_inode), block, 1);
+			gfs2_trans_remove_revoke(GFS2_SB(&ip->i_inode), block, 1);
 			error = gfs2_dir_get_new_buffer(ip, block, &bh);
 			if (error)
 				goto out_brelse;
@@ -676,7 +676,7 @@ static int gfs2_iomap_alloc(struct inode *inode, struct iomap *iomap,
 			goto out;
 		alloced += n;
 		if (state != ALLOC_DATA || gfs2_is_jdata(ip))
-			gfs2_trans_add_unrevoke(sdp, bn, n);
+			gfs2_trans_remove_revoke(sdp, bn, n);
 		switch (state) {
 		/* Growing height of tree */
 		case ALLOC_GROW_HEIGHT:
@@ -923,6 +923,32 @@ do_alloc:
 			ret = gfs2_hole_size(inode, lblock, len, mp, iomap);
 	}
 	goto out;
+}
+
+/**
+ * gfs2_lblk_to_dblk - convert logical block to disk block
+ * @inode: the inode of the file we're mapping
+ * @lblock: the block relative to the start of the file
+ * @dblock: the returned dblock, if no error
+ *
+ * This function maps a single block from a file logical block (relative to
+ * the start of the file) to a file system absolute block using iomap.
+ *
+ * Returns: the absolute file system block, or an error
+ */
+int gfs2_lblk_to_dblk(struct inode *inode, u32 lblock, u64 *dblock)
+{
+	struct iomap iomap = { };
+	struct metapath mp = { .mp_aheight = 1, };
+	loff_t pos = (loff_t)lblock << inode->i_blkbits;
+	int ret;
+
+	ret = gfs2_iomap_get(inode, pos, i_blocksize(inode), 0, &iomap, &mp);
+	release_metapath(&mp);
+	if (ret == 0)
+		*dblock = iomap.addr >> inode->i_blkbits;
+
+	return ret;
 }
 
 static int gfs2_write_lock(struct inode *inode)
