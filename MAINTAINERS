@@ -4259,7 +4259,7 @@ S:	Supported
 F:	drivers/scsi/cxgbi/cxgb3i
 
 CXGB3 IWARP RNIC DRIVER (IW_CXGB3)
-M:	Steve Wise <swise@chelsio.com>
+M:	Potnuri Bharat Teja <bharat@chelsio.com>
 L:	linux-rdma@vger.kernel.org
 W:	http://www.openfabrics.org
 S:	Supported
@@ -4288,7 +4288,7 @@ S:	Supported
 F:	drivers/scsi/cxgbi/cxgb4i
 
 CXGB4 IWARP RNIC DRIVER (IW_CXGB4)
-M:	Steve Wise <swise@chelsio.com>
+M:	Potnuri Bharat Teja <bharat@chelsio.com>
 L:	linux-rdma@vger.kernel.org
 W:	http://www.openfabrics.org
 S:	Supported
@@ -7664,6 +7664,10 @@ F:	drivers/infiniband/
 F:	include/uapi/linux/if_infiniband.h
 F:	include/uapi/rdma/
 F:	include/rdma/
+F:	include/trace/events/ib_mad.h
+F:	include/trace/events/ib_umad.h
+F:	samples/bpf/ibumad_kern.c
+F:	samples/bpf/ibumad_user.c
 
 INGENIC JZ4780 DMA Driver
 M:	Zubair Lutfullah Kakakhel <Zubair.Kakakhel@imgtec.com>
