@@ -816,7 +816,7 @@ unsigned int OnBeacon(struct adapter *padapter, union recv_frame *precv_frame)
 					update_network(&(pmlmepriv->cur_network.network), pbss, padapter, true);
 					rtw_get_bcn_info(&(pmlmepriv->cur_network));
 				}
-				kfree((u8 *)pbss);
+				kfree(pbss);
 			}
 
 			/* check the vendor of the assoc AP */
@@ -3512,7 +3512,7 @@ int issue_nulldata(struct adapter *padapter, unsigned char *da, unsigned int pow
 
 
 	/* da == NULL, assum it's null data for sta to ap*/
-	if (da == NULL)
+	if (!da)
 		da = get_my_bssid(&(pmlmeinfo->network));
 
 	psta = rtw_get_stainfo(&padapter->stapriv, da);
@@ -3569,7 +3569,6 @@ exit:
  */
 s32 issue_nulldata_in_interrupt(struct adapter *padapter, u8 *da)
 {
-	int ret;
 	struct mlme_ext_priv *pmlmeext;
 	struct mlme_ext_info *pmlmeinfo;
 
@@ -3578,12 +3577,10 @@ s32 issue_nulldata_in_interrupt(struct adapter *padapter, u8 *da)
 	pmlmeinfo = &pmlmeext->mlmext_info;
 
 	/* da == NULL, assum it's null data for sta to ap*/
-	if (da == NULL)
+	if (!da)
 		da = get_my_bssid(&(pmlmeinfo->network));
 
-	ret = _issue_nulldata(padapter, da, 0, false);
-
-	return ret;
+	return _issue_nulldata(padapter, da, 0, false);
 }
 
 /* when wait_ack is ture, this function shoule be called at process context */
@@ -3675,7 +3672,7 @@ int issue_qos_nulldata(struct adapter *padapter, unsigned char *da, u16 tid, int
 	struct mlme_ext_info *pmlmeinfo = &(pmlmeext->mlmext_info);
 
 	/* da == NULL, assum it's null data for sta to ap*/
-	if (da == NULL)
+	if (!da)
 		da = get_my_bssid(&(pmlmeinfo->network));
 
 	do {
@@ -3958,7 +3955,7 @@ void issue_action_BA(struct adapter *padapter, unsigned char *raddr, unsigned ch
 				/*  A-MSDU NOT Supported */
 				BA_para_set = 0;
 				/*  immediate Block Ack */
-				BA_para_set |= (1 << 1) & IEEE80211_ADDBA_PARAM_POLICY_MASK;
+				BA_para_set |= BIT(1) & IEEE80211_ADDBA_PARAM_POLICY_MASK;
 				/*  TID */
 				BA_para_set |= (status << 2) & IEEE80211_ADDBA_PARAM_TID_MASK;
 				/*  max buffer size is 8 MSDU */
@@ -4579,12 +4576,6 @@ u8 collect_bss_info(struct adapter *padapter, union recv_frame *precv_frame, str
 			pmlmepriv->num_sta_no_ht++;
 	}
 
-#ifdef CONFIG_INTEL_WIDI
-	/* process_intel_widi_query_or_tigger(padapter, bssid); */
-	if (process_intel_widi_query_or_tigger(padapter, bssid))
-		return _FAIL;
-#endif /*  CONFIG_INTEL_WIDI */
-
 	#if defined(DBG_RX_SIGNAL_DISPLAY_SSID_MONITORED) & 1
 	if (strcmp(bssid->Ssid.Ssid, DBG_RX_SIGNAL_DISPLAY_SSID_MONITORED) == 0) {
 		DBG_871X("Receiving %s("MAC_FMT", DSConfig:%u) from ch%u with ss:%3u, sq:%3u, RawRSSI:%3ld\n"
@@ -5052,7 +5043,7 @@ void report_survey_event(struct adapter *padapter, union recv_frame *precv_frame
 	cmdsz = (sizeof(struct survey_event) + sizeof(struct C2HEvent_Header));
 	pevtcmd = rtw_zmalloc(cmdsz);
 	if (pevtcmd == NULL) {
-		kfree((u8 *)pcmd_obj);
+		kfree(pcmd_obj);
 		return;
 	}
 
@@ -5073,8 +5064,8 @@ void report_survey_event(struct adapter *padapter, union recv_frame *precv_frame
 	psurvey_evt = (struct survey_event *)(pevtcmd + sizeof(struct C2HEvent_Header));
 
 	if (collect_bss_info(padapter, precv_frame, (struct wlan_bssid_ex *)&psurvey_evt->bss) == _FAIL) {
-		kfree((u8 *)pcmd_obj);
-		kfree((u8 *)pevtcmd);
+		kfree(pcmd_obj);
+		kfree(pevtcmd);
 		return;
 	}
 
@@ -5105,7 +5096,7 @@ void report_surveydone_event(struct adapter *padapter)
 	cmdsz = (sizeof(struct surveydone_event) + sizeof(struct C2HEvent_Header));
 	pevtcmd = rtw_zmalloc(cmdsz);
 	if (pevtcmd == NULL) {
-		kfree((u8 *)pcmd_obj);
+		kfree(pcmd_obj);
 		return;
 	}
 
@@ -5152,7 +5143,7 @@ void report_join_res(struct adapter *padapter, int res)
 	cmdsz = (sizeof(struct joinbss_event) + sizeof(struct C2HEvent_Header));
 	pevtcmd = rtw_zmalloc(cmdsz);
 	if (pevtcmd == NULL) {
-		kfree((u8 *)pcmd_obj);
+		kfree(pcmd_obj);
 		return;
 	}
 
@@ -5203,7 +5194,7 @@ void report_wmm_edca_update(struct adapter *padapter)
 	cmdsz = (sizeof(struct wmm_event) + sizeof(struct C2HEvent_Header));
 	pevtcmd = rtw_zmalloc(cmdsz);
 	if (pevtcmd == NULL) {
-		kfree((u8 *)pcmd_obj);
+		kfree(pcmd_obj);
 		return;
 	}
 
@@ -5250,7 +5241,7 @@ void report_del_sta_event(struct adapter *padapter, unsigned char *MacAddr, unsi
 	cmdsz = (sizeof(struct stadel_event) + sizeof(struct C2HEvent_Header));
 	pevtcmd = rtw_zmalloc(cmdsz);
 	if (pevtcmd == NULL) {
-		kfree((u8 *)pcmd_obj);
+		kfree(pcmd_obj);
 		return;
 	}
 
@@ -5305,7 +5296,7 @@ void report_add_sta_event(struct adapter *padapter, unsigned char *MacAddr, int 
 	cmdsz = (sizeof(struct stassoc_event) + sizeof(struct C2HEvent_Header));
 	pevtcmd = rtw_zmalloc(cmdsz);
 	if (pevtcmd == NULL) {
-		kfree((u8 *)pcmd_obj);
+		kfree(pcmd_obj);
 		return;
 	}
 
@@ -5713,11 +5704,6 @@ void linked_status_chk(struct adapter *padapter)
 		/*  Marked by Kurt 20130715 */
 		/*  For WiDi 3.5 and latered on, they don't ask WiDi sink to do roaming, so we could not check rx limit that strictly. */
 		/*  todo: To check why we under miracast session, rx_chk would be false */
-		/* ifdef CONFIG_INTEL_WIDI */
-		/* if (padapter->mlmepriv.widi_state != INTEL_WIDI_STATE_NONE) */
-		/* 	rx_chk_limit = 1; */
-		/* endif */
-
 		psta = rtw_get_stainfo(pstapriv, pmlmeinfo->network.MacAddress);
 		if (psta != NULL) {
 			if (chk_ap_is_alive(padapter, psta) == false)
@@ -5836,7 +5822,7 @@ void survey_timer_hdl(struct timer_list *t)
 
 		psurveyPara = rtw_zmalloc(sizeof(struct sitesurvey_parm));
 		if (psurveyPara == NULL) {
-			kfree((unsigned char *)ph2c);
+			kfree(ph2c);
 			goto exit_survey_timer_hdl;
 		}
 
@@ -6603,7 +6589,7 @@ u8 set_tx_beacon_cmd(struct adapter *padapter)
 
 	ptxBeacon_parm = rtw_zmalloc(sizeof(struct Tx_Beacon_param));
 	if (ptxBeacon_parm == NULL) {
-		kfree((unsigned char *)ph2c);
+		kfree(ph2c);
 		res = _FAIL;
 		goto exit;
 	}
