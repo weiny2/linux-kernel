@@ -13,7 +13,6 @@ generic-y += mmiowb.h
 generic-y += msi.h
 generic-y += parport.h
 generic-y += preempt.h
-generic-y += rwsem.h
 generic-y += seccomp.h
 generic-y += segment.h
 generic-y += serial.h
