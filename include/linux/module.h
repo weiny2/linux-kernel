@@ -677,6 +677,7 @@ static inline bool is_livepatch_module(struct module *mod)
 #endif /* CONFIG_LIVEPATCH */
 
 bool is_module_sig_enforced(void);
+void set_module_sig_enforced(void);
 
 #else /* !CONFIG_MODULES... */
 
@@ -812,6 +813,10 @@ static inline bool module_requested_async_probing(struct module *module)
 static inline bool is_module_sig_enforced(void)
 {
 	return false;
+}
+
+static inline void set_module_sig_enforced(void)
+{
 }
 
 /* Dereference module function descriptor */
