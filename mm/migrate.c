@@ -994,13 +994,13 @@ static int move_to_new_page(struct page *newpage, struct page *page,
 		 */
 		if (!PageMappingFlags(page))
 			page->mapping = NULL;
+		inc_hmem_state(m_detail->h_reason, page, newpage);
 
 		if (unlikely(is_zone_device_page(newpage))) {
 			if (is_device_public_page(newpage))
 				flush_dcache_page(newpage);
 		} else
 			flush_dcache_page(newpage);
-
 	}
 out:
 	trace_mm_migrate_move_page(page, newpage, rc);
