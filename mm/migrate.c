@@ -926,7 +926,8 @@ static int fallback_migrate_page(struct address_space *mapping,
  *  MIGRATEPAGE_SUCCESS - success
  */
 static int move_to_new_page(struct page *newpage, struct page *page,
-				enum migrate_mode mode)
+				enum migrate_mode mode,
+				struct migrate_detail *m_detail)
 {
 	struct address_space *mapping;
 	int rc = -EAGAIN;
@@ -1010,7 +1011,7 @@ static int __unmap_and_move(new_page_t get_new_page,
 			    free_page_t put_new_page,
 			    unsigned long private, struct page *page,
 			    enum migrate_mode mode,
-			    enum migrate_reason reason)
+			    struct migrate_detail *m_detail)
 {
 	int rc = -EAGAIN;
 	int page_was_mapped = 0;
@@ -1053,7 +1054,7 @@ static int __unmap_and_move(new_page_t get_new_page,
 		goto out_put;
 
 	if (unlikely(!is_lru)) {
-		rc = move_to_new_page(newpage, page, mode);
+		rc = move_to_new_page(newpage, page, mode, m_detail);
 		goto out_unlock;
 	}
 
@@ -1085,7 +1086,7 @@ static int __unmap_and_move(new_page_t get_new_page,
 	}
 
 	if (!page_mapped(page))
-		rc = move_to_new_page(newpage, page, mode);
+		rc = move_to_new_page(newpage, page, mode, m_detail);
 
 	if (page_was_mapped)
 		remove_migration_ptes(page,
@@ -1103,7 +1104,7 @@ out_put:
 	 * state.
 	 */
 	if (rc == MIGRATEPAGE_SUCCESS) {
-		set_page_owner_migrate_reason(newpage, reason);
+		set_page_owner_migrate_reason(newpage, m_detail->reason);
 		if (unlikely(!is_lru))
 			put_page(newpage);
 		else
@@ -1156,6 +1157,7 @@ static struct page *alloc_demote_node_page(struct page *page, unsigned long node
 int migrate_demote_mapping(struct page *page)
 {
 	int next_nid = next_migration_node(page_to_nid(page));
+	struct migrate_detail m_detail = {};
 
 	VM_BUG_ON_PAGE(!PageLocked(page), page);
 	VM_BUG_ON_PAGE(PageHuge(page), page);
@@ -1167,8 +1169,9 @@ int migrate_demote_mapping(struct page *page)
 		return -ENOMEM;
 
 	/* MIGRATE_ASYNC is the most light weight and never blocks.*/
+	m_detail.reason = MR_DEMOTION;
 	return __unmap_and_move(alloc_demote_node_page, NULL, next_nid,
-				page, MIGRATE_ASYNC, MR_DEMOTION);
+				page, MIGRATE_ASYNC, &m_detail);
 }
 
 
@@ -1191,7 +1194,7 @@ static ICE_noinline int unmap_and_move(new_page_t get_new_page,
 				   free_page_t put_new_page,
 				   unsigned long private, struct page *page,
 				   int force, enum migrate_mode mode,
-				   enum migrate_reason reason)
+				   struct migrate_detail *m_detail)
 {
 	int rc = -EAGAIN;
 
@@ -1255,7 +1258,7 @@ static ICE_noinline int unmap_and_move(new_page_t get_new_page,
 		wait_on_page_writeback(page);
 	}
 	rc = __unmap_and_move(get_new_page, put_new_page, private,
-			      page, mode, reason);
+			      page, mode, m_detail);
 
 out_unlock:
 	unlock_page(page);
@@ -1286,7 +1289,7 @@ out:
 	 */
 	if (rc == MIGRATEPAGE_SUCCESS) {
 		put_page(page);
-		if (reason == MR_MEMORY_FAILURE) {
+		if (m_detail->reason == MR_MEMORY_FAILURE) {
 			/*
 			 * Set PG_HWPoison on just freed page
 			 * intentionally. Although it's rather weird,
@@ -1335,7 +1338,8 @@ done:
 static int unmap_and_move_huge_page(new_page_t get_new_page,
 				free_page_t put_new_page, unsigned long private,
 				struct page *hpage, int force,
-				enum migrate_mode mode, int reason)
+				enum migrate_mode mode,
+				struct migrate_detail *m_detail)
 {
 	int rc = -EAGAIN;
 	int page_was_mapped = 0;
@@ -1394,7 +1398,7 @@ static int unmap_and_move_huge_page(new_page_t get_new_page,
 	}
 
 	if (!page_mapped(hpage))
-		rc = move_to_new_page(new_hpage, hpage, mode);
+		rc = move_to_new_page(new_hpage, hpage, mode, m_detail);
 
 	if (page_was_mapped)
 		remove_migration_ptes(hpage,
@@ -1407,7 +1411,7 @@ put_anon:
 		put_anon_vma(anon_vma);
 
 	if (rc == MIGRATEPAGE_SUCCESS) {
-		move_hugetlb_state(hpage, new_hpage, reason);
+		move_hugetlb_state(hpage, new_hpage, m_detail);
 		put_new_page = NULL;
 	}
 
@@ -1442,7 +1446,8 @@ out:
  * @private:		Private data to be passed on to get_new_page()
  * @mode:		The migration mode that specifies the constraints for
  *			page migration, if any.
- * @reason:		The reason for page migration.
+ * @m_detail:		Details about the migration, including the reason
+ * 			for page migration.
  *
  * The function returns after 10 attempts or if no pages are movable any more
  * because the list has become empty or no retryable pages exist any more.
@@ -1453,7 +1458,7 @@ out:
  */
 int migrate_pages(struct list_head *from, new_page_t get_new_page,
 		free_page_t put_new_page, unsigned long private,
-		enum migrate_mode mode, int reason)
+		enum migrate_mode mode, struct migrate_detail *m_detail)
 {
 	int retry = 1;
 	int nr_failed = 0;
@@ -1477,11 +1482,11 @@ retry:
 			if (PageHuge(page))
 				rc = unmap_and_move_huge_page(get_new_page,
 						put_new_page, private, page,
-						pass > 2, mode, reason);
+						pass > 2, mode, m_detail);
 			else
 				rc = unmap_and_move(get_new_page, put_new_page,
 						private, page, pass > 2, mode,
-						reason);
+						m_detail);
 
 			switch(rc) {
 			case -ENOMEM:
@@ -1532,7 +1537,7 @@ out:
 		count_vm_events(PGMIGRATE_SUCCESS, nr_succeeded);
 	if (nr_failed)
 		count_vm_events(PGMIGRATE_FAIL, nr_failed);
-	trace_mm_migrate_pages(nr_succeeded, nr_failed, mode, reason);
+	trace_mm_migrate_pages(nr_succeeded, nr_failed, mode, m_detail->reason);
 
 	if (!swapwrite)
 		current->flags &= ~PF_SWAPWRITE;
@@ -1556,13 +1561,15 @@ static int store_status(int __user *status, int start, int value, int nr)
 static int do_move_pages_to_node(struct mm_struct *mm,
 		struct list_head *pagelist, int node)
 {
+	struct migrate_detail m_detail = {};
 	int err;
 
 	if (list_empty(pagelist))
 		return 0;
 
+	m_detail.reason = MR_SYSCALL;
 	err = migrate_pages(pagelist, alloc_new_node_page, NULL, node,
-			MIGRATE_SYNC, MR_SYSCALL);
+			MIGRATE_SYNC, &m_detail);
 	if (err)
 		putback_movable_pages(pagelist);
 	return err;
@@ -1992,6 +1999,7 @@ bool pmd_trans_migrating(pmd_t pmd)
 int migrate_misplaced_page(struct page *page, struct vm_area_struct *vma,
 			   int node)
 {
+	struct migrate_detail m_detail = {};
 	pg_data_t *pgdat = NODE_DATA(node);
 	int isolated;
 	int nr_remaining;
@@ -2017,9 +2025,9 @@ int migrate_misplaced_page(struct page *page, struct vm_area_struct *vma,
 		goto out;
 
 	list_add(&page->lru, &migratepages);
+	m_detail.reason = MR_NUMA_MISPLACED;
 	nr_remaining = migrate_pages(&migratepages, alloc_misplaced_dst_page,
-				     NULL, node, MIGRATE_ASYNC,
-				     MR_NUMA_MISPLACED);
+				     NULL, node, MIGRATE_ASYNC, &m_detail);
 	if (nr_remaining) {
 		if (!list_empty(&migratepages)) {
 			list_del(&page->lru);
