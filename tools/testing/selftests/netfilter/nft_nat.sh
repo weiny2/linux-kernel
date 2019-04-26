@@ -347,10 +347,7 @@ EOF
 test_masquerade6()
 {
 	local natflags=$1
-<<<<<<< HEAD
-=======
 	local family=$2
->>>>>>> linux-next/akpm-base
 	local lret=0
 
 	ip netns exec ns0 sysctl net.ipv6.conf.all.forwarding=1 > /dev/null
@@ -395,11 +392,7 @@ EOF
 
 	ip netns exec ns2 ping -q -c 1 dead:1::99 > /dev/null # ping ns2->ns1
 	if [ $? -ne 0 ] ; then
-<<<<<<< HEAD
-		echo "ERROR: cannot ping ns1 from ns2 with active ipv6 masquerade $natflags"
-=======
 		echo "ERROR: cannot ping ns1 from ns2 with active $family masquerade $natflags"
->>>>>>> linux-next/akpm-base
 		lret=1
 	fi
 
@@ -438,29 +431,17 @@ EOF
 
 	ip netns exec ns2 ping -q -c 1 dead:1::99 > /dev/null # ping ns2->ns1
 	if [ $? -ne 0 ] ; then
-<<<<<<< HEAD
-		echo "ERROR: cannot ping ns1 from ns2 with active ipv6 masquerade $natflags (attempt 2)"
-		lret=1
-	fi
-
-	ip netns exec ns0 nft flush chain ip6 nat postrouting
-=======
 		echo "ERROR: cannot ping ns1 from ns2 with active $family masquerade $natflags (attempt 2)"
 		lret=1
 	fi
 
 	ip netns exec ns0 nft flush chain $family nat postrouting
->>>>>>> linux-next/akpm-base
 	if [ $? -ne 0 ]; then
 		echo "ERROR: Could not flush $family nat postrouting" 1>&2
 		lret=1
 	fi
 
-<<<<<<< HEAD
-	test $lret -eq 0 && echo "PASS: IPv6 masquerade $natflags for ns2"
-=======
 	test $lret -eq 0 && echo "PASS: $family IPv6 masquerade $natflags for ns2"
->>>>>>> linux-next/akpm-base
 
 	return $lret
 }
@@ -468,10 +449,7 @@ EOF
 test_masquerade()
 {
 	local natflags=$1
-<<<<<<< HEAD
-=======
 	local family=$2
->>>>>>> linux-next/akpm-base
 	local lret=0
 
 	ip netns exec ns0 sysctl net.ipv4.conf.veth0.forwarding=1 > /dev/null
@@ -516,11 +494,7 @@ EOF
 
 	ip netns exec ns2 ping -q -c 1 10.0.1.99 > /dev/null # ping ns2->ns1
 	if [ $? -ne 0 ] ; then
-<<<<<<< HEAD
-		echo "ERROR: cannot ping ns1 from ns2 with active ip masquere $natflags"
-=======
 		echo "ERROR: cannot ping ns1 from ns2 with active $family masquere $natflags"
->>>>>>> linux-next/akpm-base
 		lret=1
 	fi
 
@@ -558,29 +532,17 @@ EOF
 
 	ip netns exec ns2 ping -q -c 1 10.0.1.99 > /dev/null # ping ns2->ns1
 	if [ $? -ne 0 ] ; then
-<<<<<<< HEAD
-		echo "ERROR: cannot ping ns1 from ns2 with active ip masquerade $natflags (attempt 2)"
-		lret=1
-	fi
-
-	ip netns exec ns0 nft flush chain ip nat postrouting
-=======
 		echo "ERROR: cannot ping ns1 from ns2 with active $family masquerade $natflags (attempt 2)"
 		lret=1
 	fi
 
 	ip netns exec ns0 nft flush chain $family nat postrouting
->>>>>>> linux-next/akpm-base
 	if [ $? -ne 0 ]; then
 		echo "ERROR: Could not flush $family nat postrouting" 1>&2
 		lret=1
 	fi
 
-<<<<<<< HEAD
-	test $lret -eq 0 && echo "PASS: IP masquerade $natflags for ns2"
-=======
 	test $lret -eq 0 && echo "PASS: $family IP masquerade $natflags for ns2"
->>>>>>> linux-next/akpm-base
 
 	return $lret
 }
@@ -858,17 +820,8 @@ test_masquerade "" ip
 test_masquerade6 "" ip6
 
 reset_counters
-<<<<<<< HEAD
-test_masquerade ""
-test_masquerade6 ""
-
-reset_counters
-test_masquerade "fully-random"
-test_masquerade6 "fully-random"
-=======
 test_masquerade "fully-random" ip
 test_masquerade6 "fully-random" ip6
->>>>>>> linux-next/akpm-base
 
 reset_counters
 $test_inet_nat && test_masquerade "" inet
