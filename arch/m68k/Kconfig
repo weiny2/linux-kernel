@@ -22,6 +22,7 @@ config M68K
 	select ARCH_WANT_IPC_PARSE_VERSION
 	select HAVE_FUTEX_CMPXCHG if MMU && FUTEX
 	select HAVE_MOD_ARCH_SPECIFIC
+	select MMU_GATHER_NO_RANGE if MMU
 	select MODULES_USE_ELF_REL
 	select MODULES_USE_ELF_RELA
 	select OLD_SIGSUSPEND3
@@ -29,13 +30,6 @@ config M68K
 
 config CPU_BIG_ENDIAN
 	def_bool y
-
-config RWSEM_GENERIC_SPINLOCK
-	bool
-	default y
-
-config RWSEM_XCHGADD_ALGORITHM
-	bool
 
 config ARCH_HAS_ILOG2_U32
 	bool

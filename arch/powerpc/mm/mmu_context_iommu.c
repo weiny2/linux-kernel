@@ -131,18 +131,28 @@ static long mm_iommu_do_alloc(struct mm_struct *mm, unsigned long ua,
 	}
 
 	down_read(&mm->mmap_sem);
-	ret = get_user_pages(ua, entries, FOLL_WRITE | FOLL_LONGTERM,
-			     mem->hpages, NULL);
-	up_read(&mm->mmap_sem);
-	if (ret != entries) {
-		/* free the reference taken */
-		for (i = 0; i < ret; i++)
-			put_page(mem->hpages[i]);
+	chunk = (1UL << (PAGE_SHIFT + MAX_ORDER - 1)) /
+			sizeof(struct vm_area_struct *);
+	chunk = min(chunk, entries);
+	for (entry = 0; entry < entries; entry += chunk) {
+		unsigned long n = min(entries - entry, chunk);
 
-		vfree(mem->hpas);
-		kfree(mem);
-		ret = -EFAULT;
-		goto unlock_exit;
+		ret = get_user_pages_longterm(ua + (entry << PAGE_SHIFT), n,
+				FOLL_WRITE | FOLL_LONGTERM,
+				mem->hpages + entry, NULL);
+		if (ret == n) {
+			pinned += n;
+			continue;
+		}
+		if (ret > 0)
+			pinned += ret;
+		break;
+	}
+	up_read(&mm->mmap_sem);
+	if (pinned != entries) {
+		if (!ret)
+			ret = -EFAULT;
+		goto free_exit;
 	}
 
 	pageshift = PAGE_SHIFT;

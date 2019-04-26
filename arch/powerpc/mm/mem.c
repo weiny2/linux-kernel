@@ -109,8 +109,8 @@ int __weak remove_section_mapping(unsigned long start, unsigned long end)
 	return -ENODEV;
 }
 
-int __meminit arch_add_memory(int nid, u64 start, u64 size,
-			struct mhp_restrictions *restrictions)
+int __ref arch_add_memory(int nid, u64 start, u64 size,
+			  struct mhp_restrictions *restrictions)
 {
 	unsigned long start_pfn = start >> PAGE_SHIFT;
 	unsigned long nr_pages = size >> PAGE_SHIFT;
@@ -132,8 +132,8 @@ int __meminit arch_add_memory(int nid, u64 start, u64 size,
 }
 
 #ifdef CONFIG_MEMORY_HOTREMOVE
-void __meminit arch_remove_memory(int nid, u64 start, u64 size,
-				  struct vmem_altmap *altmap)
+void __ref arch_remove_memory(int nid, u64 start, u64 size,
+			     struct vmem_altmap *altmap)
 {
 	unsigned long start_pfn = start >> PAGE_SHIFT;
 	unsigned long nr_pages = size >> PAGE_SHIFT;
