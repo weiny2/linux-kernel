@@ -454,6 +454,9 @@
 #define SYS_ICH_LR14_EL2		__SYS__LR8_EL2(6)
 #define SYS_ICH_LR15_EL2		__SYS__LR8_EL2(7)
 
+/* VHE encodings for architectural EL0/1 system registers */
+#define SYS_ZCR_EL12			sys_reg(3, 5, 1, 2, 0)
+
 /* Common SCTLR_ELx flags. */
 #define SCTLR_ELx_DSSBS	(_BITUL(44))
 #define SCTLR_ELx_ENIA	(_BITUL(31))
@@ -605,6 +608,20 @@
 #define ID_AA64PFR1_SSBS_PSTATE_NI	0
 #define ID_AA64PFR1_SSBS_PSTATE_ONLY	1
 #define ID_AA64PFR1_SSBS_PSTATE_INSNS	2
+
+/* id_aa64zfr0 */
+#define ID_AA64ZFR0_SM4_SHIFT		40
+#define ID_AA64ZFR0_SHA3_SHIFT		32
+#define ID_AA64ZFR0_BITPERM_SHIFT	16
+#define ID_AA64ZFR0_AES_SHIFT		4
+#define ID_AA64ZFR0_SVEVER_SHIFT	0
+
+#define ID_AA64ZFR0_SM4			0x1
+#define ID_AA64ZFR0_SHA3		0x1
+#define ID_AA64ZFR0_BITPERM		0x1
+#define ID_AA64ZFR0_AES			0x1
+#define ID_AA64ZFR0_AES_PMULL		0x2
+#define ID_AA64ZFR0_SVEVER_SVE2		0x1
 
 /* id_aa64mmfr0 */
 #define ID_AA64MMFR0_TGRAN4_SHIFT	28

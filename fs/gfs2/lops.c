@@ -530,7 +530,7 @@ static void buf_lo_before_scan(struct gfs2_jdesc *jd,
 	jd->jd_replayed_blocks = 0;
 }
 
-static int buf_lo_scan_elements(struct gfs2_jdesc *jd, unsigned int start,
+static int buf_lo_scan_elements(struct gfs2_jdesc *jd, u32 start,
 				struct gfs2_log_descriptor *ld, __be64 *ptr,
 				int pass)
 {
@@ -623,7 +623,7 @@ static void revoke_lo_before_commit(struct gfs2_sbd *sdp, struct gfs2_trans *tr)
 {
 	struct gfs2_meta_header *mh;
 	unsigned int offset;
-	struct list_head *head = &sdp->sd_log_le_revoke;
+	struct list_head *head = &sdp->sd_log_revokes;
 	struct gfs2_bufdata *bd;
 	struct page *page;
 	unsigned int length;
@@ -661,18 +661,35 @@ static void revoke_lo_before_commit(struct gfs2_sbd *sdp, struct gfs2_trans *tr)
 
 static void revoke_lo_after_commit(struct gfs2_sbd *sdp, struct gfs2_trans *tr)
 {
-	struct list_head *head = &sdp->sd_log_le_revoke;
-	struct gfs2_bufdata *bd;
-	struct gfs2_glock *gl;
+	struct list_head *head = &sdp->sd_log_revokes;
+	struct gfs2_bufdata *bd, *tmp;
 
-	while (!list_empty(head)) {
-		bd = list_entry(head->next, struct gfs2_bufdata, bd_list);
-		list_del_init(&bd->bd_list);
-		gl = bd->bd_gl;
-		atomic_dec(&gl->gl_revokes);
-		clear_bit(GLF_LFLUSH, &gl->gl_flags);
+	/*
+	 * Glocks can be referenced repeatedly on the revoke list, but the list
+	 * only holds one reference.  All glocks on the list will have the
+	 * GLF_REVOKES flag set initially.
+	 */
+
+	list_for_each_entry_safe(bd, tmp, head, bd_list) {
+		struct gfs2_glock *gl = bd->bd_gl;
+
+		if (test_bit(GLF_REVOKES, &gl->gl_flags)) {
+			/* Keep each glock on the list exactly once. */
+			clear_bit(GLF_REVOKES, &gl->gl_flags);
+			continue;
+		}
+		list_del(&bd->bd_list);
 		kmem_cache_free(gfs2_bufdata_cachep, bd);
 	}
+	list_for_each_entry_safe(bd, tmp, head, bd_list) {
+		struct gfs2_glock *gl = bd->bd_gl;
+
+		list_del(&bd->bd_list);
+		kmem_cache_free(gfs2_bufdata_cachep, bd);
+		clear_bit(GLF_LFLUSH, &gl->gl_flags);
+		gfs2_glock_queue_put(gl);
+	}
+	/* the list is empty now */
 }
 
 static void revoke_lo_before_scan(struct gfs2_jdesc *jd,
@@ -685,7 +702,7 @@ static void revoke_lo_before_scan(struct gfs2_jdesc *jd,
 	jd->jd_replay_tail = head->lh_tail;
 }
 
-static int revoke_lo_scan_elements(struct gfs2_jdesc *jd, unsigned int start,
+static int revoke_lo_scan_elements(struct gfs2_jdesc *jd, u32 start,
 				   struct gfs2_log_descriptor *ld, __be64 *ptr,
 				   int pass)
 {
@@ -767,7 +784,7 @@ static void databuf_lo_before_commit(struct gfs2_sbd *sdp, struct gfs2_trans *tr
 	gfs2_before_commit(sdp, limit, nbuf, &tr->tr_databuf, 1);
 }
 
-static int databuf_lo_scan_elements(struct gfs2_jdesc *jd, unsigned int start,
+static int databuf_lo_scan_elements(struct gfs2_jdesc *jd, u32 start,
 				    struct gfs2_log_descriptor *ld,
 				    __be64 *ptr, int pass)
 {
@@ -853,7 +870,7 @@ static void databuf_lo_after_commit(struct gfs2_sbd *sdp, struct gfs2_trans *tr)
 }
 
 
-const struct gfs2_log_operations gfs2_buf_lops = {
+static const struct gfs2_log_operations gfs2_buf_lops = {
 	.lo_before_commit = buf_lo_before_commit,
 	.lo_after_commit = buf_lo_after_commit,
 	.lo_before_scan = buf_lo_before_scan,
@@ -862,7 +879,7 @@ const struct gfs2_log_operations gfs2_buf_lops = {
 	.lo_name = "buf",
 };
 
-const struct gfs2_log_operations gfs2_revoke_lops = {
+static const struct gfs2_log_operations gfs2_revoke_lops = {
 	.lo_before_commit = revoke_lo_before_commit,
 	.lo_after_commit = revoke_lo_after_commit,
 	.lo_before_scan = revoke_lo_before_scan,
@@ -871,7 +888,7 @@ const struct gfs2_log_operations gfs2_revoke_lops = {
 	.lo_name = "revoke",
 };
 
-const struct gfs2_log_operations gfs2_databuf_lops = {
+static const struct gfs2_log_operations gfs2_databuf_lops = {
 	.lo_before_commit = databuf_lo_before_commit,
 	.lo_after_commit = databuf_lo_after_commit,
 	.lo_scan_elements = databuf_lo_scan_elements,

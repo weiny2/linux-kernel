@@ -33,7 +33,7 @@ static const char *const gl_btc_wifi_freq_string[] = {
 
 static bool halbtc_is_bt_coexist_available(struct btc_coexist *btcoexist)
 {
-	if (!btcoexist->binded || NULL == btcoexist->adapter)
+	if (!btcoexist->binded || !btcoexist->adapter)
 		return false;
 
 	return true;
@@ -456,7 +456,6 @@ static u32 halbtc_get_wifi_link_status(struct btc_coexist *btcoexist)
 	 */
 	struct rtl_priv *rtlpriv = btcoexist->adapter;
 	struct rtl_mac *mac = rtl_mac(rtlpriv);
-	u32 ret_val = 0;
 	u32 port_connected_status = 0, num_of_connected_port = 0;
 
 	if (mac->opmode == NL80211_IFTYPE_STATION &&
@@ -471,9 +470,7 @@ static u32 halbtc_get_wifi_link_status(struct btc_coexist *btcoexist)
 	}
 	/* TODO: P2P Connected Status */
 
-	ret_val = (num_of_connected_port << 16) | port_connected_status;
-
-	return ret_val;
+	return (num_of_connected_port << 16) | port_connected_status;
 }
 
 static bool halbtc_get(void *void_btcoexist, u8 get_type, void *out_buf)
@@ -830,7 +827,7 @@ static void halbtc_display_wifi_status(struct btc_coexist *btcoexist,
 	dc_mode = true;	/*TODO*/
 	under_ips = rtlpriv->psc.inactive_pwrstate == ERFOFF ? 1 : 0;
 	under_lps = rtlpriv->psc.dot11_psmode == EACTIVE ? 0 : 1;
-	low_power = 0; /*TODO*/
+	low_power = false; /*TODO*/
 	seq_printf(m, "\n %-35s = %s%s%s%s",
 		   "Power Status",
 		   (dc_mode ? "DC mode" : "AC mode"),

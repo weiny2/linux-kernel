@@ -24,22 +24,16 @@
 
 
 #include <linux/module.h>
-#include <linux/moduleparam.h>
 #include <linux/utsname.h>
 #include <linux/vmalloc.h>
-#include <linux/init.h>
 #include <linux/list.h>
 #include <linux/slab.h>
-#include <linux/kthread.h>
 #include <linux/types.h>
 #include <linux/string.h>
 #include <linux/configfs.h>
 #include <linux/ctype.h>
 #include <asm/unaligned.h>
-#include <scsi/scsi.h>
 #include <scsi/scsi_host.h>
-#include <scsi/scsi_device.h>
-#include <scsi/scsi_cmnd.h>
 #include <target/target_core_base.h>
 #include <target/target_core_fabric.h>
 
@@ -505,9 +499,7 @@ static void tcm_qla2xxx_handle_data_work(struct work_struct *work)
 		return;
 	}
 
-	cmd->data_work = 1;
 	if (cmd->aborted) {
-		cmd->data_work_free = 1;
 		spin_unlock_irqrestore(&cmd->cmd_lock, flags);
 
 		tcm_qla2xxx_free_cmd(cmd);

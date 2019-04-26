@@ -67,7 +67,7 @@ void ftrace_likely_update(struct ftrace_likely_data *f, int val,
 				.line = __LINE__,			\
 			};						\
 		______r = !!(cond);					\
-		______f.miss_hit[______r]++;					\
+		______r ? ______f.miss_hit[1]++ : ______f.miss_hit[0]++;\
 		______r;						\
 	}))
 #endif /* CONFIG_PROFILE_ALL_BRANCHES */
@@ -161,9 +161,13 @@ void ftrace_likely_update(struct ftrace_likely_data *f, int val,
 #endif
 
 #ifndef OPTIMIZER_HIDE_VAR
+
 /* Make the optimizer believe the variable can be manipulated arbitrarily. */
 #define OPTIMIZER_HIDE_VAR(var)						\
-	__asm__ ("" : "=r" (var) : "0" (var))
+	__asm__ ("" : "=rm" (var) : "0" (var))
+
+#define COMPILER_HAS_OPTIMIZER_HIDE_VAR 1
+
 #endif
 
 /* Not-quite-unique ID. */

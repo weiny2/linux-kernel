@@ -114,8 +114,8 @@ account_global_scheduler_latency(struct task_struct *tsk,
 				break;
 			}
 
-			/* 0 and ULONG_MAX entries mean end of backtrace: */
-			if (record == 0 || record == ULONG_MAX)
+			/* 0 entry marks end of backtrace: */
+			if (!record)
 				break;
 		}
 		if (same) {
@@ -204,8 +204,8 @@ __account_scheduler_latency(struct task_struct *tsk, int usecs, int inter)
 				break;
 			}
 
-			/* 0 and ULONG_MAX entries mean end of backtrace: */
-			if (record == 0 || record == ULONG_MAX)
+			/* 0 entry is end of backtrace */
+			if (!record)
 				break;
 		}
 		if (same) {
@@ -246,10 +246,10 @@ static int lstats_show(struct seq_file *m, void *v)
 				   lr->count, lr->time, lr->max);
 			for (q = 0; q < LT_BACKTRACEDEPTH; q++) {
 				unsigned long bt = lr->backtrace[q];
+
 				if (!bt)
 					break;
-				if (bt == ULONG_MAX)
-					break;
+
 				seq_printf(m, " %ps", (void *)bt);
 			}
 			seq_puts(m, "\n");

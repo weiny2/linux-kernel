@@ -31,6 +31,7 @@
 #include <asm/os_info.h>
 #include <asm/sections.h>
 #include <asm/boot_data.h>
+#include <asm/uv.h>
 #include "entry.h"
 
 #define IPL_PARM_BLOCK_VERSION 0
@@ -119,11 +120,8 @@ static char *dump_type_str(enum dump_type type)
 	}
 }
 
-struct ipl_parameter_block __bootdata(early_ipl_block);
-int __bootdata(early_ipl_block_valid);
-
-static int ipl_block_valid;
-static struct ipl_parameter_block ipl_block;
+int __bootdata_preserved(ipl_block_valid);
+struct ipl_parameter_block __bootdata_preserved(ipl_block);
 
 static int reipl_capabilities = IPL_TYPE_UNKNOWN;
 
@@ -866,15 +864,21 @@ static void __reipl_run(void *unused)
 {
 	switch (reipl_type) {
 	case IPL_TYPE_CCW:
+		uv_set_shared(__pa(reipl_block_ccw));
 		diag308(DIAG308_SET, reipl_block_ccw);
+		uv_remove_shared(__pa(reipl_block_ccw));
 		diag308(DIAG308_LOAD_CLEAR, NULL);
 		break;
 	case IPL_TYPE_FCP:
+		uv_set_shared(__pa(reipl_block_fcp));
 		diag308(DIAG308_SET, reipl_block_fcp);
+		uv_remove_shared(__pa(reipl_block_fcp));
 		diag308(DIAG308_LOAD_CLEAR, NULL);
 		break;
 	case IPL_TYPE_NSS:
+		uv_set_shared(__pa(reipl_block_nss));
 		diag308(DIAG308_SET, reipl_block_nss);
+		uv_remove_shared(__pa(reipl_block_nss));
 		diag308(DIAG308_LOAD_CLEAR, NULL);
 		break;
 	case IPL_TYPE_UNKNOWN:
@@ -1145,7 +1149,9 @@ static struct kset *dump_kset;
 
 static void diag308_dump(void *dump_block)
 {
+	uv_set_shared(__pa(dump_block));
 	diag308(DIAG308_SET, dump_block);
+	uv_remove_shared(__pa(dump_block));
 	while (1) {
 		if (diag308(DIAG308_LOAD_NORMAL_DUMP, NULL) != 0x302)
 			break;
@@ -1673,14 +1679,6 @@ void __init setup_ipl(void)
 		break;
 	}
 	atomic_notifier_chain_register(&panic_notifier_list, &on_panic_nb);
-}
-
-void __init ipl_store_parameters(void)
-{
-	if (early_ipl_block_valid) {
-		memcpy(&ipl_block, &early_ipl_block, sizeof(ipl_block));
-		ipl_block_valid = 1;
-	}
 }
 
 void s390_reset_system(void)

@@ -30,7 +30,8 @@ CFLAGS_sclp_early_core.o += -I$(srctree)/drivers/s390/char
 
 obj-y	:= head.o als.o startup.o mem_detect.o ipl_parm.o string.o ebcdic.o
 obj-y	+= sclp_early_core.o mem.o ipl_vmparm.o cmdline.o ctype.o
-targets	:= bzImage startup.a section_cmp.boot.data $(obj-y)
+obj-$(CONFIG_PROTECTED_VIRTUALIZATION_GUEST)	+= uv.o
+targets	:= bzImage startup.a section_cmp.boot.data section_cmp.boot.preserved.data $(obj-y)
 subdir-	:= compressed
 
 OBJECTS := $(addprefix $(obj)/,$(obj-y))
@@ -48,7 +49,7 @@ define cmd_section_cmp
 	touch $@
 endef
 
-$(obj)/bzImage: $(obj)/compressed/vmlinux $(obj)/section_cmp.boot.data FORCE
+$(obj)/bzImage: $(obj)/compressed/vmlinux $(obj)/section_cmp.boot.data $(obj)/section_cmp.boot.preserved.data FORCE
 	$(call if_changed,objcopy)
 
 $(obj)/section_cmp%: vmlinux $(obj)/compressed/vmlinux FORCE

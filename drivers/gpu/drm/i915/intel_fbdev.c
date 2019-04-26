@@ -25,26 +25,27 @@
  */
 
 #include <linux/async.h>
-#include <linux/module.h>
-#include <linux/kernel.h>
 #include <linux/console.h>
-#include <linux/errno.h>
-#include <linux/string.h>
-#include <linux/mm.h>
-#include <linux/tty.h>
-#include <linux/sysrq.h>
 #include <linux/delay.h>
+#include <linux/errno.h>
 #include <linux/init.h>
+#include <linux/kernel.h>
+#include <linux/mm.h>
+#include <linux/module.h>
+#include <linux/string.h>
+#include <linux/sysrq.h>
+#include <linux/tty.h>
 #include <linux/vga_switcheroo.h>
 
 #include <drm/drm_crtc.h>
 #include <drm/drm_fb_helper.h>
 #include <drm/drm_fourcc.h>
-
-#include "intel_drv.h"
-#include "intel_frontbuffer.h"
 #include <drm/i915_drm.h>
+
 #include "i915_drv.h"
+#include "intel_drv.h"
+#include "intel_fbdev.h"
+#include "intel_frontbuffer.h"
 
 static void intel_fbdev_invalidate(struct intel_fbdev *ifbdev)
 {
@@ -235,11 +236,7 @@ static int intelfb_create(struct drm_fb_helper *helper,
 		goto out_unpin;
 	}
 
-	info->par = helper;
-
 	ifbdev->helper.fb = fb;
-
-	strcpy(info->fix.id, "inteldrmfb");
 
 	info->fbops = &intelfb_ops;
 
@@ -259,11 +256,7 @@ static int intelfb_create(struct drm_fb_helper *helper,
 	info->screen_base = vaddr;
 	info->screen_size = vma->node.size;
 
-	/* This driver doesn't need a VT switch to restore the mode on resume */
-	info->skip_vt_switch = true;
-
-	drm_fb_helper_fill_fix(info, fb->pitches[0], fb->format->depth);
-	drm_fb_helper_fill_var(info, &ifbdev->helper, sizes->fb_width, sizes->fb_height);
+	drm_fb_helper_fill_info(info, &ifbdev->helper, sizes);
 
 	/* If the object is shmemfs backed, it will have given us zeroed pages.
 	 * If the object is stolen however, it will be full of whatever
@@ -292,6 +285,7 @@ out_unlock:
 	return ret;
 }
 
+<<<<<<< HEAD
 static struct drm_fb_helper_crtc *
 intel_fb_helper_crtc(struct drm_fb_helper *fb_helper, struct drm_crtc *crtc)
 {
@@ -507,8 +501,9 @@ bail:
 	return ret;
 }
 
+=======
+>>>>>>> linux-next/akpm-base
 static const struct drm_fb_helper_funcs intel_fb_helper_funcs = {
-	.initial_config = intel_fb_initial_config,
 	.fb_probe = intelfb_create,
 };
 
