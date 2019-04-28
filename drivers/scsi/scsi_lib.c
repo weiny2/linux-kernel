@@ -46,6 +46,8 @@
  */
 #define  SCSI_INLINE_PROT_SG_CNT  1
 
+#define  SCSI_INLINE_SG_CNT  2
+
 static struct kmem_cache *scsi_sdb_cache;
 static struct kmem_cache *scsi_sense_cache;
 static struct kmem_cache *scsi_sense_isadma_cache;
@@ -548,7 +550,8 @@ static void scsi_uninit_cmd(struct scsi_cmnd *cmd)
 static void scsi_mq_free_sgtables(struct scsi_cmnd *cmd)
 {
 	if (cmd->sdb.table.nents)
-		sg_free_table_chained(&cmd->sdb.table, SG_CHUNK_SIZE);
+		sg_free_table_chained(&cmd->sdb.table,
+				SCSI_INLINE_SG_CNT);
 	if (scsi_prot_sg_count(cmd))
 		sg_free_table_chained(&cmd->prot_sdb->table,
 				SCSI_INLINE_PROT_SG_CNT);
@@ -985,7 +988,7 @@ static blk_status_t scsi_init_sgtable(struct request *req,
 	 */
 	if (unlikely(sg_alloc_table_chained(&sdb->table,
 			blk_rq_nr_phys_segments(req), sdb->table.sgl,
-			SG_CHUNK_SIZE)))
+			SCSI_INLINE_SG_CNT)))
 		return BLK_STS_RESOURCE;
 
 	/* 
@@ -1551,9 +1554,9 @@ static int scsi_dispatch_cmd(struct scsi_cmnd *cmd)
 }
 
 /* Size in bytes of the sg-list stored in the scsi-mq command-private data. */
-static unsigned int scsi_mq_sgl_size(struct Scsi_Host *shost)
+static unsigned int scsi_mq_inline_sgl_size(struct Scsi_Host *shost)
 {
-	return min_t(unsigned int, shost->sg_tablesize, SG_CHUNK_SIZE) *
+	return min_t(unsigned int, shost->sg_tablesize, SCSI_INLINE_SG_CNT) *
 		sizeof(struct scatterlist);
 }
 
@@ -1735,7 +1738,7 @@ static int scsi_mq_init_request(struct blk_mq_tag_set *set, struct request *rq,
 	if (scsi_host_get_prot(shost)) {
 		sg = (void *)cmd + sizeof(struct scsi_cmnd) +
 			shost->hostt->cmd_size;
-		cmd->prot_sdb = (void *)sg + scsi_mq_sgl_size(shost);
+		cmd->prot_sdb = (void *)sg + scsi_mq_inline_sgl_size(shost);
 	}
 
 	return 0;
@@ -1829,7 +1832,7 @@ int scsi_mq_setup_tags(struct Scsi_Host *shost)
 {
 	unsigned int cmd_size, sgl_size;
 
-	sgl_size = scsi_mq_sgl_size(shost);
+	sgl_size = scsi_mq_inline_sgl_size(shost);
 	cmd_size = sizeof(struct scsi_cmnd) + shost->hostt->cmd_size + sgl_size;
 	if (scsi_host_get_prot(shost))
 		cmd_size += sizeof(struct scsi_data_buffer) +
