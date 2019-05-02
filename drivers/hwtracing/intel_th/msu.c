@@ -1940,6 +1940,29 @@ unlock:
 static DEVICE_ATTR_RW(mode);
 
 static ssize_t
+modes_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct msu_buffer_entry *mbe;
+	ssize_t ret = 0;
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(msc_mode); i++)
+		ret += scnprintf(buf + ret, PAGE_SIZE - ret, "%s\n",
+				 msc_mode[i]);
+
+	mutex_lock(&msu_buffer_mutex);
+	list_for_each_entry(mbe, &msu_buffer_list, entry) {
+		ret += scnprintf(buf + ret, PAGE_SIZE - ret, "%s\n",
+				 mbe->mbuf->name);
+	}
+	mutex_unlock(&msu_buffer_mutex);
+
+	return ret;
+}
+
+static DEVICE_ATTR_RO(modes);
+
+static ssize_t
 nr_pages_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	struct msc *msc = dev_get_drvdata(dev);
@@ -2095,6 +2118,7 @@ static DEVICE_ATTR_RW(stop_on_full);
 static struct attribute *msc_output_attrs[] = {
 	&dev_attr_wrap.attr,
 	&dev_attr_mode.attr,
+	&dev_attr_modes.attr,
 	&dev_attr_nr_pages.attr,
 	&dev_attr_win_switch.attr,
 	&dev_attr_stop_on_full.attr,
