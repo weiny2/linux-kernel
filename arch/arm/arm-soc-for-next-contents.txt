@@ -30,6 +30,8 @@ arm/late
 		git://git.kernel.org/pub/scm/linux/kernel/git/at91/linux tags/at91-5.2-defconfig
 	<no branch> (2725d70aa5138284ba2cebf0ef51dd23e0c9ea21)
 		git://git.kernel.org/pub/scm/linux/kernel/git/at91/linux tags/at91-5.2-soc
+	patch
+		arm64: dts: sprd: Add clock properties for serial devices
 
 arm/fixes
 
