@@ -391,7 +391,8 @@ static int kvm_mmu_notifier_invalidate_range_start(struct mmu_notifier *mn,
 	spin_unlock(&kvm->mmu_lock);
 
 	ret = kvm_arch_mmu_notifier_invalidate_range(kvm, range->start,
-					range->end, range->blockable);
+					range->end,
+					mmu_notifier_range_blockable(range));
 
 	srcu_read_unlock(&kvm->srcu, idx);
 
@@ -1240,7 +1241,7 @@ int kvm_clear_dirty_log_protect(struct kvm *kvm,
 	if (as_id >= KVM_ADDRESS_SPACE_NUM || id >= KVM_USER_MEM_SLOTS)
 		return -EINVAL;
 
-	if ((log->first_page & 63) || (log->num_pages & 63))
+	if (log->first_page & 63)
 		return -EINVAL;
 
 	slots = __kvm_memslots(kvm, as_id);
@@ -1253,8 +1254,9 @@ int kvm_clear_dirty_log_protect(struct kvm *kvm,
 	n = kvm_dirty_bitmap_bytes(memslot);
 
 	if (log->first_page > memslot->npages ||
-	    log->num_pages > memslot->npages - log->first_page)
-			return -EINVAL;
+	    log->num_pages > memslot->npages - log->first_page ||
+	    (log->num_pages < memslot->npages - log->first_page && (log->num_pages & 63)))
+	    return -EINVAL;
 
 	*flush = false;
 	dirty_bitmap_buffer = kvm_second_dirty_bitmap(memslot);

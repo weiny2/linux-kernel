@@ -222,9 +222,7 @@ static __init int ixp4xx_timer_register(void __iomem *base,
 	clockevents_config_and_register(&tmr->clkevt, timer_freq,
 					0xf, 0xfffffffe);
 
-#ifdef CONFIG_ARM
 	sched_clock_register(ixp4xx_read_sched_clock, 32, timer_freq);
-#endif
 
 	return 0;
 }

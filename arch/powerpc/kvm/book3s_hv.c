@@ -74,6 +74,7 @@
 #include <asm/opal.h>
 #include <asm/xics.h>
 #include <asm/xive.h>
+#include <asm/hw_breakpoint.h>
 
 #include "book3s.h"
 
@@ -3374,7 +3375,7 @@ static int kvmhv_load_hv_regs_and_go(struct kvm_vcpu *vcpu, u64 time_limit,
 	mtspr(SPRN_PURR, vcpu->arch.purr);
 	mtspr(SPRN_SPURR, vcpu->arch.spurr);
 
-	if (cpu_has_feature(CPU_FTR_DAWR)) {
+	if (dawr_enabled()) {
 		mtspr(SPRN_DAWR, vcpu->arch.dawr);
 		mtspr(SPRN_DAWRX, vcpu->arch.dawrx);
 	}
@@ -3423,7 +3424,9 @@ static int kvmhv_load_hv_regs_and_go(struct kvm_vcpu *vcpu, u64 time_limit,
 	vcpu->arch.shregs.sprg2 = mfspr(SPRN_SPRG2);
 	vcpu->arch.shregs.sprg3 = mfspr(SPRN_SPRG3);
 
-	mtspr(SPRN_PSSCR, host_psscr);
+	/* Preserve PSSCR[FAKE_SUSPEND] until we've called kvmppc_save_tm_hv */
+	mtspr(SPRN_PSSCR, host_psscr |
+	      (local_paca->kvm_hstate.fake_suspend << PSSCR_FAKE_SUSPEND_LG));
 	mtspr(SPRN_HFSCR, host_hfscr);
 	mtspr(SPRN_CIABR, host_ciabr);
 	mtspr(SPRN_DAWR, host_dawr);
