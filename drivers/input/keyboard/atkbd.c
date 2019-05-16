@@ -25,6 +25,10 @@
 #include <linux/mutex.h>
 #include <linux/dmi.h>
 
+#if defined(CONFIG_SVOS) && defined(CONFIG_KGDB_KDB)
+extern int kdb_atkbd_hook(unsigned short);
+#endif
+
 #define DRIVER_DESC	"AT and PS/2 keyboard driver"
 
 MODULE_AUTHOR("Vojtech Pavlik <vojtech@suse.cz>");
@@ -505,6 +509,13 @@ static irqreturn_t atkbd_interrupt(struct serio *serio, unsigned char data,
 			atkbd->last = code;
 			atkbd->time = jiffies + msecs_to_jiffies(dev->rep[REP_DELAY]) / 2;
 		}
+#if defined(CONFIG_SVOS) && defined(CONFIG_KGDB_KDB)
+		//
+		// if keycode is kdb trigger call kdb from the hook code
+		//
+		if (kdb_atkbd_hook(keycode))    // see if keycode is trigger for KDB
+			break;
+#endif
 
 		input_event(dev, EV_KEY, keycode, value);
 		input_sync(dev);
