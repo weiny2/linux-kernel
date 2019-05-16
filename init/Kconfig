@@ -2278,6 +2278,7 @@ config ASN1
 	  functions to call on what tags.
 
 source "kernel/Kconfig.locks"
+source "kernel/Kconfig.svos"
 
 config ARCH_HAS_SYNC_CORE_BEFORE_USERMODE
 	bool

@@ -20,6 +20,10 @@
 #include <asm/e820/api.h>
 #include <asm/setup.h>
 
+#ifdef CONFIG_SVOS
+#include <asm/svos.h>
+#endif
+
 /*
  * We organize the E820 table into three main data structures:
  *
@@ -659,6 +663,9 @@ __init void e820__setup_pci_gap(void)
 #endif
 	}
 
+#ifdef CONFIG_SVOS
+	gapstart = svos_adjgap(gapstart);
+#endif
 	/*
 	 * e820__reserve_resources_late() protects stolen RAM already:
 	 */
@@ -884,6 +891,15 @@ static int __init parse_memopt(char *p)
 #endif
 	}
 
+#ifdef CONFIG_SVOS
+	/*
+	 * process svos mem start hint.
+	 */
+	if (memcmp(p, "svos@",5) == 0) {
+		svos_parse_mem(p);
+		return 0;
+	}
+#endif
 	userdef = 1;
 	mem_size = memparse(p, &p);
 

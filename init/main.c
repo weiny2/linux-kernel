@@ -103,6 +103,9 @@
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/initcall.h>
+#ifdef CONFIG_SVOS
+#include <linux/svos.h>
+#endif
 
 static int kernel_init(void *);
 
@@ -809,6 +812,9 @@ asmlinkage __visible void __init start_kernel(void)
 	boot_cpu_init();
 	page_address_init();
 	pr_notice("%s", linux_banner);
+#ifdef CONFIG_SVOS
+	pr_notice("%s", SVOS_ANNOUNCE_MESSAGE);
+#endif
 	early_security_init();
 	setup_arch(&command_line);
 	setup_boot_config(command_line);

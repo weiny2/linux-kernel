@@ -64,6 +64,11 @@ static unsigned long dmar_seq_ids[BITS_TO_LONGS(DMAR_UNITS_SUPPORTED)];
 static int alloc_iommu(struct dmar_drhd_unit *drhd);
 static void free_iommu(struct intel_iommu *iommu);
 
+#ifdef CONFIG_SVOS
+extern int (*svfs_vtdSubmitSync)(u64, void *);
+extern int (*svos_vtdFaultHandler)(u64, void *);
+#endif
+
 extern const struct iommu_ops intel_iommu_ops;
 
 static void dmar_register_drhd_unit(struct dmar_drhd_unit *drhd)
@@ -1239,6 +1244,11 @@ int qi_submit_sync(struct qi_desc *desc, struct intel_iommu *iommu)
 	if (!qi)
 		return 0;
 
+#ifdef CONFIG_SVOS
+        if(svfs_vtdSubmitSync)
+                return svfs_vtdSubmitSync(iommu->reg_phys, (void *)desc);
+#endif
+
 restart:
 	rc = 0;
 
@@ -1758,6 +1768,11 @@ irqreturn_t dmar_fault(int irq, void *dev_id)
 	static DEFINE_RATELIMIT_STATE(rs,
 				      DEFAULT_RATELIMIT_INTERVAL,
 				      DEFAULT_RATELIMIT_BURST);
+
+#ifdef CONFIG_SVOS
+        if(svos_vtdFaultHandler)
+                return svos_vtdFaultHandler(iommu->reg_phys, dev_id);
+#endif
 
 	raw_spin_lock_irqsave(&iommu->register_lock, flag);
 	fault_status = readl(iommu->reg + DMAR_FSTS_REG);

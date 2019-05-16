@@ -58,6 +58,10 @@
 #include "xhci.h"
 #include "xhci-trace.h"
 #include "xhci-mtk.h"
+#if defined(CONFIG_SVOS) && defined(CONFIG_KGDB_KDB)
+extern int kdb_pausekey;
+extern void kgdb_breakpoint(void);
+#endif
 
 /*
  * Returns zero if the TRB isn't in this segment, otherwise it returns the DMA
@@ -2868,6 +2872,18 @@ irqreturn_t xhci_irq(struct usb_hcd *hcd)
 
 out:
 	spin_unlock_irqrestore(&xhci->lock, flags);
+#if defined(CONFIG_SVOS) && defined(CONFIG_KGDB_KDB)
+	//
+	// check to see if the key sequence to enter kdb
+	// has been used.
+	// the kdb breakpoint needs to be called outside of
+	// the interrupt lock processing.
+	//
+	if (kdb_pausekey == 1) {
+		kdb_pausekey = 0;
+		kgdb_breakpoint();
+	}
+#endif
 
 	return ret;
 }

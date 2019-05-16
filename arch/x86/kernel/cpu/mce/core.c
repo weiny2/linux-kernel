@@ -43,6 +43,9 @@
 #include <linux/jump_label.h>
 #include <linux/set_memory.h>
 
+#ifdef CONFIG_SVOS
+#include <linux/svos.h>
+#endif
 #include <asm/intel-family.h>
 #include <asm/processor.h>
 #include <asm/traps.h>
@@ -52,6 +55,16 @@
 #include <asm/reboot.h>
 
 #include "internal.h"
+#ifdef CONFIG_SVOS
+static int dbg_clear_all_mces = 0;			// Debug aid for user-loadable MCE handlers
+static int mce_init_with_bios_settings = 0;		// When set, initialize to take MCE, but leave BIOS control settings in place.
+static int mce_force_disabled = 0;			// When set, configure hardware so MCE is absolutely disabled.
+static unsigned long svosMCE_MCG_CTL_Value = ~0UL;	// Value to write to IA32_MCG_CTL global control register.
+static unsigned int svos_user_handler_owns_bank[MAX_NR_BANKS] = { [0 ... MAX_NR_BANKS-1] = 0 };
+static unsigned long svos_bank_ctl[MAX_NR_BANKS] = { [0 ... MAX_NR_BANKS-1] = ~0UL }; // Init bank controls with these user-controllable values
+int svMCHContinue;					// Boolean that machine check handlers may use to indicate that system must
+EXPORT_SYMBOL(svMCHContinue);				// have panic invoked.
+#endif
 
 /* sysfs synchronization */
 static DEFINE_MUTEX(mce_sysfs_mutex);
@@ -92,7 +105,16 @@ struct mca_config mca_cfg __read_mostly = {
 	 * 3: never panic or SIGBUS, log all errors (for testing only)
 	 */
 	.tolerant = 1,
+#ifndef CONFIG_SVOS
 	.monarch_timeout = -1
+#else /* CONFIG_SVOS */
+	/* Disable processor rendezvous for SVOS.  Some early silicon
+	   bugs cause core shutdown then raise machine check.  This
+	   would lead to a hang in the machine check handler, since the
+	   threads in the core that is shut down will never enter the
+	   MCE handler. */
+	.monarch_timeout = 0
+#endif /* CONFIG_SVOS */
 };
 
 static DEFINE_PER_CPU(struct mce, mces_seen);
@@ -773,10 +795,14 @@ log_it:
 		mce_log(&m);
 
 clear_it:
+#ifndef CONFIG_SVOS
 		/*
 		 * Clear state for this bank.
 		 */
 		mce_wrmsrl(msr_ops.status(i), 0);
+#else
+	; /* Null statement */
+#endif
 	}
 
 	/*
@@ -1081,6 +1107,17 @@ static void mce_clear_state(unsigned long *toclear)
 	int i;
 
 	for (i = 0; i < this_cpu_read(mce_num_banks); i++) {
+#ifdef CONFIG_SVOS
+		// Support user-registered handler ownership of specified banks.
+		if (svos_user_handler_owns_bank[i]) {
+			continue;
+		}
+		// Clear all MCE conditions unconditionally.
+		if (dbg_clear_all_mces) {
+			wrmsrl(msr_ops.status(i), 0);
+			continue;
+		}
+#endif
 		if (test_bit(i, toclear))
 			mce_wrmsrl(msr_ops.status(i), 0);
 	}
@@ -1204,6 +1241,95 @@ static void __mc_scan_banks(struct mce *m, struct mce *final,
 	*m = *final;
 }
 
+#ifdef CONFIG_SVOS
+/* Definitions and kernel command line parameter settings for SVOS
+   machine check control overrides. */
+
+/* Format for bank control is: mce_ctl=bank,ctl_setting_64[,bank,ctl_setting_64] .... */
+/* Format for global control is: mce_mcg_ctl=ctl_setting_64*/
+
+static int __init svos_mce_set_ctl_overrides(char *str)
+{
+	int		continueParsing;
+	int		status;
+	long int	bankIndex;
+	unsigned long	mceCtlOverrideValue;
+	char		*startChar;
+
+	status = 0;
+	continueParsing = 1;
+	mceCtlOverrideValue = 0;
+	while (continueParsing) {
+		continueParsing = 0;
+		startChar = str;
+		bankIndex = simple_strtol(str, &str, 0); /* Let simple_strtol determine the radix */
+		if (str > startChar) {
+			str += 1;	   /* Move past the first comma (separator character). */
+			startChar = str;
+			mceCtlOverrideValue = simple_strtoul(str, &str, 0); /* Let simple_strtoul determine the radix */
+		}
+		if ((str > startChar) &&
+			((bankIndex >= 0) && (bankIndex < MAX_NR_BANKS))) {
+		        svos_bank_ctl[bankIndex] = mceCtlOverrideValue;
+			printk(
+				KERN_INFO
+				"SVOS MCE machine check mc%0lu_ctl override value 0x%lx\n",
+				bankIndex,
+				mceCtlOverrideValue
+			);
+			continueParsing = 1;
+			str += 1;	   /* Move past the second comma (separator character). */
+			status = 1;
+		}
+	}
+	if (!status) {
+		printk(
+			KERN_ERR
+			"SVOS MCE machine check mce_ctl: error parsing override values\n"
+		);
+	}
+	return 1;
+}
+
+static int __init svos_mce_set_mcg_ctl(char *str)
+{
+	char		*startChar;
+
+	startChar = str;
+	svosMCE_MCG_CTL_Value = (unsigned long) simple_strtoul(str, &str, 0);
+	if (str > startChar) {
+		printk(
+			KERN_INFO
+			"SVOS MCE machine check mce_mcg_ctl override value 0x%lx\n",
+			svosMCE_MCG_CTL_Value
+		);
+	} else {
+		printk(
+			KERN_ERR
+			"SVOS MCE machine check: error parsing mce_mcg_ctl override value\n"
+		);
+	}
+	return 1;
+}
+
+void SVOSMceSetUserHandlerBankOwnership(int bank)
+{
+	svos_user_handler_owns_bank[bank] = 1;
+}
+
+void SVOSMceClearAllUserHandlerBankOwnership(void)
+{
+	int	bank;
+
+	for (bank = 0; bank < MAX_NR_BANKS; bank++) {
+		svos_user_handler_owns_bank[bank] = 0;
+	}
+}
+
+EXPORT_SYMBOL(SVOSMceSetUserHandlerBankOwnership);
+EXPORT_SYMBOL(SVOSMceClearAllUserHandlerBankOwnership);
+#endif
+
 /*
  * The actual machine check handler. This only handles real
  * exceptions when something got corrupted coming in through int 18.
@@ -1306,6 +1432,36 @@ void notrace do_machine_check(struct pt_regs *regs, long error_code)
 
 	__mc_scan_banks(&m, final, toclear, valid_banks, no_way_out, &worst);
 
+#ifdef CONFIG_SVOS
+	{
+		int retCode;
+
+		retCode = svos_process_mce(regs);
+		/* Optionally override default behavior, depending on SVOS MCE handler
+		   wishes, as indicated via svMCHContinue. */
+		switch (retCode) {
+			case SVOS_MACHINE_CHECK_RESULT_PANIC:
+				/* Force a panic.*/
+				kill_it = 0;
+				worst = MCE_PANIC_SEVERITY;
+				no_way_out = 1;
+				break;
+
+			case SVOS_MACHINE_CHECK_RESULT_NOPANIC:
+				/* Do not panic. */
+				kill_it = 0;
+				worst = 0;
+				no_way_out = 0;
+				break;
+
+			case SVOS_MACHINE_CHECK_RESULT_DEFAULT:
+			default:
+				/* Panic if CPU state so indicated. */
+				break;
+		}
+	}
+#endif
+
 	if (!no_way_out)
 		mce_clear_state(toclear);
 
@@ -1388,7 +1544,15 @@ int memory_failure(unsigned long pfn, int flags)
  * poller finds an MCE, poll 2x faster.  When the poller finds no more
  * errors, poll 2x slower (up to check_interval seconds).
  */
+#ifndef CONFIG_SVOS
 static unsigned long check_interval = INITIAL_CHECK_INTERVAL;
+#else /* CONFIG_SVOS */
+/* Disable periodic machine check polling/modifications
+   for SVOS.  This prevents the periodic clearing of
+   correctable machine check status values from the
+   machine check status registers. */
+static unsigned long check_interval = 0;
+#endif  /* CONFIG_SVOS */
 
 static DEFINE_PER_CPU(unsigned long, mce_next_interval); /* in jiffies */
 static DEFINE_PER_CPU(struct timer_list, mce_timer);
@@ -1504,7 +1668,11 @@ static void __mcheck_cpu_mce_banks_init(void)
 		 * the required vendor quirks before
 		 * __mcheck_cpu_init_clear_banks() does the final bank setup.
 		 */
+#ifndef CONFIG_SVOS
 		b->ctl = -1ULL;
+#else
+		b->ctl = svos_bank_ctl[i];
+#endif
 		b->init = 1;
 	}
 }
@@ -1554,11 +1722,27 @@ static void __mcheck_cpu_init_generic(void)
 	bitmap_fill(all_banks, MAX_NR_BANKS);
 	machine_check_poll(MCP_UC | m_fl, &all_banks);
 
+#ifndef CONFIG_SVOS
 	cr4_set_bits(X86_CR4_MCE);
 
 	rdmsrl(MSR_IA32_MCG_CAP, cap);
 	if (cap & MCG_CTL_P)
 		wrmsr(MSR_IA32_MCG_CTL, 0xffffffff, 0xffffffff);
+#else /* CONFIG_SVOS */
+	if (mce_force_disabled) {
+		// Configure hardware so MCE is absolutely disabled.
+		cr4_clear_bits(X86_CR4_MCE);
+	} else {
+		// Enable machine check exceptions.
+		cr4_set_bits(X86_CR4_MCE);
+	}
+	rdmsrl(MSR_IA32_MCG_CAP, cap);
+	if (cap & MCG_CTL_P) {
+		if (!mce_init_with_bios_settings) {
+			wrmsrl(MSR_IA32_MCG_CTL, svosMCE_MCG_CTL_Value);
+		}
+	}
+#endif
 }
 
 static void __mcheck_cpu_init_clear_banks(void)
@@ -1571,6 +1755,11 @@ static void __mcheck_cpu_init_clear_banks(void)
 
 		if (!b->init)
 			continue;
+#ifdef CONFIG_SVOS
+		// Note that MCi_STATUS is intended to be cleared in all cases,
+		// so the following if statement should NOT be a compound statement.
+		if (!mce_init_with_bios_settings)
+#endif  /* CONFIG_SVOS*/
 		wrmsrl(msr_ops.ctl(i), b->ctl);
 		wrmsrl(msr_ops.status(i), 0);
 	}
@@ -2011,7 +2200,52 @@ static int __init mcheck_enable(char *str)
 	if (*str == '=')
 		str++;
 	if (!strcmp(str, "off"))
+#ifndef CONFIG_SVOS
 		cfg->disabled = 1;
+#else
+	{
+		cfg->disabled = 1;
+		printk(
+			KERN_INFO
+			"SVOS MCE machine check mce=off: using bios-specified initialization and ctl flags\n"
+		);
+	}
+	else if (!strcmp(str, "bios")) {
+		// Initialize to enable MCEs, but leave BIOS control settings in place.
+		mce_init_with_bios_settings = 1;
+		printk(
+			KERN_INFO
+			"SVOS MCE machine check initializing hardware, using bios-specified ctl flags\n"
+		);
+	}
+	else if (!strcmp(str, "disabled")) {
+		int	i;
+
+		// Disable MCEs without respect to BIOS settings.
+		mce_force_disabled = 1;
+		// Set all values that get written to MCE control registers to zero.
+		for (i = 0; i < ARRAY_SIZE(svos_bank_ctl); i++) {
+			svos_bank_ctl[i] = 0UL;
+		}
+		svosMCE_MCG_CTL_Value = 0UL;
+		printk(KERN_INFO "SVOS MCE machine check: forcing mce DISABLED\n");
+	}
+	else if (!strcmp(str, "dbg_clear_all_mces")) {
+		// Clear MCE banks (status registers) even if user-loaded handlers did not.
+		dbg_clear_all_mces = 1;
+		printk(KERN_INFO"SVOS MCE machine check: clear all MCEs after installable handlers execute\n");
+	}
+	else if (!strncmp(str, "_ctl=", strlen("_ctl="))) {
+		svos_mce_set_ctl_overrides(str+strlen("_ctl="));
+	}
+	else if (!strncmp(str, "_mcg_ctl=", strlen("_mcg_ctl="))) {
+		svos_mce_set_mcg_ctl(str+strlen("_mct_ctl="));
+	}
+	else if (!strncmp(str, "_check_interval=", strlen("_check_interval="))) {
+		check_interval = simple_strtoul(str+strlen("_check_interval="), &str, 0);
+		printk(KERN_INFO "SVOS MCE check_interval is %lu\n", check_interval);
+	}
+#endif /* CONFIG_SVOS */
 	else if (!strcmp(str, "no_cmci"))
 		cfg->cmci_disabled = true;
 	else if (!strcmp(str, "no_lmce"))
@@ -2066,7 +2300,11 @@ static void mce_disable_error_reporting(void)
 
 	for (i = 0; i < this_cpu_read(mce_num_banks); i++) {
 		struct mce_bank *b = &mce_banks[i];
-
+#ifdef CONFIG_SVOS
+		if (mce_init_with_bios_settings) {
+			continue;
+		}
+#endif
 		if (b->init)
 			wrmsrl(msr_ops.ctl(i), 0);
 	}
@@ -2416,7 +2654,11 @@ static void mce_reenable_cpu(void)
 		cmci_reenable();
 	for (i = 0; i < this_cpu_read(mce_num_banks); i++) {
 		struct mce_bank *b = &mce_banks[i];
-
+#ifdef CONFIG_SVOS
+		if (mce_init_with_bios_settings) {
+			continue;
+		}
+#endif
 		if (b->init)
 			wrmsrl(msr_ops.ctl(i), b->ctl);
 	}
