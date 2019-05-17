@@ -351,10 +351,8 @@ void dev_pagemap_put_ops(void)
 }
 EXPORT_SYMBOL_GPL(dev_pagemap_put_ops);
 
-void __put_devmap_managed_page(struct page *page)
+void __put_devmap_managed_page(struct page *page, int count)
 {
-	int count = page_ref_dec_return(page);
-
 	/*
 	 * If refcount is 1 then page is freed and refcount is stable as nobody
 	 * holds a reference on the page.
@@ -370,5 +368,6 @@ void __put_devmap_managed_page(struct page *page)
 	} else if (!count)
 		__put_page(page);
 }
+
 EXPORT_SYMBOL(__put_devmap_managed_page);
 #endif /* CONFIG_DEV_PAGEMAP_OPS */

@@ -29,6 +29,42 @@ struct follow_page_context {
 	unsigned int page_mask;
 };
 
+int user_page_ref_dec_return(struct page *page)
+{
+	VM_BUG_ON_PAGE(page_ref_count(page) < GUP_PIN_COUNTING_BIAS, page);
+
+	mod_node_page_state(page_pgdat(page), NR_GUP_PAGES_RETURNED, 1);
+	return page_ref_sub_return(page, GUP_PIN_COUNTING_BIAS);
+}
+
+/**
+ * put_user_page() - release a gup-pinned page
+ * @page:            pointer to page to be released
+ *
+ * Pages that were pinned via get_user_pages*() must be released via
+ * either put_user_page(), or one of the put_user_pages*() routines
+ * below. This is so that eventually, pages that are pinned via
+ * get_user_pages*() can be separately tracked and uniquely handled. In
+ * particular, interactions with RDMA and filesystems need special
+ * handling.
+ */
+void put_user_page(struct page *page)
+{
+	page = compound_head(page);
+
+	/*
+	 * For devmap managed pages we need to catch refcount transition from
+	 * GUP_PIN_COUNTING_BIAS to 1, when refcount reach one it means the
+	 * page is free and we need to inform the device driver through
+	 * callback. See include/linux/memremap.h and HMM for details.
+	 */
+	if (put_devmap_managed_user_page(page))
+		return;
+
+	user_page_ref_dec_return(page);
+}
+EXPORT_SYMBOL(put_user_page);
+
 typedef int (*set_dirty_func_t)(struct page *page);
 
 static void __put_user_pages_dirty(struct page **pages,
@@ -133,6 +169,36 @@ void put_user_pages(struct page **pages, unsigned long npages)
 		put_user_page(pages[index]);
 }
 EXPORT_SYMBOL(put_user_pages);
+
+/**
+ * try_get_gup_pin_page() - mark a page as being used by get_user_pages().
+ * @page:	pointer to page to be marked
+ * @Return:	true for success, false for failure
+ */
+__must_check bool try_get_gup_pin_page(struct page *page,
+				       enum node_stat_item gup_type)
+{
+	page = compound_head(page);
+	if (WARN_ON_ONCE(page_ref_count(page) <= 0)) {
+		mod_node_page_state(page_pgdat(page),
+				    NR_GUP_PAGE_COUNT_NEG_OVERFLOWS, 1);
+		WARN_ONCE(1, "get_user_pages pin count wrapped negative");
+		return false;
+	}
+
+	if (WARN_ON_ONCE(page_ref_count(page) >=
+			 (UINT_MAX - GUP_PIN_COUNTING_BIAS))) {
+		mod_node_page_state(page_pgdat(page),
+				    NR_GUP_PAGE_COUNT_OVERFLOWS, 1);
+		WARN_ONCE(1, "get_user_pages pin count overflowed");
+
+		return false;
+	}
+
+	page_ref_add(page, GUP_PIN_COUNTING_BIAS);
+	mod_node_page_state(page_pgdat(page), gup_type, 1);
+	return true;
+}
 
 static struct page *no_page_table(struct vm_area_struct *vma,
 		unsigned int flags)
@@ -267,7 +333,9 @@ retry:
 	}
 
 	if (flags & FOLL_GET) {
-		if (unlikely(!try_get_page(page))) {
+		if (unlikely(
+			!try_get_gup_pin_page(page,
+					      NR_GUP_SLOW_PAGES_REQUESTED))) {
 			page = ERR_PTR(-ENOMEM);
 			goto out;
 		}
@@ -613,7 +681,8 @@ static int get_gate_page(struct mm_struct *mm, unsigned long address,
 		if (is_device_public_page(*page))
 			goto unmap;
 	}
-	if (unlikely(!try_get_page(*page))) {
+	if (unlikely(!try_get_gup_pin_page(*page,
+					   NR_GUP_SLOW_PAGES_REQUESTED))) {
 		ret = -ENOMEM;
 		goto unmap;
 	}
@@ -1715,7 +1784,7 @@ static inline struct page *try_get_compound_head(struct page *page, int refs)
 	struct page *head = compound_head(page);
 	if (WARN_ON_ONCE(page_ref_count(head) < 0))
 		return NULL;
-	if (unlikely(!page_cache_add_speculative(head, refs)))
+	if (unlikely(!page_cache_gup_pin_speculative(head)))
 		return NULL;
 	return head;
 }
@@ -1762,8 +1831,13 @@ static int gup_pte_range(pmd_t pmd, unsigned long addr, unsigned long end,
 		if (!head)
 			goto pte_unmap;
 
+		mod_node_page_state(page_pgdat(head),
+				    NR_GUP_FAST_PAGES_REQUESTED, 1);
+
 		if (unlikely(pte_val(pte) != pte_val(*ptep))) {
-			put_page(head);
+			mod_node_page_state(page_pgdat(head),
+					    NR_GUP_FAST_PAGE_BACKOFFS, 1);
+			put_user_page(head);
 			goto pte_unmap;
 		}
 
@@ -1818,7 +1892,11 @@ static int __gup_device_huge(unsigned long pfn, unsigned long addr,
 		}
 		SetPageReferenced(page);
 		pages[*nr] = page;
-		get_page(page);
+		if (try_get_gup_pin_page(page, NR_GUP_FAST_PAGES_REQUESTED)) {
+			undo_dev_pagemap(nr, nr_start, pages);
+			return 0;
+		}
+
 		(*nr)++;
 		pfn++;
 	} while (addr += PAGE_SIZE, addr != end);
@@ -1907,6 +1985,8 @@ static int gup_huge_pmd(pmd_t orig, pmd_t *pmdp, unsigned long addr,
 		return 0;
 	}
 
+	mod_node_page_state(page_pgdat(head), NR_GUP_FAST_PAGES_REQUESTED, 1);
+
 	if (unlikely(pmd_val(orig) != pmd_val(*pmdp))) {
 		*nr -= refs;
 		while (refs--)
@@ -1948,6 +2028,8 @@ static int gup_huge_pud(pud_t orig, pud_t *pudp, unsigned long addr,
 		return 0;
 	}
 
+	mod_node_page_state(page_pgdat(head), NR_GUP_FAST_PAGES_REQUESTED, 1);
+
 	if (unlikely(pud_val(orig) != pud_val(*pudp))) {
 		*nr -= refs;
 		while (refs--)
@@ -1984,6 +2066,8 @@ static int gup_huge_pgd(pgd_t orig, pgd_t *pgdp, unsigned long addr,
 		*nr -= refs;
 		return 0;
 	}
+
+	mod_node_page_state(page_pgdat(head), NR_GUP_FAST_PAGES_REQUESTED, 1);
 
 	if (unlikely(pgd_val(orig) != pgd_val(*pgdp))) {
 		*nr -= refs;

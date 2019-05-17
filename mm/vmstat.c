@@ -1165,6 +1165,12 @@ const char * const vmstat_text[] = {
 	"nr_dirtied",
 	"nr_written",
 	"nr_kernel_misc_reclaimable",
+	"nr_gup_slow_pages_requested",
+	"nr_gup_fast_pages_requested",
+	"nr_gup_fast_page_backoffs",
+	"nr_gup_page_count_overflows",
+	"nr_gup_page_count_neg_overflows",
+	"nr_gup_pages_returned",
 
 	/* enum writeback_stat_item counters */
 	"nr_dirty_threshold",

@@ -241,6 +241,12 @@ enum node_stat_item {
 	NR_DIRTIED,		/* page dirtyings since bootup */
 	NR_WRITTEN,		/* page writings since bootup */
 	NR_KERNEL_MISC_RECLAIMABLE,	/* reclaimable non-slab kernel pages */
+	NR_GUP_SLOW_PAGES_REQUESTED,	/* via: get_user_pages() */
+	NR_GUP_FAST_PAGES_REQUESTED,	/* via: get_user_pages_fast() */
+	NR_GUP_FAST_PAGE_BACKOFFS,	/* gup_fast() lost to page_mkclean() */
+	NR_GUP_PAGE_COUNT_OVERFLOWS,	/* gup count overflowed: gup() failed */
+	NR_GUP_PAGE_COUNT_NEG_OVERFLOWS,/* gup count wrapped negative: gup() failed */
+	NR_GUP_PAGES_RETURNED,		/* via: put_user_page() */
 	NR_VM_NODE_STAT_ITEMS
 };
 

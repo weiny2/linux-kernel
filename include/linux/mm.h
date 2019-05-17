@@ -934,9 +934,10 @@ static inline bool is_zone_device_page(const struct page *page)
 #ifdef CONFIG_DEV_PAGEMAP_OPS
 void dev_pagemap_get_ops(void);
 void dev_pagemap_put_ops(void);
-void __put_devmap_managed_page(struct page *page);
+void __put_devmap_managed_page(struct page *page, int count);
 DECLARE_STATIC_KEY_FALSE(devmap_managed_key);
-static inline bool put_devmap_managed_page(struct page *page)
+
+static inline bool page_is_devmap_managed(struct page *page)
 {
 	if (!static_branch_unlikely(&devmap_managed_key))
 		return false;
@@ -946,12 +947,41 @@ static inline bool put_devmap_managed_page(struct page *page)
 	case MEMORY_DEVICE_PRIVATE:
 	case MEMORY_DEVICE_PUBLIC:
 	case MEMORY_DEVICE_FS_DAX:
-		__put_devmap_managed_page(page);
 		return true;
 	default:
 		break;
 	}
 	return false;
+}
+
+static inline bool put_devmap_managed_page(struct page *page)
+{
+	bool is_devmap = page_is_devmap_managed(page);
+
+	if (is_devmap) {
+		int count = page_ref_dec_return(page);
+
+		__put_devmap_managed_page(page, count);
+	}
+
+	return is_devmap;
+}
+
+int user_page_ref_dec_return(struct page *page);
+static inline bool put_devmap_managed_user_page(struct page *page)
+{
+	bool is_devmap;
+
+	page = compound_head(page);
+	is_devmap = page_is_devmap_managed(page);
+
+	if (is_devmap) {
+		int count = user_page_ref_dec_return(page);
+
+		__put_devmap_managed_page(page, count);
+	}
+
+	return is_devmap;
 }
 
 static inline bool is_device_private_page(const struct page *page)
@@ -993,6 +1023,11 @@ static inline bool put_devmap_managed_page(struct page *page)
 	return false;
 }
 
+static inline bool put_devmap_managed_user_page(struct page *page)
+{
+	return false;
+}
+
 static inline bool is_device_private_page(const struct page *page)
 {
 	return false;
@@ -1012,6 +1047,56 @@ static inline bool is_pci_p2pdma_page(const struct page *page)
 /* 127: arbitrary random number, small enough to assemble well */
 #define page_ref_zero_or_close_to_overflow(page) \
 	((unsigned int) page_ref_count(page) + 127u <= 127u)
+
+/*
+ * GUP_PIN_COUNTING_BIAS, and the associated functions that use it, overload
+ * the page's refcount so that two separate items are tracked: the original page
+ * reference count, and also a new count of how many get_user_pages() calls were
+ * made against the page. ("gup-pinned" is another term for the latter).
+ *
+ * With this scheme, get_user_pages() becomes special: such pages are marked
+ * as distinct from normal pages. As such, the new put_user_page() call (and
+ * its variants) must be used in order to release gup-pinned pages.
+ *
+ * Choice of value:
+ *
+ * By making GUP_PIN_COUNTING_BIAS a power of two, debugging of page reference
+ * counts with respect to get_user_pages() and put_user_page() becomes simpler,
+ * due to the fact that adding an even power of two to the page refcount has
+ * the effect of using only the upper N bits, for the code that counts up using
+ * the bias value. This means that the lower bits are left for the exclusive
+ * use of the original code that increments and decrements by one (or at least,
+ * by much smaller values than the bias value).
+ *
+ * Of course, once the lower bits overflow into the upper bits (and this is
+ * OK, because subtraction recovers the original values), then visual inspection
+ * no longer suffices to directly view the separate counts. However, for normal
+ * applications that don't have huge page reference counts, this won't be an
+ * issue.
+ *
+ * Locking: the lockless algorithm described in page_cache_get_speculative()
+ * and page_cache_gup_pin_speculative() provides safe operation for
+ * get_user_pages and page_mkclean and other calls that race to set up page
+ * table entries.
+ */
+#define GUP_PIN_COUNTING_BIAS (1UL << 10)
+
+void put_user_page(struct page *page);
+void put_user_pages_dirty(struct page **pages, unsigned long npages);
+void put_user_pages_dirty_lock(struct page **pages, unsigned long npages);
+void put_user_pages(struct page **pages, unsigned long npages);
+
+/**
+ * page_gup_pinned() - report if a page is gup-pinned (pinned by a call to
+ *			get_user_pages).
+ * @page:	pointer to page to be queried.
+ * @Return:	True, if it is likely that the page has been "gup-pinned".
+ *		False, if the page is definitely not gup-pinned.
+ */
+static inline bool page_gup_pinned(struct page *page)
+{
+	return (page_ref_count(page)) > GUP_PIN_COUNTING_BIAS;
+}
 
 static inline void get_page(struct page *page)
 {
@@ -1033,6 +1118,9 @@ static inline __must_check bool try_get_page(struct page *page)
 	return true;
 }
 
+__must_check bool try_get_gup_pin_page(struct page *page,
+				       enum node_stat_item gup_type);
+
 static inline void put_page(struct page *page)
 {
 	page = compound_head(page);
@@ -1049,30 +1137,6 @@ static inline void put_page(struct page *page)
 	if (put_page_testzero(page))
 		__put_page(page);
 }
-
-/**
- * put_user_page() - release a gup-pinned page
- * @page:            pointer to page to be released
- *
- * Pages that were pinned via get_user_pages*() must be released via
- * either put_user_page(), or one of the put_user_pages*() routines
- * below. This is so that eventually, pages that are pinned via
- * get_user_pages*() can be separately tracked and uniquely handled. In
- * particular, interactions with RDMA and filesystems need special
- * handling.
- *
- * put_user_page() and put_page() are not interchangeable, despite this early
- * implementation that makes them look the same. put_user_page() calls must
- * be perfectly matched up with get_user_page() calls.
- */
-static inline void put_user_page(struct page *page)
-{
-	put_page(page);
-}
-
-void put_user_pages_dirty(struct page **pages, unsigned long npages);
-void put_user_pages_dirty_lock(struct page **pages, unsigned long npages);
-void put_user_pages(struct page **pages, unsigned long npages);
 
 #if defined(CONFIG_SPARSEMEM) && !defined(CONFIG_SPARSEMEM_VMEMMAP)
 #define SECTION_IN_PAGE_FLAGS

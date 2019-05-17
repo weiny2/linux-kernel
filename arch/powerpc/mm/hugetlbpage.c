@@ -499,7 +499,9 @@ retry:
 		page = pte_page(*ptep);
 		page += ((address & mask) >> PAGE_SHIFT);
 		if (flags & FOLL_GET)
-			get_page(page);
+			if (unlikely(!try_get_gup_pin_page(page,
+					NR_GUP_SLOW_PAGES_REQUESTED)))
+				page = NULL;
 	} else {
 		if (is_hugetlb_entry_migration(*ptep)) {
 			spin_unlock(ptl);
