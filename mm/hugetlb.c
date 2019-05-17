@@ -4937,7 +4937,9 @@ retry:
 	if (pte_present(pte)) {
 		page = pmd_page(*pmd) + ((address & ~PMD_MASK) >> PAGE_SHIFT);
 		if (flags & FOLL_GET)
-			get_page(page);
+			if (unlikely(!try_get_gup_pin_page(page,
+					NR_GUP_SLOW_PAGES_REQUESTED)))
+				goto out;
 	} else {
 		if (is_hugetlb_entry_migration(pte)) {
 			spin_unlock(ptl);

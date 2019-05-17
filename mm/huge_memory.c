@@ -950,7 +950,9 @@ struct page *follow_devmap_pmd(struct vm_area_struct *vma, unsigned long addr,
 	if (!*pgmap)
 		return ERR_PTR(-EFAULT);
 	page = pfn_to_page(pfn);
-	get_page(page);
+	if (unlikely(!try_get_gup_pin_page(page,
+					   NR_GUP_SLOW_PAGES_REQUESTED)))
+		page = ERR_PTR(-ENOMEM);
 
 	return page;
 }
@@ -1090,7 +1092,9 @@ struct page *follow_devmap_pud(struct vm_area_struct *vma, unsigned long addr,
 	if (!*pgmap)
 		return ERR_PTR(-EFAULT);
 	page = pfn_to_page(pfn);
-	get_page(page);
+	if (unlikely(!try_get_gup_pin_page(page,
+					   NR_GUP_SLOW_PAGES_REQUESTED)))
+		page = ERR_PTR(-ENOMEM);
 
 	return page;
 }
@@ -1505,7 +1509,9 @@ skip_mlock:
 	page += (addr & ~HPAGE_PMD_MASK) >> PAGE_SHIFT;
 	VM_BUG_ON_PAGE(!PageCompound(page) && !is_zone_device_page(page), page);
 	if (flags & FOLL_GET)
-		get_page(page);
+		if (unlikely(!try_get_gup_pin_page(page,
+				NR_GUP_SLOW_PAGES_REQUESTED)))
+			page = NULL;
 
 out:
 	return page;
