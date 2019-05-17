@@ -1141,7 +1141,7 @@ int pnv_npu2_handle_fault(struct npu_context *context, uintptr_t *ea,
 			result = -EFAULT;
 
 		status[i] = 0;
-		put_page(page[0]);
+		put_user_page(page[0]);
 	}
 
 	return result;
