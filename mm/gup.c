@@ -29,11 +29,70 @@ struct follow_page_context {
 	unsigned int page_mask;
 };
 
+#ifdef CONFIG_DEBUG_GET_USER_PAGES_REFERENCES
+
+#define WARN_ONCE_PAGE(condition, page) ({				\
+	static int __warned;						\
+	int __ret_warn_once = !!(condition);				\
+									\
+	if (unlikely(__ret_warn_once && !__warned)) {			\
+		__warned = true;					\
+		dump_page(page,						\
+			  "WARN_ONCE_PAGE(" __stringify(condition)")");	\
+	}								\
+	unlikely(__ret_warn_once);					\
+})
+
+static bool need_debug_gup_tracking(void)
+{
+	return true;
+}
+
+struct page_ext_operations gup_debug_tracking_ops = {
+	.need = need_debug_gup_tracking,
+};
+
+static void debug_gup_ref_inc(struct page *page)
+{
+	struct page_ext *page_ext = lookup_page_ext(page);
+
+	if (WARN_ON_ONCE(!page_ext))
+		return;
+
+	atomic_inc(&page_ext->pin_count);
+}
+
+static void debug_gup_ref_dec(struct page *page)
+{
+	struct page_ext *page_ext = lookup_page_ext(page);
+
+	if (WARN_ON_ONCE(!page_ext))
+		return;
+
+	/* Someone called put_user_page() instead of put_page() */
+	WARN_ONCE_PAGE(atomic_read(&page_ext->pin_count) <= 0, page);
+	WARN_ONCE_PAGE(page_ref_count(page) < GUP_PIN_COUNTING_BIAS, page);
+
+	atomic_dec(&page_ext->pin_count);
+}
+#else
+#define WARN_ONCE_PAGE(condition, page) do {} while (0)
+
+static void debug_gup_ref_inc(struct page *page)
+{
+}
+
+static void debug_gup_ref_dec(struct page *page)
+{
+}
+#endif
+
 int user_page_ref_dec_return(struct page *page)
 {
 	VM_BUG_ON_PAGE(page_ref_count(page) < GUP_PIN_COUNTING_BIAS, page);
 
 	mod_node_page_state(page_pgdat(page), NR_GUP_PAGES_RETURNED, 1);
+	debug_gup_ref_dec(page);
 	return page_ref_sub_return(page, GUP_PIN_COUNTING_BIAS);
 }
 
@@ -195,8 +254,9 @@ __must_check bool try_get_gup_pin_page(struct page *page,
 		return false;
 	}
 
-	page_ref_add(page, GUP_PIN_COUNTING_BIAS);
 	mod_node_page_state(page_pgdat(page), gup_type, 1);
+	debug_gup_ref_inc(page);
+	page_ref_add(page, GUP_PIN_COUNTING_BIAS);
 	return true;
 }
 
@@ -1786,6 +1846,8 @@ static inline struct page *try_get_compound_head(struct page *page, int refs)
 		return NULL;
 	if (unlikely(!page_cache_gup_pin_speculative(head)))
 		return NULL;
+
+	debug_gup_ref_inc(page);
 	return head;
 }
 

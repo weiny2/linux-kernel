@@ -762,6 +762,21 @@ config GUP_BENCHMARK
 
 	  See tools/testing/selftests/vm/gup_benchmark.c
 
+config DEBUG_GET_USER_PAGES_REFERENCES
+	bool "Debug the tracking of gup-pinned pages"
+	select PAGE_EXTENSION
+	help
+	  Provides a redundant counter of pages that are pinned via some
+	  variant of get_user_pages(). This counter is checked against the
+	  real counter, at the entry of various get_user_pages() calls, and
+	  and WARN_ON_ONCE() fires if the count appears wrong. There may be
+	  false positives, because the non-debug counter is "fuzzy".
+
+	  Uses page extensions, and adds a 32-bit counter to those extensions,
+	  so this costs some memory per page. Do not enable unless you are
+	  tracking down a mismatch between get_user_pages() and put_user_page()
+	  calls.
+
 config ARCH_HAS_PTE_SPECIAL
 	bool
 

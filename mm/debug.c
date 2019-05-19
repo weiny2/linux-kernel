@@ -103,10 +103,26 @@ hex_only:
 #endif
 }
 
+static void __dump_page_gup_pinned(struct page *page)
+{
+#ifdef CONFIG_DEBUG_GET_USER_PAGES_REFERENCES
+	struct page_ext *page_ext = lookup_page_ext(page);
+
+	if (unlikely(!page_ext)) {
+		pr_alert("Page extension not available.\n");
+		return;
+	}
+
+	pr_alert("page_ext->pin_count: %d\n",
+		 atomic_read(&page_ext->pin_count));
+#endif
+}
+
 void dump_page(struct page *page, const char *reason)
 {
 	__dump_page(page, reason);
 	dump_page_owner(page);
+	__dump_page_gup_pinned(page);
 }
 EXPORT_SYMBOL(dump_page);
 

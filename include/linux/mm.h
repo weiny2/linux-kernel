@@ -1138,6 +1138,8 @@ static inline void put_page(struct page *page)
 		__put_page(page);
 }
 
+extern struct page_ext_operations gup_debug_tracking_ops;
+
 #if defined(CONFIG_SPARSEMEM) && !defined(CONFIG_SPARSEMEM_VMEMMAP)
 #define SECTION_IN_PAGE_FLAGS
 #endif
