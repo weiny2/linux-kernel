@@ -34,6 +34,11 @@ enum page_ext_flags {
  */
 struct page_ext {
 	unsigned long flags;
+
+#ifdef CONFIG_DEBUG_GET_USER_PAGES_REFERENCES
+	/* get_user_pages()-pinned count. */
+	atomic_t pin_count;
+#endif
 };
 
 extern void pgdat_page_ext_init(struct pglist_data *pgdat);

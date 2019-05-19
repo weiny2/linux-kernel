@@ -98,6 +98,14 @@ static void __put_compound_page(struct page *page)
 
 void __put_page(struct page *page)
 {
+#ifdef CONFIG_DEBUG_GET_USER_PAGES_REFERENCES
+	struct page_ext *page_ext = lookup_page_ext(page);
+
+	if (likely(page_ext)) {
+		/* Someone called put_page() instead of put_user_page() */
+		WARN_ON_ONCE(atomic_read(&page_ext->pin_count) > 0);
+	}
+#endif
 	if (is_zone_device_page(page)) {
 		put_dev_pagemap(page->pgmap);
 

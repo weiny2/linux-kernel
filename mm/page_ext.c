@@ -68,6 +68,9 @@ static struct page_ext_operations *page_ext_ops[] = {
 #if defined(CONFIG_IDLE_PAGE_TRACKING) && !defined(CONFIG_64BIT)
 	&page_idle_ops,
 #endif
+#ifdef CONFIG_DEBUG_GET_USER_PAGES_REFERENCES
+	&gup_debug_tracking_ops,
+#endif
 };
 
 static unsigned long total_usage;
