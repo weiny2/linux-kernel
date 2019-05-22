@@ -306,10 +306,13 @@ static int p9_get_mapped_pages(struct virtio_chan *chan,
 			       struct iov_iter *data,
 			       int count,
 			       size_t *offs,
-			       int *need_drop)
+			       int *need_drop,
+			       bool *from_gup)
 {
 	int nr_pages;
 	int err;
+
+	*from_gup = false;
 
 	if (!iov_iter_count(data))
 		return 0;
@@ -332,6 +335,7 @@ static int p9_get_mapped_pages(struct virtio_chan *chan,
 		*need_drop = 1;
 		nr_pages = DIV_ROUND_UP(n + *offs, PAGE_SIZE);
 		atomic_add(nr_pages, &vp_pinned);
+		*from_gup = iov_iter_get_pages_use_gup(data);
 		return n;
 	} else {
 		/* kernel buffer, no need to pin pages */
@@ -397,13 +401,15 @@ p9_virtio_zc_request(struct p9_client *client, struct p9_req_t *req,
 	size_t offs;
 	int need_drop = 0;
 	int kicked = 0;
+	bool in_from_gup, out_from_gup;
 
 	p9_debug(P9_DEBUG_TRANS, "virtio request\n");
 
 	if (uodata) {
 		__le32 sz;
 		int n = p9_get_mapped_pages(chan, &out_pages, uodata,
-					    outlen, &offs, &need_drop);
+					    outlen, &offs, &need_drop,
+					    &out_from_gup);
 		if (n < 0) {
 			err = n;
 			goto err_out;
@@ -422,7 +428,8 @@ p9_virtio_zc_request(struct p9_client *client, struct p9_req_t *req,
 		memcpy(&req->tc.sdata[0], &sz, sizeof(sz));
 	} else if (uidata) {
 		int n = p9_get_mapped_pages(chan, &in_pages, uidata,
-					    inlen, &offs, &need_drop);
+					    inlen, &offs, &need_drop,
+					    &in_from_gup);
 		if (n < 0) {
 			err = n;
 			goto err_out;
@@ -504,11 +511,12 @@ req_retry_pinned:
 err_out:
 	if (need_drop) {
 		if (in_pages) {
-			p9_release_pages(in_pages, in_nr_pages);
+			p9_release_pages(in_pages, in_nr_pages, in_from_gup);
 			atomic_sub(in_nr_pages, &vp_pinned);
 		}
 		if (out_pages) {
-			p9_release_pages(out_pages, out_nr_pages);
+			p9_release_pages(out_pages, out_nr_pages,
+					 out_from_gup);
 			atomic_sub(out_nr_pages, &vp_pinned);
 		}
 		/* wakeup anybody waiting for slots to pin pages */

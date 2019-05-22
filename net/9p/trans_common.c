@@ -19,12 +19,18 @@
 /**
  *  p9_release_pages - Release pages after the transaction.
  */
-void p9_release_pages(struct page **pages, int nr_pages)
+void p9_release_pages(struct page **pages, int nr_pages, bool from_gup)
 {
 	int i;
 
-	for (i = 0; i < nr_pages; i++)
-		if (pages[i])
-			put_page(pages[i]);
+	if (from_gup) {
+		for (i = 0; i < nr_pages; i++)
+			if (pages[i])
+				put_user_page(pages[i]);
+	} else {
+		for (i = 0; i < nr_pages; i++)
+			if (pages[i])
+				put_page(pages[i]);
+	}
 }
 EXPORT_SYMBOL(p9_release_pages);
