@@ -329,11 +329,11 @@ static void vhost_scsi_release_cmd(struct se_cmd *se_cmd)
 
 	if (tv_cmd->tvc_sgl_count) {
 		for (i = 0; i < tv_cmd->tvc_sgl_count; i++)
-			put_page(sg_page(&tv_cmd->tvc_sgl[i]));
+			put_user_page(sg_page(&tv_cmd->tvc_sgl[i]));
 	}
 	if (tv_cmd->tvc_prot_sgl_count) {
 		for (i = 0; i < tv_cmd->tvc_prot_sgl_count; i++)
-			put_page(sg_page(&tv_cmd->tvc_prot_sgl[i]));
+			put_user_page(sg_page(&tv_cmd->tvc_prot_sgl[i]));
 	}
 
 	vhost_scsi_put_inflight(tv_cmd->inflight);
@@ -630,6 +630,16 @@ vhost_scsi_map_to_sgl(struct vhost_scsi_cmd *cmd,
 	size_t offset;
 	unsigned int npages = 0;
 
+	/*
+	 * Here in all cases we should have an IOVEC which use GUP. If that is
+	 * not the case then we will wrongly call put_user_page() and the page
+	 * refcount will go wrong (this is in vhost_scsi_release_cmd())
+	 *
+	 * So offer a way to debug this and make sure no one forget about this
+	 * assumption with a BUG_ON() (the A team to the rescue !)
+	 */
+	BUG_ON(!iov_iter_get_pages_use_gup(iter));
+
 	bytes = iov_iter_get_pages(iter, pages, LONG_MAX,
 				VHOST_SCSI_PREALLOC_UPAGES, &offset);
 	/* No pages were pinned */
@@ -681,7 +691,7 @@ vhost_scsi_iov_to_sgl(struct vhost_scsi_cmd *cmd, bool write,
 			while (p < sg) {
 				struct page *page = sg_page(p++);
 				if (page)
-					put_page(page);
+					put_user_page(page);
 			}
 			return ret;
 		}
