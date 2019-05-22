@@ -2567,8 +2567,13 @@ cifs_uncached_writedata_release(struct kref *refcount)
 					struct cifs_writedata, refcount);
 
 	kref_put(&wdata->ctx->refcount, cifs_aio_ctx_release);
-	for (i = 0; i < wdata->nr_pages; i++)
-		put_page(wdata->pages[i]);
+	if (wdata->from_gup) {
+		for (i = 0; i < wdata->nr_pages; i++)
+			put_user_page(wdata->pages[i]);
+	} else {
+		for (i = 0; i < wdata->nr_pages; i++)
+			put_page(wdata->pages[i]);
+	}
 	cifs_writedata_release(refcount);
 }
 
@@ -2777,7 +2782,7 @@ cifs_write_from_iter(loff_t offset, size_t len, struct iov_iter *from,
 				break;
 			}
 
-
+			wdata->from_gup = iov_iter_get_pages_use_gup(from);
 			wdata->page_offset = start;
 			wdata->tailsz =
 				nr_pages > 1 ?
@@ -2793,6 +2798,7 @@ cifs_write_from_iter(loff_t offset, size_t len, struct iov_iter *from,
 				add_credits_and_wake_if(server, credits, 0);
 				break;
 			}
+			wdata->from_gup = false;
 
 			rc = cifs_write_allocate_pages(wdata->pages, nr_pages);
 			if (rc) {
@@ -3234,8 +3240,12 @@ cifs_uncached_readdata_release(struct kref *refcount)
 	unsigned int i;
 
 	kref_put(&rdata->ctx->refcount, cifs_aio_ctx_release);
-	for (i = 0; i < rdata->nr_pages; i++) {
-		put_page(rdata->pages[i]);
+	if (rdata->from_gup) {
+		for (i = 0; i < rdata->nr_pages; i++)
+			put_user_page(rdata->pages[i]);
+	} else {
+		for (i = 0; i < rdata->nr_pages; i++)
+			put_page(rdata->pages[i]);
 	}
 	cifs_readdata_release(refcount);
 }
@@ -3498,6 +3508,7 @@ cifs_send_async_read(loff_t offset, size_t len, struct cifsFileInfo *open_file,
 				break;
 			}
 
+			rdata->from_gup = iov_iter_get_pages_use_gup(&direct_iov);
 			npages = (cur_len + start + PAGE_SIZE-1) / PAGE_SIZE;
 			rdata->page_offset = start;
 			rdata->tailsz = npages > 1 ?
@@ -3515,6 +3526,7 @@ cifs_send_async_read(loff_t offset, size_t len, struct cifsFileInfo *open_file,
 				rc = -ENOMEM;
 				break;
 			}
+			rdata->from_gup = false;
 
 			rc = cifs_read_allocate_pages(rdata, npages);
 			if (rc) {
