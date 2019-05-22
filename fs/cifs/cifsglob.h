@@ -1280,6 +1280,7 @@ struct cifs_aio_ctx {
 	 * If yes, iter is a copy of the user passed iov_iter
 	 */
 	bool			direct_io;
+	bool			from_gup;
 };
 
 struct cifs_readdata;
@@ -1314,6 +1315,7 @@ struct cifs_readdata {
 	struct cifs_credits		credits;
 	unsigned int			nr_pages;
 	struct page			**pages;
+	bool				from_gup;
 };
 
 struct cifs_writedata;
@@ -1340,6 +1342,7 @@ struct cifs_writedata {
 	struct cifs_credits		credits;
 	unsigned int			nr_pages;
 	struct page			**pages;
+	bool				from_gup;
 };
 
 /*

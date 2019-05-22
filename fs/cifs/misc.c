@@ -821,10 +821,18 @@ cifs_aio_ctx_release(struct kref *refcount)
 	if (ctx->bv) {
 		unsigned i;
 
-		for (i = 0; i < ctx->npages; i++) {
-			if (ctx->should_dirty)
-				set_page_dirty(ctx->bv[i].bv_page);
-			put_page(ctx->bv[i].bv_page);
+		if (ctx->from_gup) {
+			for (i = 0; i < ctx->npages; i++) {
+				if (ctx->should_dirty)
+					set_page_dirty(ctx->bv[i].bv_page);
+				put_user_page(ctx->bv[i].bv_page);
+			}
+		} else {
+			for (i = 0; i < ctx->npages; i++) {
+				if (ctx->should_dirty)
+					set_page_dirty(ctx->bv[i].bv_page);
+				put_page(ctx->bv[i].bv_page);
+			}
 		}
 		kvfree(ctx->bv);
 	}
@@ -879,6 +887,9 @@ setup_aio_ctx_iter(struct cifs_aio_ctx *ctx, struct iov_iter *iter, int rw)
 	}
 
 	saved_len = count;
+
+	/* This is only use by cifs_aio_ctx_release() */
+	ctx->from_gup = iov_iter_get_pages_use_gup(iter);
 
 	while (count && npages < max_pages) {
 		rc = iov_iter_get_pages(iter, pages, count, max_pages, &start);
