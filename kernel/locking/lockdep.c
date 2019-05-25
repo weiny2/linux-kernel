@@ -732,7 +732,8 @@ look_up_lock_class(const struct lockdep_map *lock, unsigned int subclass)
 			 * Huh! same key, different name? Did someone trample
 			 * on some memory? We're most confused.
 			 */
-			WARN_ON_ONCE(class->name != lock->name);
+			WARN_ON_ONCE(class->name != lock->name &&
+				     lock->key != &__lockdep_no_validate__);
 			return class;
 		}
 	}
@@ -2816,10 +2817,6 @@ static inline int validate_chain(struct task_struct *curr,
 		int chain_head, u64 chain_key)
 {
 	return 1;
-}
-
-static void print_lock_trace(struct lock_trace *trace, unsigned int spaces)
-{
 }
 #endif
 
