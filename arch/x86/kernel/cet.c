@@ -294,6 +294,16 @@ int cet_restore_signal(bool ia32, struct sc_ext *sc_ext)
 		msr_val |= MSR_IA32_CET_SHSTK_EN;
 	}
 
+	if (cet->ibt_enabled) {
+		msr_val |= (MSR_IA32_CET_ENDBR_EN | MSR_IA32_CET_NO_TRACK_EN);
+
+		if (cet->ibt_bitmap_used)
+			msr_val |= (cet->ibt_bitmap_base | MSR_IA32_CET_LEG_IW_EN);
+
+		if (sc_ext->wait_endbr)
+			msr_val |= MSR_IA32_CET_WAIT_ENDBR;
+	}
+
 	cet_user_state->user_cet = msr_val;
 	return 0;
 }
@@ -309,7 +319,7 @@ int cet_setup_signal(bool ia32, unsigned long rstor_addr, struct sc_ext *sc_ext)
 	unsigned long ssp = 0, new_ssp = 0;
 	int err;
 
-	if (!cet->shstk_enabled)
+	if (!cet->shstk_enabled && !cet->ibt_enabled)
 		return 0;
 
 	if (cet->shstk_enabled) {
@@ -336,6 +346,16 @@ int cet_setup_signal(bool ia32, unsigned long rstor_addr, struct sc_ext *sc_ext)
 	}
 
 	start_update_msrs();
+	if (cet->ibt_enabled) {
+		u64 r;
+
+		rdmsrl(MSR_IA32_U_CET, r);
+		if (r & MSR_IA32_CET_WAIT_ENDBR) {
+			sc_ext->wait_endbr = 1;
+			wrmsrl(MSR_IA32_U_CET, r & ~MSR_IA32_CET_WAIT_ENDBR);
+		}
+	}
+
 	if (cet->shstk_enabled)
 		wrmsrl(MSR_IA32_PL3_SSP, ssp);
 	end_update_msrs();

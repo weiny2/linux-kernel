@@ -57,7 +57,8 @@ int save_cet_to_sigframe(void __user *fp, unsigned long restorer, int is_ia32)
 	int err = 0;
 
 #ifdef CONFIG_X86_INTEL_CET
-	if (!current->thread.cet.shstk_enabled)
+	if (!current->thread.cet.shstk_enabled &&
+	    !current->thread.cet.ibt_enabled)
 		return 0;
 
 	if (fp) {
@@ -89,7 +90,8 @@ static int restore_cet_from_sigframe(int is_ia32, void __user *fp)
 	int err = 0;
 
 #ifdef CONFIG_X86_INTEL_CET
-	if (!current->thread.cet.shstk_enabled)
+	if (!current->thread.cet.shstk_enabled &&
+	    !current->thread.cet.ibt_enabled)
 		return 0;
 
 	if (fp) {
@@ -359,7 +361,8 @@ static void save_supervisor_xstates(void)
 
 	xsave->header.xfeatures = 0;
 #ifdef CONFIG_X86_INTEL_CET
-	if (current->thread.cet.shstk_enabled) {
+	if (current->thread.cet.shstk_enabled ||
+	    current->thread.cet.ibt_enabled) {
 		struct cet_user_state *cet;
 
 		xsave->header.xfeatures |= XFEATURE_MASK_CET_USER;
@@ -568,7 +571,7 @@ static unsigned long fpu__alloc_sigcontext_ext(unsigned long sp)
 	if (cpu_x86_cet_enabled()) {
 		struct cet_status *cet = &current->thread.cet;
 
-		if (cet->shstk_enabled)
+		if (cet->shstk_enabled || cet->ibt_enabled)
 			sp -= (sizeof(struct sc_ext) + 8);
 	}
 #endif
