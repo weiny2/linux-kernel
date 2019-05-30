@@ -78,7 +78,7 @@ MODULE_PARM_DESC(enable_bwb, "Enable BWB unit for decoding, may crash on certain
 
 void coda_write(struct coda_dev *dev, u32 data, u32 reg)
 {
-	v4l2_dbg(2, coda_debug, &dev->v4l2_dev,
+	v4l2_dbg(3, coda_debug, &dev->v4l2_dev,
 		 "%s: data=0x%x, reg=0x%x\n", __func__, data, reg);
 	writel(data, dev->regs_base + reg);
 }
@@ -88,7 +88,7 @@ unsigned int coda_read(struct coda_dev *dev, u32 reg)
 	u32 data;
 
 	data = readl(dev->regs_base + reg);
-	v4l2_dbg(2, coda_debug, &dev->v4l2_dev,
+	v4l2_dbg(3, coda_debug, &dev->v4l2_dev,
 		 "%s: data=0x%x, reg=0x%x\n", __func__, data, reg);
 	return data;
 }
@@ -1416,7 +1416,7 @@ static int coda_job_ready(void *m2m_priv)
 		return 0;
 	}
 
-	coda_dbg(1, ctx, "job ready\n");
+	coda_dbg(2, ctx, "job ready\n");
 
 	return 1;
 }
@@ -1567,42 +1567,53 @@ static void coda_update_menu_ctrl(struct v4l2_ctrl *ctrl, int value)
 	v4l2_ctrl_unlock(ctrl);
 }
 
-static void coda_update_h264_profile_ctrl(struct coda_ctx *ctx)
+void coda_update_profile_level_ctrls(struct coda_ctx *ctx, u8 profile_idc,
+				     u8 level_idc)
 {
 	const char * const *profile_names;
-	int profile;
-
-	profile = coda_h264_profile(ctx->params.h264_profile_idc);
-	if (profile < 0) {
-		v4l2_warn(&ctx->dev->v4l2_dev, "Invalid H264 Profile: %u\n",
-			  ctx->params.h264_profile_idc);
-		return;
-	}
-
-	coda_update_menu_ctrl(ctx->h264_profile_ctrl, profile);
-
-	profile_names = v4l2_ctrl_get_menu(V4L2_CID_MPEG_VIDEO_H264_PROFILE);
-
-	coda_dbg(1, ctx, "Parsed H264 Profile: %s\n", profile_names[profile]);
-}
-
-static void coda_update_h264_level_ctrl(struct coda_ctx *ctx)
-{
 	const char * const *level_names;
+	struct v4l2_ctrl *profile_ctrl;
+	struct v4l2_ctrl *level_ctrl;
+	const char *codec_name;
+	u32 profile_cid;
+	u32 level_cid;
+	int profile;
 	int level;
 
-	level = coda_h264_level(ctx->params.h264_level_idc);
-	if (level < 0) {
-		v4l2_warn(&ctx->dev->v4l2_dev, "Invalid H264 Level: %u\n",
-			  ctx->params.h264_level_idc);
+	switch (ctx->codec->src_fourcc) {
+	case V4L2_PIX_FMT_H264:
+		codec_name = "H264";
+		profile_cid = V4L2_CID_MPEG_VIDEO_H264_PROFILE;
+		level_cid = V4L2_CID_MPEG_VIDEO_H264_LEVEL;
+		profile_ctrl = ctx->h264_profile_ctrl;
+		level_ctrl = ctx->h264_level_ctrl;
+		profile = coda_h264_profile(profile_idc);
+		level = coda_h264_level(level_idc);
+		break;
+	default:
 		return;
 	}
 
-	coda_update_menu_ctrl(ctx->h264_level_ctrl, level);
+	profile_names = v4l2_ctrl_get_menu(profile_cid);
+	level_names = v4l2_ctrl_get_menu(level_cid);
 
-	level_names = v4l2_ctrl_get_menu(V4L2_CID_MPEG_VIDEO_H264_LEVEL);
+	if (profile < 0) {
+		v4l2_warn(&ctx->dev->v4l2_dev, "Invalid %s profile: %u\n",
+			  codec_name, profile_idc);
+	} else {
+		coda_dbg(1, ctx, "Parsed %s profile: %s\n", codec_name,
+			 profile_names[profile]);
+		coda_update_menu_ctrl(profile_ctrl, profile);
+	}
 
-	coda_dbg(1, ctx, "Parsed H264 Level: %s\n", level_names[level]);
+	if (level < 0) {
+		v4l2_warn(&ctx->dev->v4l2_dev, "Invalid %s level: %u\n",
+			  codec_name, level_idc);
+	} else {
+		coda_dbg(1, ctx, "Parsed %s level: %s\n", codec_name,
+			 level_names[level]);
+		coda_update_menu_ctrl(level_ctrl, level);
+	}
 }
 
 static void coda_buf_queue(struct vb2_buffer *vb)
@@ -1635,8 +1646,9 @@ static void coda_buf_queue(struct vb2_buffer *vb)
 			 */
 			if (!ctx->params.h264_profile_idc) {
 				coda_sps_parse_profile(ctx, vb);
-				coda_update_h264_profile_ctrl(ctx);
-				coda_update_h264_level_ctrl(ctx);
+				coda_update_profile_level_ctrls(ctx,
+						ctx->params.h264_profile_idc,
+						ctx->params.h264_level_idc);
 			}
 		}
 
@@ -1857,11 +1869,16 @@ static const struct vb2_ops coda_qops = {
 
 static int coda_s_ctrl(struct v4l2_ctrl *ctrl)
 {
+	const char * const *val_names = v4l2_ctrl_get_menu(ctrl->id);
 	struct coda_ctx *ctx =
 			container_of(ctrl->handler, struct coda_ctx, ctrls);
 
-	coda_dbg(1, ctx, "s_ctrl: id = 0x%x, name = \"%s\", val = %d\n",
-		 ctrl->id, ctrl->name, ctrl->val);
+	if (val_names)
+		coda_dbg(2, ctx, "s_ctrl: id = 0x%x, name = \"%s\", val = %d (\"%s\")\n",
+			 ctrl->id, ctrl->name, ctrl->val, val_names[ctrl->val]);
+	else
+		coda_dbg(2, ctx, "s_ctrl: id = 0x%x, name = \"%s\", val = %d\n",
+			 ctrl->id, ctrl->name, ctrl->val);
 
 	switch (ctrl->id) {
 	case V4L2_CID_HFLIP:
@@ -2044,7 +2061,7 @@ static void coda_encode_ctrls(struct coda_ctx *ctx)
 	}
 	v4l2_ctrl_new_std_menu(&ctx->ctrls, &coda_ctrl_ops,
 		V4L2_CID_MPEG_VIDEO_MULTI_SLICE_MODE,
-		V4L2_MPEG_VIDEO_MULTI_SICE_MODE_MAX_BYTES, 0x0,
+		V4L2_MPEG_VIDEO_MULTI_SLICE_MODE_MAX_BYTES, 0x0,
 		V4L2_MPEG_VIDEO_MULTI_SLICE_MODE_SINGLE);
 	v4l2_ctrl_new_std(&ctx->ctrls, &coda_ctrl_ops,
 		V4L2_CID_MPEG_VIDEO_MULTI_SLICE_MAX_MB, 1, 0x3fffffff, 1, 1);
@@ -2490,9 +2507,12 @@ err_clk_per:
 static int coda_register_device(struct coda_dev *dev, int i)
 {
 	struct video_device *vfd = &dev->vfd[i];
+	enum coda_inst_type type;
+	int ret;
 
 	if (i >= dev->devtype->num_vdevs)
 		return -EINVAL;
+	type = dev->devtype->vdevs[i]->type;
 
 	strscpy(vfd->name, dev->devtype->vdevs[i]->name, sizeof(vfd->name));
 	vfd->fops	= &coda_fops;
@@ -2508,7 +2528,12 @@ static int coda_register_device(struct coda_dev *dev, int i)
 	v4l2_disable_ioctl(vfd, VIDIOC_G_CROP);
 	v4l2_disable_ioctl(vfd, VIDIOC_S_CROP);
 
-	return video_register_device(vfd, VFL_TYPE_GRABBER, 0);
+	ret = video_register_device(vfd, VFL_TYPE_GRABBER, 0);
+	if (!ret)
+		v4l2_info(&dev->v4l2_dev, "%s registered as %s\n",
+			  type == CODA_INST_ENCODER ? "encoder" : "decoder",
+			  video_device_node_name(vfd));
+	return ret;
 }
 
 static void coda_copy_firmware(struct coda_dev *dev, const u8 * const buf,
@@ -2621,9 +2646,6 @@ static void coda_fw_callback(const struct firmware *fw, void *context)
 			goto rel_vfd;
 		}
 	}
-
-	v4l2_info(&dev->v4l2_dev, "codec registered as /dev/video[%d-%d]\n",
-		  dev->vfd[0].num, dev->vfd[i - 1].num);
 
 	pm_runtime_put_sync(&pdev->dev);
 	return;
@@ -2794,8 +2816,8 @@ static int coda_probe(struct platform_device *pdev)
 		return irq;
 	}
 
-	ret = devm_request_threaded_irq(&pdev->dev, irq, NULL, coda_irq_handler,
-			IRQF_ONESHOT, dev_name(&pdev->dev), dev);
+	ret = devm_request_irq(&pdev->dev, irq, coda_irq_handler, 0,
+			       dev_name(&pdev->dev), dev);
 	if (ret < 0) {
 		dev_err(&pdev->dev, "failed to request irq: %d\n", ret);
 		return ret;

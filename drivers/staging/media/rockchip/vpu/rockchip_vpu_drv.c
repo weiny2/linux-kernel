@@ -58,22 +58,20 @@ static void rockchip_vpu_job_finish(struct rockchip_vpu_dev *vpu,
 	src->sequence = ctx->sequence_out++;
 	dst->sequence = ctx->sequence_cap++;
 
-	dst->field = src->field;
-	if (src->flags & V4L2_BUF_FLAG_TIMECODE)
-		dst->timecode = src->timecode;
-	dst->vb2_buf.timestamp = src->vb2_buf.timestamp;
-	dst->flags &= ~(V4L2_BUF_FLAG_TSTAMP_SRC_MASK |
-			V4L2_BUF_FLAG_TIMECODE);
-	dst->flags |= src->flags & (V4L2_BUF_FLAG_TSTAMP_SRC_MASK |
-				    V4L2_BUF_FLAG_TIMECODE);
+	v4l2_m2m_buf_copy_metadata(src, dst, true);
 
 	avail_size = vb2_plane_size(&dst->vb2_buf, 0) -
 		     ctx->vpu_dst_fmt->header_size;
 	if (bytesused <= avail_size) {
-		if (ctx->bounce_buf) {
+		/*
+		 * The bounce buffer is only for the JPEG encoder.
+		 * TODO: Rework the JPEG encoder to eliminate the need
+		 * for a bounce buffer.
+		 */
+		if (ctx->jpeg_enc.bounce_buffer.cpu) {
 			memcpy(vb2_plane_vaddr(&dst->vb2_buf, 0) +
 			       ctx->vpu_dst_fmt->header_size,
-			       ctx->bounce_buf, bytesused);
+			       ctx->jpeg_enc.bounce_buffer.cpu, bytesused);
 		}
 		dst->vb2_buf.planes[0].bytesused =
 			ctx->vpu_dst_fmt->header_size + bytesused;
@@ -273,10 +271,8 @@ static int rockchip_vpu_open(struct file *filp)
 	filp->private_data = &ctx->fh;
 	v4l2_fh_add(&ctx->fh);
 
-	if (vdev == vpu->vfd_enc) {
-		rockchip_vpu_enc_reset_dst_fmt(vpu, ctx);
-		rockchip_vpu_enc_reset_src_fmt(vpu, ctx);
-	}
+	rockchip_vpu_enc_reset_dst_fmt(vpu, ctx);
+	rockchip_vpu_enc_reset_src_fmt(vpu, ctx);
 
 	ret = rockchip_vpu_ctrls_setup(vpu, ctx);
 	if (ret) {

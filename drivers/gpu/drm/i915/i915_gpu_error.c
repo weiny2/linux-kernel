@@ -36,8 +36,14 @@
 
 #include <drm/drm_print.h>
 
-#include "i915_gpu_error.h"
+#include "gem/i915_gem_context.h"
+
 #include "i915_drv.h"
+#include "i915_gpu_error.h"
+#include "i915_scatterlist.h"
+#include "intel_atomic.h"
+#include "intel_csr.h"
+#include "intel_overlay.h"
 
 static inline const struct intel_engine_cs *
 engine_lookup(const struct drm_i915_private *i915, unsigned int id)
@@ -405,6 +411,7 @@ static void print_error_buffers(struct drm_i915_error_state_buf *m,
 static void error_print_instdone(struct drm_i915_error_state_buf *m,
 				 const struct drm_i915_error_engine *ee)
 {
+	struct sseu_dev_info *sseu = &RUNTIME_INFO(m->i915)->sseu;
 	int slice;
 	int subslice;
 
@@ -420,12 +427,12 @@ static void error_print_instdone(struct drm_i915_error_state_buf *m,
 	if (INTEL_GEN(m->i915) <= 6)
 		return;
 
-	for_each_instdone_slice_subslice(m->i915, slice, subslice)
+	for_each_instdone_slice_subslice(m->i915, sseu, slice, subslice)
 		err_printf(m, "  SAMPLER_INSTDONE[%d][%d]: 0x%08x\n",
 			   slice, subslice,
 			   ee->instdone.sampler[slice][subslice]);
 
-	for_each_instdone_slice_subslice(m->i915, slice, subslice)
+	for_each_instdone_slice_subslice(m->i915, sseu, slice, subslice)
 		err_printf(m, "  ROW_INSTDONE[%d][%d]: 0x%08x\n",
 			   slice, subslice,
 			   ee->instdone.row[slice][subslice]);

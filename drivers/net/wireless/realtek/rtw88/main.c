@@ -20,7 +20,7 @@ EXPORT_SYMBOL(rtw_debug_mask);
 module_param_named(support_lps, rtw_fw_support_lps, bool, 0644);
 module_param_named(debug_mask, rtw_debug_mask, uint, 0644);
 
-MODULE_PARM_DESC(support_lps, "Set Y to enable LPS support");
+MODULE_PARM_DESC(support_lps, "Set Y to enable Leisure Power Save support, to turn radio off between beacons");
 MODULE_PARM_DESC(debug_mask, "Debugging mask");
 
 static struct ieee80211_channel rtw_channeltable_2g[] = {
@@ -162,7 +162,8 @@ static void rtw_watch_dog_work(struct work_struct *work)
 	rtwdev->stats.tx_cnt = 0;
 	rtwdev->stats.rx_cnt = 0;
 
-	rtw_iterate_vifs(rtwdev, rtw_vif_watch_dog_iter, &data);
+	/* use atomic version to avoid taking local->iflist_mtx mutex */
+	rtw_iterate_vifs_atomic(rtwdev, rtw_vif_watch_dog_iter, &data);
 
 	/* fw supports only one station associated to enter lps, if there are
 	 * more than two stations associated to the AP, then we can not enter

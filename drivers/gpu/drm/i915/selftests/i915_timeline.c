@@ -6,8 +6,10 @@
 
 #include <linux/prime_numbers.h>
 
-#include "../i915_selftest.h"
+#include "gem/i915_gem_pm.h"
+
 #include "i915_random.h"
+#include "i915_selftest.h"
 
 #include "igt_flush_test.h"
 #include "mock_gem_device.h"
@@ -454,7 +456,7 @@ tl_write(struct i915_timeline *tl, struct intel_engine_cs *engine, u32 value)
 		goto out;
 	}
 
-	rq = i915_request_alloc(engine, engine->i915->kernel_context);
+	rq = i915_request_create(engine->kernel_context);
 	if (IS_ERR(rq))
 		goto out_unpin;
 
@@ -678,7 +680,7 @@ static int live_hwsp_wrap(void *arg)
 		if (!intel_engine_can_store_dword(engine))
 			continue;
 
-		rq = i915_request_alloc(engine, i915->kernel_context);
+		rq = i915_request_create(engine->kernel_context);
 		if (IS_ERR(rq)) {
 			err = PTR_ERR(rq);
 			goto out;

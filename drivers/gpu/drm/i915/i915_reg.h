@@ -35,7 +35,7 @@
  * macros. Do **not** mass change existing definitions just to update the style.
  *
  * Layout
- * ''''''
+ * ~~~~~~
  *
  * Keep helper macros near the top. For example, _PIPE() and friends.
  *
@@ -79,7 +79,7 @@
  * style. Use lower case in hexadecimal values.
  *
  * Naming
- * ''''''
+ * ~~~~~~
  *
  * Try to name registers according to the specs. If the register name changes in
  * the specs from platform to another, stick to the original name.
@@ -97,7 +97,7 @@
  * suffix to the name. For example, ``_SKL`` or ``_GEN8``.
  *
  * Examples
- * ''''''''
+ * ~~~~~~~~
  *
  * (Note that the values in the example are indented using spaces instead of
  * TABs to avoid misalignment in generated documentation. Use TABs in the
@@ -126,7 +126,7 @@
  */
 #define REG_BIT(__n)							\
 	((u32)(BIT(__n) +						\
-	       BUILD_BUG_ON_ZERO(__builtin_constant_p(__n) &&		\
+	       BUILD_BUG_ON_ZERO(__is_constexpr(__n) &&		\
 				 ((__n) < 0 || (__n) > 31))))
 
 /**
@@ -140,8 +140,8 @@
  */
 #define REG_GENMASK(__high, __low)					\
 	((u32)(GENMASK(__high, __low) +					\
-	       BUILD_BUG_ON_ZERO(__builtin_constant_p(__high) &&	\
-				 __builtin_constant_p(__low) &&		\
+	       BUILD_BUG_ON_ZERO(__is_constexpr(__high) &&	\
+				 __is_constexpr(__low) &&		\
 				 ((__low) < 0 || (__high) > 31 || (__low) > (__high)))))
 
 /*
@@ -290,6 +290,7 @@ static inline bool i915_mmio_reg_valid(i915_reg_t reg)
 #define OTHER_CLASS		4
 #define MAX_ENGINE_CLASS	4
 
+#define OTHER_GUC_INSTANCE	0
 #define OTHER_GTPM_INSTANCE	1
 #define MAX_ENGINE_INSTANCE    3
 
@@ -1813,7 +1814,6 @@ enum i915_power_well_id {
 #define  PWR_DOWN_LN_3			(0x8 << 4)
 #define  PWR_DOWN_LN_2_1_0		(0x7 << 4)
 #define  PWR_DOWN_LN_1_0		(0x3 << 4)
-#define  PWR_DOWN_LN_1			(0x2 << 4)
 #define  PWR_DOWN_LN_3_1		(0xa << 4)
 #define  PWR_DOWN_LN_3_1_0		(0xb << 4)
 #define  PWR_DOWN_LN_MASK		(0xf << 4)
@@ -1846,6 +1846,9 @@ enum i915_power_well_id {
 #define   VOLTAGE_INFO_1_05V		(2 << 24)
 #define   VOLTAGE_INFO_MASK		(3 << 24)
 #define   VOLTAGE_INFO_SHIFT		24
+
+#define ICL_PORT_COMP_DW8(port)		_MMIO(_ICL_PORT_COMP_DW(8, port))
+#define   IREFGEN			(1 << 24)
 
 #define CNL_PORT_COMP_DW9		_MMIO(0x162124)
 #define ICL_PORT_COMP_DW9(port)		_MMIO(_ICL_PORT_COMP_DW(9, port))
@@ -2870,6 +2873,7 @@ enum i915_power_well_id {
 #define GFX_FLSH_CNTL_GEN6	_MMIO(0x101008)
 #define   GFX_FLSH_CNTL_EN	(1 << 0)
 #define ECOSKPD		_MMIO(0x21d0)
+#define   ECO_CONSTANT_BUFFER_SR_DISABLE REG_BIT(4)
 #define   ECO_GATING_CX_ONLY	(1 << 3)
 #define   ECO_FLIP_DONE		(1 << 0)
 
@@ -4693,7 +4697,7 @@ enum {
 #define   VIDEO_DIP_FREQ_2VSYNC		(2 << 16)
 #define   VIDEO_DIP_FREQ_MASK		(3 << 16)
 /* HSW and later: */
-#define   DRM_DIP_ENABLE		(1 << 28)
+#define   VIDEO_DIP_ENABLE_DRM_GLK	(1 << 28)
 #define   PSR_VSC_BIT_7_SET		(1 << 27)
 #define   VSC_SELECT_MASK		(0x3 << 25)
 #define   VSC_SELECT_SHIFT		25
@@ -5769,6 +5773,7 @@ enum {
 #define _PIPE_MISC_B			0x71030
 #define   PIPEMISC_YUV420_ENABLE	(1 << 27)
 #define   PIPEMISC_YUV420_MODE_FULL_BLEND (1 << 26)
+#define   PIPEMISC_HDR_MODE_PRECISION	(1 << 23) /* icl+ */
 #define   PIPEMISC_OUTPUT_COLORSPACE_YUV  (1 << 11)
 #define   PIPEMISC_DITHER_BPC_MASK	(7 << 5)
 #define   PIPEMISC_DITHER_8_BPC		(0 << 5)
@@ -7489,6 +7494,9 @@ enum {
 #define GEN11_CRYPTO_RSVD_INTR_MASK	_MMIO(0x1900f0)
 #define GEN11_GUNIT_CSME_INTR_MASK	_MMIO(0x1900f4)
 
+#define   ENGINE1_MASK			REG_GENMASK(31, 16)
+#define   ENGINE0_MASK			REG_GENMASK(15, 0)
+
 #define ILK_DISPLAY_CHICKEN2	_MMIO(0x42004)
 /* Required on all Ironlake and Sandybridge according to the B-Spec. */
 #define  ILK_ELPIN_409_SELECT	(1 << 25)
@@ -7619,6 +7627,9 @@ enum {
   #define GEN9_DISABLE_GATHER_AT_SET_SHADER_COMMON_SLICE	(1 << 12)
   #define GEN8_SBE_DISABLE_REPLAY_BUF_OPTIMIZATION		(1 << 8)
   #define GEN8_CSC2_SBE_VUE_CACHE_CONSERVATIVE			(1 << 0)
+
+#define GEN8_L3CNTLREG	_MMIO(0x7034)
+  #define GEN8_ERRDETBCTRL (1 << 9)
 
 #define GEN11_COMMON_SLICE_CHICKEN3		_MMIO(0x7304)
   #define GEN11_BLEND_EMB_FIX_DISABLE_IN_RCC	(1 << 11)
@@ -8145,6 +8156,7 @@ enum {
 #define _HSW_VIDEO_DIP_SPD_DATA_A	0x602A0
 #define _HSW_VIDEO_DIP_GMP_DATA_A	0x602E0
 #define _HSW_VIDEO_DIP_VSC_DATA_A	0x60320
+#define _GLK_VIDEO_DIP_DRM_DATA_A	0x60440
 #define _HSW_VIDEO_DIP_AVI_ECC_A	0x60240
 #define _HSW_VIDEO_DIP_VS_ECC_A		0x60280
 #define _HSW_VIDEO_DIP_SPD_ECC_A	0x602C0
@@ -8158,6 +8170,7 @@ enum {
 #define _HSW_VIDEO_DIP_SPD_DATA_B	0x612A0
 #define _HSW_VIDEO_DIP_GMP_DATA_B	0x612E0
 #define _HSW_VIDEO_DIP_VSC_DATA_B	0x61320
+#define _GLK_VIDEO_DIP_DRM_DATA_B	0x61440
 #define _HSW_VIDEO_DIP_BVI_ECC_B	0x61240
 #define _HSW_VIDEO_DIP_VS_ECC_B		0x61280
 #define _HSW_VIDEO_DIP_SPD_ECC_B	0x612C0
@@ -8183,6 +8196,7 @@ enum {
 #define HSW_TVIDEO_DIP_SPD_DATA(trans, i)	_MMIO_TRANS2(trans, _HSW_VIDEO_DIP_SPD_DATA_A + (i) * 4)
 #define HSW_TVIDEO_DIP_GMP_DATA(trans, i)	_MMIO_TRANS2(trans, _HSW_VIDEO_DIP_GMP_DATA_A + (i) * 4)
 #define HSW_TVIDEO_DIP_VSC_DATA(trans, i)	_MMIO_TRANS2(trans, _HSW_VIDEO_DIP_VSC_DATA_A + (i) * 4)
+#define GLK_TVIDEO_DIP_DRM_DATA(trans, i)	_MMIO_TRANS2(trans, _GLK_VIDEO_DIP_DRM_DATA_A + (i) * 4)
 #define ICL_VIDEO_DIP_PPS_DATA(trans, i)	_MMIO_TRANS2(trans, _ICL_VIDEO_DIP_PPS_DATA_A + (i) * 4)
 #define ICL_VIDEO_DIP_PPS_ECC(trans, i)		_MMIO_TRANS2(trans, _ICL_VIDEO_DIP_PPS_ECC_A + (i) * 4)
 
@@ -8773,6 +8787,9 @@ enum {
 #define   GEN6_PCODE_WRITE_MIN_FREQ_TABLE	0x8
 #define   GEN6_PCODE_READ_MIN_FREQ_TABLE	0x9
 #define   GEN6_READ_OC_PARAMS			0xc
+#define   ICL_PCODE_MEM_SUBSYSYSTEM_INFO	0xd
+#define     ICL_PCODE_MEM_SS_READ_GLOBAL_INFO	(0x0 << 8)
+#define     ICL_PCODE_MEM_SS_READ_QGV_POINT_INFO(point)	(((point) << 16) | (0x1 << 8))
 #define   GEN6_PCODE_READ_D_COMP		0x10
 #define   GEN6_PCODE_WRITE_D_COMP		0x11
 #define   HSW_PCODE_DE_WRITE_FREQ_REQ		0x17
@@ -8862,6 +8879,7 @@ enum {
 #define   GEN11_LSN_UNSLCVC_GAFS_HALF_SF_MAXALLOC	(1 << 7)
 
 #define GEN10_SAMPLER_MODE		_MMIO(0xE18C)
+#define   GEN11_SAMPLER_ENABLE_HEADLESS_MSG	REG_BIT(5)
 
 /* IVYBRIDGE DPF */
 #define GEN7_L3CDERRST1(slice)		_MMIO(0xB008 + (slice) * 0x200) /* L3CD Error Status 1 */
@@ -9009,32 +9027,32 @@ enum {
 /* HSW Audio */
 #define _HSW_AUD_CONFIG_A		0x65000
 #define _HSW_AUD_CONFIG_B		0x65100
-#define HSW_AUD_CFG(pipe)		_MMIO_PIPE(pipe, _HSW_AUD_CONFIG_A, _HSW_AUD_CONFIG_B)
+#define HSW_AUD_CFG(trans)		_MMIO_TRANS(trans, _HSW_AUD_CONFIG_A, _HSW_AUD_CONFIG_B)
 
 #define _HSW_AUD_MISC_CTRL_A		0x65010
 #define _HSW_AUD_MISC_CTRL_B		0x65110
-#define HSW_AUD_MISC_CTRL(pipe)		_MMIO_PIPE(pipe, _HSW_AUD_MISC_CTRL_A, _HSW_AUD_MISC_CTRL_B)
+#define HSW_AUD_MISC_CTRL(trans)	_MMIO_TRANS(trans, _HSW_AUD_MISC_CTRL_A, _HSW_AUD_MISC_CTRL_B)
 
 #define _HSW_AUD_M_CTS_ENABLE_A		0x65028
 #define _HSW_AUD_M_CTS_ENABLE_B		0x65128
-#define HSW_AUD_M_CTS_ENABLE(pipe)	_MMIO_PIPE(pipe, _HSW_AUD_M_CTS_ENABLE_A, _HSW_AUD_M_CTS_ENABLE_B)
+#define HSW_AUD_M_CTS_ENABLE(trans)	_MMIO_TRANS(trans, _HSW_AUD_M_CTS_ENABLE_A, _HSW_AUD_M_CTS_ENABLE_B)
 #define   AUD_M_CTS_M_VALUE_INDEX	(1 << 21)
 #define   AUD_M_CTS_M_PROG_ENABLE	(1 << 20)
 #define   AUD_CONFIG_M_MASK		0xfffff
 
 #define _HSW_AUD_DIP_ELD_CTRL_ST_A	0x650b4
 #define _HSW_AUD_DIP_ELD_CTRL_ST_B	0x651b4
-#define HSW_AUD_DIP_ELD_CTRL(pipe)	_MMIO_PIPE(pipe, _HSW_AUD_DIP_ELD_CTRL_ST_A, _HSW_AUD_DIP_ELD_CTRL_ST_B)
+#define HSW_AUD_DIP_ELD_CTRL(trans)	_MMIO_TRANS(trans, _HSW_AUD_DIP_ELD_CTRL_ST_A, _HSW_AUD_DIP_ELD_CTRL_ST_B)
 
 /* Audio Digital Converter */
 #define _HSW_AUD_DIG_CNVT_1		0x65080
 #define _HSW_AUD_DIG_CNVT_2		0x65180
-#define AUD_DIG_CNVT(pipe)		_MMIO_PIPE(pipe, _HSW_AUD_DIG_CNVT_1, _HSW_AUD_DIG_CNVT_2)
+#define AUD_DIG_CNVT(trans)		_MMIO_TRANS(trans, _HSW_AUD_DIG_CNVT_1, _HSW_AUD_DIG_CNVT_2)
 #define DIP_PORT_SEL_MASK		0x3
 
 #define _HSW_AUD_EDID_DATA_A		0x65050
 #define _HSW_AUD_EDID_DATA_B		0x65150
-#define HSW_AUD_EDID_DATA(pipe)		_MMIO_PIPE(pipe, _HSW_AUD_EDID_DATA_A, _HSW_AUD_EDID_DATA_B)
+#define HSW_AUD_EDID_DATA(trans)	_MMIO_TRANS(trans, _HSW_AUD_EDID_DATA_A, _HSW_AUD_EDID_DATA_B)
 
 #define HSW_AUD_PIPE_CONV_CFG		_MMIO(0x6507c)
 #define HSW_AUD_PIN_ELD_CP_VLD		_MMIO(0x650c0)
@@ -9523,6 +9541,7 @@ enum skl_power_gate {
 #define  TRANS_MSA_12_BPC		(3 << 5)
 #define  TRANS_MSA_16_BPC		(4 << 5)
 #define  TRANS_MSA_CEA_RANGE		(1 << 3)
+#define  TRANS_MSA_USE_VSC_SDP		(1 << 14)
 
 /* LCPLL Control */
 #define LCPLL_CTL			_MMIO(0x130040)

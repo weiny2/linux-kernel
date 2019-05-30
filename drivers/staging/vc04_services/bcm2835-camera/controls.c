@@ -52,7 +52,8 @@ static const s64 ev_bias_qmenu[] = {
 static const s64 iso_qmenu[] = {
 	0, 100000, 200000, 400000, 800000,
 };
-static const uint32_t iso_values[] = {
+
+static const u32 iso_values[] = {
 	0, 100, 200, 400, 800,
 };
 
@@ -572,14 +573,14 @@ exit:
 				dev->colourfx.enable ? "true" : "false",
 				dev->colourfx.u, dev->colourfx.v,
 				ret, (ret == 0 ? 0 : -EINVAL));
-	return (ret == 0 ? 0 : EINVAL);
+	return (ret == 0 ? 0 : -EINVAL);
 }
 
 static int ctrl_set_colfx(struct bm2835_mmal_dev *dev,
 			  struct v4l2_ctrl *ctrl,
 			  const struct bm2835_mmal_v4l2_ctrl *mmal_ctrl)
 {
-	int ret = -EINVAL;
+	int ret;
 	struct vchiq_mmal_port *control;
 
 	control = &dev->component[MMAL_COMPONENT_CAMERA]->control;
@@ -596,7 +597,7 @@ static int ctrl_set_colfx(struct bm2835_mmal_dev *dev,
 		 "%s: After: mmal_ctrl:%p ctrl id:0x%x ctrl val:%d ret %d(%d)\n",
 			__func__, mmal_ctrl, ctrl->id, ctrl->val, ret,
 			(ret == 0 ? 0 : -EINVAL));
-	return (ret == 0 ? 0 : EINVAL);
+	return (ret == 0 ? 0 : -EINVAL);
 }
 
 static int ctrl_set_bitrate(struct bm2835_mmal_dev *dev,

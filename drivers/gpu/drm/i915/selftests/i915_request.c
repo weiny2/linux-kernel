@@ -24,12 +24,14 @@
 
 #include <linux/prime_numbers.h>
 
-#include "../i915_selftest.h"
+#include "gem/i915_gem_pm.h"
+#include "gem/selftests/mock_context.h"
+
 #include "i915_random.h"
+#include "i915_selftest.h"
 #include "igt_live_test.h"
 #include "lib_sw_fence.h"
 
-#include "mock_context.h"
 #include "mock_drm.h"
 #include "mock_gem_device.h"
 
@@ -267,7 +269,7 @@ static struct i915_request *
 __live_request_alloc(struct i915_gem_context *ctx,
 		     struct intel_engine_cs *engine)
 {
-	return i915_request_alloc(engine, ctx);
+	return igt_request_alloc(ctx, engine);
 }
 
 static int __igt_breadcrumbs_smoketest(void *arg)
@@ -551,8 +553,7 @@ static int live_nop_request(void *arg)
 			times[1] = ktime_get_raw();
 
 			for (n = 0; n < prime; n++) {
-				request = i915_request_alloc(engine,
-							     i915->kernel_context);
+				request = i915_request_create(engine->kernel_context);
 				if (IS_ERR(request)) {
 					err = PTR_ERR(request);
 					goto out_unlock;
@@ -649,7 +650,7 @@ empty_request(struct intel_engine_cs *engine,
 	struct i915_request *request;
 	int err;
 
-	request = i915_request_alloc(engine, engine->i915->kernel_context);
+	request = i915_request_create(engine->kernel_context);
 	if (IS_ERR(request))
 		return request;
 
@@ -853,7 +854,7 @@ static int live_all_engines(void *arg)
 	}
 
 	for_each_engine(engine, i915, id) {
-		request[id] = i915_request_alloc(engine, i915->kernel_context);
+		request[id] = i915_request_create(engine->kernel_context);
 		if (IS_ERR(request[id])) {
 			err = PTR_ERR(request[id]);
 			pr_err("%s: Request allocation failed with err=%d\n",
@@ -868,12 +869,9 @@ static int live_all_engines(void *arg)
 		GEM_BUG_ON(err);
 		request[id]->batch = batch;
 
-		if (!i915_gem_object_has_active_reference(batch->obj)) {
-			i915_gem_object_get(batch->obj);
-			i915_gem_object_set_active_reference(batch->obj);
-		}
-
+		i915_vma_lock(batch);
 		err = i915_vma_move_to_active(batch, request[id], 0);
+		i915_vma_unlock(batch);
 		GEM_BUG_ON(err);
 
 		i915_request_get(request[id]);
@@ -962,7 +960,7 @@ static int live_sequential_engines(void *arg)
 			goto out_unlock;
 		}
 
-		request[id] = i915_request_alloc(engine, i915->kernel_context);
+		request[id] = i915_request_create(engine->kernel_context);
 		if (IS_ERR(request[id])) {
 			err = PTR_ERR(request[id]);
 			pr_err("%s: Request allocation failed for %s with err=%d\n",
@@ -988,11 +986,10 @@ static int live_sequential_engines(void *arg)
 		GEM_BUG_ON(err);
 		request[id]->batch = batch;
 
+		i915_vma_lock(batch);
 		err = i915_vma_move_to_active(batch, request[id], 0);
+		i915_vma_unlock(batch);
 		GEM_BUG_ON(err);
-
-		i915_gem_object_set_active_reference(batch->obj);
-		i915_vma_get(batch);
 
 		i915_request_get(request[id]);
 		i915_request_add(request[id]);
@@ -1075,7 +1072,7 @@ max_batches(struct i915_gem_context *ctx, struct intel_engine_cs *engine)
 	if (HAS_EXECLISTS(ctx->i915))
 		return INT_MAX;
 
-	rq = i915_request_alloc(engine, ctx);
+	rq = igt_request_alloc(ctx, engine);
 	if (IS_ERR(rq)) {
 		ret = PTR_ERR(rq);
 	} else {

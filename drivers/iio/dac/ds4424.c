@@ -166,7 +166,7 @@ static int ds4424_verify_chip(struct iio_dev *indio_dev)
 {
 	int ret, val;
 
-	ret = ds4424_get_value(indio_dev, &val, DS4424_DAC_ADDR(0));
+	ret = ds4424_get_value(indio_dev, &val, 0);
 	if (ret < 0)
 		dev_err(&indio_dev->dev,
 				"%s failed. ret: %d\n", __func__, ret);
@@ -235,12 +235,6 @@ static int ds4424_probe(struct i2c_client *client,
 	indio_dev->name = id->name;
 	indio_dev->dev.of_node = client->dev.of_node;
 	indio_dev->dev.parent = &client->dev;
-
-	if (!client->dev.of_node) {
-		dev_err(&client->dev,
-				"Not found DT.\n");
-		return -ENODEV;
-	}
 
 	data->vcc_reg = devm_regulator_get(&client->dev, "vcc");
 	if (IS_ERR(data->vcc_reg)) {

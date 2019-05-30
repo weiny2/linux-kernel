@@ -1010,15 +1010,6 @@ static void skcipher_encrypt_done(struct device *jrdev, u32 *desc, u32 err,
 	if (err)
 		caam_jr_strstatus(jrdev, err);
 
-#ifdef DEBUG
-	print_hex_dump(KERN_ERR, "dstiv  @"__stringify(__LINE__)": ",
-		       DUMP_PREFIX_ADDRESS, 16, 4, req->iv,
-		       edesc->src_nents > 1 ? 100 : ivsize, 1);
-#endif
-	caam_dump_sg(KERN_ERR, "dst    @" __stringify(__LINE__)": ",
-		     DUMP_PREFIX_ADDRESS, 16, 4, req->dst,
-		     edesc->dst_nents > 1 ? 100 : req->cryptlen, 1);
-
 	skcipher_unmap(jrdev, edesc, req);
 
 	/*
@@ -1028,6 +1019,15 @@ static void skcipher_encrypt_done(struct device *jrdev, u32 *desc, u32 err,
 	if (ivsize)
 		scatterwalk_map_and_copy(req->iv, req->dst, req->cryptlen -
 					 ivsize, ivsize, 0);
+
+#ifdef DEBUG
+	print_hex_dump(KERN_ERR, "dstiv  @"__stringify(__LINE__)": ",
+		       DUMP_PREFIX_ADDRESS, 16, 4, req->iv,
+		       edesc->src_nents > 1 ? 100 : ivsize, 1);
+#endif
+	caam_dump_sg(KERN_ERR, "dst    @" __stringify(__LINE__)": ",
+		     DUMP_PREFIX_ADDRESS, 16, 4, req->dst,
+		     edesc->dst_nents > 1 ? 100 : req->cryptlen, 1);
 
 	kfree(edesc);
 
@@ -1050,6 +1050,8 @@ static void skcipher_decrypt_done(struct device *jrdev, u32 *desc, u32 err,
 	if (err)
 		caam_jr_strstatus(jrdev, err);
 
+	skcipher_unmap(jrdev, edesc, req);
+
 #ifdef DEBUG
 	print_hex_dump(KERN_ERR, "dstiv  @"__stringify(__LINE__)": ",
 		       DUMP_PREFIX_ADDRESS, 16, 4, req->iv, ivsize, 1);
@@ -1058,7 +1060,6 @@ static void skcipher_decrypt_done(struct device *jrdev, u32 *desc, u32 err,
 		     DUMP_PREFIX_ADDRESS, 16, 4, req->dst,
 		     edesc->dst_nents > 1 ? 100 : req->cryptlen, 1);
 
-	skcipher_unmap(jrdev, edesc, req);
 	kfree(edesc);
 
 	skcipher_request_complete(req, err);
@@ -1106,6 +1107,7 @@ static void init_aead_job(struct aead_request *req,
 	if (unlikely(req->src != req->dst)) {
 		if (!edesc->mapped_dst_nents) {
 			dst_dma = 0;
+			out_options = 0;
 		} else if (edesc->mapped_dst_nents == 1) {
 			dst_dma = sg_dma_address(req->dst);
 			out_options = 0;
@@ -1380,8 +1382,16 @@ static struct aead_edesc *aead_edesc_alloc(struct aead_request *req,
 		}
 	}
 
+	/*
+	 * HW reads 4 S/G entries at a time; make sure the reads don't go beyond
+	 * the end of the table by allocating more S/G entries.
+	 */
 	sec4_sg_len = mapped_src_nents > 1 ? mapped_src_nents : 0;
-	sec4_sg_len += mapped_dst_nents > 1 ? mapped_dst_nents : 0;
+	if (mapped_dst_nents > 1)
+		sec4_sg_len += pad_sg_nents(mapped_dst_nents);
+	else
+		sec4_sg_len = pad_sg_nents(sec4_sg_len);
+
 	sec4_sg_bytes = sec4_sg_len * sizeof(struct sec4_sg_entry);
 
 	/* allocate space for base edesc and hw desc commands, link tables */
@@ -1719,7 +1729,25 @@ static struct skcipher_edesc *skcipher_edesc_alloc(struct skcipher_request *req,
 	else
 		sec4_sg_ents = mapped_src_nents + !!ivsize;
 	dst_sg_idx = sec4_sg_ents;
-	sec4_sg_ents += mapped_dst_nents > 1 ? mapped_dst_nents : 0;
+
+	/*
+	 * HW reads 4 S/G entries at a time; make sure the reads don't go beyond
+	 * the end of the table by allocating more S/G entries. Logic:
+	 * if (src != dst && output S/G)
+	 *      pad output S/G, if needed
+	 * else if (src == dst && S/G)
+	 *      overlapping S/Gs; pad one of them
+	 * else if (input S/G) ...
+	 *      pad input S/G, if needed
+	 */
+	if (mapped_dst_nents > 1)
+		sec4_sg_ents += pad_sg_nents(mapped_dst_nents);
+	else if ((req->src == req->dst) && (mapped_src_nents > 1))
+		sec4_sg_ents = max(pad_sg_nents(sec4_sg_ents),
+				   !!ivsize + pad_sg_nents(mapped_src_nents));
+	else
+		sec4_sg_ents = pad_sg_nents(sec4_sg_ents);
+
 	sec4_sg_bytes = sec4_sg_ents * sizeof(struct sec4_sg_entry);
 
 	/*
@@ -3444,7 +3472,7 @@ static void caam_aead_exit(struct crypto_aead *tfm)
 	caam_exit_common(crypto_aead_ctx(tfm));
 }
 
-static void __exit caam_algapi_exit(void)
+void caam_algapi_exit(void)
 {
 	int i;
 
@@ -3489,42 +3517,14 @@ static void caam_aead_alg_init(struct caam_aead_alg *t_alg)
 	alg->exit = caam_aead_exit;
 }
 
-static int __init caam_algapi_init(void)
+int caam_algapi_init(struct device *ctrldev)
 {
-	struct device_node *dev_node;
-	struct platform_device *pdev;
-	struct caam_drv_private *priv;
+	struct caam_drv_private *priv = dev_get_drvdata(ctrldev);
 	int i = 0, err = 0;
 	u32 aes_vid, aes_inst, des_inst, md_vid, md_inst, ccha_inst, ptha_inst;
 	u32 arc4_inst;
 	unsigned int md_limit = SHA512_DIGEST_SIZE;
 	bool registered = false, gcm_support;
-
-	dev_node = of_find_compatible_node(NULL, NULL, "fsl,sec-v4.0");
-	if (!dev_node) {
-		dev_node = of_find_compatible_node(NULL, NULL, "fsl,sec4.0");
-		if (!dev_node)
-			return -ENODEV;
-	}
-
-	pdev = of_find_device_by_node(dev_node);
-	if (!pdev) {
-		of_node_put(dev_node);
-		return -ENODEV;
-	}
-
-	priv = dev_get_drvdata(&pdev->dev);
-	of_node_put(dev_node);
-
-	/*
-	 * If priv is NULL, it's probably because the caam driver wasn't
-	 * properly initialized (e.g. RNG4 init failed). Thus, bail out here.
-	 */
-	if (!priv) {
-		err = -ENODEV;
-		goto out_put_dev;
-	}
-
 
 	/*
 	 * Register crypto algorithms the device supports.
@@ -3668,14 +3668,5 @@ static int __init caam_algapi_init(void)
 	if (registered)
 		pr_info("caam algorithms registered in /proc/crypto\n");
 
-out_put_dev:
-	put_device(&pdev->dev);
 	return err;
 }
-
-module_init(caam_algapi_init);
-module_exit(caam_algapi_exit);
-
-MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("FSL CAAM support for crypto API");
-MODULE_AUTHOR("Freescale Semiconductor - NMG/STC");

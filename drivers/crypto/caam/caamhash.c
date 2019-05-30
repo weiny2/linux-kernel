@@ -759,7 +759,8 @@ static int ahash_edesc_add_src(struct caam_hash_ctx *ctx,
 
 	if (nents > 1 || first_sg) {
 		struct sec4_sg_entry *sg = edesc->sec4_sg;
-		unsigned int sgsize = sizeof(*sg) * (first_sg + nents);
+		unsigned int sgsize = sizeof(*sg) *
+				      pad_sg_nents(first_sg + nents);
 
 		sg_to_sec4_sg_last(req->src, nents, sg + first_sg, 0);
 
@@ -819,6 +820,8 @@ static int ahash_update_ctx(struct ahash_request *req)
 	}
 
 	if (to_hash) {
+		int pad_nents;
+
 		src_nents = sg_nents_for_len(req->src,
 					     req->nbytes - (*next_buflen));
 		if (src_nents < 0) {
@@ -838,15 +841,14 @@ static int ahash_update_ctx(struct ahash_request *req)
 		}
 
 		sec4_sg_src_index = 1 + (*buflen ? 1 : 0);
-		sec4_sg_bytes = (sec4_sg_src_index + mapped_nents) *
-				 sizeof(struct sec4_sg_entry);
+		pad_nents = pad_sg_nents(sec4_sg_src_index + mapped_nents);
+		sec4_sg_bytes = pad_nents * sizeof(struct sec4_sg_entry);
 
 		/*
 		 * allocate space for base edesc and hw desc commands,
 		 * link tables
 		 */
-		edesc = ahash_edesc_alloc(ctx, sec4_sg_src_index + mapped_nents,
-					  ctx->sh_desc_update,
+		edesc = ahash_edesc_alloc(ctx, pad_nents, ctx->sh_desc_update,
 					  ctx->sh_desc_update_dma, flags);
 		if (!edesc) {
 			dma_unmap_sg(jrdev, req->src, src_nents, DMA_TO_DEVICE);
@@ -935,18 +937,17 @@ static int ahash_final_ctx(struct ahash_request *req)
 		       GFP_KERNEL : GFP_ATOMIC;
 	int buflen = *current_buflen(state);
 	u32 *desc;
-	int sec4_sg_bytes, sec4_sg_src_index;
+	int sec4_sg_bytes;
 	int digestsize = crypto_ahash_digestsize(ahash);
 	struct ahash_edesc *edesc;
 	int ret;
 
-	sec4_sg_src_index = 1 + (buflen ? 1 : 0);
-	sec4_sg_bytes = sec4_sg_src_index * sizeof(struct sec4_sg_entry);
+	sec4_sg_bytes = pad_sg_nents(1 + (buflen ? 1 : 0)) *
+			sizeof(struct sec4_sg_entry);
 
 	/* allocate space for base edesc and hw desc commands, link tables */
-	edesc = ahash_edesc_alloc(ctx, sec4_sg_src_index,
-				  ctx->sh_desc_fin, ctx->sh_desc_fin_dma,
-				  flags);
+	edesc = ahash_edesc_alloc(ctx, 4, ctx->sh_desc_fin,
+				  ctx->sh_desc_fin_dma, flags);
 	if (!edesc)
 		return -ENOMEM;
 
@@ -963,7 +964,7 @@ static int ahash_final_ctx(struct ahash_request *req)
 	if (ret)
 		goto unmap_ctx;
 
-	sg_to_sec4_set_last(edesc->sec4_sg + sec4_sg_src_index - 1);
+	sg_to_sec4_set_last(edesc->sec4_sg + (buflen ? 1 : 0));
 
 	edesc->sec4_sg_dma = dma_map_single(jrdev, edesc->sec4_sg,
 					    sec4_sg_bytes, DMA_TO_DEVICE);
@@ -1246,6 +1247,8 @@ static int ahash_update_no_ctx(struct ahash_request *req)
 	}
 
 	if (to_hash) {
+		int pad_nents;
+
 		src_nents = sg_nents_for_len(req->src,
 					     req->nbytes - *next_buflen);
 		if (src_nents < 0) {
@@ -1264,14 +1267,14 @@ static int ahash_update_no_ctx(struct ahash_request *req)
 			mapped_nents = 0;
 		}
 
-		sec4_sg_bytes = (1 + mapped_nents) *
-				sizeof(struct sec4_sg_entry);
+		pad_nents = pad_sg_nents(1 + mapped_nents);
+		sec4_sg_bytes = pad_nents * sizeof(struct sec4_sg_entry);
 
 		/*
 		 * allocate space for base edesc and hw desc commands,
 		 * link tables
 		 */
-		edesc = ahash_edesc_alloc(ctx, 1 + mapped_nents,
+		edesc = ahash_edesc_alloc(ctx, pad_nents,
 					  ctx->sh_desc_update_first,
 					  ctx->sh_desc_update_first_dma,
 					  flags);
@@ -1930,7 +1933,7 @@ static void caam_hash_cra_exit(struct crypto_tfm *tfm)
 	caam_jr_free(ctx->jrdev);
 }
 
-static void __exit caam_algapi_hash_exit(void)
+void caam_algapi_hash_exit(void)
 {
 	struct caam_hash_alg *t_alg, *n;
 
@@ -1988,39 +1991,12 @@ caam_hash_alloc(struct caam_hash_template *template,
 	return t_alg;
 }
 
-static int __init caam_algapi_hash_init(void)
+int caam_algapi_hash_init(struct device *ctrldev)
 {
-	struct device_node *dev_node;
-	struct platform_device *pdev;
 	int i = 0, err = 0;
-	struct caam_drv_private *priv;
+	struct caam_drv_private *priv = dev_get_drvdata(ctrldev);
 	unsigned int md_limit = SHA512_DIGEST_SIZE;
 	u32 md_inst, md_vid;
-
-	dev_node = of_find_compatible_node(NULL, NULL, "fsl,sec-v4.0");
-	if (!dev_node) {
-		dev_node = of_find_compatible_node(NULL, NULL, "fsl,sec4.0");
-		if (!dev_node)
-			return -ENODEV;
-	}
-
-	pdev = of_find_device_by_node(dev_node);
-	if (!pdev) {
-		of_node_put(dev_node);
-		return -ENODEV;
-	}
-
-	priv = dev_get_drvdata(&pdev->dev);
-	of_node_put(dev_node);
-
-	/*
-	 * If priv is NULL, it's probably because the caam driver wasn't
-	 * properly initialized (e.g. RNG4 init failed). Thus, bail out here.
-	 */
-	if (!priv) {
-		err = -ENODEV;
-		goto out_put_dev;
-	}
 
 	/*
 	 * Register crypto algorithms the device supports.  First, identify
@@ -2042,10 +2018,8 @@ static int __init caam_algapi_hash_init(void)
 	 * Skip registration of any hashing algorithms if MD block
 	 * is not present.
 	 */
-	if (!md_inst) {
-		err = -ENODEV;
-		goto out_put_dev;
-	}
+	if (!md_inst)
+		return -ENODEV;
 
 	/* Limit digest size based on LP256 */
 	if (md_vid == CHA_VER_VID_MD_LP256)
@@ -2102,14 +2076,5 @@ static int __init caam_algapi_hash_init(void)
 			list_add_tail(&t_alg->entry, &hash_list);
 	}
 
-out_put_dev:
-	put_device(&pdev->dev);
 	return err;
 }
-
-module_init(caam_algapi_hash_init);
-module_exit(caam_algapi_hash_exit);
-
-MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("FSL CAAM support for ahash functions of crypto API");
-MODULE_AUTHOR("Freescale Semiconductor - NMG");

@@ -55,8 +55,14 @@ struct intel_guc {
 
 	/* intel_guc_recv interrupt related state */
 	spinlock_t irq_lock;
-	bool interrupts_enabled;
 	unsigned int msg_enabled_mask;
+
+	struct {
+		bool enabled;
+		void (*reset)(struct drm_i915_private *i915);
+		void (*enable)(struct drm_i915_private *i915);
+		void (*disable)(struct drm_i915_private *i915);
+	} interrupts;
 
 	struct i915_vma *ads_vma;
 	struct i915_vma *stage_desc_pool;
@@ -95,11 +101,6 @@ struct intel_guc {
 	/* GuC's FW specific notify function */
 	void (*notify)(struct intel_guc *guc);
 };
-
-static inline bool intel_guc_is_alive(struct intel_guc *guc)
-{
-	return intel_uc_fw_is_loaded(&guc->fw);
-}
 
 static
 inline int intel_guc_send(struct intel_guc *guc, const u32 *action, u32 len)
@@ -173,6 +174,13 @@ int intel_guc_suspend(struct intel_guc *guc);
 int intel_guc_resume(struct intel_guc *guc);
 struct i915_vma *intel_guc_allocate_vma(struct intel_guc *guc, u32 size);
 u32 intel_guc_reserved_gtt_size(struct intel_guc *guc);
+int intel_guc_reserve_ggtt_top(struct intel_guc *guc);
+void intel_guc_release_ggtt_top(struct intel_guc *guc);
+
+static inline bool intel_guc_is_loaded(struct intel_guc *guc)
+{
+	return intel_uc_fw_is_loaded(&guc->fw);
+}
 
 static inline int intel_guc_sanitize(struct intel_guc *guc)
 {

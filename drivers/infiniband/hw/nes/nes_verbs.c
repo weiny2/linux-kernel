@@ -1646,9 +1646,6 @@ static int nes_destroy_cq(struct ib_cq *ib_cq, struct ib_udata *udata)
 	u32 opcode = 0;
 	int ret;
 
-	if (ib_cq == NULL)
-		return 0;
-
 	nescq = to_nescq(ib_cq);
 	nesvnic = to_nesvnic(ib_cq->device);
 	nesdev = nesvnic->nesdev;
@@ -2112,10 +2109,11 @@ static struct ib_mr *nes_reg_user_mr(struct ib_pd *pd, u64 start, u64 length,
 		return (struct ib_mr *)region;
 	}
 
-	nes_debug(NES_DBG_MR, "User base = 0x%lX, Virt base = 0x%lX, length = %u,"
-			" offset = %u, page size = %lu.\n",
-			(unsigned long int)start, (unsigned long int)virt, (u32)length,
-			ib_umem_offset(region), BIT(region->page_shift));
+	nes_debug(
+		NES_DBG_MR,
+		"User base = 0x%lX, Virt base = 0x%lX, length = %u, offset = %u, page size = %lu.\n",
+		(unsigned long)start, (unsigned long)virt, (u32)length,
+		ib_umem_offset(region), PAGE_SIZE);
 
 	skip_pages = ((u32)ib_umem_offset(region)) >> 12;
 
@@ -3707,9 +3705,6 @@ void  nes_port_ibevent(struct nes_vnic *nesvnic)
  */
 void nes_destroy_ofa_device(struct nes_ib_device *nesibdev)
 {
-	if (nesibdev == NULL)
-		return;
-
 	nes_unregister_ofa_device(nesibdev);
 
 	ib_dealloc_device(&nesibdev->ibdev);

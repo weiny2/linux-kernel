@@ -357,7 +357,8 @@ int rdma_rw_ctx_signature_init(struct rdma_rw_ctx *ctx, struct ib_qp *qp,
 	int count = 0, ret;
 
 	if (sg_cnt > pages_per_mr || prot_sg_cnt > pages_per_mr) {
-		pr_err("SG count too large\n");
+		pr_err("SG count too large: sg_cnt=%d, prot_sg_cnt=%d, pages_per_mr=%d\n",
+		       sg_cnt, prot_sg_cnt, pages_per_mr);
 		return -EINVAL;
 	}
 
@@ -613,7 +614,7 @@ EXPORT_SYMBOL(rdma_rw_ctx_destroy);
 
 /**
  * rdma_rw_ctx_destroy_signature - release all resources allocated by
- *	rdma_rw_ctx_init_signature
+ *	rdma_rw_ctx_signature_init
  * @ctx:	context to release
  * @qp:		queue pair to operate on
  * @port_num:	port num to which the connection is bound
@@ -731,7 +732,7 @@ int rdma_rw_init_mrs(struct ib_qp *qp, struct ib_qp_init_attr *attr)
 				IB_MR_TYPE_SIGNATURE, 2);
 		if (ret) {
 			pr_err("%s: failed to allocated %d SIG MRs\n",
-				__func__, nr_mrs);
+				__func__, nr_sig_mrs);
 			goto out_free_rdma_mrs;
 		}
 	}

@@ -39,17 +39,24 @@
 #include <drm/i915_drm.h>
 #include <drm/intel_lpe_audio.h>
 
+#include "i915_debugfs.h"
 #include "i915_drv.h"
+#include "intel_atomic.h"
 #include "intel_audio.h"
 #include "intel_connector.h"
 #include "intel_ddi.h"
 #include "intel_dp.h"
+#include "intel_dpio_phy.h"
 #include "intel_drv.h"
+#include "intel_fifo_underrun.h"
+#include "intel_gmbus.h"
 #include "intel_hdcp.h"
 #include "intel_hdmi.h"
+#include "intel_hotplug.h"
 #include "intel_lspcon.h"
 #include "intel_sdvo.h"
 #include "intel_panel.h"
+#include "intel_sideband.h"
 
 static struct drm_device *intel_hdmi_to_dev(struct intel_hdmi *intel_hdmi)
 {
@@ -122,6 +129,8 @@ static u32 g4x_infoframe_enable(unsigned int type)
 		return VIDEO_DIP_ENABLE_SPD;
 	case HDMI_INFOFRAME_TYPE_VENDOR:
 		return VIDEO_DIP_ENABLE_VENDOR;
+	case HDMI_INFOFRAME_TYPE_DRM:
+		return 0;
 	default:
 		MISSING_CASE(type);
 		return 0;
@@ -145,6 +154,8 @@ static u32 hsw_infoframe_enable(unsigned int type)
 		return VIDEO_DIP_ENABLE_SPD_HSW;
 	case HDMI_INFOFRAME_TYPE_VENDOR:
 		return VIDEO_DIP_ENABLE_VS_HSW;
+	case HDMI_INFOFRAME_TYPE_DRM:
+		return VIDEO_DIP_ENABLE_DRM_GLK;
 	default:
 		MISSING_CASE(type);
 		return 0;
@@ -170,6 +181,8 @@ hsw_dip_data_reg(struct drm_i915_private *dev_priv,
 		return HSW_TVIDEO_DIP_SPD_DATA(cpu_transcoder, i);
 	case HDMI_INFOFRAME_TYPE_VENDOR:
 		return HSW_TVIDEO_DIP_VS_DATA(cpu_transcoder, i);
+	case HDMI_INFOFRAME_TYPE_DRM:
+		return GLK_TVIDEO_DIP_DRM_DATA(cpu_transcoder, i);
 	default:
 		MISSING_CASE(type);
 		return INVALID_MMIO_REG;
@@ -543,10 +556,16 @@ static u32 hsw_infoframes_enabled(struct intel_encoder *encoder,
 {
 	struct drm_i915_private *dev_priv = to_i915(encoder->base.dev);
 	u32 val = I915_READ(HSW_TVIDEO_DIP_CTL(pipe_config->cpu_transcoder));
+	u32 mask;
 
-	return val & (VIDEO_DIP_ENABLE_VSC_HSW | VIDEO_DIP_ENABLE_AVI_HSW |
-		      VIDEO_DIP_ENABLE_GCP_HSW | VIDEO_DIP_ENABLE_VS_HSW |
-		      VIDEO_DIP_ENABLE_GMP_HSW | VIDEO_DIP_ENABLE_SPD_HSW);
+	mask = (VIDEO_DIP_ENABLE_VSC_HSW | VIDEO_DIP_ENABLE_AVI_HSW |
+		VIDEO_DIP_ENABLE_GCP_HSW | VIDEO_DIP_ENABLE_VS_HSW |
+		VIDEO_DIP_ENABLE_GMP_HSW | VIDEO_DIP_ENABLE_SPD_HSW);
+
+	if (INTEL_GEN(dev_priv) >= 10 || IS_GEMINILAKE(dev_priv))
+		mask |= VIDEO_DIP_ENABLE_DRM_GLK;
+
+	return val & mask;
 }
 
 static const u8 infoframe_type_to_idx[] = {
@@ -556,6 +575,7 @@ static const u8 infoframe_type_to_idx[] = {
 	HDMI_INFOFRAME_TYPE_AVI,
 	HDMI_INFOFRAME_TYPE_SPD,
 	HDMI_INFOFRAME_TYPE_VENDOR,
+	HDMI_INFOFRAME_TYPE_DRM,
 };
 
 u32 intel_hdmi_infoframe_enable(unsigned int type)
@@ -778,6 +798,40 @@ intel_hdmi_compute_hdmi_infoframe(struct intel_encoder *encoder,
 	return true;
 }
 
+static bool
+intel_hdmi_compute_drm_infoframe(struct intel_encoder *encoder,
+				 struct intel_crtc_state *crtc_state,
+				 struct drm_connector_state *conn_state)
+{
+	struct hdmi_drm_infoframe *frame = &crtc_state->infoframes.drm.drm;
+	struct drm_i915_private *dev_priv = to_i915(encoder->base.dev);
+	int ret;
+
+	if (!(INTEL_GEN(dev_priv) >= 10 || IS_GEMINILAKE(dev_priv)))
+		return true;
+
+	if (!crtc_state->has_infoframe)
+		return true;
+
+	if (!conn_state->hdr_output_metadata)
+		return true;
+
+	crtc_state->infoframes.enable |=
+		intel_hdmi_infoframe_enable(HDMI_INFOFRAME_TYPE_DRM);
+
+	ret = drm_hdmi_infoframe_set_hdr_metadata(frame, conn_state);
+	if (ret < 0) {
+		DRM_DEBUG_KMS("couldn't set HDR metadata in infoframe\n");
+		return false;
+	}
+
+	ret = hdmi_drm_infoframe_check(frame);
+	if (WARN_ON(ret))
+		return false;
+
+	return true;
+}
+
 static void g4x_set_infoframes(struct intel_encoder *encoder,
 			       bool enable,
 			       const struct intel_crtc_state *crtc_state,
@@ -844,19 +898,6 @@ static void g4x_set_infoframes(struct intel_encoder *encoder,
 	intel_write_infoframe(encoder, crtc_state,
 			      HDMI_INFOFRAME_TYPE_VENDOR,
 			      &crtc_state->infoframes.hdmi);
-}
-
-static bool hdmi_sink_is_deep_color(const struct drm_connector_state *conn_state)
-{
-	struct drm_connector *connector = conn_state->connector;
-
-	/*
-	 * HDMI cloning is only supported on g4x which doesn't
-	 * support deep color or GCP infoframes anyway so no
-	 * need to worry about multiple HDMI sinks here.
-	 */
-
-	return connector->display_info.bpc > 8;
 }
 
 /*
@@ -963,8 +1004,8 @@ static void intel_hdmi_compute_gcp_infoframe(struct intel_encoder *encoder,
 	crtc_state->infoframes.enable |=
 		intel_hdmi_infoframe_enable(HDMI_PACKET_TYPE_GENERAL_CONTROL);
 
-	/* Indicate color depth whenever the sink supports deep color */
-	if (hdmi_sink_is_deep_color(conn_state))
+	/* Indicate color indication for deep color mode */
+	if (crtc_state->pipe_bpp > 24)
 		crtc_state->infoframes.gcp |= GCP_COLOR_INDICATION;
 
 	/* Enable default_phase whenever the display mode is suitably aligned */
@@ -1153,7 +1194,8 @@ static void hsw_set_infoframes(struct intel_encoder *encoder,
 
 	val &= ~(VIDEO_DIP_ENABLE_VSC_HSW | VIDEO_DIP_ENABLE_AVI_HSW |
 		 VIDEO_DIP_ENABLE_GCP_HSW | VIDEO_DIP_ENABLE_VS_HSW |
-		 VIDEO_DIP_ENABLE_GMP_HSW | VIDEO_DIP_ENABLE_SPD_HSW);
+		 VIDEO_DIP_ENABLE_GMP_HSW | VIDEO_DIP_ENABLE_SPD_HSW |
+		 VIDEO_DIP_ENABLE_DRM_GLK);
 
 	if (!enable) {
 		I915_WRITE(reg, val);
@@ -1176,6 +1218,9 @@ static void hsw_set_infoframes(struct intel_encoder *encoder,
 	intel_write_infoframe(encoder, crtc_state,
 			      HDMI_INFOFRAME_TYPE_VENDOR,
 			      &crtc_state->infoframes.hdmi);
+	intel_write_infoframe(encoder, crtc_state,
+			      HDMI_INFOFRAME_TYPE_DRM,
+			      &crtc_state->infoframes.drm);
 }
 
 void intel_dp_dual_mode_set_tmds_output(struct intel_hdmi *hdmi, bool enable)
@@ -2162,7 +2207,7 @@ static bool hdmi_deep_color_possible(const struct intel_crtc_state *crtc_state,
 	if (bpc == 10 && INTEL_GEN(dev_priv) < 11)
 		return false;
 
-	if (crtc_state->pipe_bpp <= 8*3)
+	if (crtc_state->pipe_bpp < bpc * 3)
 		return false;
 
 	if (!crtc_state->has_hdmi_sink)
@@ -2379,6 +2424,11 @@ int intel_hdmi_compute_config(struct intel_encoder *encoder,
 
 	if (!intel_hdmi_compute_hdmi_infoframe(encoder, pipe_config, conn_state)) {
 		DRM_DEBUG_KMS("bad HDMI infoframe\n");
+		return -EINVAL;
+	}
+
+	if (!intel_hdmi_compute_drm_infoframe(encoder, pipe_config, conn_state)) {
+		DRM_DEBUG_KMS("bad DRM infoframe\n");
 		return -EINVAL;
 	}
 
@@ -2620,12 +2670,12 @@ static void chv_hdmi_post_disable(struct intel_encoder *encoder,
 	struct drm_device *dev = encoder->base.dev;
 	struct drm_i915_private *dev_priv = to_i915(dev);
 
-	mutex_lock(&dev_priv->sb_lock);
+	vlv_dpio_get(dev_priv);
 
 	/* Assert data lane reset */
 	chv_data_lane_soft_reset(encoder, old_crtc_state, true);
 
-	mutex_unlock(&dev_priv->sb_lock);
+	vlv_dpio_put(dev_priv);
 }
 
 static void chv_hdmi_pre_enable(struct intel_encoder *encoder,
@@ -2720,6 +2770,10 @@ intel_hdmi_add_properties(struct intel_hdmi *intel_hdmi, struct drm_connector *c
 
 	drm_connector_attach_content_type_property(connector);
 	connector->state->picture_aspect_ratio = HDMI_PICTURE_ASPECT_NONE;
+
+	if (INTEL_GEN(dev_priv) >= 10 || IS_GEMINILAKE(dev_priv))
+		drm_object_attach_property(&connector->base,
+			connector->dev->mode_config.hdr_output_metadata_property, 0);
 
 	if (!HAS_GMCH(dev_priv))
 		drm_connector_attach_max_bpc_property(connector, 8, 12);

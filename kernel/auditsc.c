@@ -615,6 +615,11 @@ static int audit_filter_rules(struct task_struct *tsk,
 		case AUDIT_LOGINUID_SET:
 			result = audit_comparator(audit_loginuid_set(tsk), f->op, f->val);
 			break;
+		case AUDIT_SADDR_FAM:
+			if (ctx->sockaddr)
+				result = audit_comparator(ctx->sockaddr->ss_family,
+							  f->op, f->val);
+			break;
 		case AUDIT_SUBJ_USER:
 		case AUDIT_SUBJ_ROLE:
 		case AUDIT_SUBJ_TYPE:
@@ -2360,30 +2365,17 @@ void __audit_ptrace(struct task_struct *t)
 }
 
 /**
- * audit_signal_info - record signal info for shutting down audit subsystem
- * @sig: signal value
+ * audit_signal_info_syscall - record signal info for syscalls
  * @t: task being signaled
  *
  * If the audit subsystem is being terminated, record the task (pid)
  * and uid that is doing that.
  */
-int audit_signal_info(int sig, struct task_struct *t)
+int audit_signal_info_syscall(struct task_struct *t)
 {
 	struct audit_aux_data_pids *axp;
 	struct audit_context *ctx = audit_context();
-	kuid_t uid = current_uid(), auid, t_uid = task_uid(t);
-
-	if (auditd_test_task(t) &&
-	    (sig == SIGTERM || sig == SIGHUP ||
-	     sig == SIGUSR1 || sig == SIGUSR2)) {
-		audit_sig_pid = task_tgid_nr(current);
-		auid = audit_get_loginuid(current);
-		if (uid_valid(auid))
-			audit_sig_uid = auid;
-		else
-			audit_sig_uid = uid;
-		security_task_getsecid(current, &audit_sig_sid);
-	}
+	kuid_t t_uid = task_uid(t);
 
 	if (!audit_signals || audit_dummy_context())
 		return 0;

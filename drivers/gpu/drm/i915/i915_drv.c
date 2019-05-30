@@ -47,22 +47,34 @@
 #include <drm/drm_probe_helper.h>
 #include <drm/i915_drm.h>
 
+#include "gem/i915_gem_context.h"
+#include "gem/i915_gem_ioctls.h"
+#include "gt/intel_gt_pm.h"
+#include "gt/intel_reset.h"
+#include "gt/intel_workarounds.h"
+
+#include "i915_debugfs.h"
 #include "i915_drv.h"
+#include "i915_irq.h"
 #include "i915_pmu.h"
 #include "i915_query.h"
-#include "i915_reset.h"
 #include "i915_trace.h"
 #include "i915_vgpu.h"
+#include "intel_acpi.h"
 #include "intel_audio.h"
+#include "intel_bw.h"
 #include "intel_cdclk.h"
 #include "intel_csr.h"
 #include "intel_dp.h"
 #include "intel_drv.h"
 #include "intel_fbdev.h"
+#include "intel_gmbus.h"
+#include "intel_hotplug.h"
+#include "intel_overlay.h"
+#include "intel_pipe_crc.h"
 #include "intel_pm.h"
 #include "intel_sprite.h"
 #include "intel_uc.h"
-#include "intel_workarounds.h"
 
 static struct drm_driver driver;
 
@@ -186,7 +198,8 @@ intel_pch_type(const struct drm_i915_private *dev_priv, unsigned short id)
 		DRM_DEBUG_KMS("Found Kaby Lake PCH (KBP)\n");
 		WARN_ON(!IS_SKYLAKE(dev_priv) && !IS_KABYLAKE(dev_priv) &&
 			!IS_COFFEELAKE(dev_priv));
-		return PCH_KBP;
+		/* KBP is SPT compatible */
+		return PCH_SPT;
 	case INTEL_PCH_CNP_DEVICE_ID_TYPE:
 		DRM_DEBUG_KMS("Found Cannon Lake PCH (CNP)\n");
 		WARN_ON(!IS_CANNONLAKE(dev_priv) && !IS_COFFEELAKE(dev_priv));
@@ -319,8 +332,9 @@ static int i915_getparam_ioctl(struct drm_device *dev, void *data,
 {
 	struct drm_i915_private *dev_priv = to_i915(dev);
 	struct pci_dev *pdev = dev_priv->drm.pdev;
+	const struct sseu_dev_info *sseu = &RUNTIME_INFO(dev_priv)->sseu;
 	drm_i915_getparam_t *param = data;
-	int value;
+	int value = 0;
 
 	switch (param->param) {
 	case I915_PARAM_IRQ_ACTIVE:
@@ -372,12 +386,12 @@ static int i915_getparam_ioctl(struct drm_device *dev, void *data,
 		value = i915_cmd_parser_get_version(dev_priv);
 		break;
 	case I915_PARAM_SUBSLICE_TOTAL:
-		value = sseu_subslice_total(&RUNTIME_INFO(dev_priv)->sseu);
+		value = intel_sseu_subslice_total(sseu);
 		if (!value)
 			return -ENODEV;
 		break;
 	case I915_PARAM_EU_TOTAL:
-		value = RUNTIME_INFO(dev_priv)->sseu.eu_total;
+		value = sseu->eu_total;
 		if (!value)
 			return -ENODEV;
 		break;
@@ -394,7 +408,7 @@ static int i915_getparam_ioctl(struct drm_device *dev, void *data,
 		value = HAS_POOLED_EU(dev_priv);
 		break;
 	case I915_PARAM_MIN_EU_IN_POOL:
-		value = RUNTIME_INFO(dev_priv)->sseu.min_eu_in_pool;
+		value = sseu->min_eu_in_pool;
 		break;
 	case I915_PARAM_HUC_STATUS:
 		value = intel_huc_check_status(&dev_priv->huc);
@@ -433,6 +447,7 @@ static int i915_getparam_ioctl(struct drm_device *dev, void *data,
 	case I915_PARAM_HAS_EXEC_CAPTURE:
 	case I915_PARAM_HAS_EXEC_BATCH_FIRST:
 	case I915_PARAM_HAS_EXEC_FENCE_ARRAY:
+	case I915_PARAM_HAS_EXEC_SUBMIT_FENCE:
 		/* For the time being all of these are always true;
 		 * if some supported hardware does not have one of these
 		 * features this value needs to be provided from
@@ -444,12 +459,14 @@ static int i915_getparam_ioctl(struct drm_device *dev, void *data,
 		value = intel_engines_has_context_isolation(dev_priv);
 		break;
 	case I915_PARAM_SLICE_MASK:
-		value = RUNTIME_INFO(dev_priv)->sseu.slice_mask;
+		value = sseu->slice_mask;
 		if (!value)
 			return -ENODEV;
 		break;
 	case I915_PARAM_SUBSLICE_MASK:
-		value = RUNTIME_INFO(dev_priv)->sseu.subslice_mask[0];
+		/* Only copy bits from the first slice */
+		memcpy(&value, sseu->subslice_mask,
+		       min(sseu->ss_stride, (u8)sizeof(value)));
 		if (!value)
 			return -ENODEV;
 		break;
@@ -697,7 +714,7 @@ static int i915_load_modeset_init(struct drm_device *dev)
 	if (ret)
 		goto cleanup_csr;
 
-	intel_setup_gmbus(dev_priv);
+	intel_gmbus_setup(dev_priv);
 
 	/* Important: The output setup functions called by modeset_init need
 	 * working irqs for e.g. gmbus and dp aux transfers. */
@@ -732,7 +749,7 @@ cleanup_modeset:
 	intel_modeset_cleanup(dev);
 cleanup_irq:
 	drm_irq_uninstall(dev);
-	intel_teardown_gmbus(dev_priv);
+	intel_gmbus_teardown(dev_priv);
 cleanup_csr:
 	intel_csr_ucode_fini(dev_priv);
 	intel_power_domains_fini_hw(dev_priv);
@@ -884,6 +901,9 @@ static int i915_driver_init_early(struct drm_i915_private *dev_priv)
 	mutex_init(&dev_priv->backlight_lock);
 
 	mutex_init(&dev_priv->sb_lock);
+	pm_qos_add_request(&dev_priv->sb_qos,
+			   PM_QOS_CPU_DMA_LATENCY, PM_QOS_DEFAULT_VALUE);
+
 	mutex_init(&dev_priv->av_mutex);
 	mutex_init(&dev_priv->wm.wm_mutex);
 	mutex_init(&dev_priv->pps_mutex);
@@ -943,6 +963,9 @@ static void i915_driver_cleanup_early(struct drm_i915_private *dev_priv)
 	i915_gem_cleanup_early(dev_priv);
 	i915_workqueues_cleanup(dev_priv);
 	i915_engines_cleanup(dev_priv);
+
+	pm_qos_remove_request(&dev_priv->sb_qos);
+	mutex_destroy(&dev_priv->sb_lock);
 }
 
 /**
@@ -1640,6 +1663,7 @@ static int i915_driver_init_hw(struct drm_i915_private *dev_priv)
 	 */
 	intel_get_dram_info(dev_priv);
 
+	intel_bw_init_hw(dev_priv);
 
 	return 0;
 
@@ -1760,7 +1784,7 @@ static void i915_driver_unregister(struct drm_i915_private *dev_priv)
 	i915_pmu_unregister(dev_priv);
 
 	i915_teardown_sysfs(dev_priv);
-	drm_dev_unregister(&dev_priv->drm);
+	drm_dev_unplug(&dev_priv->drm);
 
 	i915_gem_shrinker_unregister(dev_priv);
 }
@@ -2322,7 +2346,7 @@ static int i915_drm_resume_early(struct drm_device *dev)
 
 	intel_power_domains_resume(dev_priv);
 
-	intel_engines_sanitize(dev_priv, true);
+	intel_gt_sanitize(dev_priv, true);
 
 	enable_rpm_wakeref_asserts(dev_priv);
 
@@ -2875,7 +2899,7 @@ static int intel_runtime_suspend(struct device *kdev)
 	 */
 	i915_gem_runtime_suspend(dev_priv);
 
-	intel_uc_suspend(dev_priv);
+	intel_uc_runtime_suspend(dev_priv);
 
 	intel_runtime_pm_disable_interrupts(dev_priv);
 
@@ -3098,7 +3122,7 @@ static const struct drm_ioctl_desc i915_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(I915_BATCHBUFFER, drm_noop, DRM_AUTH),
 	DRM_IOCTL_DEF_DRV(I915_IRQ_EMIT, drm_noop, DRM_AUTH),
 	DRM_IOCTL_DEF_DRV(I915_IRQ_WAIT, drm_noop, DRM_AUTH),
-	DRM_IOCTL_DEF_DRV(I915_GETPARAM, i915_getparam_ioctl, DRM_AUTH|DRM_RENDER_ALLOW),
+	DRM_IOCTL_DEF_DRV(I915_GETPARAM, i915_getparam_ioctl, DRM_RENDER_ALLOW),
 	DRM_IOCTL_DEF_DRV(I915_SETPARAM, drm_noop, DRM_AUTH|DRM_MASTER|DRM_ROOT_ONLY),
 	DRM_IOCTL_DEF_DRV(I915_ALLOC, drm_noop, DRM_AUTH),
 	DRM_IOCTL_DEF_DRV(I915_FREE, drm_noop, DRM_AUTH),
@@ -3111,13 +3135,13 @@ static const struct drm_ioctl_desc i915_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(I915_HWS_ADDR, drm_noop, DRM_AUTH|DRM_MASTER|DRM_ROOT_ONLY),
 	DRM_IOCTL_DEF_DRV(I915_GEM_INIT, drm_noop, DRM_AUTH|DRM_MASTER|DRM_ROOT_ONLY),
 	DRM_IOCTL_DEF_DRV(I915_GEM_EXECBUFFER, i915_gem_execbuffer_ioctl, DRM_AUTH),
-	DRM_IOCTL_DEF_DRV(I915_GEM_EXECBUFFER2_WR, i915_gem_execbuffer2_ioctl, DRM_AUTH|DRM_RENDER_ALLOW),
+	DRM_IOCTL_DEF_DRV(I915_GEM_EXECBUFFER2_WR, i915_gem_execbuffer2_ioctl, DRM_RENDER_ALLOW),
 	DRM_IOCTL_DEF_DRV(I915_GEM_PIN, i915_gem_reject_pin_ioctl, DRM_AUTH|DRM_ROOT_ONLY),
 	DRM_IOCTL_DEF_DRV(I915_GEM_UNPIN, i915_gem_reject_pin_ioctl, DRM_AUTH|DRM_ROOT_ONLY),
-	DRM_IOCTL_DEF_DRV(I915_GEM_BUSY, i915_gem_busy_ioctl, DRM_AUTH|DRM_RENDER_ALLOW),
+	DRM_IOCTL_DEF_DRV(I915_GEM_BUSY, i915_gem_busy_ioctl, DRM_RENDER_ALLOW),
 	DRM_IOCTL_DEF_DRV(I915_GEM_SET_CACHING, i915_gem_set_caching_ioctl, DRM_RENDER_ALLOW),
 	DRM_IOCTL_DEF_DRV(I915_GEM_GET_CACHING, i915_gem_get_caching_ioctl, DRM_RENDER_ALLOW),
-	DRM_IOCTL_DEF_DRV(I915_GEM_THROTTLE, i915_gem_throttle_ioctl, DRM_AUTH|DRM_RENDER_ALLOW),
+	DRM_IOCTL_DEF_DRV(I915_GEM_THROTTLE, i915_gem_throttle_ioctl, DRM_RENDER_ALLOW),
 	DRM_IOCTL_DEF_DRV(I915_GEM_ENTERVT, drm_noop, DRM_AUTH|DRM_MASTER|DRM_ROOT_ONLY),
 	DRM_IOCTL_DEF_DRV(I915_GEM_LEAVEVT, drm_noop, DRM_AUTH|DRM_MASTER|DRM_ROOT_ONLY),
 	DRM_IOCTL_DEF_DRV(I915_GEM_CREATE, i915_gem_create_ioctl, DRM_RENDER_ALLOW),
@@ -3136,7 +3160,7 @@ static const struct drm_ioctl_desc i915_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(I915_OVERLAY_ATTRS, intel_overlay_attrs_ioctl, DRM_MASTER),
 	DRM_IOCTL_DEF_DRV(I915_SET_SPRITE_COLORKEY, intel_sprite_set_colorkey_ioctl, DRM_MASTER),
 	DRM_IOCTL_DEF_DRV(I915_GET_SPRITE_COLORKEY, drm_noop, DRM_MASTER),
-	DRM_IOCTL_DEF_DRV(I915_GEM_WAIT, i915_gem_wait_ioctl, DRM_AUTH|DRM_RENDER_ALLOW),
+	DRM_IOCTL_DEF_DRV(I915_GEM_WAIT, i915_gem_wait_ioctl, DRM_RENDER_ALLOW),
 	DRM_IOCTL_DEF_DRV(I915_GEM_CONTEXT_CREATE_EXT, i915_gem_context_create_ioctl, DRM_RENDER_ALLOW),
 	DRM_IOCTL_DEF_DRV(I915_GEM_CONTEXT_DESTROY, i915_gem_context_destroy_ioctl, DRM_RENDER_ALLOW),
 	DRM_IOCTL_DEF_DRV(I915_REG_READ, i915_reg_read_ioctl, DRM_RENDER_ALLOW),
@@ -3148,6 +3172,8 @@ static const struct drm_ioctl_desc i915_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(I915_PERF_ADD_CONFIG, i915_perf_add_config_ioctl, DRM_UNLOCKED|DRM_RENDER_ALLOW),
 	DRM_IOCTL_DEF_DRV(I915_PERF_REMOVE_CONFIG, i915_perf_remove_config_ioctl, DRM_UNLOCKED|DRM_RENDER_ALLOW),
 	DRM_IOCTL_DEF_DRV(I915_QUERY, i915_query_ioctl, DRM_UNLOCKED|DRM_RENDER_ALLOW),
+	DRM_IOCTL_DEF_DRV(I915_GEM_VM_CREATE, i915_gem_vm_create_ioctl, DRM_RENDER_ALLOW),
+	DRM_IOCTL_DEF_DRV(I915_GEM_VM_DESTROY, i915_gem_vm_destroy_ioctl, DRM_RENDER_ALLOW),
 };
 
 static struct drm_driver driver = {

@@ -4,7 +4,9 @@
  * Copyright © 2018 Intel Corporation
  */
 
-#include "../i915_selftest.h"
+#include "gem/i915_gem_pm.h"
+
+#include "i915_selftest.h"
 
 #include "igt_flush_test.h"
 #include "lib_sw_fence.h"
@@ -46,7 +48,7 @@ static int __live_active_setup(struct drm_i915_private *i915,
 	for_each_engine(engine, i915, id) {
 		struct i915_request *rq;
 
-		rq = i915_request_alloc(engine, i915->kernel_context);
+		rq = i915_request_create(engine->kernel_context);
 		if (IS_ERR(rq)) {
 			err = PTR_ERR(rq);
 			break;

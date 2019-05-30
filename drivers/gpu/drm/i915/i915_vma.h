@@ -32,7 +32,7 @@
 
 #include "i915_gem_gtt.h"
 #include "i915_gem_fence_reg.h"
-#include "i915_gem_object.h"
+#include "gem/i915_gem_object.h"
 
 #include "i915_active.h"
 #include "i915_request.h"
@@ -277,8 +277,11 @@ i915_vma_compare(struct i915_vma *vma,
 	 */
 	BUILD_BUG_ON(I915_GGTT_VIEW_NORMAL >= I915_GGTT_VIEW_PARTIAL);
 	BUILD_BUG_ON(I915_GGTT_VIEW_PARTIAL >= I915_GGTT_VIEW_ROTATED);
+	BUILD_BUG_ON(I915_GGTT_VIEW_ROTATED >= I915_GGTT_VIEW_REMAPPED);
 	BUILD_BUG_ON(offsetof(typeof(*view), rotated) !=
 		     offsetof(typeof(*view), partial));
+	BUILD_BUG_ON(offsetof(typeof(*view), rotated) !=
+		     offsetof(typeof(*view), remapped));
 	return memcmp(&vma->ggtt_view.partial, &view->partial, view->type);
 }
 
@@ -294,6 +297,18 @@ void i915_vma_unlink_ctx(struct i915_vma *vma);
 void i915_vma_close(struct i915_vma *vma);
 void i915_vma_reopen(struct i915_vma *vma);
 void i915_vma_destroy(struct i915_vma *vma);
+
+#define assert_vma_held(vma) reservation_object_assert_held((vma)->resv)
+
+static inline void i915_vma_lock(struct i915_vma *vma)
+{
+	reservation_object_lock(vma->resv, NULL);
+}
+
+static inline void i915_vma_unlock(struct i915_vma *vma)
+{
+	reservation_object_unlock(vma->resv);
+}
 
 int __i915_vma_do_pin(struct i915_vma *vma,
 		      u64 size, u64 alignment, u64 flags);

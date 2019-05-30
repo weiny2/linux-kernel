@@ -277,6 +277,8 @@ patternProperties:
     description: Ecole Polytechnique Fédérale de Lausanne
   "^epson,.*":
     description: Seiko Epson Corp.
+  "^esp,.*":
+    description: Espressif Systems Co. Ltd.
   "^est,.*":
     description: ESTeem Wireless Modems
   "^ettus,.*":
@@ -287,6 +289,8 @@ patternProperties:
     description: Everest Semiconductor Co. Ltd.
   "^everspin,.*":
     description: Everspin Technologies, Inc.
+  "^evervision,.*":
+    description: Evervision Electronics Co. Ltd.
   "^exar,.*":
     description: Exar Corporation
   "^excito,.*":
@@ -371,6 +375,8 @@ patternProperties:
     description: Holt Integrated Circuits, Inc.
   "^honeywell,.*":
     description: Honeywell
+  "^hoperun,.*":
+    description: Jiangsu HopeRun Software Co., Ltd.
   "^hp,.*":
     description: Hewlett Packard
   "^holtek,.*":
@@ -666,7 +672,7 @@ patternProperties:
   "^plantower,.*":
     description: Plantower Co., Ltd
   "^plathome,.*":
-    description: Plat'Home Co., Ltd.
+    description: Plat\'Home Co., Ltd.
   "^plda,.*":
     description: PLDA
   "^plx,.*":
@@ -781,8 +787,8 @@ patternProperties:
     description: Silergy Corp.
   "^siliconmitus,.*":
     description: Silicon Mitus, Inc.
-  "^simte,.*":
-    description: k
+  "^simtek,.*":
+    description: Cypress Semiconductor Corporation (Simtek Corporation)
   "^sirf,.*":
     description: SiRF Technology, Inc.
   "^sis,.*":
@@ -849,6 +855,8 @@ patternProperties:
     description: Shenzhen Techstar Electronics Co., Ltd.
   "^terasic,.*":
     description: Terasic Inc.
+  "^tfc,.*":
+    description: Three Five Corp
   "^thine,.*":
     description: THine Electronics, Inc.
   "^ti,.*":
@@ -923,6 +931,8 @@ patternProperties:
     description: Voipac Technologies s.r.o.
   "^vot,.*":
     description: Vision Optical Technology Co., Ltd.
+  "^vxt,.*":
+    description: VXT Ltd
   "^wd,.*":
     description: Western Digital Corp.
   "^wetek,.*":
