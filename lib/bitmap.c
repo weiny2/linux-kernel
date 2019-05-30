@@ -454,11 +454,6 @@ static inline bool end_of_region(char c)
 	return __end_of_region(c) || end_of_str(c);
 }
 
-static inline bool in_str(const char *start, const char *ptr)
-{
-	return start <= ptr;
-}
-
 /*
  * The format allows commas and whitespases at the beginning
  * of the region.
@@ -473,7 +468,7 @@ static const char *bitmap_find_region(const char *str)
 
 static const char *bitmap_find_region_reverse(const char *start, const char *end)
 {
-	while (in_str(start, end) && __end_of_region(*end))
+	while (start <= end && __end_of_region(*end))
 		end--;
 
 	return end;
@@ -618,7 +613,7 @@ static const char *bitmap_get_x32_reverse(const char *start,
 
 		ret |= c << i;
 
-		if (!in_str(start, end) || __end_of_region(*end))
+		if (start > end || __end_of_region(*end))
 			goto out;
 	}
 
@@ -653,7 +648,7 @@ int bitmap_parse(const char *start, unsigned int buflen,
 	u32 *bitmap = (u32 *)maskp;
 	int unset_bit;
 
-	while (in_str(start, (end = bitmap_find_region_reverse(start, end)))) {
+	while (start <= (end = bitmap_find_region_reverse(start, end))) {
 		if (!chunks--)
 			return -EOVERFLOW;
 
