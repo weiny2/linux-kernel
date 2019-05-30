@@ -2962,94 +2962,18 @@ static int device_def_domain_type(struct device *dev)
 		 */
 		if (!pci_is_pcie(pdev)) {
 			if (!pci_is_root_bus(pdev->bus))
-				return 0;
+				return IOMMU_DOMAIN_DMA;
 			if (pdev->class >> 8 == PCI_CLASS_BRIDGE_PCI)
-				return 0;
+				return IOMMU_DOMAIN_DMA;
 		} else if (pci_pcie_type(pdev) == PCI_EXP_TYPE_PCI_BRIDGE)
-			return 0;
+			return IOMMU_DOMAIN_DMA;
 	} else {
 		if (device_has_rmrr(dev))
-			return 0;
+			return IOMMU_DOMAIN_DMA;
 	}
 
-	/*
-	 * At boot time, we don't yet know if devices will be 64-bit capable.
-	 * Assume that they will — if they turn out not to be, then we can
-	 * take them out of the 1:1 domain later.
-	 */
-	if (!startup) {
-		/*
-		 * If the device's dma_mask is less than the system's memory
-		 * size then this is not a candidate for identity mapping.
-		 */
-		u64 dma_mask = *dev->dma_mask;
-
-		if (dev->coherent_dma_mask &&
-		    dev->coherent_dma_mask < dma_mask)
-			dma_mask = dev->coherent_dma_mask;
-
-		return dma_mask >= dma_get_required_mask(dev);
-	}
-
-	return 1;
-}
-
-static int __init dev_prepare_static_identity_mapping(struct device *dev, int hw)
-{
-	int ret;
-
-	if (!iommu_should_identity_map(dev, 1))
-		return 0;
-
-	ret = domain_add_dev_info(si_domain, dev);
-	if (!ret)
-		dev_info(dev, "%s identity mapping\n",
-			 hw ? "Hardware" : "Software");
-	else if (ret == -ENODEV)
-		/* device not associated with an iommu */
-		ret = 0;
-
-	return ret;
-}
-
-
-static int __init iommu_prepare_static_identity_mapping(int hw)
-{
-	struct pci_dev *pdev = NULL;
-	struct dmar_drhd_unit *drhd;
-	/* To avoid a -Wunused-but-set-variable warning. */
-	struct intel_iommu *iommu __maybe_unused;
-	struct device *dev;
-	int i;
-	int ret = 0;
-
-	for_each_pci_dev(pdev) {
-		ret = dev_prepare_static_identity_mapping(&pdev->dev, hw);
-		if (ret)
-			return ret;
-	}
-
-	for_each_active_iommu(iommu, drhd)
-		for_each_active_dev_scope(drhd->devices, drhd->devices_cnt, i, dev) {
-			struct acpi_device_physical_node *pn;
-			struct acpi_device *adev;
-
-			if (dev->bus != &acpi_bus_type)
-				continue;
-
-			adev= to_acpi_device(dev);
-			mutex_lock(&adev->physical_node_lock);
-			list_for_each_entry(pn, &adev->physical_node_list, node) {
-				ret = dev_prepare_static_identity_mapping(pn->dev, hw);
-				if (ret)
-					break;
-			}
-			mutex_unlock(&adev->physical_node_lock);
-			if (ret)
-				return ret;
-		}
-
-	return 0;
+	return (iommu_identity_mapping & IDENTMAP_ALL) ?
+			IOMMU_DOMAIN_IDENTITY : 0;
 }
 
 static void intel_iommu_init_qi(struct intel_iommu *iommu)
