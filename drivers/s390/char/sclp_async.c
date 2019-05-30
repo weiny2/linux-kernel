@@ -64,9 +64,6 @@ static struct notifier_block call_home_panic_nb = {
 	.priority = INT_MAX,
 };
 
-static int zero;
-static int one = 1;
-
 static struct ctl_table callhome_table[] = {
 	{
 		.procname	= "callhome",
@@ -74,8 +71,8 @@ static struct ctl_table callhome_table[] = {
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec_minmax,
-		.extra1		= &zero,
-		.extra2		= &one,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_ONE,
 	},
 	{}
 };
