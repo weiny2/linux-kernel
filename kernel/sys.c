@@ -2128,8 +2128,9 @@ static int prctl_set_mm(int opt, unsigned long addr,
 	error = -EINVAL;
 
 	/*
-	 * arg_lock protects concurent updates of arg boundaries, we need mmap_sem for
-	 * a) concurrent sys_brk, b) finding VMA for addr validation.
+	 * arg_lock protects concurent updates of arg boundaries, we need
+	 * mmap_sem for a) concurrent sys_brk, b) finding VMA for addr
+	 * validation.
 	 */
 	down_read(&mm->mmap_sem);
 	vma = find_vma(mm, addr);
