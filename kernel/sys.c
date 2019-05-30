@@ -1984,7 +1984,8 @@ static int prctl_set_mm_map(int opt, const void __user *addr, unsigned long data
 		/*
 		 * Someone is trying to cheat the auxv vector.
 		 */
-		if (!prctl_map.auxv || prctl_map.auxv_size > sizeof(mm->saved_auxv))
+		if (!prctl_map.auxv ||
+				prctl_map.auxv_size > sizeof(mm->saved_auxv))
 			return -EINVAL;
 
 		memset(user_auxv, 0, sizeof(user_auxv));
@@ -2094,7 +2095,11 @@ static int prctl_set_mm(int opt, unsigned long addr,
 			unsigned long arg4, unsigned long arg5)
 {
 	struct mm_struct *mm = current->mm;
-	struct prctl_mm_map prctl_map = { .auxv = NULL, .auxv_size = 0, .exe_fd = -1 };
+	struct prctl_mm_map prctl_map = {
+		.auxv = NULL,
+		.auxv_size = 0,
+		.exe_fd = -1,
+	};
 	struct vm_area_struct *vma;
 	int error;
 
