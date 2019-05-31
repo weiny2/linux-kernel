@@ -60,13 +60,13 @@ struct hfi1_ibdev;
 struct fault {
 	struct fault_attr attr;
 	struct dentry *dir;
-	u64 n_rxfaults[(1U << BITS_PER_BYTE)];
-	u64 n_txfaults[(1U << BITS_PER_BYTE)];
+	u64 n_rxfaults[BIT(BITS_PER_BYTE)];
+	u64 n_txfaults[BIT(BITS_PER_BYTE)];
 	u64 fault_skip;
 	u64 skip;
 	u64 fault_skip_usec;
 	unsigned long skip_usec;
-	unsigned long opcodes[(1U << BITS_PER_BYTE) / BITS_PER_LONG];
+	unsigned long opcodes[BIT(BITS_PER_BYTE) / BITS_PER_LONG];
 	bool enable;
 	bool suppress_err;
 	bool opcode;
