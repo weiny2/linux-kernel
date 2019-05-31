@@ -1390,6 +1390,63 @@ static int io_sync_file_range(struct io_kiocb *req,
 	return 0;
 }
 
+#if defined(CONFIG_NET)
+static int io_send_recvmsg(struct io_kiocb *req, const struct io_uring_sqe *sqe,
+			   bool force_nonblock,
+		   long (*fn)(struct socket *, struct user_msghdr __user *,
+				unsigned int))
+{
+	struct socket *sock;
+	int ret;
+
+	if (unlikely(req->ctx->flags & IORING_SETUP_IOPOLL))
+		return -EINVAL;
+
+	sock = sock_from_file(req->file, &ret);
+	if (sock) {
+		struct user_msghdr __user *msg;
+		unsigned flags;
+
+		flags = READ_ONCE(sqe->msg_flags);
+		if (flags & MSG_DONTWAIT)
+			req->flags |= REQ_F_NOWAIT;
+		else if (force_nonblock)
+			flags |= MSG_DONTWAIT;
+
+		msg = (struct user_msghdr __user *) (unsigned long)
+			READ_ONCE(sqe->addr);
+
+		ret = fn(sock, msg, flags);
+		if (force_nonblock && ret == -EAGAIN)
+			return ret;
+	}
+
+	io_cqring_add_event(req->ctx, sqe->user_data, ret);
+	io_put_req(req);
+	return 0;
+}
+#endif
+
+static int io_sendmsg(struct io_kiocb *req, const struct io_uring_sqe *sqe,
+		      bool force_nonblock)
+{
+#if defined(CONFIG_NET)
+	return io_send_recvmsg(req, sqe, force_nonblock, __sys_sendmsg_sock);
+#else
+	return -EOPNOTSUPP;
+#endif
+}
+
+static int io_recvmsg(struct io_kiocb *req, const struct io_uring_sqe *sqe,
+		      bool force_nonblock)
+{
+#if defined(CONFIG_NET)
+	return io_send_recvmsg(req, sqe, force_nonblock, __sys_recvmsg_sock);
+#else
+	return -EOPNOTSUPP;
+#endif
+}
+
 static void io_poll_remove_one(struct io_kiocb *req)
 {
 	struct io_poll_iocb *poll = &req->poll;
@@ -1674,6 +1731,12 @@ static int __io_submit_sqe(struct io_ring_ctx *ctx, struct io_kiocb *req,
 		break;
 	case IORING_OP_SYNC_FILE_RANGE:
 		ret = io_sync_file_range(req, s->sqe, force_nonblock);
+		break;
+	case IORING_OP_SENDMSG:
+		ret = io_sendmsg(req, s->sqe, force_nonblock);
+		break;
+	case IORING_OP_RECVMSG:
+		ret = io_recvmsg(req, s->sqe, force_nonblock);
 		break;
 	default:
 		ret = -EINVAL;
