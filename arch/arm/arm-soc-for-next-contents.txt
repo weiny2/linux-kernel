@@ -1,0 +1,37 @@
+arm/soc
+
+arm/dt
+
+arm/drivers
+
+arm/defconfig
+
+arm/late
+	patch
+		soc: ixp4xx: qmgr: Fix an NULL vs IS_ERR() check in probe
+		ARM: ixp4xx: Remove duplicated include from common.c
+	omap/fixes
+		git://git.kernel.org/pub/scm/linux/kernel/git/tmlind/linux-omap tags/omap-for-v5.1/fixes-rc6
+	mvebu/arm
+		git://git.infradead.org/linux-mvebu tags/mvebu-arm-5.2-1
+	imx/fix
+		git://git.kernel.org/pub/scm/linux/kernel/git/leo/linux tags/soc-fsl-fix-v5.1
+	socfpga/defconfig2
+		git://git.kernel.org/pub/scm/linux/kernel/git/dinguyen/linux tags/socfpga_arm32_defconfig_for_v5.2
+	patch
+		Opt out of scripts/get_maintainer.pl
+	<no branch> (6d6165603e162e3d391f35853a4ab232ab0db064)
+		git://git.kernel.org/pub/scm/linux/kernel/git/tegra/linux tags/tegra-for-5.2-bus-fixes
+	<no branch> (2e988a83874b689f9e095cf60b40f1a8aff6731a)
+		git://git.kernel.org/pub/scm/linux/kernel/git/tegra/linux tags/tegra-for-5.2-arm64-soc-fixes
+	<no branch> (7278358407be770130b6b72567c1b5831c6eef28)
+		git://git.kernel.org/pub/scm/linux/kernel/git/tegra/linux tags/tegra-for-5.2-arm64-dt-fixes
+	<no branch> (c60fed1dfd4472bc8ac31b20c833c0ef3e049511)
+		git://git.kernel.org/pub/scm/linux/kernel/git/at91/linux tags/at91-5.2-defconfig
+	<no branch> (2725d70aa5138284ba2cebf0ef51dd23e0c9ea21)
+		git://git.kernel.org/pub/scm/linux/kernel/git/at91/linux tags/at91-5.2-soc
+	patch
+		arm64: dts: sprd: Add clock properties for serial devices
+
+arm/fixes
+
