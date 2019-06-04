@@ -19,7 +19,7 @@ struct dlm_config_node {
 	uint32_t comm_seq;
 };
 
-#define DLM_MAX_ADDR_COUNT 3
+#define DLM_MAX_ADDR_COUNT 9
 
 struct dlm_config_info {
 	int ci_tcp_port;
@@ -47,6 +47,7 @@ int dlm_config_nodes(char *lsname, struct dlm_config_node **nodes_out,
 int dlm_comm_seq(int nodeid, uint32_t *seq);
 int dlm_our_nodeid(void);
 int dlm_our_addr(struct sockaddr_storage *addr, int num);
+int dlm_bind_all(void);
 
 #endif				/* __CONFIG_DOT_H__ */
 
