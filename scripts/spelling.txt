@@ -1009,6 +1009,8 @@ programers||programmers
 programm||program
 programms||programs
 progresss||progress
+prohibitted||prohibited
+prohibitting||prohibiting
 promiscous||promiscuous
 promps||prompts
 pronnounced||pronounced
@@ -1145,7 +1147,6 @@ senarios||scenarios
 sentivite||sensitive
 separatly||separately
 sepcify||specify
-sepc||spec
 seperated||separated
 seperately||separately
 seperate||separate
