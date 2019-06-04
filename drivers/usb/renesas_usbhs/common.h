@@ -104,6 +104,7 @@ struct usbhs_priv;
 
 /* SYSCFG */
 #define SCKE	(1 << 10)	/* USB Module Clock Enable */
+#define CNEN	(1 << 8)	/* Single-ended receiver operation Enable */
 #define HSE	(1 << 7)	/* High-Speed Operation Enable */
 #define DCFM	(1 << 6)	/* Controller Function Select */
 #define DRPD	(1 << 5)	/* D+ Line/D- Line Resistance Control */
@@ -260,8 +261,6 @@ struct usbhs_priv {
 
 	spinlock_t		lock;
 
-	u32 flags;
-
 	/*
 	 * module control
 	 */
@@ -280,6 +279,11 @@ struct usbhs_priv {
 	struct phy *phy;
 	struct reset_control *rsts;
 	struct clk *clks[2];
+};
+
+struct usbhs_of_data {
+	const struct renesas_usbhs_platform_callback	*platform_callback;
+	const struct renesas_usbhs_driver_param		param;
 };
 
 /*
