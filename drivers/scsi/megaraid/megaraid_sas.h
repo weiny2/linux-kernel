@@ -21,8 +21,8 @@
 /*
  * MegaRAID SAS Driver meta data
  */
-#define MEGASAS_VERSION				"07.707.51.00-rc1"
-#define MEGASAS_RELDATE				"February 7, 2019"
+#define MEGASAS_VERSION				"07.708.03.00-rc1"
+#define MEGASAS_RELDATE				"March 14, 2019"
 
 /*
  * Device IDs
@@ -123,6 +123,8 @@
 #define MFI_RESET_ADAPTER			0x00000002
 #define MEGAMFI_FRAME_SIZE			64
 
+#define MFI_STATE_FAULT_CODE			0x0FFF0000
+#define MFI_STATE_FAULT_SUBCODE			0x0000FF00
 /*
  * During FW init, clear pending cmds & reset state using inbound_msg_0
  *
@@ -1483,7 +1485,9 @@ struct megasas_ctrl_info {
 #define MEGASAS_FW_BUSY				1
 
 /* Driver's internal Logging levels*/
-#define OCR_LOGS    (1 << 0)
+#define OCR_DEBUG    (1 << 0)
+#define TM_DEBUG     (1 << 1)
+#define LD_PD_DEBUG    (1 << 2)
 
 #define SCAN_PD_CHANNEL	0x1
 #define SCAN_VD_CHANNEL	0x2
@@ -1559,6 +1563,7 @@ enum FW_BOOT_CONTEXT {
 #define MFI_IO_TIMEOUT_SECS			180
 #define MEGASAS_SRIOV_HEARTBEAT_INTERVAL_VF	(5 * HZ)
 #define MEGASAS_OCR_SETTLE_TIME_VF		(1000 * 30)
+#define MEGASAS_SRIOV_MAX_RESET_TRIES_VF	1
 #define MEGASAS_ROUTINE_WAIT_TIME_VF		300
 #define MFI_REPLY_1078_MESSAGE_INTERRUPT	0x80000000
 #define MFI_REPLY_GEN2_MESSAGE_INTERRUPT	0x00000001
@@ -2160,6 +2165,9 @@ struct megasas_aen_event {
 struct megasas_irq_context {
 	struct megasas_instance *instance;
 	u32 MSIxIndex;
+	u32 os_irq;
+	struct irq_poll irqpoll;
+	bool irq_poll_scheduled;
 };
 
 struct MR_DRV_SYSTEM_INFO {
@@ -2246,6 +2254,7 @@ struct megasas_instance {
 	u32 secure_jbod_support;
 	u32 support_morethan256jbod; /* FW support for more than 256 PD/JBOD */
 	bool use_seqnum_jbod_fp;   /* Added for PD sequence */
+	bool smp_affinity_enable;
 	spinlock_t crashdump_lock;
 
 	struct megasas_register_set __iomem *reg_set;
@@ -2263,6 +2272,7 @@ struct megasas_instance {
 	u16 ldio_threshold;
 	u16 cur_can_queue;
 	u32 max_sectors_per_req;
+	bool msix_load_balance;
 	struct megasas_aen_event *ev;
 
 	struct megasas_cmd **cmd_list;
@@ -2290,6 +2300,7 @@ struct megasas_instance {
 	struct pci_dev *pdev;
 	u32 unique_id;
 	u32 fw_support_ieee;
+	u32 threshold_reply_count;
 
 	atomic_t fw_outstanding;
 	atomic_t ldio_outstanding;
@@ -2299,6 +2310,7 @@ struct megasas_instance {
 	atomic_t sge_holes_type1;
 	atomic_t sge_holes_type2;
 	atomic_t sge_holes_type3;
+	atomic64_t total_io_count;
 
 	struct megasas_instance_template *instancet;
 	struct tasklet_struct isr_tasklet;
@@ -2366,6 +2378,10 @@ struct megasas_instance {
 	u8 task_abort_tmo;
 	u8 max_reset_tmo;
 	u8 snapdump_wait_time;
+#ifdef CONFIG_DEBUG_FS
+	struct dentry *debugfs_root;
+	struct dentry *raidmap_dump;
+#endif
 	u8 enable_fw_dev_list;
 };
 struct MR_LD_VF_MAP {
@@ -2623,4 +2639,9 @@ void megasas_fusion_stop_watchdog(struct megasas_instance *instance);
 void megasas_set_dma_settings(struct megasas_instance *instance,
 			      struct megasas_dcmd_frame *dcmd,
 			      dma_addr_t dma_addr, u32 dma_len);
+int megasas_adp_reset_wait_for_ready(struct megasas_instance *instance,
+				     bool do_adp_reset,
+				     int ocr_context);
+int megasas_irqpoll(struct irq_poll *irqpoll, int budget);
+void megasas_dump_fusion_io(struct scsi_cmnd *scmd);
 #endif				/*LSI_MEGARAID_SAS_H */

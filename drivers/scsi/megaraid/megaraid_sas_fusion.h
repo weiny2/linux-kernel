@@ -88,7 +88,6 @@ enum MR_RAID_FLAGS_IO_SUB_TYPE {
 
 #define MEGASAS_FP_CMD_LEN	16
 #define MEGASAS_FUSION_IN_RESET 0
-#define THRESHOLD_REPLY_COUNT 50
 #define RAID_1_PEER_CMDS 2
 #define JBOD_MAPS_COUNT	2
 #define MEGASAS_REDUCE_QD_COUNT 64
@@ -1347,6 +1346,11 @@ struct  MR_SNAPDUMP_PROPERTIES {
 	u8       cur_num_supported;
 	u8       trigger_min_num_sec_before_ocr;
 	u8       reserved[12];
+};
+
+struct megasas_debugfs_buffer {
+	void *buf;
+	u32 len;
 };
 
 void megasas_free_cmds_fusion(struct megasas_instance *instance);
