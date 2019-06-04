@@ -38,7 +38,7 @@ struct hash_testvec {
 	const char *key;
 	const char *plaintext;
 	const char *digest;
-	unsigned short psize;
+	unsigned int psize;
 	unsigned short ksize;
 	int setkey_error;
 	int digest_error;
@@ -69,7 +69,7 @@ struct cipher_testvec {
 	const char *ctext;
 	unsigned char wk; /* weak key flag */
 	unsigned short klen;
-	unsigned short len;
+	unsigned int len;
 	bool fips_skip;
 	bool generates_iv;
 	int setkey_error;
@@ -105,9 +105,9 @@ struct aead_testvec {
 	unsigned char novrfy;
 	unsigned char wk;
 	unsigned char klen;
-	unsigned short plen;
-	unsigned short clen;
-	unsigned short alen;
+	unsigned int plen;
+	unsigned int clen;
+	unsigned int alen;
 	int setkey_error;
 	int setauthsize_error;
 	int crypt_error;
