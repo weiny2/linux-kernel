@@ -99,6 +99,7 @@
 #include <linux/mmu_notifier.h>
 #include <linux/printk.h>
 #include <linux/swapops.h>
+#include <linux/sched/sysctl.h>
 
 #include <asm/tlbflush.h>
 #include <linux/uaccess.h>
@@ -2612,9 +2613,17 @@ static void __init check_numabalancing_enable(void)
 	if (IS_ENABLED(CONFIG_NUMA_BALANCING_DEFAULT_ENABLED))
 		numabalancing_default = true;
 
-	/* Parsed by setup_numabalancing. override == 1 enables, -1 disables */
-	if (numabalancing_override)
-		set_numabalancing_state(numabalancing_override == 1);
+	/*
+	 * Parsed by setup_numabalancing. override == -1 disables,
+	 * > 0 numa balancing mode
+	 */
+	if (numabalancing_override) {
+		sysctl_numa_balancing_mode =
+			numabalancing_override == -1 ?
+			NUMA_BALANCING_DISABLED :
+			numabalancing_override;
+		set_numabalancing_state(numabalancing_override > 0);
+	}
 
 	if (num_online_nodes() > 1 && !numabalancing_override) {
 		pr_info("%s automatic NUMA balancing. Configure with numa_balancing= or the kernel.numa_balancing sysctl\n",
@@ -2630,7 +2639,10 @@ static int __init setup_numabalancing(char *str)
 		goto out;
 
 	if (!strcmp(str, "enable")) {
-		numabalancing_override = 1;
+		numabalancing_override = NUMA_BALANCING_DEFAULT;
+		ret = 1;
+	} else if (!strcmp(str, "hmem")) {
+		numabalancing_override = NUMA_BALANCING_HMEM;
 		ret = 1;
 	} else if (!strcmp(str, "disable")) {
 		numabalancing_override = -1;

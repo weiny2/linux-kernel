@@ -33,6 +33,13 @@ enum sched_tunable_scaling {
 };
 extern enum sched_tunable_scaling sysctl_sched_tunable_scaling;
 
+enum numa_balancing_mode {
+	NUMA_BALANCING_DISABLED,
+	NUMA_BALANCING_DEFAULT,
+	NUMA_BALANCING_HMEM,
+};
+
+extern int sysctl_numa_balancing_mode;
 extern unsigned int sysctl_numa_balancing_scan_delay;
 extern unsigned int sysctl_numa_balancing_scan_period_min;
 extern unsigned int sysctl_numa_balancing_scan_period_max;
