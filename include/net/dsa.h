@@ -18,6 +18,7 @@
 #include <linux/net_tstamp.h>
 #include <linux/phy.h>
 #include <linux/platform_data/dsa.h>
+#include <linux/phylink.h>
 #include <net/devlink.h>
 #include <net/switchdev.h>
 
@@ -189,6 +190,7 @@ struct dsa_port {
 	struct net_device	*bridge_dev;
 	struct devlink_port	devlink_port;
 	struct phylink		*pl;
+	struct phylink_config	pl_config;
 
 	struct work_struct	xmit_work;
 	struct sk_buff_head	xmit_queue;

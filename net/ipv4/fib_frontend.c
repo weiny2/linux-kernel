@@ -188,7 +188,7 @@ int fib_unmerge(struct net *net)
 	return 0;
 }
 
-static void fib_flush(struct net *net)
+void fib_flush(struct net *net)
 {
 	int flushed = 0;
 	unsigned int h;
@@ -536,14 +536,22 @@ static int rtentry_to_fib_config(struct net *net, int cmd, struct rtentry *rt,
 		cfg->fc_oif = dev->ifindex;
 		cfg->fc_table = l3mdev_fib_table(dev);
 		if (colon) {
-			struct in_ifaddr *ifa;
-			struct in_device *in_dev = __in_dev_get_rtnl(dev);
+			const struct in_ifaddr *ifa;
+			struct in_device *in_dev;
+
+			in_dev = __in_dev_get_rtnl(dev);
 			if (!in_dev)
 				return -ENODEV;
+
 			*colon = ':';
-			for (ifa = in_dev->ifa_list; ifa; ifa = ifa->ifa_next)
+
+			rcu_read_lock();
+			in_dev_for_each_ifa_rcu(ifa, in_dev) {
 				if (strcmp(ifa->ifa_label, devname) == 0)
 					break;
+			}
+			rcu_read_unlock();
+
 			if (!ifa)
 				return -ENODEV;
 			cfg->fc_prefsrc = ifa->ifa_local;
@@ -641,6 +649,7 @@ int ip_rt_ioctl(struct net *net, unsigned int cmd, struct rtentry *rt)
 }
 
 const struct nla_policy rtm_ipv4_policy[RTA_MAX + 1] = {
+	[RTA_UNSPEC]		= { .strict_start_type = RTA_DPORT + 1 },
 	[RTA_DST]		= { .type = NLA_U32 },
 	[RTA_SRC]		= { .type = NLA_U32 },
 	[RTA_IIF]		= { .type = NLA_U32 },
@@ -1172,8 +1181,8 @@ void fib_del_ifaddr(struct in_ifaddr *ifa, struct in_ifaddr *iprim)
 	 *
 	 * Scan address list to be sure that addresses are really gone.
 	 */
-
-	for (ifa1 = in_dev->ifa_list; ifa1; ifa1 = ifa1->ifa_next) {
+	rcu_read_lock();
+	in_dev_for_each_ifa_rcu(ifa1, in_dev) {
 		if (ifa1 == ifa) {
 			/* promotion, keep the IP */
 			gone = 0;
@@ -1241,6 +1250,7 @@ void fib_del_ifaddr(struct in_ifaddr *ifa, struct in_ifaddr *iprim)
 			}
 		}
 	}
+	rcu_read_unlock();
 
 no_promotions:
 	if (!(ok & BRD_OK))
@@ -1410,6 +1420,7 @@ static int fib_netdev_event(struct notifier_block *this, unsigned long event, vo
 	struct netdev_notifier_info_ext *info_ext = ptr;
 	struct in_device *in_dev;
 	struct net *net = dev_net(dev);
+	struct in_ifaddr *ifa;
 	unsigned int flags;
 
 	if (event == NETDEV_UNREGISTER) {
@@ -1424,9 +1435,9 @@ static int fib_netdev_event(struct notifier_block *this, unsigned long event, vo
 
 	switch (event) {
 	case NETDEV_UP:
-		for_ifa(in_dev) {
+		in_dev_for_each_ifa_rtnl(ifa, in_dev) {
 			fib_add_ifaddr(ifa);
-		} endfor_ifa(in_dev);
+		}
 #ifdef CONFIG_IP_ROUTE_MULTIPATH
 		fib_sync_up(dev, RTNH_F_DEAD);
 #endif

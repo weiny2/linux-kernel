@@ -390,6 +390,7 @@ void qede_fill_by_demand_stats(struct qede_dev *edev)
 	p_common->brb_discards = stats.common.brb_discards;
 	p_common->tx_mac_ctrl_frames = stats.common.tx_mac_ctrl_frames;
 	p_common->link_change_count = stats.common.link_change_count;
+	p_common->ptp_skip_txts = edev->ptp_skip_txts;
 
 	if (QEDE_IS_BB(edev)) {
 		struct qede_stats_bb *p_bb = &edev->stats.bb;
@@ -1306,7 +1307,8 @@ static void qede_free_mem_sb(struct qede_dev *edev, struct qed_sb_info *sb_info,
 			     u16 sb_id)
 {
 	if (sb_info->sb_virt) {
-		edev->ops->common->sb_release(edev->cdev, sb_info, sb_id);
+		edev->ops->common->sb_release(edev->cdev, sb_info, sb_id,
+					      QED_SB_TYPE_L2_QUEUE);
 		dma_free_coherent(&edev->pdev->dev, sizeof(*sb_info->sb_virt),
 				  (void *)sb_info->sb_virt, sb_info->sb_phys);
 		memset(sb_info, 0, sizeof(*sb_info));
@@ -2230,6 +2232,8 @@ out:
 
 	if (mode != QEDE_UNLOAD_RECOVERY)
 		DP_NOTICE(edev, "Link is down\n");
+
+	edev->ptp_skip_txts = 0;
 
 	DP_INFO(edev, "Ending qede unload\n");
 }

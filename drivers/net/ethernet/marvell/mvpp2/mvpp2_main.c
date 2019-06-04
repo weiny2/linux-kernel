@@ -56,9 +56,9 @@ static struct {
 /* The prototype is added here to be used in start_dev when using ACPI. This
  * will be removed once phylink is used for all modes (dt+ACPI).
  */
-static void mvpp2_mac_config(struct net_device *dev, unsigned int mode,
+static void mvpp2_mac_config(struct phylink_config *config, unsigned int mode,
 			     const struct phylink_link_state *state);
-static void mvpp2_mac_link_up(struct net_device *dev, unsigned int mode,
+static void mvpp2_mac_link_up(struct phylink_config *config, unsigned int mode,
 			      phy_interface_t interface, struct phy_device *phy);
 
 /* Queue modes */
@@ -3237,9 +3237,9 @@ static void mvpp2_start_dev(struct mvpp2_port *port)
 		struct phylink_link_state state = {
 			.interface = port->phy_interface,
 		};
-		mvpp2_mac_config(port->dev, MLO_AN_INBAND, &state);
-		mvpp2_mac_link_up(port->dev, MLO_AN_INBAND, port->phy_interface,
-				  NULL);
+		mvpp2_mac_config(&port->phylink_config, MLO_AN_INBAND, &state);
+		mvpp2_mac_link_up(&port->phylink_config, MLO_AN_INBAND,
+				  port->phy_interface, NULL);
 	}
 
 	netif_tx_start_all_queues(port->dev);
@@ -3954,7 +3954,7 @@ static int mvpp2_ethtool_get_rxnfc(struct net_device *dev,
 		ret = mvpp2_ethtool_cls_rule_get(port, info);
 		break;
 	case ETHTOOL_GRXCLSRLALL:
-		for (i = 0; i < MVPP2_N_RFS_RULES; i++) {
+		for (i = 0; i < MVPP2_N_RFS_ENTRIES_PER_FLOW; i++) {
 			if (port->rfs_rules[i])
 				rules[loc++] = i;
 		}
@@ -4000,24 +4000,25 @@ static int mvpp2_ethtool_get_rxfh(struct net_device *dev, u32 *indir, u8 *key,
 				  u8 *hfunc)
 {
 	struct mvpp2_port *port = netdev_priv(dev);
+	int ret = 0;
 
 	if (!mvpp22_rss_is_supported())
 		return -EOPNOTSUPP;
 
 	if (indir)
-		memcpy(indir, port->indir,
-		       ARRAY_SIZE(port->indir) * sizeof(port->indir[0]));
+		ret = mvpp22_port_rss_ctx_indir_get(port, 0, indir);
 
 	if (hfunc)
 		*hfunc = ETH_RSS_HASH_CRC32;
 
-	return 0;
+	return ret;
 }
 
 static int mvpp2_ethtool_set_rxfh(struct net_device *dev, const u32 *indir,
 				  const u8 *key, const u8 hfunc)
 {
 	struct mvpp2_port *port = netdev_priv(dev);
+	int ret = 0;
 
 	if (!mvpp22_rss_is_supported())
 		return -EOPNOTSUPP;
@@ -4028,15 +4029,58 @@ static int mvpp2_ethtool_set_rxfh(struct net_device *dev, const u32 *indir,
 	if (key)
 		return -EOPNOTSUPP;
 
-	if (indir) {
-		memcpy(port->indir, indir,
-		       ARRAY_SIZE(port->indir) * sizeof(port->indir[0]));
-		mvpp22_rss_fill_table(port, port->id);
-	}
+	if (indir)
+		ret = mvpp22_port_rss_ctx_indir_set(port, 0, indir);
 
-	return 0;
+	return ret;
 }
 
+static int mvpp2_ethtool_get_rxfh_context(struct net_device *dev, u32 *indir,
+					  u8 *key, u8 *hfunc, u32 rss_context)
+{
+	struct mvpp2_port *port = netdev_priv(dev);
+	int ret = 0;
+
+	if (!mvpp22_rss_is_supported())
+		return -EOPNOTSUPP;
+
+	if (hfunc)
+		*hfunc = ETH_RSS_HASH_CRC32;
+
+	if (indir)
+		ret = mvpp22_port_rss_ctx_indir_get(port, rss_context, indir);
+
+	return ret;
+}
+
+static int mvpp2_ethtool_set_rxfh_context(struct net_device *dev,
+					  const u32 *indir, const u8 *key,
+					  const u8 hfunc, u32 *rss_context,
+					  bool delete)
+{
+	struct mvpp2_port *port = netdev_priv(dev);
+	int ret;
+
+	if (!mvpp22_rss_is_supported())
+		return -EOPNOTSUPP;
+
+	if (hfunc != ETH_RSS_HASH_NO_CHANGE && hfunc != ETH_RSS_HASH_CRC32)
+		return -EOPNOTSUPP;
+
+	if (key)
+		return -EOPNOTSUPP;
+
+	if (delete)
+		return mvpp22_port_rss_ctx_delete(port, *rss_context);
+
+	if (*rss_context == ETH_RXFH_CONTEXT_ALLOC) {
+		ret = mvpp22_port_rss_ctx_create(port, rss_context);
+		if (ret)
+			return ret;
+	}
+
+	return mvpp22_port_rss_ctx_indir_set(port, *rss_context, indir);
+}
 /* Device ops */
 
 static const struct net_device_ops mvpp2_netdev_ops = {
@@ -4073,7 +4117,8 @@ static const struct ethtool_ops mvpp2_eth_tool_ops = {
 	.get_rxfh_indir_size	= mvpp2_ethtool_get_rxfh_indir_size,
 	.get_rxfh		= mvpp2_ethtool_get_rxfh,
 	.set_rxfh		= mvpp2_ethtool_set_rxfh,
-
+	.get_rxfh_context	= mvpp2_ethtool_get_rxfh_context,
+	.set_rxfh_context	= mvpp2_ethtool_set_rxfh_context,
 };
 
 /* Used for PPv2.1, or PPv2.2 with the old Device Tree binding that
@@ -4416,11 +4461,12 @@ static void mvpp2_port_copy_mac_addr(struct net_device *dev, struct mvpp2 *priv,
 	eth_hw_addr_random(dev);
 }
 
-static void mvpp2_phylink_validate(struct net_device *dev,
+static void mvpp2_phylink_validate(struct phylink_config *config,
 				   unsigned long *supported,
 				   struct phylink_link_state *state)
 {
-	struct mvpp2_port *port = netdev_priv(dev);
+	struct mvpp2_port *port = container_of(config, struct mvpp2_port,
+					       phylink_config);
 	__ETHTOOL_DECLARE_LINK_MODE_MASK(mask) = { 0, };
 
 	/* Invalid combinations */
@@ -4544,10 +4590,11 @@ static void mvpp2_gmac_link_state(struct mvpp2_port *port,
 		state->pause |= MLO_PAUSE_TX;
 }
 
-static int mvpp2_phylink_mac_link_state(struct net_device *dev,
+static int mvpp2_phylink_mac_link_state(struct phylink_config *config,
 					struct phylink_link_state *state)
 {
-	struct mvpp2_port *port = netdev_priv(dev);
+	struct mvpp2_port *port = container_of(config, struct mvpp2_port,
+					       phylink_config);
 
 	if (port->priv->hw_version == MVPP22 && port->gop_id == 0) {
 		u32 mode = readl(port->base + MVPP22_XLG_CTRL3_REG);
@@ -4563,9 +4610,10 @@ static int mvpp2_phylink_mac_link_state(struct net_device *dev,
 	return 1;
 }
 
-static void mvpp2_mac_an_restart(struct net_device *dev)
+static void mvpp2_mac_an_restart(struct phylink_config *config)
 {
-	struct mvpp2_port *port = netdev_priv(dev);
+	struct mvpp2_port *port = container_of(config, struct mvpp2_port,
+					       phylink_config);
 	u32 val = readl(port->base + MVPP2_GMAC_AUTONEG_CONFIG);
 
 	writel(val | MVPP2_GMAC_IN_BAND_RESTART_AN,
@@ -4750,9 +4798,10 @@ static void mvpp2_gmac_config(struct mvpp2_port *port, unsigned int mode,
 	}
 }
 
-static void mvpp2_mac_config(struct net_device *dev, unsigned int mode,
+static void mvpp2_mac_config(struct phylink_config *config, unsigned int mode,
 			     const struct phylink_link_state *state)
 {
+	struct net_device *dev = to_net_dev(config->dev);
 	struct mvpp2_port *port = netdev_priv(dev);
 	bool change_interface = port->phy_interface != state->interface;
 
@@ -4792,9 +4841,10 @@ static void mvpp2_mac_config(struct net_device *dev, unsigned int mode,
 	mvpp2_port_enable(port);
 }
 
-static void mvpp2_mac_link_up(struct net_device *dev, unsigned int mode,
+static void mvpp2_mac_link_up(struct phylink_config *config, unsigned int mode,
 			      phy_interface_t interface, struct phy_device *phy)
 {
+	struct net_device *dev = to_net_dev(config->dev);
 	struct mvpp2_port *port = netdev_priv(dev);
 	u32 val;
 
@@ -4819,9 +4869,10 @@ static void mvpp2_mac_link_up(struct net_device *dev, unsigned int mode,
 	netif_tx_wake_all_queues(dev);
 }
 
-static void mvpp2_mac_link_down(struct net_device *dev, unsigned int mode,
-				phy_interface_t interface)
+static void mvpp2_mac_link_down(struct phylink_config *config,
+				unsigned int mode, phy_interface_t interface)
 {
+	struct net_device *dev = to_net_dev(config->dev);
 	struct mvpp2_port *port = netdev_priv(dev);
 	u32 val;
 
@@ -5078,8 +5129,11 @@ static int mvpp2_port_probe(struct platform_device *pdev,
 
 	/* Phylink isn't used w/ ACPI as of now */
 	if (port_node) {
-		phylink = phylink_create(dev, port_fwnode, phy_mode,
-					 &mvpp2_phylink_ops);
+		port->phylink_config.dev = &dev->dev;
+		port->phylink_config.type = PHYLINK_NETDEV;
+
+		phylink = phylink_create(&port->phylink_config, port_fwnode,
+					 phy_mode, &mvpp2_phylink_ops);
 		if (IS_ERR(phylink)) {
 			err = PTR_ERR(phylink);
 			goto err_free_port_pcpu;
