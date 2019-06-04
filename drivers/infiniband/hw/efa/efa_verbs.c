@@ -436,12 +436,6 @@ void efa_dealloc_pd(struct ib_pd *ibpd, struct ib_udata *udata)
 	struct efa_dev *dev = to_edev(ibpd->device);
 	struct efa_pd *pd = to_epd(ibpd);
 
-	if (udata->inlen &&
-	    !ib_is_udata_cleared(udata, 0, udata->inlen)) {
-		ibdev_dbg(&dev->ibdev, "Incompatible ABI params\n");
-		return;
-	}
-
 	ibdev_dbg(&dev->ibdev, "Dealloc pd[%d]\n", pd->pdn);
 	efa_pd_dealloc(dev, pd->pdn);
 }
@@ -458,12 +452,6 @@ int efa_destroy_qp(struct ib_qp *ibqp, struct ib_udata *udata)
 	struct efa_dev *dev = to_edev(ibqp->pd->device);
 	struct efa_qp *qp = to_eqp(ibqp);
 	int err;
-
-	if (udata->inlen &&
-	    !ib_is_udata_cleared(udata, 0, udata->inlen)) {
-		ibdev_dbg(&dev->ibdev, "Incompatible ABI params\n");
-		return -EINVAL;
-	}
 
 	ibdev_dbg(&dev->ibdev, "Destroy qp[%u]\n", ibqp->qp_num);
 	err = efa_destroy_qp_handle(dev, qp->qp_handle);
@@ -865,12 +853,6 @@ int efa_destroy_cq(struct ib_cq *ibcq, struct ib_udata *udata)
 	struct efa_cq *cq = to_ecq(ibcq);
 	int err;
 
-	if (udata->inlen &&
-	    !ib_is_udata_cleared(udata, 0, udata->inlen)) {
-		ibdev_dbg(&dev->ibdev, "Incompatible ABI params\n");
-		return -EINVAL;
-	}
-
 	ibdev_dbg(&dev->ibdev,
 		  "Destroy cq[%d] virt[0x%p] freed: size[%lu], dma[%pad]\n",
 		  cq->cq_idx, cq->cpu_addr, cq->size, &cq->dma_addr);
@@ -1103,14 +1085,14 @@ err:
  */
 static int pbl_chunk_list_create(struct efa_dev *dev, struct pbl_context *pbl)
 {
-	unsigned int entry, payloads_in_sg, chunk_list_size, chunk_idx, payload_idx;
 	struct pbl_chunk_list *chunk_list = &pbl->phys.indirect.chunk_list;
 	int page_cnt = pbl->phys.indirect.pbl_buf_size_in_pages;
 	struct scatterlist *pages_sgl = pbl->phys.indirect.sgl;
+	unsigned int chunk_list_size, chunk_idx, payload_idx;
 	int sg_dma_cnt = pbl->phys.indirect.sg_dma_cnt;
 	struct efa_com_ctrl_buff_info *ctrl_buf;
 	u64 *cur_chunk_buf, *prev_chunk_buf;
-	struct scatterlist *sg;
+	struct ib_block_iter biter;
 	dma_addr_t dma_addr;
 	int i;
 
@@ -1144,18 +1126,15 @@ static int pbl_chunk_list_create(struct efa_dev *dev, struct pbl_context *pbl)
 	chunk_idx = 0;
 	payload_idx = 0;
 	cur_chunk_buf = chunk_list->chunks[0].buf;
-	for_each_sg(pages_sgl, sg, sg_dma_cnt, entry) {
-		payloads_in_sg = sg_dma_len(sg) >> EFA_CHUNK_PAYLOAD_SHIFT;
-		for (i = 0; i < payloads_in_sg; i++) {
-			cur_chunk_buf[payload_idx++] =
-				(sg_dma_address(sg) & ~(EFA_CHUNK_PAYLOAD_SIZE - 1)) +
-				(EFA_CHUNK_PAYLOAD_SIZE * i);
+	rdma_for_each_block(pages_sgl, &biter, sg_dma_cnt,
+			    EFA_CHUNK_PAYLOAD_SIZE) {
+		cur_chunk_buf[payload_idx++] =
+			rdma_block_iter_dma_address(&biter);
 
-			if (payload_idx == EFA_PTRS_PER_CHUNK) {
-				chunk_idx++;
-				cur_chunk_buf = chunk_list->chunks[chunk_idx].buf;
-				payload_idx = 0;
-			}
+		if (payload_idx == EFA_PTRS_PER_CHUNK) {
+			chunk_idx++;
+			cur_chunk_buf = chunk_list->chunks[chunk_idx].buf;
+			payload_idx = 0;
 		}
 	}
 
@@ -1303,30 +1282,30 @@ static int pbl_create(struct efa_dev *dev,
 	int err;
 
 	pbl->pbl_buf_size_in_bytes = hp_cnt * EFA_CHUNK_PAYLOAD_PTR_SIZE;
-	pbl->pbl_buf = kzalloc(pbl->pbl_buf_size_in_bytes,
-			       GFP_KERNEL | __GFP_NOWARN);
-	if (pbl->pbl_buf) {
+	pbl->pbl_buf = kvzalloc(pbl->pbl_buf_size_in_bytes, GFP_KERNEL);
+	if (!pbl->pbl_buf)
+		return -ENOMEM;
+
+	if (is_vmalloc_addr(pbl->pbl_buf)) {
+		pbl->physically_continuous = 0;
+		err = umem_to_page_list(dev, umem, pbl->pbl_buf, hp_cnt,
+					hp_shift);
+		if (err)
+			goto err_free;
+
+		err = pbl_indirect_initialize(dev, pbl);
+		if (err)
+			goto err_free;
+	} else {
 		pbl->physically_continuous = 1;
 		err = umem_to_page_list(dev, umem, pbl->pbl_buf, hp_cnt,
 					hp_shift);
 		if (err)
-			goto err_continuous;
+			goto err_free;
+
 		err = pbl_continuous_initialize(dev, pbl);
 		if (err)
-			goto err_continuous;
-	} else {
-		pbl->physically_continuous = 0;
-		pbl->pbl_buf = vzalloc(pbl->pbl_buf_size_in_bytes);
-		if (!pbl->pbl_buf)
-			return -ENOMEM;
-
-		err = umem_to_page_list(dev, umem, pbl->pbl_buf, hp_cnt,
-					hp_shift);
-		if (err)
-			goto err_indirect;
-		err = pbl_indirect_initialize(dev, pbl);
-		if (err)
-			goto err_indirect;
+			goto err_free;
 	}
 
 	ibdev_dbg(&dev->ibdev,
@@ -1335,24 +1314,20 @@ static int pbl_create(struct efa_dev *dev,
 
 	return 0;
 
-err_continuous:
-	kfree(pbl->pbl_buf);
-	return err;
-err_indirect:
-	vfree(pbl->pbl_buf);
+err_free:
+	kvfree(pbl->pbl_buf);
 	return err;
 }
 
 static void pbl_destroy(struct efa_dev *dev, struct pbl_context *pbl)
 {
-	if (pbl->physically_continuous) {
+	if (pbl->physically_continuous)
 		dma_unmap_single(&dev->pdev->dev, pbl->phys.continuous.dma_addr,
 				 pbl->pbl_buf_size_in_bytes, DMA_TO_DEVICE);
-		kfree(pbl->pbl_buf);
-	} else {
+	else
 		pbl_indirect_terminate(dev, pbl);
-		vfree(pbl->pbl_buf);
-	}
+
+	kvfree(pbl->pbl_buf);
 }
 
 static int efa_create_inline_pbl(struct efa_dev *dev, struct efa_mr *mr,
@@ -1555,12 +1530,6 @@ int efa_dereg_mr(struct ib_mr *ibmr, struct ib_udata *udata)
 	struct efa_com_dereg_mr_params params;
 	struct efa_mr *mr = to_emr(ibmr);
 	int err;
-
-	if (udata->inlen &&
-	    !ib_is_udata_cleared(udata, 0, udata->inlen)) {
-		ibdev_dbg(&dev->ibdev, "Incompatible ABI params\n");
-		return -EINVAL;
-	}
 
 	ibdev_dbg(&dev->ibdev, "Deregister mr[%d]\n", ibmr->lkey);
 

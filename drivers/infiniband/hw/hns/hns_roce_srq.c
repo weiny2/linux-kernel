@@ -181,27 +181,18 @@ static int hns_roce_create_idx_que(struct ib_pd *pd, struct hns_roce_srq *srq,
 {
 	struct hns_roce_dev *hr_dev = to_hr_dev(pd->device);
 	struct hns_roce_idx_que *idx_que = &srq->idx_que;
-	u32 bitmap_num;
-	int i;
 
-	bitmap_num = HNS_ROCE_ALOGN_UP(srq->max, 8 * sizeof(u64));
-
-	idx_que->bitmap = kcalloc(1, bitmap_num / 8, GFP_KERNEL);
+	idx_que->bitmap = bitmap_zalloc(srq->max, GFP_KERNEL);
 	if (!idx_que->bitmap)
 		return -ENOMEM;
-
-	bitmap_num = bitmap_num / (8 * sizeof(u64));
 
 	idx_que->buf_size = srq->idx_que.buf_size;
 
 	if (hns_roce_buf_alloc(hr_dev, idx_que->buf_size, (1 << page_shift) * 2,
 			       &idx_que->idx_buf, page_shift)) {
-		kfree(idx_que->bitmap);
+		bitmap_free(idx_que->bitmap);
 		return -ENOMEM;
 	}
-
-	for (i = 0; i < bitmap_num; i++)
-		idx_que->bitmap[i] = ~(0UL);
 
 	return 0;
 }
@@ -264,8 +255,7 @@ int hns_roce_create_srq(struct ib_srq *ib_srq,
 		} else
 			ret = hns_roce_mtt_init(hr_dev,
 						ib_umem_page_count(srq->umem),
-						srq->umem->page_shift,
-						&srq->mtt);
+						PAGE_SHIFT, &srq->mtt);
 		if (ret)
 			goto err_buf;
 
@@ -291,10 +281,9 @@ int hns_roce_create_srq(struct ib_srq *ib_srq,
 			ret = hns_roce_mtt_init(hr_dev, npages,
 						page_shift, &srq->idx_que.mtt);
 		} else {
-			ret = hns_roce_mtt_init(hr_dev,
-				       ib_umem_page_count(srq->idx_que.umem),
-				       srq->idx_que.umem->page_shift,
-				       &srq->idx_que.mtt);
+			ret = hns_roce_mtt_init(
+				hr_dev, ib_umem_page_count(srq->idx_que.umem),
+				PAGE_SHIFT, &srq->idx_que.mtt);
 		}
 
 		if (ret) {
@@ -397,7 +386,7 @@ err_idx_mtt:
 err_create_idx:
 	hns_roce_buf_free(hr_dev, srq->idx_que.buf_size,
 			  &srq->idx_que.idx_buf);
-	kfree(srq->idx_que.bitmap);
+	bitmap_free(srq->idx_que.bitmap);
 
 err_srq_mtt:
 	hns_roce_mtt_cleanup(hr_dev, &srq->mtt);
