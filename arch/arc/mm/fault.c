@@ -196,7 +196,7 @@ bad_area:
 	}
 
 	tsk->thread.fault_address = address;
-	force_sig_fault(sig, si_code, (void __user *)address, tsk);
+	force_sig_fault(sig, si_code, (void __user *)address);
 	return;
 
 no_context:
