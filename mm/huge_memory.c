@@ -950,6 +950,12 @@ struct page *follow_devmap_pmd(struct vm_area_struct *vma, unsigned long addr,
 	if (!*pgmap)
 		return ERR_PTR(-EFAULT);
 	page = pfn_to_page(pfn);
+
+	if (unlikely(flags & FOLL_LONGTERM) &&
+	    (*pgmap)->type == MEMORY_DEVICE_FS_DAX &&
+	    !mapping_inode_has_layout(page))
+		return ERR_PTR(-EPERM);
+
 	if (unlikely(!try_get_gup_pin_page(page,
 					   NR_GUP_SLOW_PAGES_REQUESTED)))
 		page = ERR_PTR(-ENOMEM);
@@ -1092,6 +1098,12 @@ struct page *follow_devmap_pud(struct vm_area_struct *vma, unsigned long addr,
 	if (!*pgmap)
 		return ERR_PTR(-EFAULT);
 	page = pfn_to_page(pfn);
+
+	if (unlikely(flags & FOLL_LONGTERM) &&
+	    (*pgmap)->type == MEMORY_DEVICE_FS_DAX &&
+	    !mapping_inode_has_layout(page))
+		return ERR_PTR(-EPERM);
+
 	if (unlikely(!try_get_gup_pin_page(page,
 					   NR_GUP_SLOW_PAGES_REQUESTED)))
 		page = ERR_PTR(-ENOMEM);
