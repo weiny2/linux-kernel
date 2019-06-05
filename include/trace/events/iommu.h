@@ -219,7 +219,7 @@ TRACE_EVENT(dev_fault,
 
 TRACE_EVENT(dev_page_response,
 
-	TP_PROTO(struct device *dev,  struct iommu_fault_page_response *msg),
+	TP_PROTO(struct device *dev,  struct iommu_page_response *msg),
 
 	TP_ARGS(dev, msg),
 
