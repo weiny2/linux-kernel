@@ -1130,7 +1130,8 @@ static struct page *alloc_node_page(struct page *page, unsigned long node)
 	 * get a page.
 	 */
 	gfp_t mask = GFP_NOWAIT | __GFP_NOWARN | __GFP_NORETRY |
-			__GFP_NOMEMALLOC | __GFP_THISNODE | __GFP_MOVABLE;
+			__GFP_NOMEMALLOC | __GFP_THISNODE | __GFP_HIGHMEM |
+			__GFP_MOVABLE;
 	struct page *newpage;
 
 	if (PageTransHuge(page)) {
