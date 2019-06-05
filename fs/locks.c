@@ -2971,3 +2971,50 @@ static int __init filelock_init(void)
 	return 0;
 }
 core_initcall(filelock_init);
+
+/**
+ * mapping_inode_has_layout - ensure a file mapped page has a layout lease
+ * taken
+ * @page: page we are trying to GUP
+ *
+ * This should only be called on DAX pages.  DAX pages which are mapped through
+ * FS DAX do not use the page cache.  As a result they require the user to take
+ * a LAYOUT lease on them prior to be able to pin them for longterm use.
+ * This allows the user to opt-into the fact that truncation operations will
+ * fail for the duration of the pin.
+ *
+ * Return true if the page has a LAYOUT lease associated with it's file.
+ */
+bool mapping_inode_has_layout(struct page *page)
+{
+	bool ret = false;
+	struct inode *inode;
+	struct file_lock *fl;
+
+	if (WARN_ON(PageAnon(page)) ||
+	    WARN_ON(!page) ||
+	    WARN_ON(!page->mapping) ||
+	    WARN_ON(!page->mapping->host))
+		return false;
+
+	inode = page->mapping->host;
+
+	smp_mb();
+	if (inode->i_flctx &&
+	    !list_empty_careful(&inode->i_flctx->flc_lease)) {
+		spin_lock(&inode->i_flctx->flc_lock);
+		ret = false;
+		list_for_each_entry(fl, &inode->i_flctx->flc_lease, fl_list) {
+			if (fl->fl_pid == current->tgid &&
+			    (fl->fl_flags & FL_LAYOUT) &&
+			    (fl->fl_flags & FL_EXCLUSIVE)) {
+				ret = true;
+				break;
+			}
+		}
+		spin_unlock(&inode->i_flctx->flc_lock);
+	}
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(mapping_inode_has_layout);
