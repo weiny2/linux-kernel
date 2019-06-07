@@ -64,10 +64,10 @@
 #define MAX_ASID_AVAILABLE ((1 << CR3_AVAIL_PCID_BITS) - 2)
 
 /*
- * 6 because 6 should be plenty and struct tlb_state will fit in two cache
+ * 8 because 8 should be plenty and struct tlb_state will fit in two cache
  * lines.
  */
-#define TLB_NR_DYN_ASIDS	6
+#define TLB_NR_DYN_ASIDS	8
 
 /*
  * Given @asid, compute kPCID

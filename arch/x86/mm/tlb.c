@@ -88,6 +88,21 @@ static void choose_new_asid(struct mm_struct *next, u64 next_tlb_gen,
 	if (this_cpu_read(cpu_tlbstate.invalidate_other))
 		clear_asid_other();
 
+	if (static_cpu_has(X86_FEATURE_RAR)) {
+		asid = (u16)((unsigned long)next >> 6) & 0x7;
+
+		if ((this_cpu_read(cpu_tlbstate.ctxs[asid].ctx_id) !=
+		     next->context.ctx_id) ||
+		    (this_cpu_read(cpu_tlbstate.ctxs[asid].tlb_gen) <
+		     next_tlb_gen))
+			*need_flush = true;
+		else
+			*need_flush = false;
+
+		*new_asid = asid;
+		return;
+	}
+
 	for (asid = 0; asid < TLB_NR_DYN_ASIDS; asid++) {
 		if (this_cpu_read(cpu_tlbstate.ctxs[asid].ctx_id) !=
 		    next->context.ctx_id)
