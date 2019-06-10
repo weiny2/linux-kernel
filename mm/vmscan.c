@@ -57,6 +57,7 @@
 
 #include <linux/swapops.h>
 #include <linux/balloon_compaction.h>
+#include <linux/sched/sysctl.h>
 
 #include "internal.h"
 
@@ -3753,8 +3754,21 @@ static void kswapd_try_to_sleep(pg_data_t *pgdat, int alloc_order, int reclaim_o
 		 */
 		set_pgdat_percpu_threshold(pgdat, calculate_normal_threshold);
 
-		if (!kthread_should_stop())
-			schedule();
+		if (!kthread_should_stop()) {
+			/*
+			 * Periodically migrate cold pages to slower
+			 * memory node.
+			 */
+			if (sysctl_numa_balancing_mode == NUMA_BALANCING_HMEM &&
+			    next_migration_node(pgdat->node_id) != -1) {
+				remaining = schedule_timeout(HZ);
+				if (!remaining) {
+					pgdat->kswapd_classzone_idx = ZONE_MOVABLE;
+					pgdat->kswapd_order = 0;
+				}
+			} else
+				schedule();
+		}
 
 		set_pgdat_percpu_threshold(pgdat, calculate_pressure_threshold);
 	} else {
@@ -3858,6 +3872,14 @@ kswapd_try_sleep:
 	current->reclaim_state = NULL;
 
 	return 0;
+}
+
+void wakeup_all_kswapds(void)
+{
+	struct pglist_data *pgdat;
+
+	for_each_online_pgdat(pgdat)
+		wake_up_interruptible(&pgdat->kswapd_wait);
 }
 
 /*

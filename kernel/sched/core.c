@@ -10,6 +10,7 @@
 #include <linux/nospec.h>
 
 #include <linux/kcov.h>
+#include <linux/mmzone.h>
 
 #include <asm/switch_to.h>
 #include <asm/tlb.h>
@@ -2192,8 +2193,12 @@ int sysctl_numa_balancing(struct ctl_table *table, int write,
 	err = proc_dointvec_minmax(table, write, buffer, lenp, ppos);
 	if (err < 0)
 		return err;
-	if (write)
+	if (write) {
 		set_numabalancing_state(*(int *)table->data);
+		/* Trigger periodic kswapd waking up */
+		if (sysctl_numa_balancing_mode == NUMA_BALANCING_HMEM)
+			wakeup_all_kswapds();
+	}
 	return err;
 }
 #endif
