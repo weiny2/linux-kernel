@@ -47,6 +47,7 @@
 #include <linux/page_owner.h>
 #include <linux/sched/mm.h>
 #include <linux/ptrace.h>
+#include <linux/sched/sysctl.h>
 
 #include <asm/tlbflush.h>
 
@@ -1945,15 +1946,24 @@ static bool migrate_balanced_pgdat(struct pglist_data *pgdat,
 	int z;
 
 	for (z = pgdat->nr_zones - 1; z >= 0; z--) {
+		unsigned long wmark;
 		struct zone *zone = pgdat->node_zones + z;
 
 		if (!populated_zone(zone))
 			continue;
 
 		/* Avoid waking kswapd by allocating pages_to_migrate pages. */
+		wmark = high_wmark_pages(zone);
+		/*
+		 * For hetero memory system, kswapd will periodically
+		 * migrate cold pages to slower memory node.  And the
+		 * half of the high watermark is used to allocate
+		 * promoted pages.
+		 */
+		if (sysctl_numa_balancing_mode == NUMA_BALANCING_HMEM)
+			wmark = (wmark + low_wmark_pages(zone)) / 2;
 		if (!zone_watermark_ok(zone, 0,
-				       high_wmark_pages(zone) +
-				       nr_migrate_pages,
+				       wmark + nr_migrate_pages,
 				       ZONE_MOVABLE, 0))
 			continue;
 		return true;
