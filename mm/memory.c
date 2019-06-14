@@ -3726,8 +3726,10 @@ static vm_fault_t do_numa_page(struct vm_fault *vmf)
 	update_mmu_cache(vma, vmf->address, vmf->pte);
 
 	/* Only migrate if accessed twice */
-	if (!pte_young(old_pte))
+	if (!pte_young(old_pte)) {
+		count_vm_event(NUMA_ACCESS_ONCE);
 		goto unmap_out;
+	}
 
 	page = vm_normal_page(vma, vmf->address, pte);
 	if (!page)
@@ -3761,6 +3763,7 @@ static vm_fault_t do_numa_page(struct vm_fault *vmf)
 			&flags);
 	pte_unmap_unlock(vmf->pte, vmf->ptl);
 	if (target_nid == NUMA_NO_NODE) {
+		count_vm_event(NUMA_NO_TARGET);
 		put_page(page);
 		goto out;
 	}

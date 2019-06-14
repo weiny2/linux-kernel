@@ -1993,8 +1993,10 @@ static int numamigrate_isolate_page(pg_data_t *pgdat, struct page *page)
 	VM_BUG_ON_PAGE(compound_order(page) && !PageTransHuge(page), page);
 
 	/* Avoid migrating to a node that is nearly full */
-	if (!migrate_balanced_pgdat(pgdat, 1UL << compound_order(page)))
+	if (!migrate_balanced_pgdat(pgdat, 1UL << compound_order(page))) {
+		count_vm_event(NUMA_WMARK);
 		return 0;
+	}
 
 	if (isolate_lru_page(page))
 		return 0;

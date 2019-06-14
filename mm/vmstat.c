@@ -1251,6 +1251,10 @@ const char * const vmstat_text[] = {
 	"numa_hint_faults",
 	"numa_hint_faults_local",
 	"numa_pages_migrated",
+	"numa_access_once",
+	"numa_no_target",
+	"numa_shared",
+	"numa_wmark",
 #endif
 #ifdef CONFIG_MIGRATION
 	"pgmigrate_success",

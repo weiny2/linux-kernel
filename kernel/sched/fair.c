@@ -21,6 +21,7 @@
  *  Copyright (C) 2007 Red Hat, Inc., Peter Zijlstra
  */
 #include "sched.h"
+#include <linux/vmstat.h>
 
 #include <trace/events/sched.h>
 
@@ -1435,8 +1436,10 @@ bool should_numa_migrate_memory(struct task_struct *p, struct page * page,
 	 * act on an unlikely task<->page relation.
 	 */
 	if (!cpupid_pid_unset(last_cpupid) &&
-				cpupid_to_nid(last_cpupid) != dst_nid)
+	    cpupid_to_nid(last_cpupid) != dst_nid) {
+		count_vm_event(NUMA_SHARED);
 		return false;
+	}
 
 	/* Always allow migrate on private faults */
 	if (cpupid_match_pid(p, last_cpupid))
