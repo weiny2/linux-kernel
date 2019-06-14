@@ -82,6 +82,19 @@ static unsigned long change_pte_range(struct vm_area_struct *vma, pmd_t *pmd,
 				struct page *page;
 				int nid;
 
+				/* Avoid TLB flush if possible */
+				if (pte_protnone(oldpte)) {
+					/*
+					 * PTE young bit is used to record
+					 * whether the page is accessed in
+					 * last scan period
+					 */
+					if (pte_young(oldpte))
+						set_pte_at(vma->vm_mm, addr, pte,
+							   pte_mkold(oldpte));
+					continue;
+				}
+
 				page = vm_normal_page(vma, addr, oldpte);
 				if (!page || PageKsm(page))
 					continue;
@@ -98,19 +111,6 @@ static unsigned long change_pte_range(struct vm_area_struct *vma, pmd_t *pmd,
 				 */
 				if (page_is_file_cache(page) && PageDirty(page))
 					continue;
-
-				/* Avoid TLB flush if possible */
-				if (pte_protnone(oldpte)) {
-					/*
-					 * PTE young bit is used to record
-					 * whether the page is accessed in
-					 * last scan period
-					 */
-					if (pte_young(oldpte))
-						set_pte_at(vma->vm_mm, addr, pte,
-							   pte_mkold(oldpte));
-					continue;
-				}
 
 				/*
 				 * Don't mess with PTEs if page is already on the node
