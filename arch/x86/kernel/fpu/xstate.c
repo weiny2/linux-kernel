@@ -138,18 +138,6 @@ static int retrieve_prior_xstate_comp_nr(int xfeature_nr)
 }
 
 /*
- * Mask for the first-use detection: a combination of feature bit
- * values that the kernel wants to select and the hardware supports
- * for the first-use detection.
- *
- * It is the default bit value for the hardware configuration, while
- * the first-use detection status in FPU context has zero by default.
- * It also helps to determine whether the first-use detection runs
- * in the system or not.
- */
-u64 xfeatures_firstuse_mask __read_mostly;
-
-/*
  * The XSAVE area of kernel can be in standard or compacted format;
  * it is always in standard format for user mode. This is the user
  * mode standard format size used for signal and ptrace frames.
@@ -347,7 +335,7 @@ void fpu__init_cpu_xstate(void)
 		wrmsrl(MSR_IA32_XSS, xfeatures_mask_supervisor());
 
 	if (xfirstuse_availability())
-		xfd_set_bits(xfeatures_firstuse_mask);
+		xfd_set_bits(xfirstuse_mask());
 }
 
 static int xfeature_enabled(enum xfeature xfeature)
@@ -914,6 +902,7 @@ void __init fpu__init_system_xstate(void)
 {
 	unsigned int eax, ebx, ecx, edx;
 	static int on_boot_cpu __initdata = 1;
+	u64 firstuse_mask;
 	int err;
 	int i;
 
@@ -950,10 +939,9 @@ void __init fpu__init_system_xstate(void)
 
 	/*
 	 * The kernel can select which feature to be monitored for its first
-	 * usage. Select no xfeature at the moment as the support is not
-	 * fully ready yet.
+	 * usage
 	 */
-	xfeatures_firstuse_mask = 0;
+	firstuse_mask = XFEATURE_MASK_HUGESTATE;
 
 	if ((xfeatures_mask_user() & XFEATURE_MASK_FPSSE) != XFEATURE_MASK_FPSSE) {
 		/*
@@ -973,7 +961,7 @@ void __init fpu__init_system_xstate(void)
 	for (i = 0; i < ARRAY_SIZE(xfeature_capflags); i++) {
 		short cpu_cap = xfeature_capflags[i].cpu_cap;
 		int idx = xfeature_capflags[i].xfeature_idx;
-		u64 mask = ~BIT_ULL(idx);
+		u64 mask = BIT_ULL(idx);
 
 		if (cpu_cap == X86_FEATURE_SHSTK) {
 			/*
@@ -982,18 +970,22 @@ void __init fpu__init_system_xstate(void)
 			 */
 			if (!boot_cpu_has(X86_FEATURE_SHSTK) &&
 			    !boot_cpu_has(X86_FEATURE_IBT))
-				xfeatures_mask_all &= mask;
+				xfeatures_mask_all &= ~mask;
 		} else if ((cpu_cap == -1) || !boot_cpu_has(cpu_cap)) {
-			xfeatures_mask_all &= mask;
+			xfeatures_mask_all &= ~mask;
 		}
 
-		if (!xfeature_supports_firstuse_detection(idx))
-			xfeatures_firstuse_mask &= mask;
+		if (!xfeature_supports_firstuse_detection(idx) &&
+		    (mask & XFEATURE_MASK_HUGESTATE)) {
+			xfeatures_mask_all &= ~mask;
+			firstuse_mask &= mask;
+		}
 	}
 
 	xfeatures_mask_all &= fpu__get_supported_xfeatures_mask();
-	xstate_exp_area_mask = xfeatures_mask_all & XFEATURE_MASK_HUGESTATE;
 	xstate_area_mask = xfeatures_mask_all & ~XFEATURE_MASK_HUGESTATE;
+	/* The first-use deteciton mask is converted to the expanded area mask: */
+	xstate_exp_area_mask = xfeatures_mask_all & firstuse_mask;
 
 	/* Enable xstate instructions to be able to continue with initialization: */
 	fpu__init_cpu_xstate();

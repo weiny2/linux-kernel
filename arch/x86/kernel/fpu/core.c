@@ -516,6 +516,7 @@ int fpu__exception_code(struct fpu *fpu, int trap_nr)
 int xfirstuse_trap(struct fpu *fpu)
 {
 	u64 event;
+	int ret;
 
 	/*
 	 * Check the condition whether the first-use detection is
@@ -533,7 +534,7 @@ int xfirstuse_trap(struct fpu *fpu)
 	 * incrementally. So, this trap record bit value should be a
 	 * subset of the first-use mask.
 	 */
-	WARN_ON(!(event & xfeatures_firstuse_mask));
+	WARN_ON(!(event & xfirstuse_mask()));
 	/*
 	 * If the faulting feature is empty, return with nonzero, implying
 	 * implying the trap not handled yet.
@@ -541,11 +542,20 @@ int xfirstuse_trap(struct fpu *fpu)
 	if (!event)
 		return 1;
 
+	/* Check context before attempting to allocate the area */
+	if (in_interrupt())
+		return 1;
+
+	ret = alloc_xstate_exp(fpu);
+	if (ret)
+		return 1;
+
 	/*
-	 * No special handling right now, except for updating both
-	 * software and hardware bit values.
+	 * Any first-use of the xfeature in the expanded area triggers
+	 * the entire expansion, not in an incremental way. So, stop the
+	 * monitoring and update the hardware configuration accordingly.
 	 */
-	fpu->firstuse_bv |= event;
+	xfirstuse_end(fpu);
 	xfd_set_bits(xfd_get_cfg(fpu));
 
 	/* Clear the trap record. */
