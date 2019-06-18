@@ -70,6 +70,20 @@ static struct xfeature_capflag_info xfeature_capflags[] __initdata = {
  */
 u64 xfeatures_mask_all __read_mostly;
 
+/*
+ * Mask of xstate features that are pre-allocated, as appended
+ * to task_struct.
+ */
+u64 xstate_area_mask __read_mostly;
+
+/*
+ * Mask of xfeatures, the states of which stored in an expanded
+ * area, as they are assumed to have huge states.
+ *
+ * This mask value should be a subset of the xfeatures_mask
+ */
+static u64 xstate_exp_area_mask __read_mostly;
+
 static unsigned int xstate_offsets[XFEATURE_MAX] = { [ 0 ... XFEATURE_MAX - 1] = -1};
 static unsigned int xstate_sizes[XFEATURE_MAX]   = { [ 0 ... XFEATURE_MAX - 1] = -1};
 static unsigned int xstate_comp_offsets[XFEATURE_MAX] = { [ 0 ... XFEATURE_MAX - 1] = -1};
@@ -192,7 +206,7 @@ void fpstate_sanitize_xstate(struct fpu *fpu)
 	 * None of the feature bits are in init state. So nothing else
 	 * to do for us, as the memory layout is up to date.
 	 */
-	if ((xfeatures & xfeatures_mask_all) == xfeatures_mask_all)
+	if ((xfeatures & xstate_area_mask) == xstate_area_mask)
 		return;
 
 	/*
@@ -219,7 +233,7 @@ void fpstate_sanitize_xstate(struct fpu *fpu)
 	 * in a special way already:
 	 */
 	feature_bit = 0x2;
-	xfeatures = (xfeatures_mask_user() & ~xfeatures) >> 2;
+	xfeatures = (xfeatures_mask_user() & ~xfeatures) >> feature_bit;
 
 	/*
 	 * Update all the remaining memory layouts according to their
@@ -467,7 +481,7 @@ static void __init setup_init_fpu_buf(void)
 	print_xstate_features();
 
 	if (boot_cpu_has(X86_FEATURE_XSAVES))
-		fpstate_init_xstate(&init_fpstate.xsave, xfeatures_mask_all);
+		fpstate_init_xstate(&init_fpstate.xsave, xstate_area_mask);
 
 	/*
 	 * Init all the features state with header.xfeatures being 0x0
@@ -753,6 +767,8 @@ static int __init init_xstate_size(void)
 static void fpu__init_disable_system_xstate(void)
 {
 	xfeatures_mask_all = 0;
+	xstate_area_mask = 0;
+	xstate_exp_area_mask = 0;
 	cr4_clear_bits(X86_CR4_OSXSAVE);
 	setup_clear_cpu_cap(X86_FEATURE_XSAVE);
 }
@@ -843,6 +859,8 @@ void __init fpu__init_system_xstate(void)
 	}
 
 	xfeatures_mask_all &= fpu__get_supported_xfeatures_mask();
+	xstate_exp_area_mask = xfeatures_mask_all & XFEATURE_MASK_HUGESTATE;
+	xstate_area_mask = xfeatures_mask_all & ~XFEATURE_MASK_HUGESTATE;
 
 	/* Enable xstate instructions to be able to continue with initialization: */
 	fpu__init_cpu_xstate();

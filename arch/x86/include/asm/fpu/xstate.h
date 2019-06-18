@@ -47,6 +47,9 @@
 #define ALL_XFEATURES_MASK_SUPERVISOR (SUPPORTED_XFEATURES_MASK_SUPERVISOR | \
 				       UNSUPPORTED_XFEATURES_MASK_SUPERVISOR)
 
+/* The features with huge xstate size */
+#define XFEATURE_MASK_HUGESTATE 0
+
 #ifdef CONFIG_X86_64
 #define REX_PREFIX	"0x48, "
 #else
@@ -65,6 +68,7 @@ static inline u64 xfeatures_mask_user(void)
 	return xfeatures_mask_all & SUPPORTED_XFEATURES_MASK_USER;
 }
 
+extern u64 xstate_area_mask;
 extern u64 xstate_fx_sw_bytes[USER_XSTATE_FX_SW_WORDS];
 extern u64 xfeatures_firstuse_mask;
 
