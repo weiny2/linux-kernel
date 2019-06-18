@@ -131,10 +131,8 @@ static void __init fpu__init_system_generic(void)
 }
 
 /*
- * Size of the FPU context state. All tasks in the system use the
- * same context size, regardless of what portion they use.
- * This is inherent to the XSAVE architecture which puts all state
- * components into a single, continuous memory block:
+ * Size of the default FPU context state. The state is appended
+ * to task_struct, as overall size is manageable.
  */
 unsigned int fpu_kernel_xstate_size;
 EXPORT_SYMBOL_GPL(fpu_kernel_xstate_size);
