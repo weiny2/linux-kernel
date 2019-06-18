@@ -318,9 +318,8 @@ static inline void copy_kernel_to_xregs_booting(struct xregs_state *xstate)
 /*
  * Save processor xstate to xsave area.
  */
-static inline void copy_xregs_to_kernel(struct xregs_state *xstate)
+static inline void __copy_xregs_to_kernel(struct xregs_state *xstate, u64 mask)
 {
-	u64 mask = -1;
 	u32 lmask = mask;
 	u32 hmask = mask >> 32;
 	int err;
@@ -336,7 +335,7 @@ static inline void copy_xregs_to_kernel(struct xregs_state *xstate)
 /*
  * Restore processor xstate from xsave area.
  */
-static inline void copy_kernel_to_xregs(struct xregs_state *xstate, u64 mask)
+static inline void __copy_kernel_to_xregs(struct xregs_state *xstate, u64 mask)
 {
 	u32 lmask = mask;
 	u32 hmask = mask >> 32;
@@ -394,7 +393,8 @@ static inline int copy_user_to_xregs(struct xregs_state __user *buf, u64 mask)
  * Restore xstate from kernel space xsave area, return an error code instead of
  * an exception.
  */
-static inline int copy_kernel_to_xregs_err(struct xregs_state *xstate, u64 mask)
+static inline int __copy_kernel_to_xregs_err(struct xregs_state *xstate,
+					     u64 mask)
 {
 	u32 lmask = mask;
 	u32 hmask = mask >> 32;
@@ -406,6 +406,17 @@ static inline int copy_kernel_to_xregs_err(struct xregs_state *xstate, u64 mask)
 		XSTATE_OP(XRSTOR, xstate, lmask, hmask, err);
 
 	return err;
+}
+
+/*
+ * Intermediate wrapper function to access all FPU states. This is useful
+ * when supporting multiple state buffers.
+ */
+static inline int copy_kernel_to_xregs_err(struct fpu *fpu, u64 mask)
+{
+	struct xregs_state *xstate = &fpu->state.xsave;
+
+	return __copy_kernel_to_xregs_err(xstate, mask);
 }
 
 /*
@@ -421,7 +432,7 @@ static inline int copy_kernel_to_xregs_err(struct xregs_state *xstate, u64 mask)
 static inline int copy_fpregs_to_fpstate(struct fpu *fpu)
 {
 	if (likely(use_xsave())) {
-		copy_xregs_to_kernel(&fpu->state.xsave);
+		__copy_xregs_to_kernel(&fpu->state.xsave, -1);
 
 		/*
 		 * AVX512 state is tracked here because its use is
@@ -449,7 +460,7 @@ static inline int copy_fpregs_to_fpstate(struct fpu *fpu)
 static inline void __copy_kernel_to_fpregs(union fpregs_state *fpstate, u64 mask)
 {
 	if (use_xsave()) {
-		copy_kernel_to_xregs(&fpstate->xsave, mask);
+		__copy_kernel_to_xregs(&fpstate->xsave, mask);
 	} else {
 		if (use_fxsr())
 			copy_kernel_to_fxregs(&fpstate->fxsave);
@@ -458,8 +469,10 @@ static inline void __copy_kernel_to_fpregs(union fpregs_state *fpstate, u64 mask
 	}
 }
 
-static inline void copy_kernel_to_fpregs(union fpregs_state *fpstate)
+static inline void copy_kernel_to_fpregs(struct fpu *fpu)
 {
+	union fpregs_state *fpstate = &fpu->state;
+
 	/*
 	 * AMD K7/K8 CPUs don't save/restore FDP/FIP/FOP unless an exception is
 	 * pending. Clear the x87 state here by setting it to fixed values.
@@ -554,7 +567,7 @@ static inline void __fpregs_load_activate(void)
 		return;
 
 	if (!fpregs_state_valid(fpu, cpu)) {
-		copy_kernel_to_fpregs(&fpu->state);
+		copy_kernel_to_fpregs(fpu);
 		fpregs_activate(fpu);
 		fpu->last_cpu = cpu;
 	}
