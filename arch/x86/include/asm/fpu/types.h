@@ -292,9 +292,9 @@ struct xregs_state {
  * put together, so that we can pick the right one runtime.
  *
  * The size of the structure is determined by the largest
- * member - which is the xsave area.  The padding is there
- * to ensure that statically-allocated task_structs (just
- * the init_task today) have enough space.
+ * member - which is the inline-allocated xsave area.
+ * The padding is there to ensure that statically-allocated
+ * task_structs (just the init_task today) have enough space.
  */
 union fpregs_state {
 	struct fregs_state		fsave;
