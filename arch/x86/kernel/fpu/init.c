@@ -132,7 +132,7 @@ static void __init fpu__init_system_generic(void)
 
 /*
  * Size of expanded xstate buffer, which is expected to be huge,
- * not fitting to the task_struct.
+ * not fitting to the task_struct. Allocate as-needed basis
  */
 unsigned int fpu_kernel_xstate_exp_size;
 EXPORT_SYMBOL_GPL(fpu_kernel_xstate_exp_size);
