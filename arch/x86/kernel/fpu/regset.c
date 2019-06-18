@@ -112,6 +112,16 @@ int xstateregs_set(struct task_struct *target, const struct user_regset *regset,
 	if ((pos != 0) || (count < fpu_user_xstate_size))
 		return -EFAULT;
 
+	/*
+	 * When ptracer writes the states in the expanded area,
+	 * but not expanded yet, we need to allocate it.
+	 */
+	if ((count > fpu_kernel_xstate_size) && !fpu->state_exp) {
+		if (alloc_xstate_exp(fpu))
+			return -ENOMEM;
+		xfirstuse_end(fpu);
+	}
+
 	fpu__prepare_write(fpu);
 
 	if (using_compacted_format()) {
