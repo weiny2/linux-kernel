@@ -15,6 +15,7 @@
 
 #include <linux/hardirq.h>
 #include <linux/pkeys.h>
+#include <linux/delay.h>
 
 #define CREATE_TRACE_POINTS
 #include <asm/trace/fpu.h>
@@ -483,6 +484,8 @@ int fpu__exception_code(struct fpu *fpu, int trap_nr)
 	return 0;
 }
 
+#define XSTATE_EXPAND_RETRY_DELAY	10
+
 int xfirstuse_trap(struct fpu *fpu)
 {
 	u64 event;
@@ -503,7 +506,7 @@ int xfirstuse_trap(struct fpu *fpu)
 	 * incrementally. So, this trap record bit value should be a
 	 * subset of the first-use mask.
 	 */
-	WARN_ON(!(event & xfeatures_firstuse_mask));
+	WARN_ON(!(event & xfirstuse_mask()));
 	/*
 	 * If the faulting feature is empty, return with nonzero, implying
 	 * implying the trap not handled yet.
@@ -512,10 +515,26 @@ int xfirstuse_trap(struct fpu *fpu)
 		return 1;
 
 	/*
-	 * No special handling right now, except for updating both
-	 * software and hardware bit values.
+	 * The first-use event is presumed to be from userspace, so it
+	 * should have nothing to do with interrupt context.
 	 */
-	fpu->firstuse_bv |= event;
+	if (WARN_ON(in_interrupt()))
+		return 1;
+
+	/*
+	 * While the allocation failure is most likely a risky condition,
+	 * retrials after a long sleep perhaps are smoother than an
+	 * immediate return to die.
+	 */
+	while (alloc_xstate_exp(fpu))
+		msleep(XSTATE_EXPAND_RETRY_DELAY);
+
+	/*
+	 * Any first-use of the xfeature in the expanded area triggers
+	 * the entire expansion, not in an incremental way. So, stop the
+	 * monitoring and update the hardware configuration accordingly.
+	 */
+	fpu->firstuse_bv |= xstate_exp_area_mask;
 	xfd_set_bits(xfd_get_cfg(fpu));
 
 	/* Clear the trap record. */

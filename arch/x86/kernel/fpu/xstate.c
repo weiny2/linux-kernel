@@ -140,18 +140,6 @@ static int retrieve_prior_xstate_comp_nr(int xfeature_nr)
 }
 
 /*
- * Mask for the first-use detection: a combination of feature bit
- * values that the kernel wants to select and the hardware supports
- * for the first-use detection.
- *
- * It is the default bit value for the hardware configuration, while
- * the first-use detection status in FPU context has zero by default.
- * It also helps to determine whether the first-use detection runs
- * in the system or not.
- */
-u64 xfeatures_firstuse_mask __read_mostly;
-
-/*
  * The XSAVE area of kernel can be in standard or compacted format;
  * it is always in standard format for user mode. This is the user
  * mode standard format size used for signal and ptrace frames.
@@ -335,7 +323,7 @@ void fpu__init_cpu_xstate(void)
 		wrmsrl(MSR_IA32_XSS, xfeatures_mask_supervisor());
 
 	if (xfirstuse_availability())
-		xfd_set_bits(xfeatures_firstuse_mask);
+		xfd_set_bits(xfirstuse_mask());
 }
 
 static bool xfeature_enabled(enum xfeature xfeature)
@@ -941,13 +929,6 @@ void __init fpu__init_system_xstate(void)
 	cpuid_count(XSTATE_CPUID, 1, &eax, &ebx, &ecx, &edx);
 	xfeatures_mask_all |= ecx + ((u64)edx << 32);
 
-	/*
-	 * The kernel can select which feature to be monitored for its first
-	 * usage. Select no xfeature at the moment as the support is not
-	 * fully ready yet.
-	 */
-	xfeatures_firstuse_mask = 0;
-
 	if ((xfeatures_mask_user() & XFEATURE_MASK_FPSSE) != XFEATURE_MASK_FPSSE) {
 		/*
 		 * This indicates that something really unexpected happened
@@ -983,6 +964,11 @@ void __init fpu__init_system_xstate(void)
 	/*
 	 * We don't support any feature, the state of which saved in the
 	 * expanded area.
+	 *
+	 * When enabling any feature saved in the expanded area, make sure
+	 * that the first-use detection to be available for it. Otherwise,
+	 * the area saving the feature's state needs to be pre-allocated,
+	 * by setting the relevant bits in xstate_area_mask.
 	 */
 	xstate_exp_area_mask = 0;
 

@@ -657,6 +657,31 @@ static inline u64 xfd_get_bits(void)
 }
 
 /*
+ * Return bit value, where each feature bit represents whether the
+ * first-use detection is needed or not.
+ *
+ * The whole bit value serves to determine whether the first-use
+ * detection related code to be executed or not. It will be also
+ * the default for the hardware configuration, while the first-
+ * use detection status in FPU context will have zero by default.
+ */
+static inline u64 xfirstuse_mask(void)
+{
+	/*
+	 * All the xfeatures in the expanded area, in the current
+	 * kernel, rely on the first-use detection mechanism.
+	 * And any xfeature in the default area does not require
+	 * this mechanism. So, the default bit value for first-use
+	 * detection is this.
+	 *
+	 * The bit value is a combination of feature bit values
+	 * that the kernel chose and the hardware supports for the
+	 * first-use detection.
+	 */
+	return xstate_exp_area_mask;
+}
+
+/*
  * Convert first-use status to hardware configuration bit value
  */
 static inline u64 xfd_get_cfg(struct fpu *fpu)
@@ -665,14 +690,18 @@ static inline u64 xfd_get_cfg(struct fpu *fpu)
 	 * In the first-use bit value of each FPU context, a bit is on
 	 * when the first-use detection happens. The superset of this is
 	 * the combination of what the kernel chooses, and the hardware
-	 * supports in the XFD.
+	 * supports for the XFD.
 	 *
-	 * If an xfeature is being monitor but not detected for its first-
-	 * use, set the feature bit in the XFD configuration bit value.
+	 * If an xfeature is being monitored but not detected for its
+	 * first-use, set the feature bit in the XFD configuration bit
+	 * value to keep the monitoring.
+	 *
 	 * If not monitored, the task's first-use status bit is always
-	 * zero. So, make the following conversion:
+	 * zero.
+	 *
+	 * So, make the following conversion:
 	 */
-	return xfeatures_firstuse_mask ^ fpu->firstuse_bv;
+	return xfirstuse_mask() ^ fpu->firstuse_bv;
 }
 
 /*
@@ -681,7 +710,7 @@ static inline u64 xfd_get_cfg(struct fpu *fpu)
  */
 static inline bool xfirstuse_availability(void)
 {
-	if (static_cpu_has(X86_FEATURE_XFD) && xfeatures_firstuse_mask)
+	if (static_cpu_has(X86_FEATURE_XFD) && xfirstuse_mask())
 		return true;
 	return false;
 }
@@ -771,7 +800,5 @@ static inline void xsetbv(u32 index, u64 value)
 	asm volatile(".byte 0x0f,0x01,0xd1" /* xsetbv */
 		     : : "a" (eax), "d" (edx), "c" (index));
 }
-
-
 
 #endif /* _ASM_X86_FPU_INTERNAL_H */
