@@ -31,7 +31,8 @@
 				       XFEATURE_MASK_Hi16_ZMM	 | \
 				       XFEATURE_MASK_PKRU | \
 				       XFEATURE_MASK_BNDREGS | \
-				       XFEATURE_MASK_BNDCSR)
+				       XFEATURE_MASK_BNDCSR | \
+				       XFEATURE_MASK_XTILE)
 
 /* All currently supported supervisor features */
 #define SUPPORTED_XFEATURES_MASK_SUPERVISOR (XFEATURE_MASK_CET_USER | \
@@ -49,7 +50,7 @@
 				       UNSUPPORTED_XFEATURES_MASK_SUPERVISOR)
 
 /* The features with huge xstate size */
-#define XFEATURE_MASK_HUGESTATE 0
+#define XFEATURE_MASK_HUGESTATE (XFEATURE_MASK_XTILE_DATA)
 
 #ifdef CONFIG_X86_64
 #define REX_PREFIX	"0x48, "
