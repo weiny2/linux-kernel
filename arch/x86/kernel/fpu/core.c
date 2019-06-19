@@ -189,6 +189,8 @@ int fpu__copy(struct task_struct *dst, struct task_struct *src)
 	 */
 	memset(&dst_fpu->state.xsave, 0, fpu_kernel_xstate_size);
 
+	dst_fpu->state_exp = NULL;
+
 	/*
 	 * If the FPU registers are not current just memcpy() the state.
 	 * Otherwise save current FPU registers directly into the child's FPU
