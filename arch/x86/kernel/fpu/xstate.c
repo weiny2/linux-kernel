@@ -10,6 +10,7 @@
 #include <linux/pkeys.h>
 #include <linux/seq_file.h>
 #include <linux/proc_fs.h>
+#include <linux/vmalloc.h>
 
 #include <asm/fpu/api.h>
 #include <asm/fpu/internal.h>
@@ -1157,6 +1158,44 @@ static inline bool xfeatures_mxcsr_quirk(u64 xfeatures)
 		return false;
 
 	return true;
+}
+
+int alloc_xstate_exp(struct fpu *fpu)
+{
+	union fpregs_state *state_exp;
+
+	/*
+	 * Once a task's xstate gets expanded, the area goes all the way
+	 * through the termination of it. If this approach has any
+	 * significant scalability issue in practice, we need to change
+	 * the model.
+	 */
+	if (!fpu->state_exp) {
+		/*
+		 * The caller may be under interrupt disabled condition.
+		 * Ensure interrupt allowance before memory allocation
+		 * that may cause page faults.
+		 */
+		local_irq_enable();
+		state_exp = vmalloc(fpu_kernel_xstate_exp_size);
+		local_irq_disable();
+		if (!state_exp)
+			return -ENOMEM;
+
+		fpu->state_exp = state_exp;
+	} else {
+		state_exp = fpu->state_exp;
+	}
+
+	memset(state_exp, 0, fpu_kernel_xstate_exp_size);
+	if (boot_cpu_has(X86_FEATURE_XSAVES))
+		fpstate_init_xstate(&state_exp->xsave, xstate_exp_area_mask);
+	return 0;
+}
+
+void free_xstate_exp(struct fpu *fpu)
+{
+	vfree(fpu->state_exp);
 }
 
 /*

@@ -77,6 +77,9 @@ extern void __init update_regset_xstate_info(unsigned int size,
 					     u64 xstate_mask);
 
 void *get_xsave_addr(struct fpu *fpu, int xfeature_nr);
+int alloc_xstate_exp(struct fpu *fpu);
+void free_xstate_exp(struct fpu *fpu);
+
 const void *get_xsave_field_ptr(int xfeature_nr);
 int using_compacted_format(void);
 int copy_xstate_comp_to_kernel(void *kbuf, struct fpu *fpu,
