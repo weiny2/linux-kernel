@@ -351,6 +351,15 @@ struct fpu {
 	u64	firstuse_bv;
 
 	/*
+	 * @state_exp:
+	 *
+	 * In-memory copy of some extended register state that takes
+	 * significant space, not fitting in task_struct. This is an
+	 * expanded area.
+	 */
+	union fpregs_state		*state_exp;
+
+	/*
 	 * @state:
 	 *
 	 * In-memory copy of all FPU registers that we save/restore
