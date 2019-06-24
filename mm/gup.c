@@ -34,7 +34,7 @@ static void __put_user_page(struct page *page, struct vaddr_pin *vaddr_pin)
 	 * page is free and we need to inform the device driver through
 	 * callback. See include/linux/memremap.h and HMM for details.
 	 */
-	if (put_devmap_managed_page(page))
+	if (put_devmap_managed_user_page(vaddr_pin, page))
 		return;
 
 	if (put_page_testzero(page))
@@ -261,7 +261,7 @@ retry:
 
 		if (unlikely(flags & FOLL_LONGTERM) &&
 		    (*pgmap)->type == MEMORY_DEVICE_FS_DAX &&
-		    !mapping_inode_has_layout(page)) {
+		    !mapping_inode_has_layout(ctx->vaddr_pin, page)) {
 			page = ERR_PTR(-EPERM);
 			goto out;
 		}
@@ -1904,7 +1904,7 @@ static int gup_pte_range(pmd_t pmd, unsigned long addr, unsigned long end,
 		if (pte_devmap(pte) &&
 		    unlikely(flags & FOLL_LONGTERM) &&
 		    pgmap->type == MEMORY_DEVICE_FS_DAX &&
-		    !mapping_inode_has_layout(head)) {
+		    !mapping_inode_has_layout(vaddr_pin, head)) {
 			put_user_page(head);
 			goto pte_unmap;
 		}
@@ -1961,7 +1961,7 @@ static int __gup_device_huge(unsigned long pfn, unsigned long addr,
 
 		if (unlikely(flags & FOLL_LONGTERM) &&
 		    pgmap->type == MEMORY_DEVICE_FS_DAX &&
-		    !mapping_inode_has_layout(page)) {
+		    !mapping_inode_has_layout(vaddr_pin, page)) {
 			undo_dev_pagemap(nr, nr_start, pages);
 			return 0;
 		}

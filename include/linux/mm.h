@@ -981,9 +981,11 @@ struct vaddr_pin {
 };
 
 #ifdef CONFIG_DEV_PAGEMAP_OPS
+void mapping_release_file(struct vaddr_pin *vaddr_pin, struct page *page);
 void __put_devmap_managed_page(struct page *page);
 DECLARE_STATIC_KEY_FALSE(devmap_managed_key);
-static inline bool put_devmap_managed_page(struct page *page)
+
+static inline bool page_is_devmap_managed(struct page *page)
 {
 	if (!static_branch_unlikely(&devmap_managed_key))
 		return false;
@@ -992,7 +994,6 @@ static inline bool put_devmap_managed_page(struct page *page)
 	switch (page->pgmap->type) {
 	case MEMORY_DEVICE_PRIVATE:
 	case MEMORY_DEVICE_FS_DAX:
-		__put_devmap_managed_page(page);
 		return true;
 	default:
 		break;
@@ -1000,8 +1001,36 @@ static inline bool put_devmap_managed_page(struct page *page)
 	return false;
 }
 
+static inline bool put_devmap_managed_page(struct page *page)
+{
+	bool is_devmap = page_is_devmap_managed(page);
+	if (is_devmap)
+		__put_devmap_managed_page(page);
+	return is_devmap;
+}
+
+static inline bool put_devmap_managed_user_page(struct vaddr_pin *vaddr_pin,
+						struct page *page)
+{
+	bool is_devmap = page_is_devmap_managed(page);
+
+	if (is_devmap) {
+		if (page->pgmap->type == MEMORY_DEVICE_FS_DAX)
+			mapping_release_file(vaddr_pin, page);
+
+		__put_devmap_managed_page(page);
+	}
+
+	return is_devmap;
+}
+
 #else /* CONFIG_DEV_PAGEMAP_OPS */
 static inline bool put_devmap_managed_page(struct page *page)
+{
+	return false;
+}
+static inline bool put_devmap_managed_user_page(struct vaddr_pin *vaddr_pin,
+						struct page *page)
 {
 	return false;
 }
@@ -1574,7 +1603,7 @@ int account_locked_vm(struct mm_struct *mm, unsigned long pages, bool inc);
 int __account_locked_vm(struct mm_struct *mm, unsigned long pages, bool inc,
 			struct task_struct *task, bool bypass_rlim);
 
-bool mapping_inode_has_layout(struct page *page);
+bool mapping_inode_has_layout(struct vaddr_pin *vaddr_pin, struct page *page);
 
 /* Container for pinned pfns / pages */
 struct frame_vector {
