@@ -168,6 +168,7 @@
 #include <linux/pid_namespace.h>
 #include <linux/hashtable.h>
 #include <linux/percpu.h>
+#include <linux/sched/mm.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/filelock.h>
@@ -2990,9 +2991,194 @@ static int __init filelock_init(void)
 }
 core_initcall(filelock_init);
 
+static struct file_file_pin *alloc_file_file_pin(struct inode *inode,
+						 struct file *file)
+{
+	struct file_file_pin *fp = kzalloc(sizeof(*fp), GFP_ATOMIC);
+
+	if (!fp)
+		return ERR_PTR(-ENOMEM);
+
+	INIT_LIST_HEAD(&fp->list);
+	kref_init(&fp->ref);
+	return fp;
+}
+
+static int add_file_pin_to_f_owner(struct vaddr_pin *vaddr_pin,
+				   struct inode *inode,
+				   struct file *file)
+{
+	struct file_file_pin *fp;
+
+	list_for_each_entry(fp, &vaddr_pin->f_owner->file_pins, list) {
+		if (fp->file == file) {
+			kref_get(&fp->ref);
+			return 0;
+		}
+	}
+
+	fp = alloc_file_file_pin(inode, file);
+	if (IS_ERR(fp))
+		return PTR_ERR(fp);
+
+	fp->file = get_file(file);
+	/* NOTE no reference needed here.
+	 * It is expected that the caller holds a reference to the owner file
+	 * for the duration of this pin.
+	 */
+	fp->f_owner = vaddr_pin->f_owner;
+
+	spin_lock(&fp->f_owner->fp_lock);
+	list_add(&fp->list, &fp->f_owner->file_pins);
+	spin_unlock(&fp->f_owner->fp_lock);
+
+	return 0;
+}
+
+static void release_file_file_pin(struct kref *ref)
+{
+	struct file_file_pin *fp = container_of(ref, struct file_file_pin, ref);
+
+	spin_lock(&fp->f_owner->fp_lock);
+	list_del(&fp->list);
+	spin_unlock(&fp->f_owner->fp_lock);
+	fput(fp->file);
+	kfree(fp);
+}
+
+static struct mm_file_pin *alloc_mm_file_pin(struct inode *inode,
+					     struct file *file)
+{
+	struct mm_file_pin *fp = kzalloc(sizeof(*fp), GFP_ATOMIC);
+
+	if (!fp)
+		return ERR_PTR(-ENOMEM);
+
+	INIT_LIST_HEAD(&fp->list);
+	kref_init(&fp->ref);
+	return fp;
+}
+
+/**
+ * This object bridges files and the mm struct for the purpose of tracking
+ * which files have GUP pins on them.
+ */
+static int add_file_pin_to_mm(struct vaddr_pin *vaddr_pin, struct inode *inode,
+			      struct file *file)
+{
+	struct mm_file_pin *fp;
+
+	list_for_each_entry(fp, &vaddr_pin->mm->file_pins, list) {
+		if (fp->inode == inode) {
+			kref_get(&fp->ref);
+			return 0;
+		}
+	}
+
+	fp = alloc_mm_file_pin(inode, file);
+	if (IS_ERR(fp))
+		return PTR_ERR(fp);
+
+	fp->inode = igrab(inode);
+	if (!fp->inode) {
+		kfree(fp);
+		return -EFAULT;
+	}
+
+	fp->file = get_file(file);
+	fp->mm = vaddr_pin->mm;
+	mmgrab(fp->mm);
+
+	spin_lock(&fp->mm->fp_lock);
+	list_add(&fp->list, &fp->mm->file_pins);
+	spin_unlock(&fp->mm->fp_lock);
+
+	return 0;
+}
+
+static void release_mm_file_pin(struct kref *ref)
+{
+	struct mm_file_pin *fp = container_of(ref, struct mm_file_pin, ref);
+
+	spin_lock(&fp->mm->fp_lock);
+	list_del(&fp->list);
+	spin_unlock(&fp->mm->fp_lock);
+
+	mmdrop(fp->mm);
+	fput(fp->file);
+	iput(fp->inode);
+	kfree(fp);
+}
+
+static void remove_file_file_pin(struct vaddr_pin *vaddr_pin)
+{
+	struct file_file_pin *fp;
+	struct file_file_pin *tmp;
+
+	list_for_each_entry_safe(fp, tmp, &vaddr_pin->f_owner->file_pins,
+				 list) {
+		kref_put(&fp->ref, release_file_file_pin);
+	}
+}
+
+static void remove_mm_file_pin(struct vaddr_pin *vaddr_pin,
+			       struct inode *inode)
+{
+	struct mm_file_pin *fp;
+	struct mm_file_pin *tmp;
+
+	list_for_each_entry_safe(fp, tmp, &vaddr_pin->mm->file_pins, list) {
+		if (fp->inode == inode)
+			kref_put(&fp->ref, release_mm_file_pin);
+	}
+}
+
+static bool add_file_pin(struct vaddr_pin *vaddr_pin, struct inode *inode,
+			 struct file *file)
+{
+	bool ret = true;
+
+	if (!vaddr_pin || (!vaddr_pin->f_owner && !vaddr_pin->mm))
+		return false;
+
+	if (vaddr_pin->f_owner) {
+		if (add_file_pin_to_f_owner(vaddr_pin, inode, file))
+			ret = false;
+	} else {
+		if (add_file_pin_to_mm(vaddr_pin, inode, file))
+			ret = false;
+	}
+
+	return ret;
+}
+
+void mapping_release_file(struct vaddr_pin *vaddr_pin, struct page *page)
+{
+	struct inode *inode;
+
+	if (WARN_ON(!page) || WARN_ON(!vaddr_pin) ||
+	    WARN_ON(!vaddr_pin->mm && !vaddr_pin->f_owner))
+		return;
+
+	if (PageAnon(page) ||
+	    !page->mapping ||
+	    !page->mapping->host)
+		return;
+
+	inode = page->mapping->host;
+
+	if (vaddr_pin->f_owner)
+		remove_file_file_pin(vaddr_pin);
+	else
+		remove_mm_file_pin(vaddr_pin, inode);
+}
+EXPORT_SYMBOL_GPL(mapping_release_file);
+
 /**
  * mapping_inode_has_layout - ensure a file mapped page has a layout lease
  * taken
+ * @vaddr_pin: pin owner information to store with this pin if a proper layout
+ * is lease is found.
  * @page: page we are trying to GUP
  *
  * This should only be called on DAX pages.  DAX pages which are mapped through
@@ -3001,9 +3187,12 @@ core_initcall(filelock_init);
  * This allows the user to opt-into the fact that truncation operations will
  * fail for the duration of the pin.
  *
+ * Also if the proper layout leases are found we store pining information into
+ * the owner passed in via the vaddr_pin structure.
+ *
  * Return true if the page has a LAYOUT lease associated with it's file.
  */
-bool mapping_inode_has_layout(struct page *page)
+bool mapping_inode_has_layout(struct vaddr_pin *vaddr_pin, struct page *page)
 {
 	bool ret = false;
 	struct inode *inode;
@@ -3021,12 +3210,12 @@ bool mapping_inode_has_layout(struct page *page)
 	if (inode->i_flctx &&
 	    !list_empty_careful(&inode->i_flctx->flc_lease)) {
 		spin_lock(&inode->i_flctx->flc_lock);
-		ret = false;
 		list_for_each_entry(fl, &inode->i_flctx->flc_lease, fl_list) {
 			if (fl->fl_pid == current->tgid &&
 			    (fl->fl_flags & FL_LAYOUT) &&
 			    (fl->fl_flags & FL_EXCLUSIVE)) {
-				ret = true;
+				ret = add_file_pin(vaddr_pin, inode,
+						   fl->fl_file);
 				break;
 			}
 		}
