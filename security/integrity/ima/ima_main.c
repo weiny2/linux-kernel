@@ -39,6 +39,10 @@ int ima_appraise;
 int ima_hash_algo = HASH_ALGO_SHA1;
 static int hash_setup_done;
 
+static struct notifier_block ima_lsm_policy_notifier = {
+	.notifier_call = ima_lsm_policy_change,
+};
+
 static int __init hash_setup(char *str)
 {
 	struct ima_template_desc *template_desc = ima_template_desc_current();
@@ -67,6 +71,27 @@ out:
 	return 1;
 }
 __setup("ima_hash=", hash_setup);
+
+/* Prevent mmap'ing a file execute that is already mmap'ed write */
+static int mmap_violation_check(enum ima_hooks func, struct file *file,
+				char **pathbuf, const char **pathname,
+				char *filename)
+{
+	struct inode *inode;
+	int rc = 0;
+
+	if ((func == MMAP_CHECK) && mapping_writably_mapped(file->f_mapping)) {
+		rc = -ETXTBSY;
+		inode = file_inode(file);
+
+		if (!*pathbuf)	/* ima_rdwr_violation possibly pre-fetched */
+			*pathname = ima_d_path(&file->f_path, pathbuf,
+					       filename);
+		integrity_audit_msg(AUDIT_INTEGRITY_DATA, inode, *pathname,
+				    "mmap_file", "mmapped_writers", rc, 0);
+	}
+	return rc;
+}
 
 /*
  * ima_rdwr_violation_check
@@ -266,8 +291,12 @@ static int process_measurement(struct file *file, const struct cred *cred,
 
 	/* Nothing to do, just return existing appraised status */
 	if (!action) {
-		if (must_appraise)
-			rc = ima_get_cache_status(iint, func);
+		if (must_appraise) {
+			rc = mmap_violation_check(func, file, &pathbuf,
+						  &pathname, filename);
+			if (!rc)
+				rc = ima_get_cache_status(iint, func);
+		}
 		goto out_locked;
 	}
 
@@ -294,6 +323,9 @@ static int process_measurement(struct file *file, const struct cred *cred,
 		rc = ima_appraise_measurement(func, iint, file, pathname,
 					      xattr_value, xattr_len);
 		inode_unlock(inode);
+		if (!rc)
+			rc = mmap_violation_check(func, file, &pathbuf,
+						  &pathname, filename);
 	}
 	if (action & IMA_AUDIT)
 		ima_audit_measurement(iint, pathname);
@@ -588,6 +620,10 @@ static int __init init_ima(void)
 		hash_setup(CONFIG_IMA_DEFAULT_HASH);
 		error = ima_init();
 	}
+
+	error = register_blocking_lsm_notifier(&ima_lsm_policy_notifier);
+	if (error)
+		pr_warn("Couldn't register LSM notifier, error %d\n", error);
 
 	if (!error)
 		ima_update_policy_flag();

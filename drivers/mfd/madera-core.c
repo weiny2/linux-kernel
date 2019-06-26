@@ -59,7 +59,11 @@ static const struct mfd_cell cs47l35_devs[] = {
 	{ .name = "madera-irq", },
 	{ .name = "madera-micsupp", },
 	{ .name = "madera-gpio", },
-	{ .name = "madera-extcon", },
+	{
+		.name = "madera-extcon",
+		.parent_supplies = cs47l35_supplies,
+		.num_parent_supplies = 1, /* We only need MICVDD */
+	},
 	{
 		.name = "cs47l35-codec",
 		.parent_supplies = cs47l35_supplies,
@@ -83,7 +87,11 @@ static const struct mfd_cell cs47l85_devs[] = {
 	{ .name = "madera-irq", },
 	{ .name = "madera-micsupp" },
 	{ .name = "madera-gpio", },
-	{ .name = "madera-extcon", },
+	{
+		.name = "madera-extcon",
+		.parent_supplies = cs47l85_supplies,
+		.num_parent_supplies = 1, /* We only need MICVDD */
+	},
 	{
 		.name = "cs47l85-codec",
 		.parent_supplies = cs47l85_supplies,
@@ -105,7 +113,11 @@ static const struct mfd_cell cs47l90_devs[] = {
 	{ .name = "madera-irq", },
 	{ .name = "madera-micsupp", },
 	{ .name = "madera-gpio", },
-	{ .name = "madera-extcon", },
+	{
+		.name = "madera-extcon",
+		.parent_supplies = cs47l90_supplies,
+		.num_parent_supplies = 1, /* We only need MICVDD */
+	},
 	{
 		.name = "cs47l90-codec",
 		.parent_supplies = cs47l90_supplies,
@@ -139,7 +151,7 @@ EXPORT_SYMBOL_GPL(madera_name_from_type);
 static int madera_wait_for_boot(struct madera *madera)
 {
 	ktime_t timeout;
-	unsigned int val;
+	unsigned int val = 0;
 	int ret = 0;
 
 	/*
@@ -286,6 +298,7 @@ const struct of_device_id madera_of_match[] = {
 	{ .compatible = "cirrus,wm1840", .data = (void *)WM1840 },
 	{}
 };
+MODULE_DEVICE_TABLE(of, madera_of_match);
 EXPORT_SYMBOL_GPL(madera_of_match);
 
 static int madera_get_reset_gpio(struct madera *madera)

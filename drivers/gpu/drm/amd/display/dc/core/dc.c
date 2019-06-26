@@ -22,6 +22,8 @@
  * Authors: AMD
  */
 
+#include <linux/slab.h>
+
 #include "dm_services.h"
 
 #include "dc.h"
@@ -33,6 +35,7 @@
 
 #include "resource.h"
 
+#include "clk_mgr.h"
 #include "clock_source.h"
 #include "dc_bios_types.h"
 
@@ -169,9 +172,14 @@ static bool create_links(
 		link = link_create(&link_init_params);
 
 		if (link) {
-			dc->links[dc->link_count] = link;
-			link->dc = dc;
-			++dc->link_count;
+			if (dc->config.edp_not_connected &&
+					link->connector_signal == SIGNAL_TYPE_EDP) {
+				link_destroy(&link);
+			} else {
+				dc->links[dc->link_count] = link;
+				link->dc = dc;
+				++dc->link_count;
+			}
 		}
 	}
 
@@ -257,7 +265,7 @@ bool dc_stream_adjust_vmin_vmax(struct dc *dc,
 	for (i = 0; i < MAX_PIPES; i++) {
 		struct pipe_ctx *pipe = &dc->current_state->res_ctx.pipe_ctx[i];
 
-		if (pipe->stream == stream && pipe->stream_res.stream_enc) {
+		if (pipe->stream == stream && pipe->stream_res.tg) {
 			pipe->stream->adjust = *adjust;
 			dc->hwss.set_drr(&pipe,
 					1,
@@ -451,7 +459,7 @@ bool dc_stream_program_csc_matrix(struct dc *dc, struct dc_stream_state *stream)
 					pipes,
 					stream->output_color_space,
 					stream->csc_color_matrix.matrix,
-					pipes->plane_res.hubp ? pipes->plane_res.hubp->opp_id : 0);
+					pipes->stream_res.opp->inst);
 			ret = true;
 		}
 	}
@@ -484,134 +492,17 @@ void dc_stream_set_static_screen_events(struct dc *dc,
 	dc->hwss.set_static_screen_control(pipes_affected, num_pipes_affected, events);
 }
 
-void dc_link_set_drive_settings(struct dc *dc,
-				struct link_training_settings *lt_settings,
-				const struct dc_link *link)
-{
-
-	int i;
-
-	for (i = 0; i < dc->link_count; i++) {
-		if (dc->links[i] == link)
-			break;
-	}
-
-	if (i >= dc->link_count)
-		ASSERT_CRITICAL(false);
-
-	dc_link_dp_set_drive_settings(dc->links[i], lt_settings);
-}
-
-void dc_link_perform_link_training(struct dc *dc,
-				   struct dc_link_settings *link_setting,
-				   bool skip_video_pattern)
-{
-	int i;
-
-	for (i = 0; i < dc->link_count; i++)
-		dc_link_dp_perform_link_training(
-			dc->links[i],
-			link_setting,
-			skip_video_pattern);
-}
-
-void dc_link_set_preferred_link_settings(struct dc *dc,
-					 struct dc_link_settings *link_setting,
-					 struct dc_link *link)
-{
-	int i;
-	struct pipe_ctx *pipe;
-	struct dc_stream_state *link_stream;
-	struct dc_link_settings store_settings = *link_setting;
-
-	link->preferred_link_setting = store_settings;
-
-	/* Retrain with preferred link settings only relevant for
-	 * DP signal type
-	 */
-	if (!dc_is_dp_signal(link->connector_signal))
-		return;
-
-	for (i = 0; i < MAX_PIPES; i++) {
-		pipe = &dc->current_state->res_ctx.pipe_ctx[i];
-		if (pipe->stream && pipe->stream->link) {
-			if (pipe->stream->link == link)
-				break;
-		}
-	}
-
-	/* Stream not found */
-	if (i == MAX_PIPES)
-		return;
-
-	link_stream = link->dc->current_state->res_ctx.pipe_ctx[i].stream;
-
-	/* Cannot retrain link if backend is off */
-	if (link_stream->dpms_off)
-		return;
-
-	if (link_stream)
-		decide_link_settings(link_stream, &store_settings);
-
-	if ((store_settings.lane_count != LANE_COUNT_UNKNOWN) &&
-		(store_settings.link_rate != LINK_RATE_UNKNOWN))
-		dp_retrain_link_dp_test(link, &store_settings, false);
-}
-
-void dc_link_enable_hpd(const struct dc_link *link)
-{
-	dc_link_dp_enable_hpd(link);
-}
-
-void dc_link_disable_hpd(const struct dc_link *link)
-{
-	dc_link_dp_disable_hpd(link);
-}
-
-
-void dc_link_set_test_pattern(struct dc_link *link,
-			      enum dp_test_pattern test_pattern,
-			      const struct link_training_settings *p_link_settings,
-			      const unsigned char *p_custom_pattern,
-			      unsigned int cust_pattern_size)
-{
-	if (link != NULL)
-		dc_link_dp_set_test_pattern(
-			link,
-			test_pattern,
-			p_link_settings,
-			p_custom_pattern,
-			cust_pattern_size);
-}
-
-uint32_t dc_link_bandwidth_kbps(
-	const struct dc_link *link,
-	const struct dc_link_settings *link_setting)
-{
-	uint32_t link_bw_kbps = link_setting->link_rate * LINK_RATE_REF_FREQ_IN_KHZ; /* bytes per sec */
-
-	link_bw_kbps *= 8;   /* 8 bits per byte*/
-	link_bw_kbps *= link_setting->lane_count;
-
-	return link_bw_kbps;
-
-}
-
-const struct dc_link_settings *dc_link_get_link_cap(
-		const struct dc_link *link)
-{
-	if (link->preferred_link_setting.lane_count != LANE_COUNT_UNKNOWN &&
-			link->preferred_link_setting.link_rate != LINK_RATE_UNKNOWN)
-		return &link->preferred_link_setting;
-	return &link->verified_link_cap;
-}
-
 static void destruct(struct dc *dc)
 {
 	dc_release_state(dc->current_state);
 	dc->current_state = NULL;
 
 	destroy_links(dc);
+
+	if (dc->clk_mgr) {
+		dc_destroy_clk_mgr(dc->clk_mgr);
+		dc->clk_mgr = NULL;
+	}
 
 	dc_destroy_resource_pool(dc);
 
@@ -754,6 +645,10 @@ static bool construct(struct dc *dc,
 
 	dc->res_pool = dc_create_resource_pool(dc, init_params, dc_version);
 	if (!dc->res_pool)
+		goto fail;
+
+	dc->clk_mgr = dc_clk_mgr_create(dc->ctx, dc->res_pool->pp_smu, dc->res_pool->dccg);
+	if (!dc->clk_mgr)
 		goto fail;
 
 	/* Creation of current_state must occur after dc->dml
@@ -1136,10 +1031,6 @@ static enum dc_status dc_commit_state_no_check(struct dc *dc, struct dc_state *c
 	/* Program all planes within new context*/
 	for (i = 0; i < context->stream_count; i++) {
 		const struct dc_link *link = context->streams[i]->link;
-		struct dc_stream_status *status;
-
-		if (context->streams[i]->apply_seamless_boot_optimization)
-			context->streams[i]->apply_seamless_boot_optimization = false;
 
 		if (!context->streams[i]->mode_changed)
 			continue;
@@ -1163,9 +1054,6 @@ static enum dc_status dc_commit_state_no_check(struct dc *dc, struct dc_state *c
 					dc->hwss.setup_stereo(pipe, dc);
 			}
 		}
-
-		status = dc_stream_get_status_from_state(context, context->streams[i]);
-		context->streams[i]->out.otg_offset = status->primary_otg_inst;
 
 		CONN_MSG_MODE(link, "{%dx%d, %dx%d@%dKhz}",
 				context->streams[i]->timing.h_addressable,
@@ -1331,71 +1219,94 @@ static bool is_surface_in_context(
 static enum surface_update_type get_plane_info_update_type(const struct dc_surface_update *u)
 {
 	union surface_update_flags *update_flags = &u->surface->update_flags;
+	enum surface_update_type update_type = UPDATE_TYPE_FAST;
 
 	if (!u->plane_info)
 		return UPDATE_TYPE_FAST;
 
-	if (u->plane_info->color_space != u->surface->color_space)
+	if (u->plane_info->color_space != u->surface->color_space) {
 		update_flags->bits.color_space_change = 1;
+		elevate_update_type(&update_type, UPDATE_TYPE_MED);
+	}
 
-	if (u->plane_info->horizontal_mirror != u->surface->horizontal_mirror)
+	if (u->plane_info->horizontal_mirror != u->surface->horizontal_mirror) {
 		update_flags->bits.horizontal_mirror_change = 1;
+		elevate_update_type(&update_type, UPDATE_TYPE_MED);
+	}
 
-	if (u->plane_info->rotation != u->surface->rotation)
+	if (u->plane_info->rotation != u->surface->rotation) {
 		update_flags->bits.rotation_change = 1;
+		elevate_update_type(&update_type, UPDATE_TYPE_FULL);
+	}
 
-	if (u->plane_info->format != u->surface->format)
+	if (u->plane_info->format != u->surface->format) {
 		update_flags->bits.pixel_format_change = 1;
+		elevate_update_type(&update_type, UPDATE_TYPE_FULL);
+	}
 
-	if (u->plane_info->stereo_format != u->surface->stereo_format)
+	if (u->plane_info->stereo_format != u->surface->stereo_format) {
 		update_flags->bits.stereo_format_change = 1;
+		elevate_update_type(&update_type, UPDATE_TYPE_FULL);
+	}
 
-	if (u->plane_info->per_pixel_alpha != u->surface->per_pixel_alpha)
+	if (u->plane_info->per_pixel_alpha != u->surface->per_pixel_alpha) {
 		update_flags->bits.per_pixel_alpha_change = 1;
+		elevate_update_type(&update_type, UPDATE_TYPE_MED);
+	}
 
-	if (u->plane_info->global_alpha_value != u->surface->global_alpha_value)
+	if (u->plane_info->global_alpha_value != u->surface->global_alpha_value) {
 		update_flags->bits.global_alpha_change = 1;
+		elevate_update_type(&update_type, UPDATE_TYPE_MED);
+	}
+
+	if (u->plane_info->sdr_white_level != u->surface->sdr_white_level) {
+		update_flags->bits.sdr_white_level = 1;
+		elevate_update_type(&update_type, UPDATE_TYPE_MED);
+	}
 
 	if (u->plane_info->dcc.enable != u->surface->dcc.enable
 			|| u->plane_info->dcc.grph.independent_64b_blks != u->surface->dcc.grph.independent_64b_blks
-			|| u->plane_info->dcc.grph.meta_pitch != u->surface->dcc.grph.meta_pitch)
+			|| u->plane_info->dcc.grph.meta_pitch != u->surface->dcc.grph.meta_pitch) {
 		update_flags->bits.dcc_change = 1;
+		elevate_update_type(&update_type, UPDATE_TYPE_MED);
+	}
 
 	if (resource_pixel_format_to_bpp(u->plane_info->format) !=
-			resource_pixel_format_to_bpp(u->surface->format))
+			resource_pixel_format_to_bpp(u->surface->format)) {
 		/* different bytes per element will require full bandwidth
 		 * and DML calculation
 		 */
 		update_flags->bits.bpp_change = 1;
+		elevate_update_type(&update_type, UPDATE_TYPE_FULL);
+	}
 
 	if (u->plane_info->plane_size.grph.surface_pitch != u->surface->plane_size.grph.surface_pitch
 			|| u->plane_info->plane_size.video.luma_pitch != u->surface->plane_size.video.luma_pitch
-			|| u->plane_info->plane_size.video.chroma_pitch != u->surface->plane_size.video.chroma_pitch)
+			|| u->plane_info->plane_size.video.chroma_pitch != u->surface->plane_size.video.chroma_pitch) {
 		update_flags->bits.plane_size_change = 1;
+		elevate_update_type(&update_type, UPDATE_TYPE_MED);
+	}
 
 
 	if (memcmp(&u->plane_info->tiling_info, &u->surface->tiling_info,
 			sizeof(union dc_tiling_info)) != 0) {
 		update_flags->bits.swizzle_change = 1;
+		elevate_update_type(&update_type, UPDATE_TYPE_MED);
+
 		/* todo: below are HW dependent, we should add a hook to
 		 * DCE/N resource and validated there.
 		 */
-		if (u->plane_info->tiling_info.gfx9.swizzle != DC_SW_LINEAR)
+		if (u->plane_info->tiling_info.gfx9.swizzle != DC_SW_LINEAR) {
 			/* swizzled mode requires RQ to be setup properly,
 			 * thus need to run DML to calculate RQ settings
 			 */
 			update_flags->bits.bandwidth_change = 1;
+			elevate_update_type(&update_type, UPDATE_TYPE_FULL);
+		}
 	}
 
-	if (update_flags->bits.rotation_change
-			|| update_flags->bits.stereo_format_change
-			|| update_flags->bits.pixel_format_change
-			|| update_flags->bits.bpp_change
-			|| update_flags->bits.bandwidth_change
-			|| update_flags->bits.output_tf_change)
-		return UPDATE_TYPE_FULL;
-
-	return update_flags->raw ? UPDATE_TYPE_MED : UPDATE_TYPE_FAST;
+	/* This should be UPDATE_TYPE_FAST if nothing has changed. */
+	return update_type;
 }
 
 static enum surface_update_type get_scaling_info_update_type(
@@ -1474,6 +1385,9 @@ static enum surface_update_type det_surface_update(const struct dc *dc,
 
 	type = get_scaling_info_update_type(u);
 	elevate_update_type(&overall_type, type);
+
+	if (u->flip_addr)
+		update_flags->bits.addr_update = 1;
 
 	if (u->in_transfer_func)
 		update_flags->bits.in_transfer_func_change = 1;
@@ -1695,6 +1609,73 @@ static void copy_surface_update_to_plane(
 			*srf_update->coeff_reduction_factor;
 }
 
+static void copy_stream_update_to_stream(struct dc *dc,
+					 struct dc_state *context,
+					 struct dc_stream_state *stream,
+					 const struct dc_stream_update *update)
+{
+	if (update == NULL || stream == NULL)
+		return;
+
+	if (update->src.height && update->src.width)
+		stream->src = update->src;
+
+	if (update->dst.height && update->dst.width)
+		stream->dst = update->dst;
+
+	if (update->out_transfer_func &&
+	    stream->out_transfer_func != update->out_transfer_func) {
+		stream->out_transfer_func->sdr_ref_white_level =
+			update->out_transfer_func->sdr_ref_white_level;
+		stream->out_transfer_func->tf = update->out_transfer_func->tf;
+		stream->out_transfer_func->type =
+			update->out_transfer_func->type;
+		memcpy(&stream->out_transfer_func->tf_pts,
+		       &update->out_transfer_func->tf_pts,
+		       sizeof(struct dc_transfer_func_distributed_points));
+	}
+
+	if (update->hdr_static_metadata)
+		stream->hdr_static_metadata = *update->hdr_static_metadata;
+
+	if (update->abm_level)
+		stream->abm_level = *update->abm_level;
+
+	if (update->periodic_interrupt0)
+		stream->periodic_interrupt0 = *update->periodic_interrupt0;
+
+	if (update->periodic_interrupt1)
+		stream->periodic_interrupt1 = *update->periodic_interrupt1;
+
+	if (update->gamut_remap)
+		stream->gamut_remap_matrix = *update->gamut_remap;
+
+	/* Note: this being updated after mode set is currently not a use case
+	 * however if it arises OCSC would need to be reprogrammed at the
+	 * minimum
+	 */
+	if (update->output_color_space)
+		stream->output_color_space = *update->output_color_space;
+
+	if (update->output_csc_transform)
+		stream->csc_color_matrix = *update->output_csc_transform;
+
+	if (update->vrr_infopacket)
+		stream->vrr_infopacket = *update->vrr_infopacket;
+
+	if (update->dpms_off)
+		stream->dpms_off = *update->dpms_off;
+
+	if (update->vsc_infopacket)
+		stream->vsc_infopacket = *update->vsc_infopacket;
+
+	if (update->vsp_infopacket)
+		stream->vsp_infopacket = *update->vsp_infopacket;
+
+	if (update->dither_option)
+		stream->dither_option = *update->dither_option;
+}
+
 static void commit_planes_do_stream_update(struct dc *dc,
 		struct dc_stream_state *stream,
 		struct dc_stream_update *stream_update,
@@ -1710,13 +1691,6 @@ static void commit_planes_do_stream_update(struct dc *dc,
 		if (!pipe_ctx->top_pipe &&
 			pipe_ctx->stream &&
 			pipe_ctx->stream == stream) {
-
-			/* Fast update*/
-			// VRR program can be done as part of FAST UPDATE
-			if (stream_update->adjust)
-				dc->hwss.set_drr(&pipe_ctx, 1,
-					stream_update->adjust->v_total_min,
-					stream_update->adjust->v_total_max);
 
 			if (stream_update->periodic_interrupt0 &&
 					dc->hwss.setup_periodic_interrupt)
@@ -1792,10 +1766,15 @@ static void commit_planes_for_stream(struct dc *dc,
 	if (dc->optimize_seamless_boot && surface_count > 0) {
 		/* Optimize seamless boot flag keeps clocks and watermarks high until
 		 * first flip. After first flip, optimization is required to lower
-		 * bandwidth.
+		 * bandwidth. Important to note that it is expected UEFI will
+		 * only light up a single display on POST, therefore we only expect
+		 * one stream with seamless boot flag set.
 		 */
-		dc->optimize_seamless_boot = false;
-		dc->optimized_required = true;
+		if (stream->apply_seamless_boot_optimization) {
+			stream->apply_seamless_boot_optimization = false;
+			dc->optimize_seamless_boot = false;
+			dc->optimized_required = true;
+		}
 	}
 
 	if (update_type == UPDATE_TYPE_FULL && !dc->optimize_seamless_boot) {
@@ -1870,6 +1849,20 @@ static void commit_planes_for_stream(struct dc *dc,
 
 		dc->hwss.pipe_control_lock(dc, top_pipe_to_program, false);
 	}
+
+	// Fire manual trigger only when bottom plane is flipped
+	for (j = 0; j < dc->res_pool->pipe_count; j++) {
+		struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[j];
+
+		if (pipe_ctx->bottom_pipe ||
+				!pipe_ctx->stream ||
+				pipe_ctx->stream != stream ||
+				!pipe_ctx->plane_state->update_flags.bits.addr_update)
+			continue;
+
+		if (pipe_ctx->stream_res.tg->funcs->program_manual_trigger)
+			pipe_ctx->stream_res.tg->funcs->program_manual_trigger(pipe_ctx->stream_res.tg);
+	}
 }
 
 void dc_commit_updates_for_stream(struct dc *dc,
@@ -1932,6 +1925,8 @@ void dc_commit_updates_for_stream(struct dc *dc,
 			}
 		}
 	}
+
+	copy_stream_update_to_stream(dc, context, stream, stream_update);
 
 	commit_planes_for_stream(
 				dc,
@@ -2006,6 +2001,12 @@ void dc_set_power_state(
 	enum dc_acpi_cm_power_state power_state)
 {
 	struct kref refcount;
+	struct display_mode_lib *dml = kzalloc(sizeof(struct display_mode_lib),
+						GFP_KERNEL);
+
+	ASSERT(dml);
+	if (!dml)
+		return;
 
 	switch (power_state) {
 	case DC_ACPI_CM_POWER_STATE_D0:
@@ -2022,15 +2023,20 @@ void dc_set_power_state(
 
 		/* Preserve refcount */
 		refcount = dc->current_state->refcount;
+		/* Preserve display mode lib */
+		memcpy(dml, &dc->current_state->bw_ctx.dml, sizeof(struct display_mode_lib));
+
 		dc_resource_state_destruct(dc->current_state);
 		memset(dc->current_state, 0,
 				sizeof(*dc->current_state));
 
 		dc->current_state->refcount = refcount;
+		dc->current_state->bw_ctx.dml = *dml;
 
 		break;
 	}
 
+	kfree(dml);
 }
 
 void dc_resume(struct dc *dc)

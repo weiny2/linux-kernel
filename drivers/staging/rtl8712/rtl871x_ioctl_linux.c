@@ -1309,7 +1309,7 @@ static int r8711_wx_set_rate(struct net_device *dev,
 	u32 ratevalue = 0;
 	u8 datarates[NumRates];
 	u8 mpdatarate[NumRates] = {11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0xff};
-	int i, ret = 0;
+	int i;
 
 	if (target_rate == -1) {
 		ratevalue = 11;
@@ -1367,9 +1367,7 @@ set_rate:
 			datarates[i] = 0xff;
 		}
 	}
-	if (r8712_setdatarate_cmd(padapter, datarates) != _SUCCESS)
-		ret = -ENOMEM;
-	return ret;
+	return r8712_setdatarate_cmd(padapter, datarates);
 }
 
 static int r8711_wx_get_rate(struct net_device *dev,
@@ -1577,7 +1575,7 @@ static int r8711_wx_get_enc(struct net_device *dev,
 				struct iw_request_info *info,
 				union iwreq_data *wrqu, char *keybuf)
 {
-	uint key, ret = 0;
+	uint key;
 	struct _adapter *padapter = netdev_priv(dev);
 	struct iw_point *erq = &(wrqu->encoding);
 	struct	mlme_priv	*pmlmepriv = &(padapter->mlmepriv);
@@ -1633,7 +1631,7 @@ static int r8711_wx_get_enc(struct net_device *dev,
 		erq->flags |= IW_ENCODE_DISABLED;
 		break;
 	}
-	return ret;
+	return 0;
 }
 
 static int r8711_wx_get_power(struct net_device *dev,

@@ -53,7 +53,7 @@ extern unsigned int apic_verbosity;
 extern int local_apic_timer_c2_ok;
 
 extern int disable_apic;
-extern unsigned int lapic_timer_frequency;
+extern unsigned int lapic_timer_period;
 
 extern enum apic_intr_mode_id apic_intr_mode;
 enum apic_intr_mode_id {
@@ -155,7 +155,6 @@ static inline int apic_force_enable(unsigned long addr)
 extern int apic_force_enable(unsigned long addr);
 #endif
 
-extern void apic_bsp_setup(bool upmode);
 extern void apic_ap_setup(void);
 
 /*

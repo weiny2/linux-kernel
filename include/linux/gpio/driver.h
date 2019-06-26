@@ -18,6 +18,7 @@ struct seq_file;
 struct gpio_device;
 struct module;
 enum gpiod_flags;
+enum gpio_lookup_flags;
 
 #ifdef CONFIG_GPIOLIB
 
@@ -100,13 +101,6 @@ struct gpio_irq_chip {
 	 * The number of interrupt parents of a GPIO chip.
 	 */
 	unsigned int num_parents;
-
-	/**
-	 * @parent_irq:
-	 *
-	 * For use by gpiochip_set_cascaded_irqchip()
-	 */
-	unsigned int parent_irq;
 
 	/**
 	 * @parents:
@@ -590,6 +584,8 @@ void gpiochip_remove_pin_ranges(struct gpio_chip *chip);
 
 #else
 
+struct pinctrl_dev;
+
 static inline int
 gpiochip_add_pin_range(struct gpio_chip *chip, const char *pinctl_name,
 		       unsigned int gpio_offset, unsigned int pin_offset,
@@ -614,7 +610,8 @@ gpiochip_remove_pin_ranges(struct gpio_chip *chip)
 
 struct gpio_desc *gpiochip_request_own_desc(struct gpio_chip *chip, u16 hwnum,
 					    const char *label,
-					    enum gpiod_flags flags);
+					    enum gpio_lookup_flags lflags,
+					    enum gpiod_flags dflags);
 void gpiochip_free_own_desc(struct gpio_desc *desc);
 
 void devprop_gpiochip_set_names(struct gpio_chip *chip,

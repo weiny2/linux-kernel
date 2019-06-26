@@ -13,6 +13,8 @@
 
 #ifdef CONFIG_PINCONF
 
+#include <linux/types.h>
+
 struct pinctrl_dev;
 struct seq_file;
 

@@ -12,7 +12,6 @@
 #include "pipe.h"
 
 #define usbhsf_get_cfifo(p)	(&((p)->fifo_info.cfifo))
-#define usbhsf_is_cfifo(p, f)	(usbhsf_get_cfifo(p) == f)
 
 #define usbhsf_fifo_is_busy(f)	((f)->pipe) /* see usbhs_pipe_select_fifo */
 
@@ -325,10 +324,7 @@ static int usbhsf_fifo_select(struct usbhs_pipe *pipe,
 	}
 
 	/* "base" will be used below  */
-	if (usbhs_get_dparam(priv, has_sudmac) && !usbhsf_is_cfifo(priv, fifo))
-		usbhs_write(priv, fifo->sel, base);
-	else
-		usbhs_write(priv, fifo->sel, base | MBW_32);
+	usbhs_write(priv, fifo->sel, base | MBW_32);
 
 	/* check ISEL and CURPIPE value */
 	while (timeout--) {
@@ -543,8 +539,13 @@ static int usbhsf_pio_try_push(struct usbhs_pkt *pkt, int *is_done)
 	}
 
 	/* the rest operation */
-	for (i = 0; i < len; i++)
-		iowrite8(buf[i], addr + (0x03 - (i & 0x03)));
+	if (usbhs_get_dparam(priv, cfifo_byte_addr)) {
+		for (i = 0; i < len; i++)
+			iowrite8(buf[i], addr + (i & 0x03));
+	} else {
+		for (i = 0; i < len; i++)
+			iowrite8(buf[i], addr + (0x03 - (i & 0x03)));
+	}
 
 	/*
 	 * variable update

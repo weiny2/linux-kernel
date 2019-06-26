@@ -36,12 +36,14 @@
 #include <linux/mutex.h>
 #include <linux/poll.h>
 #include <linux/vmalloc.h>
+#include <linux/irq_poll.h>
 
 #include <scsi/scsi.h>
 #include <scsi/scsi_cmnd.h>
 #include <scsi/scsi_device.h>
 #include <scsi/scsi_host.h>
 #include <scsi/scsi_tcq.h>
+#include <scsi/scsi_dbg.h>
 #include "megaraid_sas_fusion.h"
 #include "megaraid_sas.h"
 
@@ -50,45 +52,45 @@
  * Will be set in megasas_init_mfi if user does not provide
  */
 static unsigned int max_sectors;
-module_param_named(max_sectors, max_sectors, int, 0);
+module_param_named(max_sectors, max_sectors, int, 0444);
 MODULE_PARM_DESC(max_sectors,
 	"Maximum number of sectors per IO command");
 
 static int msix_disable;
-module_param(msix_disable, int, S_IRUGO);
+module_param(msix_disable, int, 0444);
 MODULE_PARM_DESC(msix_disable, "Disable MSI-X interrupt handling. Default: 0");
 
 static unsigned int msix_vectors;
-module_param(msix_vectors, int, S_IRUGO);
+module_param(msix_vectors, int, 0444);
 MODULE_PARM_DESC(msix_vectors, "MSI-X max vector count. Default: Set by FW");
 
 static int allow_vf_ioctls;
-module_param(allow_vf_ioctls, int, S_IRUGO);
+module_param(allow_vf_ioctls, int, 0444);
 MODULE_PARM_DESC(allow_vf_ioctls, "Allow ioctls in SR-IOV VF mode. Default: 0");
 
 static unsigned int throttlequeuedepth = MEGASAS_THROTTLE_QUEUE_DEPTH;
-module_param(throttlequeuedepth, int, S_IRUGO);
+module_param(throttlequeuedepth, int, 0444);
 MODULE_PARM_DESC(throttlequeuedepth,
 	"Adapter queue depth when throttled due to I/O timeout. Default: 16");
 
 unsigned int resetwaittime = MEGASAS_RESET_WAIT_TIME;
-module_param(resetwaittime, int, S_IRUGO);
+module_param(resetwaittime, int, 0444);
 MODULE_PARM_DESC(resetwaittime, "Wait time in (1-180s) after I/O timeout before resetting adapter. Default: 180s");
 
 int smp_affinity_enable = 1;
-module_param(smp_affinity_enable, int, S_IRUGO);
+module_param(smp_affinity_enable, int, 0444);
 MODULE_PARM_DESC(smp_affinity_enable, "SMP affinity feature enable/disable Default: enable(1)");
 
 int rdpq_enable = 1;
-module_param(rdpq_enable, int, S_IRUGO);
+module_param(rdpq_enable, int, 0444);
 MODULE_PARM_DESC(rdpq_enable, "Allocate reply queue in chunks for large queue depth enable/disable Default: enable(1)");
 
 unsigned int dual_qdepth_disable;
-module_param(dual_qdepth_disable, int, S_IRUGO);
+module_param(dual_qdepth_disable, int, 0444);
 MODULE_PARM_DESC(dual_qdepth_disable, "Disable dual queue depth feature. Default: 0");
 
 unsigned int scmd_timeout = MEGASAS_DEFAULT_CMD_TIMEOUT;
-module_param(scmd_timeout, int, S_IRUGO);
+module_param(scmd_timeout, int, 0444);
 MODULE_PARM_DESC(scmd_timeout, "scsi command timeout (10-90s), default 90s. See megasas_reset_timer.");
 
 MODULE_LICENSE("GPL");
@@ -173,6 +175,12 @@ static bool support_nvme_encapsulation;
 
 /* define lock for aen poll */
 spinlock_t poll_aen_lock;
+
+extern struct dentry *megasas_debugfs_root;
+extern void megasas_init_debugfs(void);
+extern void megasas_exit_debugfs(void);
+extern void megasas_setup_debugfs(struct megasas_instance *instance);
+extern void megasas_destroy_debugfs(struct megasas_instance *instance);
 
 void
 megasas_complete_cmd(struct megasas_instance *instance, struct megasas_cmd *cmd,
@@ -1098,8 +1106,9 @@ megasas_issue_blocked_cmd(struct megasas_instance *instance,
 		ret = wait_event_timeout(instance->int_cmd_wait_q,
 				cmd->cmd_status_drv != MFI_STAT_INVALID_STATUS, timeout * HZ);
 		if (!ret) {
-			dev_err(&instance->pdev->dev, "Failed from %s %d DCMD Timed out\n",
-				__func__, __LINE__);
+			dev_err(&instance->pdev->dev,
+				"DCMD(opcode: 0x%x) is timed out, func:%s\n",
+				cmd->frame->dcmd.opcode, __func__);
 			return DCMD_TIMEOUT;
 		}
 	} else
@@ -1128,6 +1137,7 @@ megasas_issue_blocked_abort_cmd(struct megasas_instance *instance,
 	struct megasas_cmd *cmd;
 	struct megasas_abort_frame *abort_fr;
 	int ret = 0;
+	u32 opcode;
 
 	cmd = megasas_get_cmd(instance);
 
@@ -1163,8 +1173,10 @@ megasas_issue_blocked_abort_cmd(struct megasas_instance *instance,
 		ret = wait_event_timeout(instance->abort_cmd_wait_q,
 				cmd->cmd_status_drv != MFI_STAT_INVALID_STATUS, timeout * HZ);
 		if (!ret) {
-			dev_err(&instance->pdev->dev, "Failed from %s %d Abort Timed out\n",
-				__func__, __LINE__);
+			opcode = cmd_to_abort->frame->dcmd.opcode;
+			dev_err(&instance->pdev->dev,
+				"Abort(to be aborted DCMD opcode: 0x%x) is timed out func:%s\n",
+				opcode,  __func__);
 			return DCMD_TIMEOUT;
 		}
 	} else
@@ -1918,7 +1930,6 @@ megasas_set_nvme_device_properties(struct scsi_device *sdev, u32 max_io_size)
 static void megasas_set_static_target_properties(struct scsi_device *sdev,
 						 bool is_target_prop)
 {
-	u16	target_index = 0;
 	u8 interface_type;
 	u32 device_qd = MEGASAS_DEFAULT_CMD_PER_LUN;
 	u32 max_io_size_kb = MR_DEFAULT_NVME_MDTS_KB;
@@ -1934,8 +1945,6 @@ static void megasas_set_static_target_properties(struct scsi_device *sdev,
 	 * The RAID firmware may require extended timeouts.
 	 */
 	blk_queue_rq_timeout(sdev->request_queue, scmd_timeout * HZ);
-
-	target_index = (sdev->channel * MEGASAS_MAX_DEV_PER_CHANNEL) + sdev->id;
 
 	switch (interface_type) {
 	case SAS_PD:
@@ -2822,21 +2831,108 @@ blk_eh_timer_return megasas_reset_timer(struct scsi_cmnd *scmd)
 }
 
 /**
- * megasas_dump_frame -	This function will dump MPT/MFI frame
+ * megasas_dump -	This function will print hexdump of provided buffer.
+ * @buf:		Buffer to be dumped
+ * @sz:		Size in bytes
+ * @format:		Different formats of dumping e.g. format=n will
+ *			cause only 'n' 32 bit words to be dumped in a single
+ *			line.
  */
-static inline void
-megasas_dump_frame(void *mpi_request, int sz)
+inline void
+megasas_dump(void *buf, int sz, int format)
 {
 	int i;
-	__le32 *mfp = (__le32 *)mpi_request;
+	__le32 *buf_loc = (__le32 *)buf;
 
-	printk(KERN_INFO "IO request frame:\n\t");
-	for (i = 0; i < sz / sizeof(__le32); i++) {
-		if (i && ((i % 8) == 0))
-			printk("\n\t");
-		printk("%08x ", le32_to_cpu(mfp[i]));
+	for (i = 0; i < (sz / sizeof(__le32)); i++) {
+		if ((i % format) == 0) {
+			if (i != 0)
+				printk(KERN_CONT "\n");
+			printk(KERN_CONT "%08x: ", (i * 4));
+		}
+		printk(KERN_CONT "%08x ", le32_to_cpu(buf_loc[i]));
 	}
-	printk("\n");
+	printk(KERN_CONT "\n");
+}
+
+/**
+ * megasas_dump_reg_set -	This function will print hexdump of register set
+ * @buf:			Buffer to be dumped
+ * @sz:				Size in bytes
+ * @format:			Different formats of dumping e.g. format=n will
+ *				cause only 'n' 32 bit words to be dumped in a
+ *				single line.
+ */
+inline void
+megasas_dump_reg_set(void __iomem *reg_set)
+{
+	unsigned int i, sz = 256;
+	u32 __iomem *reg = (u32 __iomem *)reg_set;
+
+	for (i = 0; i < (sz / sizeof(u32)); i++)
+		printk("%08x: %08x\n", (i * 4), readl(&reg[i]));
+}
+
+/**
+ * megasas_dump_fusion_io -	This function will print key details
+ *				of SCSI IO
+ * @scmd:			SCSI command pointer of SCSI IO
+ */
+void
+megasas_dump_fusion_io(struct scsi_cmnd *scmd)
+{
+	struct megasas_cmd_fusion *cmd;
+	union MEGASAS_REQUEST_DESCRIPTOR_UNION *req_desc;
+	struct megasas_instance *instance;
+
+	cmd = (struct megasas_cmd_fusion *)scmd->SCp.ptr;
+	instance = (struct megasas_instance *)scmd->device->host->hostdata;
+
+	scmd_printk(KERN_INFO, scmd,
+		    "scmd: (0x%p)  retries: 0x%x  allowed: 0x%x\n",
+		    scmd, scmd->retries, scmd->allowed);
+	scsi_print_command(scmd);
+
+	if (cmd) {
+		req_desc = (union MEGASAS_REQUEST_DESCRIPTOR_UNION *)cmd->request_desc;
+		scmd_printk(KERN_INFO, scmd, "Request descriptor details:\n");
+		scmd_printk(KERN_INFO, scmd,
+			    "RequestFlags:0x%x  MSIxIndex:0x%x  SMID:0x%x  LMID:0x%x  DevHandle:0x%x\n",
+			    req_desc->SCSIIO.RequestFlags,
+			    req_desc->SCSIIO.MSIxIndex, req_desc->SCSIIO.SMID,
+			    req_desc->SCSIIO.LMID, req_desc->SCSIIO.DevHandle);
+
+		printk(KERN_INFO "IO request frame:\n");
+		megasas_dump(cmd->io_request,
+			     MEGA_MPI2_RAID_DEFAULT_IO_FRAME_SIZE, 8);
+		printk(KERN_INFO "Chain frame:\n");
+		megasas_dump(cmd->sg_frame,
+			     instance->max_chain_frame_sz, 8);
+	}
+
+}
+
+/*
+ * megasas_dump_sys_regs - This function will dump system registers through
+ *			    sysfs.
+ * @reg_set:		    Pointer to System register set.
+ * @buf:		    Buffer to which output is to be written.
+ * @return:		    Number of bytes written to buffer.
+ */
+static inline ssize_t
+megasas_dump_sys_regs(void __iomem *reg_set, char *buf)
+{
+	unsigned int i, sz = 256;
+	int bytes_wrote = 0;
+	char *loc = (char *)buf;
+	u32 __iomem *reg = (u32 __iomem *)reg_set;
+
+	for (i = 0; i < sz / sizeof(u32); i++) {
+		bytes_wrote += snprintf(loc + bytes_wrote, PAGE_SIZE,
+					"%08x: %08x\n", (i * 4),
+					readl(&reg[i]));
+	}
+	return bytes_wrote;
 }
 
 /**
@@ -2850,24 +2946,20 @@ static int megasas_reset_bus_host(struct scsi_cmnd *scmd)
 	instance = (struct megasas_instance *)scmd->device->host->hostdata;
 
 	scmd_printk(KERN_INFO, scmd,
-		"Controller reset is requested due to IO timeout\n"
-		"SCSI command pointer: (%p)\t SCSI host state: %d\t"
-		" SCSI host busy: %d\t FW outstanding: %d\n",
-		scmd, scmd->device->host->shost_state,
+		"OCR is requested due to IO timeout!!\n");
+
+	scmd_printk(KERN_INFO, scmd,
+		"SCSI host state: %d  SCSI host busy: %d  FW outstanding: %d\n",
+		scmd->device->host->shost_state,
 		scsi_host_busy(scmd->device->host),
 		atomic_read(&instance->fw_outstanding));
-
 	/*
 	 * First wait for all commands to complete
 	 */
 	if (instance->adapter_type == MFI_SERIES) {
 		ret = megasas_generic_reset(scmd);
 	} else {
-		struct megasas_cmd_fusion *cmd;
-		cmd = (struct megasas_cmd_fusion *)scmd->SCp.ptr;
-		if (cmd)
-			megasas_dump_frame(cmd->io_request,
-				MEGA_MPI2_RAID_DEFAULT_IO_FRAME_SIZE);
+		megasas_dump_fusion_io(scmd);
 		ret = megasas_reset_fusion(scmd->device->host,
 				SCSIIO_TIMEOUT_OCR);
 	}
@@ -3017,7 +3109,7 @@ megasas_service_aen(struct megasas_instance *instance, struct megasas_cmd *cmd)
 }
 
 static ssize_t
-megasas_fw_crash_buffer_store(struct device *cdev,
+fw_crash_buffer_store(struct device *cdev,
 	struct device_attribute *attr, const char *buf, size_t count)
 {
 	struct Scsi_Host *shost = class_to_shost(cdev);
@@ -3036,14 +3128,13 @@ megasas_fw_crash_buffer_store(struct device *cdev,
 }
 
 static ssize_t
-megasas_fw_crash_buffer_show(struct device *cdev,
+fw_crash_buffer_show(struct device *cdev,
 	struct device_attribute *attr, char *buf)
 {
 	struct Scsi_Host *shost = class_to_shost(cdev);
 	struct megasas_instance *instance =
 		(struct megasas_instance *) shost->hostdata;
 	u32 size;
-	unsigned long buff_addr;
 	unsigned long dmachunk = CRASH_DMA_BUF_SIZE;
 	unsigned long src_addr;
 	unsigned long flags;
@@ -3059,8 +3150,6 @@ megasas_fw_crash_buffer_show(struct device *cdev,
 		spin_unlock_irqrestore(&instance->crashdump_lock, flags);
 		return -EINVAL;
 	}
-
-	buff_addr = (unsigned long) buf;
 
 	if (buff_offset > (instance->fw_crash_buffer_size * dmachunk)) {
 		dev_err(&instance->pdev->dev,
@@ -3081,7 +3170,7 @@ megasas_fw_crash_buffer_show(struct device *cdev,
 }
 
 static ssize_t
-megasas_fw_crash_buffer_size_show(struct device *cdev,
+fw_crash_buffer_size_show(struct device *cdev,
 	struct device_attribute *attr, char *buf)
 {
 	struct Scsi_Host *shost = class_to_shost(cdev);
@@ -3093,7 +3182,7 @@ megasas_fw_crash_buffer_size_show(struct device *cdev,
 }
 
 static ssize_t
-megasas_fw_crash_state_store(struct device *cdev,
+fw_crash_state_store(struct device *cdev,
 	struct device_attribute *attr, const char *buf, size_t count)
 {
 	struct Scsi_Host *shost = class_to_shost(cdev);
@@ -3128,7 +3217,7 @@ megasas_fw_crash_state_store(struct device *cdev,
 }
 
 static ssize_t
-megasas_fw_crash_state_show(struct device *cdev,
+fw_crash_state_show(struct device *cdev,
 	struct device_attribute *attr, char *buf)
 {
 	struct Scsi_Host *shost = class_to_shost(cdev);
@@ -3139,14 +3228,14 @@ megasas_fw_crash_state_show(struct device *cdev,
 }
 
 static ssize_t
-megasas_page_size_show(struct device *cdev,
+page_size_show(struct device *cdev,
 	struct device_attribute *attr, char *buf)
 {
 	return snprintf(buf, PAGE_SIZE, "%ld\n", (unsigned long)PAGE_SIZE - 1);
 }
 
 static ssize_t
-megasas_ldio_outstanding_show(struct device *cdev, struct device_attribute *attr,
+ldio_outstanding_show(struct device *cdev, struct device_attribute *attr,
 	char *buf)
 {
 	struct Scsi_Host *shost = class_to_shost(cdev);
@@ -3156,7 +3245,7 @@ megasas_ldio_outstanding_show(struct device *cdev, struct device_attribute *attr
 }
 
 static ssize_t
-megasas_fw_cmds_outstanding_show(struct device *cdev,
+fw_cmds_outstanding_show(struct device *cdev,
 				 struct device_attribute *attr, char *buf)
 {
 	struct Scsi_Host *shost = class_to_shost(cdev);
@@ -3165,18 +3254,37 @@ megasas_fw_cmds_outstanding_show(struct device *cdev,
 	return snprintf(buf, PAGE_SIZE, "%d\n", atomic_read(&instance->fw_outstanding));
 }
 
-static DEVICE_ATTR(fw_crash_buffer, S_IRUGO | S_IWUSR,
-	megasas_fw_crash_buffer_show, megasas_fw_crash_buffer_store);
-static DEVICE_ATTR(fw_crash_buffer_size, S_IRUGO,
-	megasas_fw_crash_buffer_size_show, NULL);
-static DEVICE_ATTR(fw_crash_state, S_IRUGO | S_IWUSR,
-	megasas_fw_crash_state_show, megasas_fw_crash_state_store);
-static DEVICE_ATTR(page_size, S_IRUGO,
-	megasas_page_size_show, NULL);
-static DEVICE_ATTR(ldio_outstanding, S_IRUGO,
-	megasas_ldio_outstanding_show, NULL);
-static DEVICE_ATTR(fw_cmds_outstanding, S_IRUGO,
-	megasas_fw_cmds_outstanding_show, NULL);
+static ssize_t
+dump_system_regs_show(struct device *cdev,
+			       struct device_attribute *attr, char *buf)
+{
+	struct Scsi_Host *shost = class_to_shost(cdev);
+	struct megasas_instance *instance =
+			(struct megasas_instance *)shost->hostdata;
+
+	return megasas_dump_sys_regs(instance->reg_set, buf);
+}
+
+static ssize_t
+raid_map_id_show(struct device *cdev, struct device_attribute *attr,
+			  char *buf)
+{
+	struct Scsi_Host *shost = class_to_shost(cdev);
+	struct megasas_instance *instance =
+			(struct megasas_instance *)shost->hostdata;
+
+	return snprintf(buf, PAGE_SIZE, "%ld\n",
+			(unsigned long)instance->map_id);
+}
+
+static DEVICE_ATTR_RW(fw_crash_buffer);
+static DEVICE_ATTR_RO(fw_crash_buffer_size);
+static DEVICE_ATTR_RW(fw_crash_state);
+static DEVICE_ATTR_RO(page_size);
+static DEVICE_ATTR_RO(ldio_outstanding);
+static DEVICE_ATTR_RO(fw_cmds_outstanding);
+static DEVICE_ATTR_RO(dump_system_regs);
+static DEVICE_ATTR_RO(raid_map_id);
 
 struct device_attribute *megaraid_host_attrs[] = {
 	&dev_attr_fw_crash_buffer_size,
@@ -3185,6 +3293,8 @@ struct device_attribute *megaraid_host_attrs[] = {
 	&dev_attr_page_size,
 	&dev_attr_ldio_outstanding,
 	&dev_attr_fw_cmds_outstanding,
+	&dev_attr_dump_system_regs,
+	&dev_attr_raid_map_id,
 	NULL,
 };
 
@@ -3776,7 +3886,6 @@ megasas_transition_to_ready(struct megasas_instance *instance, int ocr)
 	int i;
 	u8 max_wait;
 	u32 fw_state;
-	u32 cur_state;
 	u32 abs_state, curr_abs_state;
 
 	abs_state = instance->instancet->read_fw_status_reg(instance);
@@ -3791,13 +3900,18 @@ megasas_transition_to_ready(struct megasas_instance *instance, int ocr)
 		switch (fw_state) {
 
 		case MFI_STATE_FAULT:
-			dev_printk(KERN_DEBUG, &instance->pdev->dev, "FW in FAULT state!!\n");
+			dev_printk(KERN_ERR, &instance->pdev->dev,
+				   "FW in FAULT state, Fault code:0x%x subcode:0x%x func:%s\n",
+				   abs_state & MFI_STATE_FAULT_CODE,
+				   abs_state & MFI_STATE_FAULT_SUBCODE, __func__);
 			if (ocr) {
 				max_wait = MEGASAS_RESET_WAIT_TIME;
-				cur_state = MFI_STATE_FAULT;
 				break;
-			} else
+			} else {
+				dev_printk(KERN_DEBUG, &instance->pdev->dev, "System Register set:\n");
+				megasas_dump_reg_set(instance->reg_set);
 				return -ENODEV;
+			}
 
 		case MFI_STATE_WAIT_HANDSHAKE:
 			/*
@@ -3817,7 +3931,6 @@ megasas_transition_to_ready(struct megasas_instance *instance, int ocr)
 					&instance->reg_set->inbound_doorbell);
 
 			max_wait = MEGASAS_RESET_WAIT_TIME;
-			cur_state = MFI_STATE_WAIT_HANDSHAKE;
 			break;
 
 		case MFI_STATE_BOOT_MESSAGE_PENDING:
@@ -3833,7 +3946,6 @@ megasas_transition_to_ready(struct megasas_instance *instance, int ocr)
 					&instance->reg_set->inbound_doorbell);
 
 			max_wait = MEGASAS_RESET_WAIT_TIME;
-			cur_state = MFI_STATE_BOOT_MESSAGE_PENDING;
 			break;
 
 		case MFI_STATE_OPERATIONAL:
@@ -3866,7 +3978,6 @@ megasas_transition_to_ready(struct megasas_instance *instance, int ocr)
 					&instance->reg_set->inbound_doorbell);
 
 			max_wait = MEGASAS_RESET_WAIT_TIME;
-			cur_state = MFI_STATE_OPERATIONAL;
 			break;
 
 		case MFI_STATE_UNDEFINED:
@@ -3874,37 +3985,33 @@ megasas_transition_to_ready(struct megasas_instance *instance, int ocr)
 			 * This state should not last for more than 2 seconds
 			 */
 			max_wait = MEGASAS_RESET_WAIT_TIME;
-			cur_state = MFI_STATE_UNDEFINED;
 			break;
 
 		case MFI_STATE_BB_INIT:
 			max_wait = MEGASAS_RESET_WAIT_TIME;
-			cur_state = MFI_STATE_BB_INIT;
 			break;
 
 		case MFI_STATE_FW_INIT:
 			max_wait = MEGASAS_RESET_WAIT_TIME;
-			cur_state = MFI_STATE_FW_INIT;
 			break;
 
 		case MFI_STATE_FW_INIT_2:
 			max_wait = MEGASAS_RESET_WAIT_TIME;
-			cur_state = MFI_STATE_FW_INIT_2;
 			break;
 
 		case MFI_STATE_DEVICE_SCAN:
 			max_wait = MEGASAS_RESET_WAIT_TIME;
-			cur_state = MFI_STATE_DEVICE_SCAN;
 			break;
 
 		case MFI_STATE_FLUSH_CACHE:
 			max_wait = MEGASAS_RESET_WAIT_TIME;
-			cur_state = MFI_STATE_FLUSH_CACHE;
 			break;
 
 		default:
 			dev_printk(KERN_DEBUG, &instance->pdev->dev, "Unknown state 0x%x\n",
 			       fw_state);
+			dev_printk(KERN_DEBUG, &instance->pdev->dev, "System Register set:\n");
+			megasas_dump_reg_set(instance->reg_set);
 			return -ENODEV;
 		}
 
@@ -3927,6 +4034,8 @@ megasas_transition_to_ready(struct megasas_instance *instance, int ocr)
 		if (curr_abs_state == abs_state) {
 			dev_printk(KERN_DEBUG, &instance->pdev->dev, "FW state [%d] hasn't changed "
 			       "in %d secs\n", fw_state, max_wait);
+			dev_printk(KERN_DEBUG, &instance->pdev->dev, "System Register set:\n");
+			megasas_dump_reg_set(instance->reg_set);
 			return -ENODEV;
 		}
 
@@ -3990,21 +4099,10 @@ static int megasas_create_frame_pool(struct megasas_instance *instance)
 {
 	int i;
 	u16 max_cmd;
-	u32 sge_sz;
 	u32 frame_count;
 	struct megasas_cmd *cmd;
 
 	max_cmd = instance->max_mfi_cmds;
-
-	/*
-	 * Size of our frame is 64 bytes for MFI frame, followed by max SG
-	 * elements and finally SCSI_SENSE_BUFFERSIZE bytes for sense buffer
-	 */
-	sge_sz = (IS_DMA64) ? sizeof(struct megasas_sge64) :
-	    sizeof(struct megasas_sge32);
-
-	if (instance->flag_ieee)
-		sge_sz = sizeof(struct megasas_sge_skinny);
 
 	/*
 	 * For MFI controllers.
@@ -4292,7 +4390,6 @@ megasas_get_pd_list(struct megasas_instance *instance)
 	struct megasas_dcmd_frame *dcmd;
 	struct MR_PD_LIST *ci;
 	struct MR_PD_ADDRESS *pd_addr;
-	dma_addr_t ci_h = 0;
 
 	if (instance->pd_list_not_supported) {
 		dev_info(&instance->pdev->dev, "MR_DCMD_PD_LIST_QUERY "
@@ -4301,7 +4398,6 @@ megasas_get_pd_list(struct megasas_instance *instance)
 	}
 
 	ci = instance->pd_list_buf;
-	ci_h = instance->pd_list_buf_h;
 
 	cmd = megasas_get_cmd(instance);
 
@@ -4374,6 +4470,9 @@ megasas_get_pd_list(struct megasas_instance *instance)
 
 	case DCMD_SUCCESS:
 		pd_addr = ci->addr;
+		if (megasas_dbg_lvl & LD_PD_DEBUG)
+			dev_info(&instance->pdev->dev, "%s, sysPD count: 0x%x\n",
+				 __func__, le32_to_cpu(ci->count));
 
 		if ((le32_to_cpu(ci->count) >
 			(MEGASAS_MAX_PD_CHANNELS * MEGASAS_MAX_DEV_PER_CHANNEL)))
@@ -4389,6 +4488,11 @@ megasas_get_pd_list(struct megasas_instance *instance)
 					pd_addr->scsiDevType;
 			instance->local_pd_list[le16_to_cpu(pd_addr->deviceId)].driveState	=
 					MR_PD_STATE_SYSTEM;
+			if (megasas_dbg_lvl & LD_PD_DEBUG)
+				dev_info(&instance->pdev->dev,
+					 "PD%d: targetID: 0x%03x deviceType:0x%x\n",
+					 pd_index, le16_to_cpu(pd_addr->deviceId),
+					 pd_addr->scsiDevType);
 			pd_addr++;
 		}
 
@@ -4492,6 +4596,10 @@ megasas_get_ld_list(struct megasas_instance *instance)
 		break;
 
 	case DCMD_SUCCESS:
+		if (megasas_dbg_lvl & LD_PD_DEBUG)
+			dev_info(&instance->pdev->dev, "%s, LD count: 0x%x\n",
+				 __func__, ld_count);
+
 		if (ld_count > instance->fw_supported_vd_count)
 			break;
 
@@ -4501,6 +4609,10 @@ megasas_get_ld_list(struct megasas_instance *instance)
 			if (ci->ldList[ld_index].state != 0) {
 				ids = ci->ldList[ld_index].ref.targetId;
 				instance->ld_ids[ids] = ci->ldList[ld_index].ref.targetId;
+				if (megasas_dbg_lvl & LD_PD_DEBUG)
+					dev_info(&instance->pdev->dev,
+						 "LD%d: targetID: 0x%03x\n",
+						 ld_index, ids);
 			}
 		}
 
@@ -4604,6 +4716,10 @@ megasas_ld_list_query(struct megasas_instance *instance, u8 query_type)
 	case DCMD_SUCCESS:
 		tgtid_count = le32_to_cpu(ci->count);
 
+		if (megasas_dbg_lvl & LD_PD_DEBUG)
+			dev_info(&instance->pdev->dev, "%s, LD count: 0x%x\n",
+				 __func__, tgtid_count);
+
 		if ((tgtid_count > (instance->fw_supported_vd_count)))
 			break;
 
@@ -4611,6 +4727,9 @@ megasas_ld_list_query(struct megasas_instance *instance, u8 query_type)
 		for (ld_index = 0; ld_index < tgtid_count; ld_index++) {
 			ids = ci->targetId[ld_index];
 			instance->ld_ids[ids] = ci->targetId[ld_index];
+			if (megasas_dbg_lvl & LD_PD_DEBUG)
+				dev_info(&instance->pdev->dev, "LD%d: targetID: 0x%03x\n",
+					 ld_index, ci->targetId[ld_index]);
 		}
 
 		break;
@@ -4690,6 +4809,10 @@ megasas_host_device_list_query(struct megasas_instance *instance,
 		 */
 		count = le32_to_cpu(ci->count);
 
+		if (megasas_dbg_lvl & LD_PD_DEBUG)
+			dev_info(&instance->pdev->dev, "%s, Device count: 0x%x\n",
+				 __func__, count);
+
 		memset(instance->local_pd_list, 0,
 		       MEGASAS_MAX_PD * sizeof(struct megasas_pd_list));
 		memset(instance->ld_ids, 0xff, MAX_LOGICAL_DRIVES_EXT);
@@ -4701,8 +4824,16 @@ megasas_host_device_list_query(struct megasas_instance *instance,
 						ci->host_device_list[i].scsi_type;
 				instance->local_pd_list[target_id].driveState =
 						MR_PD_STATE_SYSTEM;
+				if (megasas_dbg_lvl & LD_PD_DEBUG)
+					dev_info(&instance->pdev->dev,
+						 "Device %d: PD targetID: 0x%03x deviceType:0x%x\n",
+						 i, target_id, ci->host_device_list[i].scsi_type);
 			} else {
 				instance->ld_ids[target_id] = target_id;
+				if (megasas_dbg_lvl & LD_PD_DEBUG)
+					dev_info(&instance->pdev->dev,
+						 "Device %d: LD targetID: 0x%03x\n",
+						 i, target_id);
 			}
 		}
 
@@ -5262,6 +5393,25 @@ fail_alloc_cmds:
 	return 1;
 }
 
+static
+void megasas_setup_irq_poll(struct megasas_instance *instance)
+{
+	struct megasas_irq_context *irq_ctx;
+	u32 count, i;
+
+	count = instance->msix_vectors > 0 ? instance->msix_vectors : 1;
+
+	/* Initialize IRQ poll */
+	for (i = 0; i < count; i++) {
+		irq_ctx = &instance->irq_context[i];
+		irq_ctx->os_irq = pci_irq_vector(instance->pdev, i);
+		irq_ctx->irq_poll_scheduled = false;
+		irq_poll_init(&irq_ctx->irqpoll,
+			      instance->threshold_reply_count,
+			      megasas_irqpoll);
+	}
+}
+
 /*
  * megasas_setup_irqs_ioapic -		register legacy interrupts.
  * @instance:				Adapter soft state
@@ -5320,6 +5470,7 @@ megasas_setup_irqs_msix(struct megasas_instance *instance, u8 is_probe)
 					 &instance->irq_context[j]);
 			/* Retry irq register for IO_APIC*/
 			instance->msix_vectors = 0;
+			instance->msix_load_balance = false;
 			if (is_probe) {
 				pci_free_irq_vectors(instance->pdev);
 				return megasas_setup_irqs_ioapic(instance);
@@ -5328,6 +5479,7 @@ megasas_setup_irqs_msix(struct megasas_instance *instance, u8 is_probe)
 			}
 		}
 	}
+
 	return 0;
 }
 
@@ -5340,6 +5492,16 @@ static void
 megasas_destroy_irqs(struct megasas_instance *instance) {
 
 	int i;
+	int count;
+	struct megasas_irq_context *irq_ctx;
+
+	count = instance->msix_vectors > 0 ? instance->msix_vectors : 1;
+	if (instance->adapter_type != MFI_SERIES) {
+		for (i = 0; i < count; i++) {
+			irq_ctx = &instance->irq_context[i];
+			irq_poll_disable(&irq_ctx->irqpoll);
+		}
+	}
 
 	if (instance->msix_vectors)
 		for (i = 0; i < instance->msix_vectors; i++) {
@@ -5474,12 +5636,12 @@ static int megasas_init_fw(struct megasas_instance *instance)
 	u32 max_sectors_2, tmp_sectors, msix_enable;
 	u32 scratch_pad_1, scratch_pad_2, scratch_pad_3, status_reg;
 	resource_size_t base_addr;
+	void *base_addr_phys;
 	struct megasas_ctrl_info *ctrl_info = NULL;
 	unsigned long bar_list;
-	int i, j, loop, fw_msix_count = 0;
+	int i, j, loop;
 	struct IOV_111 *iovPtr;
 	struct fusion_context *fusion;
-	bool do_adp_reset = true;
 
 	fusion = instance->ctrl_context;
 
@@ -5499,6 +5661,11 @@ static int megasas_init_fw(struct megasas_instance *instance)
 		dev_printk(KERN_DEBUG, &instance->pdev->dev, "Failed to map IO mem\n");
 		goto fail_ioremap;
 	}
+
+	base_addr_phys = &base_addr;
+	dev_printk(KERN_DEBUG, &instance->pdev->dev,
+		   "BAR:0x%lx  BAR's base_addr(phys):%pa  mapped virt_addr:0x%p\n",
+		   instance->bar, base_addr_phys, instance->reg_set);
 
 	if (instance->adapter_type != MFI_SERIES)
 		instance->instancet = &megasas_instance_template_fusion;
@@ -5526,29 +5693,35 @@ static int megasas_init_fw(struct megasas_instance *instance)
 	}
 
 	if (megasas_transition_to_ready(instance, 0)) {
-		if (instance->adapter_type >= INVADER_SERIES) {
+		dev_info(&instance->pdev->dev,
+			 "Failed to transition controller to ready from %s!\n",
+			 __func__);
+		if (instance->adapter_type != MFI_SERIES) {
 			status_reg = instance->instancet->read_fw_status_reg(
 					instance);
-			do_adp_reset = status_reg & MFI_RESET_ADAPTER;
-		}
-
-		if (do_adp_reset) {
+			if (status_reg & MFI_RESET_ADAPTER) {
+				if (megasas_adp_reset_wait_for_ready
+					(instance, true, 0) == FAILED)
+					goto fail_ready_state;
+			} else {
+				goto fail_ready_state;
+			}
+		} else {
 			atomic_set(&instance->fw_reset_no_pci_access, 1);
 			instance->instancet->adp_reset
 				(instance, instance->reg_set);
 			atomic_set(&instance->fw_reset_no_pci_access, 0);
-			dev_info(&instance->pdev->dev,
-				 "FW restarted successfully from %s!\n",
-				 __func__);
 
 			/*waiting for about 30 second before retry*/
 			ssleep(30);
 
 			if (megasas_transition_to_ready(instance, 0))
 				goto fail_ready_state;
-		} else {
-			goto fail_ready_state;
 		}
+
+		dev_info(&instance->pdev->dev,
+			 "FW restarted successfully from %s!\n",
+			 __func__);
 	}
 
 	megasas_init_ctrl_params(instance);
@@ -5587,7 +5760,6 @@ static int megasas_init_fw(struct megasas_instance *instance)
 				/* Thunderbolt Series*/
 				instance->msix_vectors = (scratch_pad_1
 					& MR_MAX_REPLY_QUEUES_OFFSET) + 1;
-				fw_msix_count = instance->msix_vectors;
 			} else {
 				instance->msix_vectors = ((scratch_pad_1
 					& MR_MAX_REPLY_QUEUES_EXT_OFFSET)
@@ -5616,7 +5788,12 @@ static int megasas_init_fw(struct megasas_instance *instance)
 				if (rdpq_enable)
 					instance->is_rdpq = (scratch_pad_1 & MR_RDPQ_MODE_OFFSET) ?
 								1 : 0;
-				fw_msix_count = instance->msix_vectors;
+
+				if (!instance->msix_combined) {
+					instance->msix_load_balance = true;
+					instance->smp_affinity_enable = false;
+				}
+
 				/* Save 1-15 reply post index address to local memory
 				 * Index 0 is already saved from reg offset
 				 * MPI2_REPLY_POST_HOST_INDEX_OFFSET
@@ -5629,22 +5806,29 @@ static int megasas_init_fw(struct megasas_instance *instance)
 						+ (loop * 0x10));
 				}
 			}
+
+			dev_info(&instance->pdev->dev,
+				 "firmware supports msix\t: (%d)",
+				 instance->msix_vectors);
 			if (msix_vectors)
 				instance->msix_vectors = min(msix_vectors,
 					instance->msix_vectors);
 		} else /* MFI adapters */
 			instance->msix_vectors = 1;
+
 		/* Don't bother allocating more MSI-X vectors than cpus */
 		instance->msix_vectors = min(instance->msix_vectors,
 					     (unsigned int)num_online_cpus());
-		if (smp_affinity_enable)
+		if (instance->smp_affinity_enable)
 			irq_flags |= PCI_IRQ_AFFINITY;
 		i = pci_alloc_irq_vectors(instance->pdev, 1,
 					  instance->msix_vectors, irq_flags);
-		if (i > 0)
+		if (i > 0) {
 			instance->msix_vectors = i;
-		else
+		} else {
 			instance->msix_vectors = 0;
+			instance->msix_load_balance = false;
+		}
 	}
 	/*
 	 * MSI-X host index 0 is common for all adapter.
@@ -5668,8 +5852,6 @@ static int megasas_init_fw(struct megasas_instance *instance)
 
 	megasas_setup_reply_map(instance);
 
-	dev_info(&instance->pdev->dev,
-		"firmware supports msix\t: (%d)", fw_msix_count);
 	dev_info(&instance->pdev->dev,
 		"current msix/online cpus\t: (%d/%d)\n",
 		instance->msix_vectors, (unsigned int)num_online_cpus());
@@ -5706,6 +5888,9 @@ static int megasas_init_fw(struct megasas_instance *instance)
 		megasas_setup_irqs_msix(instance, 1) :
 		megasas_setup_irqs_ioapic(instance))
 		goto fail_init_adapter;
+
+	if (instance->adapter_type != MFI_SERIES)
+		megasas_setup_irq_poll(instance);
 
 	instance->instancet->enable_intr(instance);
 
@@ -6748,6 +6933,7 @@ static inline void megasas_init_ctrl_params(struct megasas_instance *instance)
 	INIT_LIST_HEAD(&instance->internal_reset_pending_q);
 
 	atomic_set(&instance->fw_outstanding, 0);
+	atomic64_set(&instance->total_io_count, 0);
 
 	init_waitqueue_head(&instance->int_cmd_wait_q);
 	init_waitqueue_head(&instance->abort_cmd_wait_q);
@@ -6770,6 +6956,8 @@ static inline void megasas_init_ctrl_params(struct megasas_instance *instance)
 	instance->last_time = 0;
 	instance->disableOnlineCtrlReset = 1;
 	instance->UnevenSpanSupport = 0;
+	instance->smp_affinity_enable = smp_affinity_enable ? true : false;
+	instance->msix_load_balance = false;
 
 	if (instance->adapter_type != MFI_SERIES)
 		INIT_WORK(&instance->work_init, megasas_fusion_ocr_wq);
@@ -6910,6 +7098,8 @@ static int megasas_probe_one(struct pci_dev *pdev,
 		goto fail_start_aen;
 	}
 
+	megasas_setup_debugfs(instance);
+
 	/* Get current SR-IOV LD/VF affiliation */
 	if (instance->requestorId)
 		megasas_get_ld_vf_affiliation(instance, 1);
@@ -7041,12 +7231,12 @@ static void megasas_shutdown_controller(struct megasas_instance *instance,
 static int
 megasas_suspend(struct pci_dev *pdev, pm_message_t state)
 {
-	struct Scsi_Host *host;
 	struct megasas_instance *instance;
 
 	instance = pci_get_drvdata(pdev);
-	host = instance->host;
 	instance->unload = 1;
+
+	dev_info(&pdev->dev, "%s is called\n", __func__);
 
 	/* Shutdown SR-IOV heartbeat timer */
 	if (instance->requestorId && !instance->skip_heartbeat_timer_del)
@@ -7102,6 +7292,7 @@ megasas_resume(struct pci_dev *pdev)
 	pci_enable_wake(pdev, PCI_D0, 0);
 	pci_restore_state(pdev);
 
+	dev_info(&pdev->dev, "%s is called\n", __func__);
 	/*
 	 * PCI prepping: enable device set bus mastering and dma mask
 	 */
@@ -7133,7 +7324,7 @@ megasas_resume(struct pci_dev *pdev)
 	/* Now re-enable MSI-X */
 	if (instance->msix_vectors) {
 		irq_flags = PCI_IRQ_MSIX;
-		if (smp_affinity_enable)
+		if (instance->smp_affinity_enable)
 			irq_flags |= PCI_IRQ_AFFINITY;
 	}
 	rval = pci_alloc_irq_vectors(instance->pdev, 1,
@@ -7170,6 +7361,9 @@ megasas_resume(struct pci_dev *pdev)
 			megasas_setup_irqs_msix(instance, 0) :
 			megasas_setup_irqs_ioapic(instance))
 		goto fail_init_mfi;
+
+	if (instance->adapter_type != MFI_SERIES)
+		megasas_setup_irq_poll(instance);
 
 	/* Re-launch SR-IOV heartbeat timer */
 	if (instance->requestorId) {
@@ -7373,6 +7567,8 @@ skip_firing_dcmds:
 	megasas_free_ctrl_dma_buffers(instance);
 
 	megasas_free_ctrl_mem(instance);
+
+	megasas_destroy_debugfs(instance);
 
 	scsi_host_put(host);
 
@@ -8161,7 +8357,7 @@ megasas_aen_polling(struct work_struct *work)
 	struct megasas_instance *instance = ev->instance;
 	union megasas_evt_class_locale class_locale;
 	int event_type = 0;
-	u32 seq_num, wait_time = MEGASAS_RESET_WAIT_TIME;
+	u32 seq_num;
 	int error;
 	u8  dcmd_ret = DCMD_SUCCESS;
 
@@ -8170,10 +8366,6 @@ megasas_aen_polling(struct work_struct *work)
 		kfree(ev);
 		return;
 	}
-
-	/* Adjust event workqueue thread wait time for VF mode */
-	if (instance->requestorId)
-		wait_time = MEGASAS_ROUTINE_WAIT_TIME_VF;
 
 	/* Don't run the event workqueue thread if OCR is running */
 	mutex_lock(&instance->reset_mutex);
@@ -8301,6 +8493,8 @@ static int __init megasas_init(void)
 
 	megasas_mgmt_majorno = rval;
 
+	megasas_init_debugfs();
+
 	/*
 	 * Register ourselves as PCI hotplug module
 	 */
@@ -8360,6 +8554,7 @@ err_dcf_rel_date:
 err_dcf_attr_ver:
 	pci_unregister_driver(&megasas_pci_driver);
 err_pcidrv:
+	megasas_exit_debugfs();
 	unregister_chrdev(megasas_mgmt_majorno, "megaraid_sas_ioctl");
 	return rval;
 }
@@ -8382,6 +8577,7 @@ static void __exit megasas_exit(void)
 			   &driver_attr_support_nvme_encapsulation);
 
 	pci_unregister_driver(&megasas_pci_driver);
+	megasas_exit_debugfs();
 	unregister_chrdev(megasas_mgmt_majorno, "megaraid_sas_ioctl");
 }
 

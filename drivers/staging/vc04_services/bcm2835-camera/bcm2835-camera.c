@@ -327,7 +327,7 @@ static void buffer_cb(struct vchiq_mmal_instance *instance,
 		 "%s: status:%d, buf:%p, length:%lu, flags %u, pts %lld\n",
 		 __func__, status, buf, length, mmal_flags, pts);
 
-	if (status != 0) {
+	if (status) {
 		/* error in transfer */
 		if (buf) {
 			/* there was a buffer with the error so return it */
@@ -359,8 +359,7 @@ static void buffer_cb(struct vchiq_mmal_instance *instance,
 		}
 	} else {
 		if (dev->capture.frame_count) {
-			if (dev->capture.vc_start_timestamp != -1 &&
-			    pts != 0) {
+			if (dev->capture.vc_start_timestamp != -1 && pts) {
 				ktime_t timestamp;
 				s64 runtime_us = pts -
 				    dev->capture.vc_start_timestamp;
@@ -826,7 +825,7 @@ static int vidioc_enum_input(struct file *file, void *priv,
 			     struct v4l2_input *inp)
 {
 	/* only a single camera input */
-	if (inp->index != 0)
+	if (inp->index)
 		return -EINVAL;
 
 	inp->type = V4L2_INPUT_TYPE_CAMERA;
@@ -842,7 +841,7 @@ static int vidioc_g_input(struct file *file, void *priv, unsigned int *i)
 
 static int vidioc_s_input(struct file *file, void *priv, unsigned int i)
 {
-	if (i != 0)
+	if (i)
 		return -EINVAL;
 
 	return 0;
@@ -864,10 +863,6 @@ static int vidioc_querycap(struct file *file, void *priv,
 
 	snprintf((char *)cap->bus_info, sizeof(cap->bus_info),
 		 "platform:%s", dev->v4l2_dev.name);
-	cap->device_caps = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_VIDEO_OVERLAY |
-	    V4L2_CAP_STREAMING | V4L2_CAP_READWRITE;
-	cap->capabilities = cap->device_caps | V4L2_CAP_DEVICE_CAPS;
-
 	return 0;
 }
 
@@ -1281,7 +1276,7 @@ static int vidioc_s_fmt_vid_cap(struct file *file, void *priv,
 	}
 
 	ret = mmal_setup_components(dev, f);
-	if (ret != 0) {
+	if (ret) {
 		v4l2_err(&dev->v4l2_dev,
 			 "%s: failed to setup mmal components: %d\n",
 			 __func__, ret);
@@ -1446,6 +1441,8 @@ static const struct video_device vdev_template = {
 	.fops = &camera0_fops,
 	.ioctl_ops = &camera0_ioctl_ops,
 	.release = video_device_release_empty,
+	.device_caps = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_VIDEO_OVERLAY |
+		       V4L2_CAP_STREAMING | V4L2_CAP_READWRITE,
 };
 
 /* Returns the number of cameras, and also the max resolution supported

@@ -554,6 +554,11 @@ cifs_show_options(struct seq_file *s, struct dentry *root)
 	seq_printf(s, ",bsize=%u", cifs_sb->bsize);
 	seq_printf(s, ",echo_interval=%lu",
 			tcon->ses->server->echo_interval / HZ);
+
+	/* Only display max_credits if it was overridden on mount */
+	if (tcon->ses->server->max_credits != SMB2_MAX_CREDITS_AVAILABLE)
+		seq_printf(s, ",max_credits=%u", tcon->ses->server->max_credits);
+
 	if (tcon->snapshot_time)
 		seq_printf(s, ",snapshot=%llu", tcon->snapshot_time);
 	if (tcon->handle_timeout)
@@ -1149,6 +1154,10 @@ static ssize_t cifs_copy_file_range(struct file *src_file, loff_t off,
 	rc = cifs_file_copychunk_range(xid, src_file, off, dst_file, destoff,
 					len, flags);
 	free_xid(xid);
+
+	if (rc == -EOPNOTSUPP || rc == -EXDEV)
+		rc = generic_copy_file_range(src_file, off, dst_file,
+					     destoff, len, flags);
 	return rc;
 }
 
@@ -1591,7 +1600,6 @@ MODULE_DESCRIPTION
 	("VFS to access SMB3 servers e.g. Samba, Macs, Azure and Windows (and "
 	"also older servers complying with the SNIA CIFS Specification)");
 MODULE_VERSION(CIFS_VERSION);
-MODULE_SOFTDEP("pre: arc4");
 MODULE_SOFTDEP("pre: des");
 MODULE_SOFTDEP("pre: ecb");
 MODULE_SOFTDEP("pre: hmac");
@@ -1604,5 +1612,6 @@ MODULE_SOFTDEP("pre: sha256");
 MODULE_SOFTDEP("pre: sha512");
 MODULE_SOFTDEP("pre: aead2");
 MODULE_SOFTDEP("pre: ccm");
+MODULE_SOFTDEP("pre: gcm");
 module_init(init_cifs)
 module_exit(exit_cifs)

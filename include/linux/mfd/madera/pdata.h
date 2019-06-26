@@ -16,6 +16,7 @@
 #include <linux/regulator/arizona-ldo1.h>
 #include <linux/regulator/arizona-micsupp.h>
 #include <linux/regulator/machine.h>
+#include <sound/madera-pdata.h>
 
 #define MADERA_MAX_MICBIAS		4
 #define MADERA_MAX_CHILD_MICBIAS	4
@@ -34,11 +35,13 @@ struct madera_codec_pdata;
  * @micvdd:	    Substruct of pdata for the MICVDD regulator
  * @irq_flags:	    Mode for primary IRQ (defaults to active low)
  * @gpio_base:	    Base GPIO number
- * @gpio_configs:   Array of GPIO configurations (See Documentation/pinctrl.txt)
+ * @gpio_configs:   Array of GPIO configurations (See
+ *		    Documentation/driver-api/pinctl.rst)
  * @n_gpio_configs: Number of entries in gpio_configs
  * @gpsw:	    General purpose switch mode setting. Depends on the external
  *		    hardware connected to the switch. (See the SW1_MODE field
  *		    in the datasheet for the available values for your codec)
+ * @codec:	    Substruct of pdata for the ASoC codec driver
  */
 struct madera_pdata {
 	struct gpio_desc *reset;
@@ -53,6 +56,8 @@ struct madera_pdata {
 	int n_gpio_configs;
 
 	u32 gpsw[MADERA_MAX_GPSW];
+
+	struct madera_codec_pdata codec;
 };
 
 #endif

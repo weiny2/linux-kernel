@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-/*
- * core.c  --  Voltage/Current Regulator framework.
- *
- * Copyright 2007, 2008 Wolfson Microelectronics PLC.
- * Copyright 2008 SlimLogic Ltd.
- *
- * Author: Liam Girdwood <lrg@slimlogic.co.uk>
- */
+//
+// core.c  --  Voltage/Current Regulator framework.
+//
+// Copyright 2007, 2008 Wolfson Microelectronics PLC.
+// Copyright 2008 SlimLogic Ltd.
+//
+// Author: Liam Girdwood <lrg@slimlogic.co.uk>
 
 #include <linux/kernel.h>
 #include <linux/init.h>
@@ -1645,9 +1644,9 @@ static int _regulator_get_enable_time(struct regulator_dev *rdev)
 {
 	if (rdev->constraints && rdev->constraints->enable_time)
 		return rdev->constraints->enable_time;
-	if (!rdev->desc->ops->enable_time)
-		return rdev->desc->enable_time;
-	return rdev->desc->ops->enable_time(rdev);
+	if (rdev->desc->ops->enable_time)
+		return rdev->desc->ops->enable_time(rdev);
+	return rdev->desc->enable_time;
 }
 
 static struct regulator_supply_alias *regulator_find_supply_alias(
@@ -2304,7 +2303,7 @@ static int regulator_ena_gpio_ctrl(struct regulator_dev *rdev, bool enable)
  *
  * Delay for the requested amount of time as per the guidelines in:
  *
- *     Documentation/timers/timers-howto.txt
+ *     Documentation/timers/timers-howto.rst
  *
  * The assumption here is that regulators will never be enabled in
  * atomic context and therefore sleeping functions can be used.

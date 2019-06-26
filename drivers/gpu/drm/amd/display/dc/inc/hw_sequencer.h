@@ -158,6 +158,11 @@ struct hw_sequencer_funcs {
 
 	void (*update_info_frame)(struct pipe_ctx *pipe_ctx);
 
+	void (*send_immediate_sdp_message)(
+				struct pipe_ctx *pipe_ctx,
+				const uint8_t *custom_sdp_message,
+				unsigned int sdp_message_size);
+
 	void (*enable_stream)(struct pipe_ctx *pipe_ctx);
 
 	void (*disable_stream)(struct pipe_ctx *pipe_ctx,
@@ -235,6 +240,7 @@ struct hw_sequencer_funcs {
 
 	void (*setup_periodic_interrupt)(struct pipe_ctx *pipe_ctx, enum vline_select vline);
 	void (*setup_vupdate_interrupt)(struct pipe_ctx *pipe_ctx);
+	bool (*did_underflow_occur)(struct dc *dc, struct pipe_ctx *pipe_ctx);
 
 };
 
