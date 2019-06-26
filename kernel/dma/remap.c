@@ -158,6 +158,9 @@ out:
 
 bool dma_in_atomic_pool(void *start, size_t size)
 {
+	if (unlikely(!atomic_pool))
+	return false;
+
 	return gen_pool_has_addr(atomic_pool, (unsigned long)start, size);
 }
 
