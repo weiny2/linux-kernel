@@ -11,12 +11,17 @@
 #include <linux/device.h>
 #include <linux/dma-mapping.h>
 
+static unsigned int block_order;
+
+module_param(block_order, int, 0600);
+
 #define MAX_SGTS 16
 
 struct msu_sink_private {
 	struct device	*dev;
 	struct sg_table **sgts;
 	unsigned int	nr_sgts;
+	unsigned int	block_order;
 };
 
 static void *msu_sink_assign(struct device *dev, int *mode)
@@ -34,6 +39,7 @@ static void *msu_sink_assign(struct device *dev, int *mode)
 	}
 
 	priv->dev = dev;
+	priv->block_order = block_order;
 	*mode = MSC_MODE_MULTI;
 
 	return priv;
@@ -59,7 +65,7 @@ static int msu_sink_alloc_window(void *data, struct sg_table **sgt, size_t size)
 	if (priv->nr_sgts == MAX_SGTS)
 		return -ENOMEM;
 
-	nents = DIV_ROUND_UP(size, PAGE_SIZE);
+	nents = DIV_ROUND_UP(size, PAGE_SIZE << priv->block_order);
 
 	ret = sg_alloc_table(*sgt, nents, GFP_KERNEL);
 	if (ret)
@@ -69,9 +75,12 @@ static int msu_sink_alloc_window(void *data, struct sg_table **sgt, size_t size)
 
 	for_each_sg((*sgt)->sgl, sg_ptr, nents, i) {
 		block = dma_alloc_coherent(priv->dev->parent->parent,
-					   PAGE_SIZE, &sg_dma_address(sg_ptr),
+					   PAGE_SIZE << priv->block_order,
+					   &sg_dma_address(sg_ptr),
 					   GFP_KERNEL);
-		sg_set_buf(sg_ptr, block, PAGE_SIZE);
+		sg_set_buf(sg_ptr, block, PAGE_SIZE << priv->block_order);
+		if (priv->block_order)
+			split_page(virt_to_page(block), priv->block_order);
 	}
 
 	return nents;
@@ -85,7 +94,8 @@ static void msu_sink_free_window(void *data, struct sg_table *sgt)
 	int i;
 
 	for_each_sg(sgt->sgl, sg_ptr, sgt->nents, i) {
-		dma_free_coherent(priv->dev->parent->parent, PAGE_SIZE,
+		dma_free_coherent(priv->dev->parent->parent,
+				  PAGE_SIZE << priv->block_order,
 				  sg_virt(sg_ptr), sg_dma_address(sg_ptr));
 	}
 
