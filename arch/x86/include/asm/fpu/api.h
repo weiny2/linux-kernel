@@ -62,4 +62,9 @@ extern void switch_fpu_return(void);
  */
 extern int cpu_has_xfeatures(u64 xfeatures_mask, const char **feature_name);
 
+/* The init state of the IA32_PASID MSR is 0 */
+#define IA32_PASID_INIT_STATE	0
+
+void fpu__pasid_write(u64 val);
+
 #endif /* _ASM_X86_FPU_API_H */

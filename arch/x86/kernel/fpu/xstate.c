@@ -1326,3 +1326,49 @@ int proc_pid_arch_status(struct seq_file *m, struct pid_namespace *ns,
 	return 0;
 }
 #endif /* CONFIG_PROC_PID_ARCH_STATUS */
+
+/*
+ * Write the current task's 64-bit IA32_PASID MSR/PASID state.
+ * @pasid:	 PASID value.
+ */
+void fpu__pasid_write(u64 pasid)
+{
+	fpregs_lock();
+
+	/*
+	 * If the MSR is active and owned by the current task's FPU, it can
+	 * be directly written.
+	 *
+	 * Otherwise, write the fpstate and/or xfeatures bit.
+	 */
+	if (!test_thread_flag(TIF_NEED_FPU_LOAD)) {
+		wrmsrl(MSR_IA32_PASID, pasid);
+	} else {
+		struct xregs_state *xsave = &current->thread.fpu.state.xsave;
+
+		/*
+		 * If pasid value is init state (i.e. 0), clear the xfeatures
+		 * bit for the fpstate so that the MSR will be initialized to
+		 * its init state by init optimization in XRSTORS.
+		 *
+		 * Otherwise, directly write pasid to the fpstate. Set the
+		 * xfeatures bit so that the fpstate will be restored to
+		 * the MSR without triggering init optimization in XRSTORS.
+		 */
+		if (pasid == IA32_PASID_INIT_STATE) {
+			xsave->header.xfeatures &= ~XFEATURE_MASK_PASID;
+		} else {
+			struct ia32_pasid_state *ppasid_state;
+
+			xsave->header.xfeatures |= XFEATURE_MASK_PASID;
+			ppasid_state = get_xsave_addr(xsave, XFEATURE_PASID);
+			/*
+			 * ppasid_state shouldn't be NULL because XFEATURE_PASID
+			 * must be supported when this function is called.
+			 */
+			WARN_ON_ONCE(!ppasid_state);
+			ppasid_state->pasid = pasid;
+		}
+	}
+	fpregs_unlock();
+}
