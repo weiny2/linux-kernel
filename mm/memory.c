@@ -70,6 +70,7 @@
 #include <linux/dax.h>
 #include <linux/oom.h>
 #include <linux/numa.h>
+#include <linux/vm_event_item.h>
 
 #include <asm/io.h>
 #include <asm/mmu_context.h>
@@ -3726,10 +3727,12 @@ static vm_fault_t do_numa_page(struct vm_fault *vmf)
 	update_mmu_cache(vma, vmf->address, vmf->pte);
 
 	/* Only migrate if accessed twice */
-	if (!pte_young(old_pte)) {
+#ifdef CONFIG_NUMA_BALANCING
+	if (!pte_young(old_pte) && IS_ENABLED(CONFIG_NUMA_BALANCING)) {
 		count_vm_event(NUMA_ACCESS_ONCE);
 		goto unmap_out;
 	}
+#endif
 
 	page = vm_normal_page(vma, vmf->address, pte);
 	if (!page)
@@ -3762,11 +3765,14 @@ static vm_fault_t do_numa_page(struct vm_fault *vmf)
 	target_nid = numa_migrate_prep(page, vma, vmf->address, page_nid,
 			&flags);
 	pte_unmap_unlock(vmf->pte, vmf->ptl);
-	if (target_nid == NUMA_NO_NODE) {
+#ifdef CONFIG_NUMA_BALANCING
+	if (target_nid == NUMA_NO_NODE
+	    && IS_ENABLED(CONFIG_NUMA_BALANCING)) {
 		count_vm_event(NUMA_NO_TARGET);
 		put_page(page);
 		goto out;
 	}
+#endif
 
 	/* Migrate to the requested node */
 	migrated = migrate_misplaced_page(page, vma, target_nid);
