@@ -1284,6 +1284,9 @@ void __init setup_arch(char **cmdline_p)
 #endif
 
 	unwind_init();
+
+	WARN_TAINT(1, TAINT_CRAP, "Kernel version only for testing purposes");
+	pr_warn("Not for use in production environments\n");
 }
 
 #ifdef CONFIG_X86_32
