@@ -773,6 +773,15 @@ static void do_extra_xstate_size_checks(void)
 		else
 			continue;
 
+		bv = BIT_ULL(i);
+
+		if (xstate_area_mask & bv)
+			size = &paranoid_size;
+		else if (xstate_exp_area_mask & bv)
+			size = &paranoid_exp_size;
+		else
+			continue;
+
 		check_xstate_against_struct(i);
 		/*
 		 * Supervisor state components can be managed only by
@@ -809,29 +818,6 @@ static void do_extra_xstate_size_checks(void)
 }
 
 
-/*
- * Get total size of enabled xstates in XCR0 | IA32_XSS.
- *
- * Note the SDM's wording here.  "sub-function 0" only enumerates
- * the size of the *user* states.  If we use it to size a buffer
- * that we use 'XSAVES' on, we could potentially overflow the
- * buffer because 'XSAVES' saves system states too.
- */
-static unsigned int __init __get_xsave_compact_size(void)
-{
-	unsigned int eax, ebx, ecx, edx;
-	/*
-	 * - CPUID function 0DH, sub-function 1:
-	 *    EBX enumerates the size (in bytes) required by
-	 *    the XSAVES instruction for an XSAVE area
-	 *    containing all the state components
-	 *    corresponding to bits currently set in
-	 *    XCR0 | IA32_XSS.
-	 */
-	cpuid_count(XSTATE_CPUID, 1, &eax, &ebx, &ecx, &edx);
-	return ebx;
-}
-
 static unsigned int __init __get_xsave_uncompacted_size(void)
 {
 	unsigned int eax, ebx, ecx, edx;
@@ -848,24 +834,29 @@ static unsigned int __init __get_xsave_uncompacted_size(void)
 
 static unsigned int __init get_xsave_area_size(u64 mask, bool compacted)
 {
-	unsigned long flags;
-	unsigned int size;
+	int size;
+	int i;
 
 	if (!mask)
 		return 0;
 
-	/* non-extended region of an XSAVE area is the minimum size. */
-	mask |= XFEATURE_MASK_FPSSE;
+	if (!compacted) {
+		int max_nr = fls64(mask);
 
-	/* Make sure the original XCR0 value recovered safely */
-	local_irq_save(flags);
-	xsetbv(XCR_XFEATURE_ENABLED_MASK, mask);
-	if (compacted)
-		size = __get_xsave_compact_size();
-	else
-		size = __get_xsave_uncompacted_size();
-	xsetbv(XCR_XFEATURE_ENABLED_MASK, xfeatures_mask);
-	local_irq_restore(flags);
+		return (xfeature_uncompacted_offset(max_nr) +
+			xfeature_size(max_nr));
+	}
+
+	size = XSAVE_FIRST_EXT_OFFSET;
+
+	for (i = FIRST_EXTENDED_XFEATURE; i < XFEATURE_MAX; i++) {
+		if (!(mask & BIT_ULL(i)))
+			continue;
+
+		if (xfeature_is_aligned(i))
+			size = ALIGN(size, 64);
+		size += xfeature_size(i);
+	}
 
 	return size;
 }
