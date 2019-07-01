@@ -131,6 +131,13 @@ static void __init fpu__init_system_generic(void)
 }
 
 /*
+ * Size of expanded xstate buffer, which is expected to be huge,
+ * not fitting to the task_struct.
+ */
+unsigned int fpu_kernel_xstate_exp_size;
+EXPORT_SYMBOL_GPL(fpu_kernel_xstate_exp_size);
+
+/*
  * Size of the default FPU context state. The state is appended
  * to task_struct, as overall size is manageable.
  */

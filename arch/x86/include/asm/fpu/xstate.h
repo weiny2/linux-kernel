@@ -20,6 +20,7 @@
 
 #define XSAVE_YMM_SIZE	    256
 #define XSAVE_YMM_OFFSET    (XSAVE_HDR_SIZE + XSAVE_HDR_OFFSET)
+#define XSAVE_FIRST_EXT_OFFSET XSAVE_YMM_OFFSET
 
 /* All currently supported user features */
 #define XFEATURE_MASK_USER_SUPPORTED (XFEATURE_MASK_FP | \

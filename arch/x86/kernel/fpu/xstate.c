@@ -211,7 +211,7 @@ void fpstate_sanitize_xstate(struct fpu *fpu)
 	 * First two features are FPU and SSE, which above we handled
 	 * in a special way already:
 	 */
-	feature_bit = 0x2;
+	feature_bit = FIRST_EXTENDED_XFEATURE;
 	xfeatures = (xfeatures_mask_user() & xstate_area_mask & ~xfeatures);
 	xfeatures >>= feature_bit;
 
@@ -653,11 +653,19 @@ static void check_xstate_against_struct(int nr)
  */
 static void do_extra_xstate_size_checks(void)
 {
-	int paranoid_xstate_size = FXSAVE_SIZE + XSAVE_HDR_SIZE;
+	int paranoid_size = XSAVE_FIRST_EXT_OFFSET;
+	int paranoid_exp_size = 0;
+	int *size;
 	int i;
 
 	for (i = FIRST_EXTENDED_XFEATURE; i < XFEATURE_MAX; i++) {
-		if (!xfeature_enabled(i))
+		u64 bv = BIT_ULL(i);
+
+		if (xstate_area_mask & bv)
+			size = &paranoid_size;
+		else if (xstate_exp_area_mask & bv)
+			size = &paranoid_exp_size;
+		else
 			continue;
 
 		check_xstate_against_struct(i);
@@ -668,9 +676,15 @@ static void do_extra_xstate_size_checks(void)
 		if (!using_compacted_format())
 			XSTATE_WARN_ON(xfeature_is_supervisor(i));
 
+		/*
+		 * Set legacy and header offset for nonzero expanded
+		 * area
+		 */
+		if (*size == 0)
+			*size = XSAVE_FIRST_EXT_OFFSET;
 		/* Align from the end of the previous feature */
 		if (xfeature_is_aligned(i))
-			paranoid_xstate_size = ALIGN(paranoid_xstate_size, 64);
+			*size = ALIGN(*size, 64);
 		/*
 		 * The offset of a given state in the non-compacted
 		 * format is given to us in a CPUID leaf.  We check
@@ -678,14 +692,15 @@ static void do_extra_xstate_size_checks(void)
 		 * setup_xstate_features().
 		 */
 		if (!using_compacted_format())
-			paranoid_xstate_size = xfeature_uncompacted_offset(i);
+			*size = xfeature_uncompacted_offset(i);
 		/*
 		 * The compacted-format offset always depends on where
 		 * the previous state ended.
 		 */
-		paranoid_xstate_size += xfeature_size(i);
+		*size += xfeature_size(i);
 	}
-	XSTATE_WARN_ON(paranoid_xstate_size != fpu_kernel_xstate_size);
+	XSTATE_WARN_ON(paranoid_exp_size != fpu_kernel_xstate_exp_size);
+	XSTATE_WARN_ON(paranoid_size != fpu_kernel_xstate_size);
 }
 
 
@@ -697,7 +712,7 @@ static void do_extra_xstate_size_checks(void)
  * that we use 'XSAVES' on, we could potentially overflow the
  * buffer because 'XSAVES' saves system states too.
  */
-static unsigned int __init get_xsaves_size(void)
+static unsigned int __init __get_xsave_compact_size(void)
 {
 	unsigned int eax, ebx, ecx, edx;
 	/*
@@ -712,7 +727,7 @@ static unsigned int __init get_xsaves_size(void)
 	return ebx;
 }
 
-static unsigned int __init get_xsave_size(void)
+static unsigned int __init __get_xsave_uncompacted_size(void)
 {
 	unsigned int eax, ebx, ecx, edx;
 	/*
@@ -724,6 +739,30 @@ static unsigned int __init get_xsave_size(void)
 	 */
 	cpuid_count(XSTATE_CPUID, 0, &eax, &ebx, &ecx, &edx);
 	return ebx;
+}
+
+static unsigned int __init get_xsave_area_size(u64 mask, bool compacted)
+{
+	unsigned long flags;
+	unsigned int size;
+
+	if (!mask)
+		return 0;
+
+	/* non-extended region of an XSAVE area is the minimum size. */
+	mask |= XFEATURE_MASK_FPSSE;
+
+	/* Make sure the original XCR0 value recovered safely */
+	local_irq_save(flags);
+	xsetbv(XCR_XFEATURE_ENABLED_MASK, mask);
+	if (compacted)
+		size = __get_xsave_compact_size();
+	else
+		size = __get_xsave_uncompacted_size();
+	xsetbv(XCR_XFEATURE_ENABLED_MASK, xfeatures_mask);
+	local_irq_restore(flags);
+
+	return size;
 }
 
 /*
@@ -743,25 +782,26 @@ static bool is_supported_xstate_size(unsigned int test_xstate_size)
 static int __init init_xstate_size(void)
 {
 	/* Recompute the context size for enabled features: */
-	unsigned int possible_xstate_size;
+	unsigned int xstate_exp_size;
+	unsigned int xstate_size;
 	unsigned int xsave_size;
 
-	xsave_size = get_xsave_size();
-
-	if (boot_cpu_has(X86_FEATURE_XSAVES))
-		possible_xstate_size = get_xsaves_size();
-	else
-		possible_xstate_size = xsave_size;
+	xsave_size = __get_xsave_uncompacted_size();
+	xstate_size = get_xsave_area_size(xstate_area_mask,
+					  using_compacted_format());
+	xstate_exp_size = get_xsave_area_size(xstate_exp_area_mask,
+					      using_compacted_format());
 
 	/* Ensure we have the space to store all enabled: */
-	if (!is_supported_xstate_size(possible_xstate_size))
+	if (!is_supported_xstate_size(xstate_size))
 		return -EINVAL;
 
 	/*
 	 * The size is OK, we are definitely going to use xsave,
 	 * make it known to the world that we need more space.
 	 */
-	fpu_kernel_xstate_size = possible_xstate_size;
+	fpu_kernel_xstate_size = xstate_size;
+	fpu_kernel_xstate_exp_size = xstate_exp_size;
 	do_extra_xstate_size_checks();
 
 	/*
@@ -889,10 +929,12 @@ void __init fpu__init_system_xstate(void)
 	setup_supervisor_only_offsets();
 	print_xstate_offset_size();
 
-	pr_info("x86/fpu: Enabled xstate features 0x%llx, context size is %d bytes, using '%s' format.\n",
+	pr_info("x86/fpu: Enabled xstate features 0x%llx, total context size is %d",
 		xfeatures_mask_all,
-		fpu_kernel_xstate_size,
-		boot_cpu_has(X86_FEATURE_XSAVES) ? "compacted" : "standard");
+		fpu_kernel_xstate_size + fpu_kernel_xstate_exp_size);
+	pr_info(" bytes (base %d bytes, expansion %d bytes), using '%s' format.\n",
+		fpu_kernel_xstate_size, fpu_kernel_xstate_exp_size,
+		using_compacted_format() ? "compacted" : "standard");
 	return;
 
 out_disable:
