@@ -43,7 +43,6 @@ struct ib_umem_odp;
 
 struct ib_umem {
 	struct ib_ucontext     *context;
-	struct mm_struct       *owning_mm;
 	size_t			length;
 	unsigned long		address;
 	u32 writable : 1;
@@ -52,6 +51,7 @@ struct ib_umem {
 	struct sg_table sg_head;
 	int             nmap;
 	unsigned int    sg_nents;
+	struct vaddr_pin vaddr_pin;
 };
 
 /* Returns the offset of the umem start relative to the first page. */
