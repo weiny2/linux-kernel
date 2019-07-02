@@ -278,11 +278,11 @@ static int get_per_mm(struct ib_umem_odp *umem_odp)
 	 */
 	mutex_lock(&ctx->per_mm_list_lock);
 	list_for_each_entry(per_mm, &ctx->per_mm_list, ucontext_list) {
-		if (per_mm->mm == umem_odp->umem.owning_mm)
+		if (per_mm->mm == umem_odp->umem.vaddr_pin.mm)
 			goto found;
 	}
 
-	per_mm = alloc_per_mm(ctx, umem_odp->umem.owning_mm);
+	per_mm = alloc_per_mm(ctx, umem_odp->umem.vaddr_pin.mm);
 	if (IS_ERR(per_mm)) {
 		mutex_unlock(&ctx->per_mm_list_lock);
 		return PTR_ERR(per_mm);
@@ -355,8 +355,8 @@ struct ib_umem_odp *ib_alloc_odp_umem(struct ib_umem_odp *root,
 	umem->writable   = root->umem.writable;
 	umem->is_odp = 1;
 	odp_data->per_mm = per_mm;
-	umem->owning_mm  = per_mm->mm;
-	mmgrab(umem->owning_mm);
+	umem->vaddr_pin.mm  = per_mm->mm;
+	mmgrab(umem->vaddr_pin.mm);
 
 	mutex_init(&odp_data->umem_mutex);
 	init_completion(&odp_data->notifier_completion);
@@ -389,7 +389,7 @@ struct ib_umem_odp *ib_alloc_odp_umem(struct ib_umem_odp *root,
 out_page_list:
 	vfree(odp_data->page_list);
 out_odp_data:
-	mmdrop(umem->owning_mm);
+	mmdrop(umem->vaddr_pin.mm);
 	kfree(odp_data);
 	return ERR_PTR(ret);
 }
@@ -399,10 +399,10 @@ int ib_umem_odp_get(struct ib_umem_odp *umem_odp, int access)
 {
 	struct ib_umem *umem = &umem_odp->umem;
 	/*
-	 * NOTE: This must called in a process context where umem->owning_mm
+	 * NOTE: This must called in a process context where umem->vaddr_pin.mm
 	 * == current->mm
 	 */
-	struct mm_struct *mm = umem->owning_mm;
+	struct mm_struct *mm = umem->vaddr_pin.mm;
 	int ret_val;
 
 	umem_odp->page_shift = PAGE_SHIFT;
@@ -581,7 +581,7 @@ int ib_umem_odp_map_dma_pages(struct ib_umem_odp *umem_odp, u64 user_virt,
 			      unsigned long current_seq)
 {
 	struct task_struct *owning_process  = NULL;
-	struct mm_struct *owning_mm = umem_odp->umem.owning_mm;
+	struct mm_struct *owning_mm = umem_odp->umem.vaddr_pin.mm;
 	struct page       **local_page_list = NULL;
 	u64 page_mask, off;
 	int j, k, ret = 0, start_idx, npages = 0;

@@ -54,7 +54,8 @@ static void __ib_umem_release(struct ib_device *dev, struct ib_umem *umem, int d
 
 	for_each_sg_page(umem->sg_head.sgl, &sg_iter, umem->sg_nents, 0) {
 		page = sg_page_iter_page(&sg_iter);
-		put_user_pages_dirty_lock(&page, 1, umem->writable && dirty);
+		vaddr_unpin_pages(&page, 1, &umem->vaddr_pin,
+				  umem->writable && dirty);
 	}
 
 	sg_free_table(&umem->sg_head);
@@ -243,8 +244,15 @@ struct ib_umem *ib_umem_get(struct ib_udata *udata, unsigned long addr,
 	umem->length     = size;
 	umem->address    = addr;
 	umem->writable   = ib_access_writable(access);
-	umem->owning_mm = mm = current->mm;
-	mmgrab(mm);
+	umem->vaddr_pin.mm = mm = current->mm;
+	mmgrab(umem->vaddr_pin.mm);
+
+	/* No need to get a reference to the core file object here.  The key is
+	 * that sys_file reference is held by the ufile.  Any duplication of
+	 * sys_file by the core will keep references active until all those
+	 * contexts are closed out.  No matter which process hold them open.
+	 */
+	umem->vaddr_pin.f_owner = context->ufile->sys_file;
 
 	if (access & IB_ACCESS_ON_DEMAND) {
 		if (WARN_ON_ONCE(!context->invalidate_range)) {
@@ -292,11 +300,11 @@ struct ib_umem *ib_umem_get(struct ib_udata *udata, unsigned long addr,
 
 	while (npages) {
 		down_read(&mm->mmap_sem);
-		ret = get_user_pages(cur_base,
+		ret = vaddr_pin_pages(cur_base,
 				     min_t(unsigned long, npages,
 					   PAGE_SIZE / sizeof (struct page *)),
-				     gup_flags | FOLL_LONGTERM,
-				     page_list, NULL);
+				     gup_flags,
+				     page_list, &umem->vaddr_pin);
 		if (ret < 0) {
 			up_read(&mm->mmap_sem);
 			goto umem_release;
@@ -336,7 +344,7 @@ out:
 	free_page((unsigned long) page_list);
 umem_kfree:
 	if (ret) {
-		mmdrop(umem->owning_mm);
+		mmdrop(umem->vaddr_pin.mm);
 		kfree(umem);
 	}
 	return ret ? ERR_PTR(ret) : umem;
@@ -345,7 +353,7 @@ EXPORT_SYMBOL(ib_umem_get);
 
 static void __ib_umem_release_tail(struct ib_umem *umem)
 {
-	mmdrop(umem->owning_mm);
+	mmdrop(umem->vaddr_pin.mm);
 	if (umem->is_odp)
 		kfree(to_ib_umem_odp(umem));
 	else
@@ -369,7 +377,7 @@ void ib_umem_release(struct ib_umem *umem)
 
 	__ib_umem_release(umem->context->device, umem, 1);
 
-	atomic64_sub(ib_umem_num_pages(umem), &umem->owning_mm->pinned_vm);
+	atomic64_sub(ib_umem_num_pages(umem), &umem->vaddr_pin.mm->pinned_vm);
 	__ib_umem_release_tail(umem);
 }
 EXPORT_SYMBOL(ib_umem_release);
