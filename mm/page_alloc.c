@@ -140,11 +140,14 @@ DEFINE_STATIC_KEY_TRUE(init_on_alloc);
 #else
 DEFINE_STATIC_KEY_FALSE(init_on_alloc);
 #endif
+EXPORT_SYMBOL(init_on_alloc);
+
 #ifdef CONFIG_INIT_ON_FREE_DEFAULT_ON
 DEFINE_STATIC_KEY_TRUE(init_on_free);
 #else
 DEFINE_STATIC_KEY_FALSE(init_on_free);
 #endif
+EXPORT_SYMBOL(init_on_free);
 
 static int __init early_init_on_alloc(char *buf)
 {
@@ -154,10 +157,8 @@ static int __init early_init_on_alloc(char *buf)
 	if (!buf)
 		return -EINVAL;
 	ret = kstrtobool(buf, &bool_result);
-	if (bool_result && IS_ENABLED(CONFIG_PAGE_POISONING)) {
-		pr_warn("mem auto-init: Disabling init_on_alloc: CONFIG_PAGE_POISONING is on\n");
-		bool_result = false;
-	}
+	if (bool_result && IS_ENABLED(CONFIG_PAGE_POISONING))
+		pr_warn("mem auto-init: CONFIG_PAGE_POISONING is on, will take precedence over init_on_alloc\n");
 	if (bool_result)
 		static_branch_enable(&init_on_alloc);
 	else
@@ -174,10 +175,8 @@ static int __init early_init_on_free(char *buf)
 	if (!buf)
 		return -EINVAL;
 	ret = kstrtobool(buf, &bool_result);
-	if (bool_result && IS_ENABLED(CONFIG_PAGE_POISONING)) {
-		pr_warn("mem auto-init: Disabling init_on_free: CONFIG_PAGE_POISONING is on\n");
-		bool_result = false;
-	}
+	if (bool_result && IS_ENABLED(CONFIG_PAGE_POISONING))
+		pr_warn("mem auto-init: CONFIG_PAGE_POISONING is on, will take precedence over init_on_free\n");
 	if (bool_result)
 		static_branch_enable(&init_on_free);
 	else
@@ -1179,9 +1178,10 @@ static __always_inline bool free_pages_prepare(struct page *page,
 					   PAGE_SIZE << order);
 	}
 	arch_free_page(page, order);
-	kernel_poison_pages(page, 1 << order, 0);
 	if (want_init_on_free())
 		kernel_init_free_pages(page, 1 << order);
+
+	kernel_poison_pages(page, 1 << order, 0);
 	if (debug_pagealloc_enabled())
 		kernel_map_pages(page, 1 << order, 0);
 
