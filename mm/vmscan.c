@@ -3196,11 +3196,13 @@ unsigned long try_to_free_pages(struct zonelist *zonelist, int order,
 	if (throttle_direct_reclaim(sc.gfp_mask, zonelist, nodemask))
 		return 1;
 
+	current->reclaim_state = &sc.reclaim_state;
 	trace_mm_vmscan_direct_reclaim_begin(order, sc.gfp_mask);
 
 	nr_reclaimed = do_try_to_free_pages(zonelist, &sc);
 
 	trace_mm_vmscan_direct_reclaim_end(nr_reclaimed);
+	current->reclaim_state = NULL;
 
 	return nr_reclaimed;
 }
@@ -3223,6 +3225,7 @@ unsigned long mem_cgroup_shrink_node(struct mem_cgroup *memcg,
 	};
 	unsigned long lru_pages;
 
+	current->reclaim_state = &sc.reclaim_state;
 	sc.gfp_mask = (gfp_mask & GFP_RECLAIM_MASK) |
 			(GFP_HIGHUSER_MOVABLE & ~GFP_RECLAIM_MASK);
 
@@ -3244,7 +3247,9 @@ unsigned long mem_cgroup_shrink_node(struct mem_cgroup *memcg,
 					cgroup_ino(memcg->css.cgroup),
 					sc.nr_reclaimed);
 
+	current->reclaim_state = NULL;
 	*nr_scanned = sc.nr_scanned;
+
 	return sc.nr_reclaimed;
 }
 
@@ -3271,6 +3276,7 @@ unsigned long try_to_free_mem_cgroup_pages(struct mem_cgroup *memcg,
 		.may_shrinkslab = 1,
 	};
 
+	current->reclaim_state = &sc.reclaim_state;
 	/*
 	 * Unlike direct reclaim via alloc_pages(), memcg's reclaim doesn't
 	 * take care of from where we get pages. So the node where we start the
@@ -3295,6 +3301,7 @@ unsigned long try_to_free_mem_cgroup_pages(struct mem_cgroup *memcg,
 	trace_mm_vmscan_memcg_reclaim_end(
 				cgroup_ino(memcg->css.cgroup),
 				nr_reclaimed);
+	current->reclaim_state = NULL;
 
 	return nr_reclaimed;
 }
