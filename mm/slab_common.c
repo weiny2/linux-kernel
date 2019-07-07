@@ -771,6 +771,7 @@ static void kmemcg_cache_deactivate(struct kmem_cache *s)
 		return;
 
 	__kmemcg_cache_deactivate(s);
+	s->flags |= SLAB_DEACTIVATED;
 
 	/*
 	 * memcg_kmem_wq_lock is used to synchronize memcg_params.dying
