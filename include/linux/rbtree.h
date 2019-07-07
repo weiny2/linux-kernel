@@ -144,8 +144,8 @@ static inline void rb_insert_color_cached(struct rb_node *node,
 static inline void rb_erase_cached(struct rb_node *node,
 				   struct rb_root_cached *root)
 {
-        if (root->rb_leftmost == node)
-                root->rb_leftmost = rb_next(node);
+	if (root->rb_leftmost == node)
+		root->rb_leftmost = rb_next(node);
 	rb_erase(node, &root->rb_root);
 }
 
