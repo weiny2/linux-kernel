@@ -154,6 +154,10 @@ static int __init early_init_on_alloc(char *buf)
 	if (!buf)
 		return -EINVAL;
 	ret = kstrtobool(buf, &bool_result);
+	if (bool_result && IS_ENABLED(CONFIG_PAGE_POISONING)) {
+		pr_warn("mem auto-init: Disabling init_on_alloc: CONFIG_PAGE_POISONING is on\n");
+		bool_result = false;
+	}
 	if (bool_result)
 		static_branch_enable(&init_on_alloc);
 	else
@@ -170,6 +174,10 @@ static int __init early_init_on_free(char *buf)
 	if (!buf)
 		return -EINVAL;
 	ret = kstrtobool(buf, &bool_result);
+	if (bool_result && IS_ENABLED(CONFIG_PAGE_POISONING)) {
+		pr_warn("mem auto-init: Disabling init_on_free: CONFIG_PAGE_POISONING is on\n");
+		bool_result = false;
+	}
 	if (bool_result)
 		static_branch_enable(&init_on_free);
 	else

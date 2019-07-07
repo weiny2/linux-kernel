@@ -1282,8 +1282,9 @@ out:
 	if ((static_branch_unlikely(&init_on_alloc) ||
 	     static_branch_unlikely(&init_on_free)) &&
 	    (slub_debug & SLAB_POISON)) {
-		pr_warn("disabling SLAB_POISON: can't be used together with memory auto-initialization\n");
-		slub_debug &= ~SLAB_POISON;
+		pr_warn("mem auto-init: Disabling init_on_alloc/init_on_free: can't be used together with SLAB_POISON\n");
+		static_branch_disable(&init_on_alloc);
+		static_branch_disable(&init_on_free);
 	}
 	return 1;
 }
@@ -1432,12 +1433,21 @@ static inline bool slab_free_freelist_hook(struct kmem_cache *s,
 	void *object;
 	void *next = *head;
 	void *old_tail = *tail ? *tail : *head;
+	int rsize;
 
 	if (slab_want_init_on_free(s))
 		do {
 			object = next;
 			next = get_freepointer(s, object);
-			memset(object, 0, s->size);
+			/*
+			 * Clear the object and the metadata, but don't touch
+			 * the redzone.
+			 */
+			memset(object, 0, s->object_size);
+			rsize = (s->flags & SLAB_RED_ZONE) ? s->red_left_pad
+							   : 0;
+			memset((char *)object + s->inuse, 0,
+			       s->size - s->inuse - rsize);
 			set_freepointer(s, object, next);
 		} while (object != old_tail);
 
@@ -2751,7 +2761,7 @@ redo:
 	 * initialized by zeroing out freelist pointer.
 	 */
 	if (unlikely(slab_want_init_on_free(s)) && object)
-		*(void **)object = NULL;
+		memset(object + s->offset, 0, sizeof(void *));
 
 	if (unlikely(slab_want_init_on_alloc(gfpflags, s)) && object)
 		memset(object, 0, s->object_size);
