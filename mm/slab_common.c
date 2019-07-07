@@ -1615,7 +1615,8 @@ size_t ksize(const void *objp)
 {
 	size_t size;
 
-	BUG_ON(!objp);
+	if (WARN_ON_ONCE(!objp))
+		return 0;
 	/*
 	 * We need to check that the pointed to object is valid, and only then
 	 * unpoison the shadow memory below. We use __kasan_check_read(), to
