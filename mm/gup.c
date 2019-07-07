@@ -1449,7 +1449,8 @@ static long check_and_migrate_cma_pages(struct task_struct *tsk,
 					struct vm_area_struct **vmas,
 					unsigned int gup_flags)
 {
-	long i, step;
+	unsigned long i;
+	unsigned long step;
 	bool drain_allow = true;
 	bool migrate_allow = true;
 	LIST_HEAD(cma_page_list);
