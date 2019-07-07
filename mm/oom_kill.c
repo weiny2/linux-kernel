@@ -71,7 +71,7 @@ static inline bool is_memcg_oom(struct oom_control *oc)
 
 #ifdef CONFIG_NUMA
 /**
- * has_intersects_mems_allowed() - check task eligiblity for kill
+ * oom_cpuset_eligible() - check task eligiblity for kill
  * @start: task struct of which task to consider
  * @mask: nodemask passed to page allocator for mempolicy ooms
  *
@@ -79,17 +79,18 @@ static inline bool is_memcg_oom(struct oom_control *oc)
  * shares the same mempolicy nodes as current if it is bound by such a policy
  * and whether or not it has the same set of allowed cpuset nodes.
  *
- * Only call in the global oom context (i.e. not in memcg oom). This function
- * is assuming 'current' has triggered the oom-killer.
+ * This function is assuming oom-killer context and 'current' has triggered
+ * the oom-killer.
  */
-static bool has_intersects_mems_allowed(struct task_struct *start,
-					struct oom_control *oc)
+static bool oom_cpuset_eligible(struct task_struct *start,
+				struct oom_control *oc)
 {
 	struct task_struct *tsk;
 	bool ret = false;
 	const nodemask_t *mask = oc->nodemask;
 
-	VM_BUG_ON(is_memcg_oom(oc));
+	if (is_memcg_oom(oc))
+		return true;
 
 	rcu_read_lock();
 	for_each_thread(start, tsk) {
@@ -116,8 +117,7 @@ static bool has_intersects_mems_allowed(struct task_struct *start,
 	return ret;
 }
 #else
-static bool has_intersects_mems_allowed(struct task_struct *tsk,
-					struct oom_control *oc)
+static bool oom_cpuset_eligible(struct task_struct *tsk, struct oom_control *oc)
 {
 	return true;
 }
@@ -315,7 +315,7 @@ static int oom_evaluate_task(struct task_struct *task, void *arg)
 		goto next;
 
 	/* p may not have freeable memory in nodemask */
-	if (!is_memcg_oom(oc) && !has_intersects_mems_allowed(task, oc))
+	if (!is_memcg_oom(oc) && !oom_cpuset_eligible(task, oc))
 		goto next;
 
 	/*
@@ -388,7 +388,7 @@ static int dump_task(struct task_struct *p, void *arg)
 		return 0;
 
 	/* p may not have freeable memory in nodemask */
-	if (!is_memcg_oom(oc) && !has_intersects_mems_allowed(p, oc))
+	if (!is_memcg_oom(oc) && !oom_cpuset_eligible(p, oc))
 		return 0;
 
 	task = find_lock_task_mm(p);
@@ -1087,7 +1087,7 @@ bool out_of_memory(struct oom_control *oc)
 
 	if (!is_memcg_oom(oc) && sysctl_oom_kill_allocating_task &&
 	    current->mm && !oom_unkillable_task(current) &&
-	    has_intersects_mems_allowed(current, oc) &&
+	    oom_cpuset_eligible(current, oc) &&
 	    current->signal->oom_score_adj != OOM_SCORE_ADJ_MIN) {
 		get_task_struct(current);
 		oc->chosen = current;
