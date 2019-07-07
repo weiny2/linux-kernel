@@ -157,8 +157,8 @@ static int __init early_init_on_alloc(char *buf)
 	if (!buf)
 		return -EINVAL;
 	ret = kstrtobool(buf, &bool_result);
-	if (bool_result && IS_ENABLED(CONFIG_PAGE_POISONING))
-		pr_warn("mem auto-init: CONFIG_PAGE_POISONING is on, will take precedence over init_on_alloc\n");
+	if (bool_result && page_poisoning_enabled())
+		pr_info("mem auto-init: CONFIG_PAGE_POISONING is on, will take precedence over init_on_alloc\n");
 	if (bool_result)
 		static_branch_enable(&init_on_alloc);
 	else
@@ -175,8 +175,8 @@ static int __init early_init_on_free(char *buf)
 	if (!buf)
 		return -EINVAL;
 	ret = kstrtobool(buf, &bool_result);
-	if (bool_result && IS_ENABLED(CONFIG_PAGE_POISONING))
-		pr_warn("mem auto-init: CONFIG_PAGE_POISONING is on, will take precedence over init_on_free\n");
+	if (bool_result && page_poisoning_enabled())
+		pr_info("mem auto-init: CONFIG_PAGE_POISONING is on, will take precedence over init_on_free\n");
 	if (bool_result)
 		static_branch_enable(&init_on_free);
 	else
