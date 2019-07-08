@@ -1603,6 +1603,11 @@ int account_locked_vm(struct mm_struct *mm, unsigned long pages, bool inc);
 int __account_locked_vm(struct mm_struct *mm, unsigned long pages, bool inc,
 			struct task_struct *task, bool bypass_rlim);
 
+long vaddr_pin_pages(unsigned long addr, unsigned long nr_pages,
+		     unsigned int gup_flags, struct page **pages,
+		     struct vaddr_pin *vaddr_pin);
+void vaddr_unpin_pages(struct page **pages, unsigned long nr_pages,
+		       struct vaddr_pin *vaddr_pin, bool make_dirty);
 bool mapping_inode_has_layout(struct vaddr_pin *vaddr_pin, struct page *page);
 
 /* Container for pinned pfns / pages */

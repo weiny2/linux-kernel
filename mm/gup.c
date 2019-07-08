@@ -2526,3 +2526,62 @@ int get_user_pages_fast(unsigned long start, int nr_pages,
 	return ret;
 }
 EXPORT_SYMBOL_GPL(get_user_pages_fast);
+
+/**
+ * vaddr_pin_pages pin pages by virtual address and return the pages to the
+ * user.
+ *
+ * @addr: start address
+ * @nr_pages: number of pages to pin
+ * @gup_flags: flags to use for the pin
+ * @pages: array of pages returned
+ * @vaddr_pin: initialized meta information this pin is to be associated
+ * with.
+ *
+ * NOTE regarding vaddr_pin:
+ *
+ * Some callers can share pins via file descriptors to other processes.
+ * Callers such as this should use the f_owner field of vaddr_pin to indicate
+ * the file the fd points to.  All other callers should use the mm this pin is
+ * being made against.  Usually "current->mm".
+ *
+ * Expects mmap_sem to be read locked.
+ */
+long vaddr_pin_pages(unsigned long addr, unsigned long nr_pages,
+		     unsigned int gup_flags, struct page **pages,
+		     struct vaddr_pin *vaddr_pin)
+{
+	long ret;
+
+	gup_flags |= FOLL_LONGTERM;
+
+	if (!vaddr_pin || (!vaddr_pin->mm && !vaddr_pin->f_owner))
+		return -EINVAL;
+
+	ret = __gup_longterm_locked(current,
+				    vaddr_pin->mm,
+				    addr, nr_pages,
+				    pages, NULL, gup_flags,
+				    vaddr_pin);
+	return ret;
+}
+EXPORT_SYMBOL(vaddr_pin_pages);
+
+/**
+ * vaddr_unpin_pages - counterpart to vaddr_pin_pages
+ *
+ * @pages: array of pages returned
+ * @nr_pages: number of pages in pages
+ * @vaddr_pin: same information passed to vaddr_pin_pages
+ * @make_dirty: whether to mark the pages dirty
+ *
+ * The semantics are similar to put_user_pages_dirty_lock but a vaddr_pin used
+ * in vaddr_pin_pages should be passed back into this call for proper
+ * tracking.
+ */
+void vaddr_unpin_pages(struct page **pages, unsigned long nr_pages,
+		       struct vaddr_pin *vaddr_pin, bool make_dirty)
+{
+	__put_user_pages_dirty_lock(pages, nr_pages, make_dirty, vaddr_pin);
+}
+EXPORT_SYMBOL(vaddr_unpin_pages);
