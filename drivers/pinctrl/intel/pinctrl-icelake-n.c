@@ -418,7 +418,7 @@ static INTEL_PINCTRL_PM_OPS(icln_pinctrl_pm_ops);
 static struct platform_driver icln_pinctrl_driver = {
 	.probe = intel_pinctrl_probe_by_hid,
 	.driver = {
-		.name = "icelake-pinctrl",
+		.name = "icelake-n-pinctrl",
 		.acpi_match_table = icln_pinctrl_acpi_match,
 		.pm = &icln_pinctrl_pm_ops,
 	},
