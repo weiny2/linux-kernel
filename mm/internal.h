@@ -12,6 +12,34 @@
 #include <linux/pagemap.h>
 #include <linux/tracepoint-defs.h>
 
+struct follow_page_context {
+	struct dev_pagemap *pgmap;
+	unsigned int page_mask;
+	struct vaddr_pin *vaddr_pin;
+};
+
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE
+struct page *follow_devmap_pmd(struct vm_area_struct *vma, unsigned long addr,
+		pmd_t *pmd, int flags, struct follow_page_context *ctx);
+struct page *follow_devmap_pud(struct vm_area_struct *vma, unsigned long addr,
+		pud_t *pud, int flags, struct follow_page_context *ctx);
+#else
+static inline struct page *follow_devmap_pmd(struct vm_area_struct *vma,
+	unsigned long addr, pmd_t *pmd, int flags,
+	struct follow_page_context *ctx)
+{
+	return NULL;
+}
+
+static inline struct page *follow_devmap_pud(struct vm_area_struct *vma,
+	unsigned long addr, pud_t *pud, int flags,
+	struct follow_page_context *ctx)
+{
+	return NULL;
+}
+#endif /* CONFIG_TRANSPARENT_HUGEPAGE */
+
+
 /*
  * The set of flags that only affect watermark checking and reclaim
  * behaviour. This is used by the MM to obey the caller constraints
