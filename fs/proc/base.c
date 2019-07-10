@@ -2995,6 +2995,7 @@ static int proc_stack_depth(struct seq_file *m, struct pid_namespace *ns,
  */
 static const struct file_operations proc_task_operations;
 static const struct inode_operations proc_task_inode_operations;
+static const struct file_operations proc_pid_file_pins_operations;
 
 static const struct pid_entry tgid_base_stuff[] = {
 	DIR("task",       S_IRUGO|S_IXUGO, proc_task_inode_operations, proc_task_operations),
@@ -3024,6 +3025,7 @@ static const struct pid_entry tgid_base_stuff[] = {
 	ONE("stat",       S_IRUGO, proc_tgid_stat),
 	ONE("statm",      S_IRUGO, proc_pid_statm),
 	REG("maps",       S_IRUGO, proc_pid_maps_operations),
+	REG("file_pins",  S_IRUGO, proc_pid_file_pins_operations),
 #ifdef CONFIG_NUMA
 	REG("numa_maps",  S_IRUGO, proc_pid_numa_maps_operations),
 #endif
@@ -3422,6 +3424,7 @@ static const struct pid_entry tid_base_stuff[] = {
 	ONE("stat",      S_IRUGO, proc_tid_stat),
 	ONE("statm",     S_IRUGO, proc_pid_statm),
 	REG("maps",      S_IRUGO, proc_pid_maps_operations),
+	REG("file_pins", S_IRUGO, proc_pid_file_pins_operations),
 #ifdef CONFIG_PROC_CHILDREN
 	REG("children",  S_IRUGO, proc_tid_children_operations),
 #endif
@@ -3718,3 +3721,166 @@ void __init set_proc_pid_nlink(void)
 	nlink_tid = pid_entry_nlink(tid_base_stuff, ARRAY_SIZE(tid_base_stuff));
 	nlink_tgid = pid_entry_nlink(tgid_base_stuff, ARRAY_SIZE(tgid_base_stuff));
 }
+
+/**
+ * file_pin information below.
+ */
+
+struct proc_file_pins_private {
+	struct inode *inode;
+	struct task_struct *task;
+	struct files_struct *files;
+	unsigned int nr_pins;
+	struct xarray fps;
+} __randomize_layout;
+
+static void print_fd_file_pin(struct seq_file *m, struct file *file,
+			    unsigned long i)
+{
+	struct file_file_pin *fp;
+	struct file_file_pin *tmp;
+
+	if (list_empty_careful(&file->file_pins))
+		return;
+
+	seq_printf(m, "%lu: ", i);
+	seq_file_path(m, file, "\n");
+	seq_putc(m, '\n');
+
+	list_for_each_entry_safe(fp, tmp, &file->file_pins, list) {
+		seq_puts(m, "   ");
+		seq_file_path(m, fp->file, "\n");
+		seq_putc(m, '\n');
+	}
+}
+
+/* We are storing the index's within the FD table for later retrieval */
+static int store_fd(const void *priv , struct file *file, unsigned i)
+{
+	struct proc_file_pins_private *fp_priv;
+
+	/* cast away const... */
+	fp_priv = (struct proc_file_pins_private *)priv;
+
+	if (list_empty_careful(&file->file_pins))
+		return 0;
+
+	/* can't sleep in the iterate of the fd table */
+	xa_store(&fp_priv->fps, fp_priv->nr_pins, xa_mk_value(i), GFP_ATOMIC);
+	fp_priv->nr_pins++;
+
+	return 0;
+}
+
+static void *fp_start(struct seq_file *m, loff_t *ppos)
+{
+	struct proc_file_pins_private *priv = m->private;
+	unsigned int pos = *ppos;
+
+	priv->task = get_proc_task(priv->inode);
+	if (!priv->task)
+		return ERR_PTR(-ESRCH);
+
+	priv->files = get_files_struct(priv->task);
+
+	xa_destroy(&priv->fps);
+	priv->nr_pins = 0;
+
+	/* grab fds of "files" which have pins and store as xa values */
+	if (priv->files)
+		iterate_fd(priv->files, 0, store_fd, priv);
+
+	if (pos >= priv->nr_pins)
+		return NULL;
+
+	return xa_load(&priv->fps, pos);
+}
+
+static void *fp_next(struct seq_file *m, void *v, loff_t *pos)
+{
+	struct proc_file_pins_private *priv = m->private;
+
+	(*pos)++;
+	if ((*pos) >= priv->nr_pins)
+		return NULL;
+
+	return xa_load(&priv->fps, *pos);
+}
+
+static void fp_stop(struct seq_file *m, void *v)
+{
+	struct proc_file_pins_private *priv = m->private;
+
+	if (priv->task) {
+		put_task_struct(priv->task);
+		priv->task = NULL;
+	}
+
+	if (priv->files) {
+		put_files_struct(priv->files);
+		priv->files = NULL;
+	}
+}
+
+static int show_fp(struct seq_file *m, void *v)
+{
+	struct proc_file_pins_private *priv = m->private;
+
+	if (xa_is_value(v)) {
+		struct file *file;
+		unsigned long fd = xa_to_value(v);
+
+		rcu_read_lock();
+		file = fcheck_files(priv->files, fd);
+		if (file)
+			print_fd_file_pin(m, file, fd);
+		rcu_read_unlock();
+	}
+
+	return 0;
+}
+
+static const struct seq_operations proc_pid_file_pins_op = {
+	.start	= fp_start,
+	.next	= fp_next,
+	.stop	= fp_stop,
+	.show	= show_fp
+};
+
+static int proc_file_pins_open(struct inode *inode, struct file *file)
+{
+	struct proc_file_pins_private *priv = __seq_open_private(file,
+						&proc_pid_file_pins_op,
+						sizeof(*priv));
+
+	if (!priv)
+		return -ENOMEM;
+
+	xa_init(&priv->fps);
+	priv->inode = inode;
+	priv->task = NULL;
+
+	return 0;
+}
+
+static int proc_file_pins_release(struct inode *inode, struct file *file)
+{
+	struct seq_file *seq = file->private_data;
+	struct proc_file_pins_private *priv = seq->private;
+
+	/* This is for "protection" not sure when these may end up not being
+	 * NULL here... */
+	WARN_ON(priv->files);
+	WARN_ON(priv->task);
+
+	xa_destroy(&priv->fps);
+
+	return seq_release_private(inode, file);
+}
+
+static const struct file_operations proc_pid_file_pins_operations = {
+	.open		= proc_file_pins_open,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= proc_file_pins_release,
+};
