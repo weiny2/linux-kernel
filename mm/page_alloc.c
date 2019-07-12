@@ -3447,6 +3447,24 @@ bool zone_watermark_ok_safe(struct zone *z, unsigned int order,
 								free_pages);
 }
 
+unsigned long pgdat_wmark_pages(struct pglist_data *pgdat,
+				enum zone_watermarks m)
+{
+	int z;
+	long wmark_pages = 0;
+
+	for (z = pgdat->nr_zones - 1; z >= 0; z--) {
+		struct zone *zone = pgdat->node_zones + z;
+
+		if (!populated_zone(zone))
+			continue;
+
+		wmark_pages += wmark_pages(zone, m);
+	}
+
+	return wmark_pages;
+}
+
 #ifdef CONFIG_NUMA
 static bool zone_allows_reclaim(struct zone *local_zone, struct zone *zone)
 {
