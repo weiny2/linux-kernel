@@ -24,30 +24,41 @@
 
 #include "internal.h"
 
-/**
- * put_user_pages_dirty_lock() - release and optionally dirty gup-pinned pages
- * @pages:  array of pages to be maybe marked dirty, and definitely released.
- * @npages: number of pages in the @pages array.
- * @make_dirty: whether to mark the pages dirty
- *
- * "gup-pinned page" refers to a page that has had one of the get_user_pages()
- * variants called on that page.
- *
- * For each page in the @pages array, make that page (or its head page, if a
- * compound page) dirty, if @make_dirty is true, and if the page was previously
- * listed as clean. In any case, releases all pages using put_user_page(),
- * possibly via put_user_pages(), for the non-dirty case.
- *
- * Please see the put_user_page() documentation for details.
- *
- * set_page_dirty_lock() is used internally. If instead, set_page_dirty() is
- * required, then the caller should a) verify that this is really correct,
- * because _lock() is usually required, and b) hand code it:
- * set_page_dirty_lock(), put_user_page().
- *
- */
-void put_user_pages_dirty_lock(struct page **pages, unsigned long npages,
-			       bool make_dirty)
+static void __put_user_page(struct vaddr_pin *vaddr_pin, struct page *page)
+{
+	page = compound_head(page);
+
+	/*
+	 * For devmap managed pages we need to catch refcount transition from
+	 * GUP_PIN_COUNTING_BIAS to 1, when refcount reach one it means the
+	 * page is free and we need to inform the device driver through
+	 * callback. See include/linux/memremap.h and HMM for details.
+	 */
+	if (put_devmap_managed_page(page))
+		return;
+
+	if (put_page_testzero(page))
+		__put_page(page);
+}
+
+static void __put_user_pages(struct vaddr_pin *vaddr_pin, struct page **pages,
+			     unsigned long npages)
+{
+	unsigned long index;
+
+	/*
+	 * TODO: this can be optimized for huge pages: if a series of pages is
+	 * physically contiguous and part of the same compound page, then a
+	 * single operation to the head page should suffice.
+	 */
+	for (index = 0; index < npages; index++)
+		__put_user_page(vaddr_pin, pages[index]);
+}
+
+static void __put_user_pages_dirty_lock(struct vaddr_pin *vaddr_pin,
+					struct page **pages,
+					unsigned long npages,
+					bool make_dirty)
 {
 	unsigned long index;
 
@@ -58,7 +69,7 @@ void put_user_pages_dirty_lock(struct page **pages, unsigned long npages,
 	 */
 
 	if (!make_dirty) {
-		put_user_pages(pages, npages);
+		__put_user_pages(vaddr_pin, pages, npages);
 		return;
 	}
 
@@ -86,8 +97,57 @@ void put_user_pages_dirty_lock(struct page **pages, unsigned long npages,
 		 */
 		if (!PageDirty(page))
 			set_page_dirty_lock(page);
-		put_user_page(page);
+		__put_user_page(vaddr_pin, page);
 	}
+}
+
+/**
+ * put_user_page() - release a gup-pinned page
+ * @page:            pointer to page to be released
+ *
+ * Pages that were pinned via get_user_pages*() must be released via
+ * either put_user_page(), or one of the put_user_pages*() routines
+ * below. This is so that eventually, pages that are pinned via
+ * get_user_pages*() can be separately tracked and uniquely handled. In
+ * particular, interactions with RDMA and filesystems need special
+ * handling.
+ *
+ * put_user_page() and put_page() are not interchangeable, despite this early
+ * implementation that makes them look the same. put_user_page() calls must
+ * be perfectly matched up with get_user_page() calls.
+ */
+void put_user_page(struct page *page)
+{
+	__put_user_page(NULL, page);
+}
+EXPORT_SYMBOL(put_user_page);
+
+/**
+ * put_user_pages_dirty_lock() - release and optionally dirty gup-pinned pages
+ * @pages:  array of pages to be maybe marked dirty, and definitely released.
+ * @npages: number of pages in the @pages array.
+ * @make_dirty: whether to mark the pages dirty
+ *
+ * "gup-pinned page" refers to a page that has had one of the get_user_pages()
+ * variants called on that page.
+ *
+ * For each page in the @pages array, make that page (or its head page, if a
+ * compound page) dirty, if @make_dirty is true, and if the page was previously
+ * listed as clean. In any case, releases all pages using put_user_page(),
+ * possibly via put_user_pages(), for the non-dirty case.
+ *
+ * Please see the put_user_page() documentation for details.
+ *
+ * set_page_dirty_lock() is used internally. If instead, set_page_dirty() is
+ * required, then the caller should a) verify that this is really correct,
+ * because _lock() is usually required, and b) hand code it:
+ * set_page_dirty_lock(), put_user_page().
+ *
+ */
+void put_user_pages_dirty_lock(struct page **pages, unsigned long npages,
+			       bool make_dirty)
+{
+	__put_user_pages_dirty_lock(NULL, pages, npages, make_dirty);
 }
 EXPORT_SYMBOL(put_user_pages_dirty_lock);
 
@@ -102,15 +162,7 @@ EXPORT_SYMBOL(put_user_pages_dirty_lock);
  */
 void put_user_pages(struct page **pages, unsigned long npages)
 {
-	unsigned long index;
-
-	/*
-	 * TODO: this can be optimized for huge pages: if a series of pages is
-	 * physically contiguous and part of the same compound page, then a
-	 * single operation to the head page should suffice.
-	 */
-	for (index = 0; index < npages; index++)
-		put_user_page(pages[index]);
+	__put_user_pages(NULL, pages, npages);
 }
 EXPORT_SYMBOL(put_user_pages);
 
