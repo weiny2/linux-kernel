@@ -149,10 +149,11 @@ do_merge() {
 			# Skip any topics/commits that have allready been merged
 			if [ "$OPT_fast_check" = true ]; then
 				egrep -q "^Merge $COMMIT from" $PATCH_MANIFEST
-			else
+				if [ $? -eq 0 ]; then continue; fi
+			elif [ "$OPT_continue" = true ]; then
 				git branch --contains $COMMIT | egrep -q "\* master"
+				if [ $? -eq 0 ]; then continue; fi
 			fi
-			if [ $? -eq 0 ]; then continue; fi
 			echo "Merging $REMOTE $REF $COMMIT"
 			git merge -m "Intel Next: Merge commit $COMMIT from $URL $REF" --no-ff --log $COMMIT --rerere-autoupdate
 			if [ $? -ne 0 ]; then
@@ -169,8 +170,9 @@ do_merge() {
 			fi
 			if [ "$URL" != "$EYWA_GIT" ]; then
 				echo "Merge $COMMIT from $URL $REF" >> $PATCH_MANIFEST
-				git log -1 --merges --pretty=format:%P |\
-					awk '{system("git log --pretty=oneline --no-merges --abbrev-commit "$1".."$2)}' >> $PATCH_MANIFEST
+				#Disable patch manifest print
+				#git log -1 --merges --pretty=format:%P |\
+				#	awk '{system("git log --pretty=oneline --no-merges --abbrev-commit "$1".."$2)}' >> $PATCH_MANIFEST
 				rule >> $PATCH_MANIFEST
 			fi
 			rule
