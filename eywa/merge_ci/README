@@ -1,0 +1,43 @@
+intel-next merge buildbot processes
+
+Login to buildbot 
+http://otcpl-manager.jf.intel.com:8000
+Username:nextbot
+Password:ask intel-next-maintainers
+
+Resolvable merge conflict (fails in step2.sh):
+Login as sys_eywa to otcpl-manager.jf.intel.com
+cd to /home/sys_eywa/merge-worker/intel-next-daily-merge/build/src/.
+Find file(s) where conflict(s) occurred: git status
+Fix conflict manually: vi <file>; git add <file> ; git commit <file>
+Finish merge to fix any other conflicts: ./merge.sh -c
+Checkout eywa: git checkout eywa
+Copy new cache over to folder: cp -rfv .git/rr-cache/* eywa/merge_ci/rr-cache
+Commit new cache: git add eywa/merge_ci/rr-cache; git commit -s; git push origin eywa:eywa (Put fix in rr-cache commit message)
+Restart build 
+
+Unresolvable merge conflict:
+Login as sys_eywa to otcpl-manager.jf.intel.com
+cd to /home/sys_eywa/merge-worker/intel-next-daily-merge/build/src/.
+Add offending branch and reason to blacklist file
+Run blacklist script:./blacklist.py
+Run merge over again to check for other conflicts: ./step2.sh 
+If build succeeds check-in blacklist file:  git checkout eywa; cp blacklist eywa/blacklist; git add eywa/blacklist; git commit -s ; git push origin eywa:eywa
+Restart build on buildbot:http://otcpl-manager.jf.intel.com:8000/#/
+
+Compile errors or boot test errors:
+Login as sys_eywa to otcpl-manager.jf.intel.com
+Go to /home/sys_eywa/merge-worker/intel-next-daily-merge/build/src/.
+Debug and find reason for failure and add offending branch to blacklist file
+check-in blacklist file:  git checkout eywa; cp blacklist eywa/blacklist; git add eywa/blacklist; git commit -s ; git push origin eywa:eywa
+Restart build in buildbot:http://otcpl-manager.jf.intel.com:8000/#/
+
+Removing a branch from blacklist:
+Checkout intel next source on a local machine
+Edit eywa/blacklist; check in file to eywa branch and push
+Restart build
+
+Making a  daily release:
+Buildbot daily-merge triggers a run of push_changes.sh.
+It will push the tag if >10 am and Mon-Fri PST.
+

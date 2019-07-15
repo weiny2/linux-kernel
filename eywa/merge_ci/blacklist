@@ -1,0 +1,14 @@
+#black list file for branches that are currently not merging
+#format is <branch str>#<reason for disabling>
+git://git.kernel.org/pub/scm/linux/kernel/git/efi/efi.git next #DISABLED Not based on v5.2
+git://git.kernel.org/pub/scm/linux/kernel/git/iwlwifi/iwlwifi-next.git master #DISABLED Not based on v5.2
+git://git.kernel.org/pub/scm/linux/kernel/git/bluetooth/bluetooth-next.git master #DISABLED Not based on v5.2
+git://git.kernel.org/pub/scm/linux/kernel/git/nvdimm/nvdimm.git libnvdimm-for-next #DISABLED Not based on v5.2
+git://git.kernel.org/pub/scm/linux/kernel/git/shli/md.git for-next  #DISABLED Not based on v5.2
+ssh://git-amr-1.devtools.intel.com:29418/aose_graphics_media-pkt_graphics gfx-dm-di4in #DISABLED needs rebase on drm branch
+ssh://git@gitlab.devtools.intel.com:29418/OWR/IoTG/ESE/Linux-Integration/KMB/xlink.git int/vpu-driver #DISABLED 6/19 unsolved conflicts
+ssh://git-ccr-1.devtools.intel.com:29418/jasperlake_po_intel_next_kernel-beta.git master #DISABLED 6/20 sys_eywa read access needed
+ssh://git-amr-4.devtools.intel.com:29418/otc_power-kernel.git thermal_jsl_support #DISABLED
+ssh://git-amr-4.devtools.intel.com:29418/otc_power-kernel.git drm_fixup #DISABLED as not longer needed
+ssh://git-gar-1.devtools.intel.com:29418/eig_audio-kernel.git us_integ #DISABLED needs rebase on v5.2
+ssh://git-amr-4.devtools.intel.com:29418/otc_audio-linux.git sof-for-next-5.2-rc1 #DISABLED needs rebase
