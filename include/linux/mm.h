@@ -971,6 +971,15 @@ static inline bool is_zone_device_page(const struct page *page)
 }
 #endif
 
+/**
+ * @f_owner The file who "owns this GUP"
+ * @mm The mm who "owns this GUP"
+ */
+struct vaddr_pin {
+	struct file *f_owner;
+	struct mm_struct *mm;
+};
+
 #ifdef CONFIG_DEV_PAGEMAP_OPS
 void __put_devmap_managed_page(struct page *page);
 DECLARE_STATIC_KEY_FALSE(devmap_managed_key);
