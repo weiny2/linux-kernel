@@ -12,3 +12,4 @@ ssh://git-amr-4.devtools.intel.com:29418/otc_power-kernel.git thermal_jsl_suppor
 ssh://git-amr-4.devtools.intel.com:29418/otc_power-kernel.git drm_fixup #DISABLED as not longer needed
 ssh://git-gar-1.devtools.intel.com:29418/eig_audio-kernel.git us_integ #DISABLED needs rebase on v5.2
 ssh://git-amr-4.devtools.intel.com:29418/otc_audio-linux.git sof-for-next-5.2-rc1 #DISABLED needs rebase
+ssh://git-amr-10.devtools.intel.com:29418/linux_yyu-pasid.git pasid #DISABLED as suggested by Fenghua
