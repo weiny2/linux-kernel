@@ -2,4 +2,3 @@
 #format is <branch> #what to replace with
 #sample:git://git.infradead.org/users/jjs/linux-tpmdd.git next #git://git.infradead.org/users/jjs/linux-tpmdd.git next 5812f97c0a225958a34b5af3888f55bdd8cdaf29
 git://git.kernel.org/pub/scm/linux/kernel/git/rafael/linux-pm.git testing #git://git.kernel.org/pub/scm/linux/kernel/git/rafael/linux-pm.git testing f012a132824fc870b90980540f727c76fc72e244
-ssh://git-amr-4.devtools.intel.com:29418/enabling_cldemote_in_linux_kerne-linux_git.git pasid #ssh://git-amr-4.devtools.intel.com:29418/enabling_cldemote_in_linux_kerne-linux_git.git pasid 88c0aa5692d2adcbf5c465265631bebf29ade312
