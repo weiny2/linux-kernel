@@ -1005,7 +1005,8 @@ static __always_inline long __get_user_pages_locked(struct task_struct *tsk,
 						struct page **pages,
 						struct vm_area_struct **vmas,
 						int *locked,
-						unsigned int flags)
+						unsigned int flags,
+						struct vaddr_pin *vaddr_pin)
 {
 	long ret, pages_done;
 	bool lock_dropped;
@@ -1165,7 +1166,8 @@ long get_user_pages_remote(struct task_struct *tsk, struct mm_struct *mm,
 
 	return __get_user_pages_locked(tsk, mm, start, nr_pages, pages, vmas,
 				       locked,
-				       gup_flags | FOLL_TOUCH | FOLL_REMOTE);
+				       gup_flags | FOLL_TOUCH | FOLL_REMOTE,
+				       NULL);
 }
 EXPORT_SYMBOL(get_user_pages_remote);
 
@@ -1320,7 +1322,8 @@ static long __get_user_pages_locked(struct task_struct *tsk,
 		struct mm_struct *mm, unsigned long start,
 		unsigned long nr_pages, struct page **pages,
 		struct vm_area_struct **vmas, int *locked,
-		unsigned int foll_flags)
+		unsigned int foll_flags,
+		struct vaddr_pin *vaddr_pin)
 {
 	struct vm_area_struct *vma;
 	unsigned long vm_flags;
@@ -1504,7 +1507,7 @@ check_again:
 		 */
 		nr_pages = __get_user_pages_locked(tsk, mm, start, nr_pages,
 						   pages, vmas, NULL,
-						   gup_flags);
+						   gup_flags, NULL);
 
 		if ((nr_pages > 0) && migrate_allow) {
 			drain_allow = true;
@@ -1537,7 +1540,8 @@ static long __gup_longterm_locked(struct task_struct *tsk,
 				  unsigned long nr_pages,
 				  struct page **pages,
 				  struct vm_area_struct **vmas,
-				  unsigned int gup_flags)
+				  unsigned int gup_flags,
+				  struct vaddr_pin *vaddr_pin)
 {
 	struct vm_area_struct **vmas_tmp = vmas;
 	unsigned long flags = 0;
@@ -1558,7 +1562,7 @@ static long __gup_longterm_locked(struct task_struct *tsk,
 	}
 
 	rc = __get_user_pages_locked(tsk, mm, start, nr_pages, pages,
-				     vmas_tmp, NULL, gup_flags);
+				     vmas_tmp, NULL, gup_flags, vaddr_pin);
 
 	if (gup_flags & FOLL_LONGTERM) {
 		memalloc_nocma_restore(flags);
@@ -1588,10 +1592,11 @@ static __always_inline long __gup_longterm_locked(struct task_struct *tsk,
 						  unsigned long nr_pages,
 						  struct page **pages,
 						  struct vm_area_struct **vmas,
-						  unsigned int flags)
+						  unsigned int flags,
+						  struct vaddr_pin *vaddr_pin)
 {
 	return __get_user_pages_locked(tsk, mm, start, nr_pages, pages, vmas,
-				       NULL, flags);
+				       NULL, flags, vaddr_pin);
 }
 #endif /* CONFIG_FS_DAX || CONFIG_CMA */
 
@@ -1607,7 +1612,8 @@ long get_user_pages(unsigned long start, unsigned long nr_pages,
 		struct vm_area_struct **vmas)
 {
 	return __gup_longterm_locked(current, current->mm, start, nr_pages,
-				     pages, vmas, gup_flags | FOLL_TOUCH);
+				     pages, vmas, gup_flags | FOLL_TOUCH,
+				     NULL);
 }
 EXPORT_SYMBOL(get_user_pages);
 
@@ -1647,7 +1653,7 @@ long get_user_pages_locked(unsigned long start, unsigned long nr_pages,
 
 	return __get_user_pages_locked(current, current->mm, start, nr_pages,
 				       pages, NULL, locked,
-				       gup_flags | FOLL_TOUCH);
+				       gup_flags | FOLL_TOUCH, NULL);
 }
 EXPORT_SYMBOL(get_user_pages_locked);
 
@@ -1684,7 +1690,7 @@ long get_user_pages_unlocked(unsigned long start, unsigned long nr_pages,
 
 	down_read(&mm->mmap_sem);
 	ret = __get_user_pages_locked(current, mm, start, nr_pages, pages, NULL,
-				      &locked, gup_flags | FOLL_TOUCH);
+				      &locked, gup_flags | FOLL_TOUCH, NULL);
 	if (locked)
 		up_read(&mm->mmap_sem);
 	return ret;
@@ -2377,7 +2383,8 @@ int __get_user_pages_fast(unsigned long start, int nr_pages, int write,
 EXPORT_SYMBOL_GPL(__get_user_pages_fast);
 
 static int __gup_longterm_unlocked(unsigned long start, int nr_pages,
-				   unsigned int gup_flags, struct page **pages)
+				   unsigned int gup_flags, struct page **pages,
+				   struct vaddr_pin *vaddr_pin)
 {
 	int ret;
 
@@ -2389,7 +2396,8 @@ static int __gup_longterm_unlocked(unsigned long start, int nr_pages,
 		down_read(&current->mm->mmap_sem);
 		ret = __gup_longterm_locked(current, current->mm,
 					    start, nr_pages,
-					    pages, NULL, gup_flags);
+					    pages, NULL, gup_flags,
+					    vaddr_pin);
 		up_read(&current->mm->mmap_sem);
 	} else {
 		ret = get_user_pages_unlocked(start, nr_pages,
@@ -2448,7 +2456,7 @@ int get_user_pages_fast(unsigned long start, int nr_pages,
 		pages += nr;
 
 		ret = __gup_longterm_unlocked(start, nr_pages - nr,
-					      gup_flags, pages);
+					      gup_flags, pages, NULL);
 
 		/* Have to be a bit careful with return values */
 		if (nr > 0) {
