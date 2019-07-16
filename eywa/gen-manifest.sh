@@ -49,12 +49,19 @@ rule() {
 }
 
 fetch() {
+	grep -ne $1 fetch_cache
+	if [ $? == 0 ]; then
+		echo "$1 already fetched"
+		return 0
+	fi
+
 	git fetch -p --tags $1
 	if [ $? -ne 0 ]; then
 		echo -e "\nERROR: Failed to fetch $1" >&2
 		echo -e "Notify branch owner of the failure"  >&2
 		return 1
 	fi
+	echo $1 >>fetch_cache
 	return 0
 }
 
@@ -83,7 +90,8 @@ setup_remote() {
 	fi
 	echo "$REMOTE"
 }
-
+rm -f fetch_cache
+touch fetch_cache
 echo -n "Determining latest version from Linus ... "
 REMOTE=$(setup_remote $LINUS_GIT)
 if [ $? -ne 0 ]; then
