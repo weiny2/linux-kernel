@@ -494,13 +494,6 @@ ssh://git-amr-10.devtools.intel.com:29418/linux_yyu-pasid.git pasid
 # Config		: https://eclists.intel.com/sympa/arc/intel-next/2019-05/msg00086.html
 ssh://git-amr-4.devtools.intel.com:29418/otc_audio-linux.git sof-for-next-5.2-rc1
 
-# Handle PASID in svm binding/unbinding and #GP
-# Classification      : Intel Confidential
-# Contributor         : Fenghua Yu <fenghua.yu@intel.com>
-# IP/Information Owner: Ravi V. Shankar <ravi.v.shankar@intel.com>
-# SDL Contact         : Ashok Raj <ashok.raj@intel.com>
-# Configs	      :
-ssh://git-amr-4.devtools.intel.com:29418/enabling_cldemote_in_linux_kerne-linux_git.git pasid
 
 #IOMMU vSVA changes since v5.1-rc3
 # Classification      : Public
@@ -706,3 +699,12 @@ ssh://git-ccr-1.devtools.intel.com:29418/jasperlake_po_intel_next_kernel-beta.gi
 # IP/Information Owner  : Xu, Yu <yu.xu@intel.com>
 # Contributor           : Tingqian Li <tingqian.li@intel.com>
 ssh://git@gitlab.devtools.intel.com:29418/kmb_integration/vpusmm_driver.git for-intel-next
+
+# Handle PASID in svm binding/unbinding and #GP
+# Classification      : Intel Confidential
+# Contributor         : Fenghua Yu <fenghua.yu@intel.com>
+# IP/Information Owner: Ravi V. Shankar <ravi.v.shankar@intel.com>
+# SDL Contact         : Ashok Raj <ashok.raj@intel.com>
+# Configs	      :
+ssh://git-amr-4.devtools.intel.com:29418/enabling_cldemote_in_linux_kerne-linux_git.git pasid
+
