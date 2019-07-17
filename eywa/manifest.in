@@ -321,13 +321,13 @@ ssh://git-ccr-1.devtools.intel.com:29418/otc_linux_rui-rapl for-intel-next
 # Configs              : CONFIG_X86_CPU_RESCTRL=y
 ssh://git-amr-2.devtools.intel.com:29418/rt_linux-linux.git cache-pseudo-locking/for-intel-next
 
-# IPU driver 19WW03 release to intel-next
+# IPU driver 19WW29 release to intel-next
 # Classification       : Intel Confidential
 # SDLC contact         : Shengquan <shengquan.yuan@intel.com> 
 # IP owner             : Cao Bingbu <bingbu.cao@intel.com>
 # Contributor          : Meng Wei <wei.meng@intel.com>
-# Configs	       : https://eclists.intel.com/sympa/arc/intel-next/2019-01/msg00062.html
-#ssh://git-ccr-1.devtools.intel.com:29418/icg_camera-kernel intel-next-release
+# Configs	       :
+ssh://git-ccr-1.devtools.intel.com:29418/icg_camera-kernel intel-next-release-embargoed
 
 # SoCWatch and SEP drivers for both native and ACRN hypervisor
 # Classification       : Intel Confidential
