@@ -1,0 +1,172 @@
+Subject: Enable per-file/directory DAX operations
+
+At LSF/MM'19 [1] [2] we discussed applications that overestimate memory
+consumption due to their inability to detect whether the kernel will
+instantiate page cache for a file, and cases where a global dax enable via a
+mount option is too coarse.
+
+The following patch series enables selecting the use of DAX on individual files
+and/or directories on xfs, and lays some groundwork to do so in ext4.  In this
+scheme the dax mount option can be omitted to allow the per-file property to
+take effect.
+
+The insight at LSF/MM was to separate the per-mount or per-file "physical"
+capability switch from an "effective" attribute for the file.
+
+At LSF/MM we discussed the difficulties of switching the mode of a file with
+active mappings / page cache. Rather than solve those races the decision was to
+just limit mode flips to 0-length files.
+
+Finally, the physical DAX flag inheritance is maintained from previous work on 
+XFS but should be added for other file systems for consistence.
+
+
+[1] https://lwn.net/Articles/787973/
+[2] https://lwn.net/Articles/787233/
+
+
+Defined flags and their hierarchy
+=================================
+
+Individual file flags
+---------------------
+
+Any individual inode has 3 flags associated with it.
+
+	* FS_XFLAG_DAX
+		- This is the generic flag which indicates 'physical' DAX
+		  enablement.
+		- XFS_DIFLAG2_DAX for xfs.
+		- EXT4_DAX_FL for ext4 is to be added later
+		- Visible to the user through xfs_io 'lsattr' output
+	* S_DAX
+		- Define indicate the effective mode of the inode
+		- The patches clean up some uses of this flag to conform to
+		  this definition.
+	* STATX_ATTR_DAX
+		- Introduced in this series
+		- A new flag used to reflect S_DAX through the user API
+		- This is separate from the 'physical' DAX flag
+		- Shown in the statx attribute output
+
+The DAX mount option
+--------------------
+
+	* EXT4_MOUNT_DAX | XFS_MOUNT_DAX
+
+Assuming the underlying device supports DAX:
+
+The DAX mount option continues to be available.  Setting the DAX mount option
+will override the individual inode flag settings.  This means that all files on
+the file system will have their S_DAX bit set even if the individual inode
+flags are not set.
+
+This is an OR operation of the physical dax flag and the mount option to
+set the effective dax flag, S_DAX.
+
+The physical DAX flag continues to be mutable independent of the S_DAX flag
+value.
+
+
+Inheritance
+-----------
+
+Files inherit their physical DAX flag from their parent directory.
+
+
+Changing the physical DAX flag
+------------------------------
+
+The physical DAX flag can be toggled only when the file is 0 length, without
+extents allocated.
+
+	*** NOTE How do I check for extents allocated? ***
+
+
+
+Action Plan/NOTES
+=================
+
+Use bits in Statx syscall to show the status of the effective DAX flag, S_DAX.
+	statx on all files of a FS mounted with the DAX option will return
+	STATX_ATTR_DAX == 1
+
+
+xfsctl already has a flag which shows the xfs level flag.
+ext4 has nothing AFAIK it is setting S_DAX based solely on the mount option is on
+	So... Add ext4 on disk flag. EXT4_DAX_FL
+
+See if we can standardize the mount option between ext4 and xfs?
+	Also standardize the check for the mount option?
+
+Need to implement the 0-length check no-extents check because changing the flag
+"on the fly" was shown to get data corruption.
+
+
+
+Background/History/Reference
+============================
+
+Per file ext4 patches from Russ
+	https://patchwork.ozlabs.org/cover/810311/
+		Specifically from here
+			https://patchwork.ozlabs.org/patch/810309/
+
+This builds off the code started by Dave Chinner[1].
+
+This code was disabled because of potential race conditions present in when to
+turn this flag on and how to deal with files switching between DAX and non-DAX
+modes.
+
+Links from Dan:
+
+Test for this:
+https://www.spinics.net/lists/linux-xfs/msg10124.html
+
+
+<quote>
+> This is the patch I am most concerned about.  If we are going from
+> > non-dax to dax we need to make sure that nothing is allocated and in the
+> > page cache.
+> >
+> > Yeah, that really depends what guarantees do we have about file size vs
+> > page cache population and whether locking the inode was sufficient.
+> > Dave had these locking concerns previously:
+> >
+> > https://lore.kernel.org/linux-xfs/20170926003114.GN10955@dastard/
+> >
+</quote>
+
+<quote Dan>
+My review is basically going to be recalling the objections last time and make
+sure they don't apply to this new attempt:
+
+https://lore.kernel.org/linux-xfs/20170925231404.32723-1-ross.zwisler@linux.intel.com/
+</quote>
+
+
+[1] 58f88ca2df72 xfs: introduce per-inode DAX enablement
+
+commit 58f88ca2df7270881de2034c8286233a89efe71c
+Author: Dave Chinner <dchinner@redhat.com>
+Date:   Mon Jan 4 16:44:15 2016 +1100
+
+xfs: introduce per-inode DAX enablement
+
+Rather than just being able to turn DAX on and off via a mount option, some
+applications may only want to enable DAX for certain performance critical files
+in a filesystem.
+
+This patch introduces a new inode flag to enable DAX in the v3 inode di_flags2
+field.  It adds support for setting and clearing flags in the di_flags2 field
+via the XFS_IOC_FSSETXATTR ioctl, and sets the S_DAX inode flag appropriately
+when it is seen.
+
+When this flag is set on a directory, it acts as an "inherit flag".  That is,
+inodes created in the directory will automatically inherit the on-disk inode
+DAX flag, enabling administrators to set up directory heirarchies that
+automatically use DAX.  Setting this flag on an empty root directory will make
+the entire filesystem use DAX by default.
+
+Signed-off-by: Dave Chinner <dchinner@redhat.com> 
+
