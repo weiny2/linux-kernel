@@ -27,7 +27,7 @@ echo  >>$release_notes_file
 echo "branch:master"  >>$release_notes_file
 echo "tag:$latest_tag"  >>$release_notes_file
 echo  >>$release_notes_file
-echo "For more information about intel-next vist:http://goto.intel.com/intelnext" >>$release_notes_file
+echo "For more information about intel-next visit:http://goto.intel.com/intelnext" >>$release_notes_file
 echo $rule >>$release_notes_file
 echo  >>$release_notes_file
 
