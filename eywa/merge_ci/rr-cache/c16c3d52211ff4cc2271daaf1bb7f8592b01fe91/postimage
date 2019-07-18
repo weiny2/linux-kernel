@@ -63,8 +63,6 @@
 
 #define INTEL_FAM6_ALDERLAKE_X		0x8F /* Sapphire Rapids */
 
-#define INTEL_FAM6_SAPPHIRE_RAPIDS	0x8F
-
 /* "Small Core" Processors (Atom) */
 
 #define INTEL_FAM6_ATOM_BONNELL		0x1C /* Diamondville, Pineview */
@@ -89,12 +87,6 @@
 #define INTEL_FAM6_ATOM_ELKHART_LAKE	0x96
 #define INTEL_FAM6_ATOM_JASPER_LAKE	0x9c
 
-<<<<<<<
-#define INTEL_FAM6_ATOM_ELKHART_LAKE	0x96 /* Elkhart Lake */
-=======
-#define INTEL_FAM6_ATOM_TREMONT		0x96 /* Elkhart Lake */
-
->>>>>>>
 /* Xeon Phi */
 
 #define INTEL_FAM6_XEON_PHI_KNL		0x57 /* Knights Landing */
