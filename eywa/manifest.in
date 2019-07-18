@@ -405,7 +405,7 @@ ssh://git-amr-1.devtools.intel.com:29418/iotg_keembay-hantrodriver 0606_v5.2-rc6
 # IP ownder           : Sia, Jee Heng <jee.heng.sia@intel.com>
 # Contributor         : Sit, Michael Wei Hong <michael.wei.hong.sit@intel.com>
 # Configs             : https://eclists.intel.com/sympa/arc/intel-next/2019-01/msg00081.html
-ssh://git@gitlab.devtools.intel.com:29418/OWR/IoTG/ESE/Audio/keembay_linux_sound_driver-linux_sound_driver.git v5.2-next
+ssh://git@gitlab.devtools.intel.com:29418/OWR/IoTG/ESE/Audio/keembay_linux_sound_driver-linux_sound_driver.git v5.2-rc1
 
 # boot/ota/dnt support for Android project
 # Classification      : Intel Confidential
