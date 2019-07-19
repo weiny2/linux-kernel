@@ -772,6 +772,9 @@ typedef struct pglist_data {
 #ifdef CONFIG_NUMA_BALANCING
 	unsigned long autonuma_jiffies;
 	unsigned long autonuma_try_migrate;
+	unsigned long autonuma_threshold_jiffies;
+	unsigned long autonuma_threshold_try_migrate;
+	unsigned long autonuma_threshold;
 #endif
 	/* Fields commonly accessed by the page reclaim scanner */
 	struct lruvec		lruvec;
