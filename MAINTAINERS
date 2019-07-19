@@ -1236,7 +1236,7 @@ M:	James (Qian) Wang <james.qian.wang@arm.com>
 M:	Liviu Dudau <liviu.dudau@arm.com>
 L:	Mali DP Maintainers <malidp@foss.arm.com>
 S:	Supported
-T:	git git://linux-arm.org/linux-ld.git for-upstream/mali-dp
+T:	git git://anongit.freedesktop.org/drm/drm-misc
 F:	drivers/gpu/drm/arm/display/include/
 F:	drivers/gpu/drm/arm/display/komeda/
 F:	Documentation/devicetree/bindings/display/arm,komeda.txt
@@ -1247,7 +1247,7 @@ M:	Liviu Dudau <liviu.dudau@arm.com>
 M:	Brian Starkey <brian.starkey@arm.com>
 L:	Mali DP Maintainers <malidp@foss.arm.com>
 S:	Supported
-T:	git git://linux-arm.org/linux-ld.git for-upstream/mali-dp
+T:	git git://anongit.freedesktop.org/drm/drm-misc
 F:	drivers/gpu/drm/arm/
 F:	Documentation/devicetree/bindings/display/arm,malidp.txt
 F:	Documentation/gpu/afbc.rst
@@ -1264,7 +1264,7 @@ F:	include/uapi/drm/panfrost_drm.h
 ARM MFM AND FLOPPY DRIVERS
 M:	Ian Molton <spyro@f2s.com>
 S:	Maintained
-F:	arch/arm/lib/floppydma.S
+F:	arch/arm/mach-rpc/floppydma.S
 F:	arch/arm/include/asm/floppy.h
 
 ARM PMU PROFILING AND DEBUGGING
@@ -1863,6 +1863,7 @@ F:	arch/arm/mach-orion5x/
 F:	arch/arm/plat-orion/
 F:	arch/arm/boot/dts/dove*
 F:	arch/arm/boot/dts/orion5x*
+T:	git git://git.infradead.org/linux-mvebu.git
 
 ARM/Marvell Kirkwood and Armada 370, 375, 38x, 39x, XP, 3700, 7K/8K SOC support
 M:	Jason Cooper <jason@lakedaemon.net>
@@ -1883,6 +1884,7 @@ F:	drivers/irqchip/irq-armada-370-xp.c
 F:	drivers/irqchip/irq-mvebu-*
 F:	drivers/pinctrl/mvebu/
 F:	drivers/rtc/rtc-armada38x.c
+T:	git git://git.infradead.org/linux-mvebu.git
 
 ARM/Mediatek RTC DRIVER
 M:	Eddie Huang <eddie.huang@mediatek.com>
@@ -2089,7 +2091,6 @@ S:	Maintained
 
 ARM/QUALCOMM SUPPORT
 M:	Andy Gross <agross@kernel.org>
-M:	David Brown <david.brown@linaro.org>
 L:	linux-arm-msm@vger.kernel.org
 S:	Maintained
 F:	Documentation/devicetree/bindings/soc/qcom/
@@ -2111,7 +2112,7 @@ F:	drivers/i2c/busses/i2c-qup.c
 F:	drivers/i2c/busses/i2c-qcom-geni.c
 F:	drivers/mfd/ssbi.c
 F:	drivers/mmc/host/mmci_qcom*
-F:	drivers/mmc/host/sdhci_msm.c
+F:	drivers/mmc/host/sdhci-msm.c
 F:	drivers/pci/controller/dwc/pcie-qcom.c
 F:	drivers/phy/qualcomm/
 F:	drivers/power/*/msm*
@@ -3108,9 +3109,9 @@ S:	Maintained
 F:	arch/riscv/net/
 
 BPF JIT for S390
+M:	Ilya Leoshkevich <iii@linux.ibm.com>
 M:	Heiko Carstens <heiko.carstens@de.ibm.com>
 M:	Vasily Gorbik <gor@linux.ibm.com>
-M:	Christian Borntraeger <borntraeger@de.ibm.com>
 L:	netdev@vger.kernel.org
 L:	bpf@vger.kernel.org
 S:	Maintained
@@ -3765,7 +3766,7 @@ F:	arch/powerpc/platforms/cell/
 
 CEPH COMMON CODE (LIBCEPH)
 M:	Ilya Dryomov <idryomov@gmail.com>
-M:	"Yan, Zheng" <zyan@redhat.com>
+M:	Jeff Layton <jlayton@kernel.org>
 M:	Sage Weil <sage@redhat.com>
 L:	ceph-devel@vger.kernel.org
 W:	http://ceph.com/
@@ -3777,7 +3778,7 @@ F:	include/linux/ceph/
 F:	include/linux/crush/
 
 CEPH DISTRIBUTED FILE SYSTEM CLIENT (CEPH)
-M:	"Yan, Zheng" <zyan@redhat.com>
+M:	Jeff Layton <jlayton@kernel.org>
 M:	Sage Weil <sage@redhat.com>
 M:	Ilya Dryomov <idryomov@gmail.com>
 L:	ceph-devel@vger.kernel.org
@@ -6525,6 +6526,7 @@ M:	Li Yang <leoyang.li@nxp.com>
 L:	linuxppc-dev@lists.ozlabs.org
 L:	linux-arm-kernel@lists.infradead.org
 S:	Maintained
+F:	Documentation/devicetree/bindings/misc/fsl,dpaa2-console.txt
 F:	Documentation/devicetree/bindings/soc/fsl/
 F:	drivers/soc/fsl/
 F:	include/linux/fsl/
@@ -8415,6 +8417,7 @@ L:	linux-fsdevel@vger.kernel.org
 T:	git git://git.kernel.org/pub/scm/fs/xfs/xfs-linux.git
 S:	Supported
 F:	fs/iomap.c
+F:	fs/iomap/
 F:	include/linux/iomap.h
 
 IOMMU DRIVERS
@@ -8875,6 +8878,8 @@ F:	arch/s390/include/asm/gmap.h
 F:	arch/s390/include/asm/kvm*
 F:	arch/s390/kvm/
 F:	arch/s390/mm/gmap.c
+F:	tools/testing/selftests/kvm/s390x/
+F:	tools/testing/selftests/kvm/*/s390x/
 
 KERNEL VIRTUAL MACHINE FOR X86 (KVM/x86)
 M:	Paolo Bonzini <pbonzini@redhat.com>
@@ -11904,11 +11909,13 @@ F:	include/linux/mtd/onenand*.h
 
 OP-TEE DRIVER
 M:	Jens Wiklander <jens.wiklander@linaro.org>
+L:	tee-dev@lists.linaro.org
 S:	Maintained
 F:	drivers/tee/optee/
 
 OP-TEE RANDOM NUMBER GENERATOR (RNG) DRIVER
 M:	Sumit Garg <sumit.garg@linaro.org>
+L:	tee-dev@lists.linaro.org
 S:	Maintained
 F:	drivers/char/hw_random/optee-rng.c
 
@@ -13292,7 +13299,7 @@ M:	Niklas Cassel <niklas.cassel@linaro.org>
 L:	netdev@vger.kernel.org
 S:	Maintained
 F:	drivers/net/ethernet/stmicro/stmmac/dwmac-qcom-ethqos.c
-F:	Documentation/devicetree/bindings/net/qcom,dwmac.txt
+F:	Documentation/devicetree/bindings/net/qcom,ethqos.txt
 
 QUALCOMM GENERIC INTERFACE I2C DRIVER
 M:	Alok Chauhan <alokc@codeaurora.org>
@@ -13720,7 +13727,7 @@ RISC-V ARCHITECTURE
 M:	Palmer Dabbelt <palmer@sifive.com>
 M:	Albert Ou <aou@eecs.berkeley.edu>
 L:	linux-riscv@lists.infradead.org
-T:	git git://git.kernel.org/pub/scm/linux/kernel/git/palmer/riscv-linux.git
+T:	git git://git.kernel.org/pub/scm/linux/kernel/git/riscv/linux.git
 S:	Supported
 F:	arch/riscv/
 K:	riscv
@@ -14582,7 +14589,7 @@ M:	Paul Walmsley <paul.walmsley@sifive.com>
 L:	linux-riscv@lists.infradead.org
 T:	git git://github.com/sifive/riscv-linux.git
 S:	Supported
-K:	sifive
+K:	[^@]sifive
 N:	sifive
 
 SIFIVE FU540 SYSTEM-ON-CHIP
@@ -15741,6 +15748,7 @@ F:	include/media/i2c/tw9910.h
 
 TEE SUBSYSTEM
 M:	Jens Wiklander <jens.wiklander@linaro.org>
+L:	tee-dev@lists.linaro.org
 S:	Maintained
 F:	include/linux/tee_drv.h
 F:	include/uapi/linux/tee.h
@@ -16068,7 +16076,7 @@ S:	Maintained
 F:	drivers/net/ethernet/ti/netcp*
 
 TI PCM3060 ASoC CODEC DRIVER
-M:	Kirill Marinushkin <kmarinushkin@birdec.tech>
+M:	Kirill Marinushkin <kmarinushkin@birdec.com>
 L:	alsa-devel@alsa-project.org (moderated for non-subscribers)
 S:	Maintained
 F:	Documentation/devicetree/bindings/sound/pcm3060.txt
@@ -17651,9 +17659,8 @@ L:	linux-xfs@vger.kernel.org
 W:	http://xfs.org/
 T:	git git://git.kernel.org/pub/scm/fs/xfs/xfs-linux.git
 S:	Supported
-F:	Documentation/filesystems/xfs.txt
+F:	Documentation/admin-guide/xfs.rst
 F:	Documentation/ABI/testing/sysfs-fs-xfs
-F:	Documentation/filesystems/xfs.txt
 F:	Documentation/filesystems/xfs-delayed-logging-design.txt
 F:	Documentation/filesystems/xfs-self-describing-metadata.txt
 F:	fs/xfs/
