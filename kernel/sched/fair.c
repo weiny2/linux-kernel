@@ -1496,6 +1496,41 @@ static bool numa_migration_check_rate_limit(struct pglist_data *pgdat,
 	return true;
 }
 
+#define NUMA_MIGRATION_ADJUST_STEPS	16
+
+static void numa_migration_adjust_threshold(struct pglist_data *pgdat,
+					    unsigned long rate_limit,
+					    unsigned long ref_threshold)
+{
+	unsigned long now = jiffies, last_threshold_jiffies;
+	unsigned long unit_threshold, threshold;
+	unsigned long try_migrate, ref_try_migrate, mdiff;
+
+	last_threshold_jiffies = pgdat->autonuma_threshold_jiffies;
+	if (now > last_threshold_jiffies +
+	    msecs_to_jiffies(sysctl_numa_balancing_scan_period_max) &&
+	    cmpxchg(&pgdat->autonuma_threshold_jiffies,
+		    last_threshold_jiffies, now) == last_threshold_jiffies) {
+
+		ref_try_migrate = rate_limit * \
+			sysctl_numa_balancing_scan_period_max / 1000;
+		try_migrate = node_page_state(pgdat, NUMA_TRY_MIGRATE);
+		mdiff = try_migrate - pgdat->autonuma_threshold_try_migrate;
+		unit_threshold = ref_threshold / NUMA_MIGRATION_ADJUST_STEPS;
+		threshold = pgdat->autonuma_threshold;
+		if (!threshold)
+			threshold = ref_threshold;
+		if (mdiff > ref_try_migrate * 11 / 10)
+			threshold = max(threshold - unit_threshold,
+					unit_threshold);
+		else if (mdiff < ref_try_migrate * 9 / 10)
+			threshold = min(threshold + unit_threshold,
+					ref_threshold);
+		pgdat->autonuma_threshold_try_migrate = try_migrate;
+		pgdat->autonuma_threshold = threshold;
+	}
+}
+
 bool should_numa_migrate_memory(struct task_struct *p, struct page * page,
 				int src_nid, int dst_cpu, unsigned long addr,
 				int flags)
@@ -1511,7 +1546,7 @@ bool should_numa_migrate_memory(struct task_struct *p, struct page * page,
 	if (sysctl_numa_balancing_mode & NUMA_BALANCING_HMEM &&
 	    next_promotion_node(src_nid) != -1) {
 		struct pglist_data *pgdat;
-		unsigned long rate_limit, latency, threshold;
+		unsigned long rate_limit, latency, threshold, def_threshold;
 
 		pgdat = NODE_DATA(dst_nid);
 		if (pgdat_free_space_enough(pgdat))
@@ -1521,15 +1556,20 @@ bool should_numa_migrate_memory(struct task_struct *p, struct page * page,
 		if (!(flags & TNF_YOUNG))
 			return false;
 
-		threshold = msecs_to_jiffies(
+		def_threshold = msecs_to_jiffies(
 			sysctl_numa_balancing_hot_threshold);
+		rate_limit = numa_migration_rate_limit(pgdat);
+		numa_migration_adjust_threshold(pgdat, rate_limit,
+						def_threshold);
+
+		threshold = pgdat->autonuma_threshold;
+		threshold = threshold ? : def_threshold;
 		if (flags & TNF_WRITE)
 			threshold *= 2;
 		latency = numa_hint_fault_latency(p, addr);
 		if (latency > threshold)
 			return false;
 
-		rate_limit = numa_migration_rate_limit(pgdat);
 		return numa_migration_check_rate_limit(pgdat, rate_limit,
 						       hpage_nr_pages(page));
 	}
