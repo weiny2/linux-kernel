@@ -466,7 +466,7 @@ ssh://git-gar-1.devtools.intel.com:29418/otc_nvme_linux-kernel for-intel-next
 # Contributor         : Swaminathan, Nivedita <nivedita.swaminathan@intel.com>
 # IP/Information Owner: Atwood, Matthew S <matthew.s.atwood@intel.com>
 # SDL Contact         : Charles Prestopine <charles.d.prestopine@intel.com>
-#ssh://git-amr-4.devtools.intel.com:29418/otc_power-kernel.git chrome-dmc-patch
+ssh://git-amr-4.devtools.intel.com:29418/otc_power-kernel.git chrome-dmc-patch
 
 # Custom intel-next logo on bootup
 # Classification	: Intel Confidential
