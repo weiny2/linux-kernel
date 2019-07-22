@@ -153,7 +153,7 @@ ssh://git-gar-1.devtools.intel.com:29418/otc_nvme_linux-kernel for-intel-next
 #                     : Kelan Silvester <kelan.silvester@intel.com> - CNL
 # SDL Contact         : Charles Prestopine <charles.d.prestopine@intel.com>
 # Configs             : CONFIG_INTEL_IDLE
-#ssh://git-amr-4.devtools.intel.com:29418/otc_power-kernel.git intel_idle_all
+ssh://git-amr-4.devtools.intel.com:29418/otc_power-kernel.git intel_idle_all
 
 # USB
 # USB host support and fixes
