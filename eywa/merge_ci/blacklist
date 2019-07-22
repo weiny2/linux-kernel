@@ -1,2 +1,3 @@
 #black list file for branches that are currently not merging
 #format is <branch str>#<reason for disabling>
+git://github.com/jsakkine-intel/linux-sgx.git next # merge conflicts on 7/22. Needs to rebase on v5.3-rc1
