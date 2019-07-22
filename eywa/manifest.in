@@ -80,7 +80,7 @@ git://github.com/jsakkine-intel/linux-sgx.git next
 #                     : N,Shyjumon <shyjumon.n@intel.com>
 # SDL Contact         : N,Shyjumon <shyjumon.n@intel.com>
 # Configs             :
-#ssh://git-gar-1.devtools.intel.com:29418/otc_nvme_linux-kernel for-intel-next
+ssh://git-gar-1.devtools.intel.com:29418/otc_nvme_linux-kernel for-intel-next
 
 ###############################################################################
 # INTERNAL CODE
