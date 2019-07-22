@@ -192,7 +192,7 @@ ssh://git-gar-1.devtools.intel.com:29418/otc_nvme_linux-kernel for-intel-next
 # Maintained by       : Nivedita Swaminathan <nivedita.swaminathan@intel.com>
 # IP/Information Owner: Nivedita Swaminathan <Nivedita.Swaminathan@intel.com>
 # SDL Contact         : Charles D Prestopine <charles.d.prestopine@intel.com>
-#ssh://git-amr-4.devtools.intel.com:29418/otc_power-kernel.git powertop
+ssh://git-amr-4.devtools.intel.com:29418/otc_power-kernel.git powertop
 
 # Key Locker enabling for Tiger Lake
 # Support for AES key hiding from memory during encryption and decryption process
