@@ -96,10 +96,12 @@ ssh://git-gar-1.devtools.intel.com:29418/otc_nvme_linux-kernel for-intel-next
 
 # MMC
 # MMC Subsystem and SCS (eMMC/SD card/SDIO/UFS) driver enabling
+# GPIO enabling
 # Classification      : Intel Confidential
 # Contributor         : Adrian Hunter <adrian.hunter@intel.com>
 # IP/Information Owner: Rajesh Bhaskar <rajesh.bhaskar@intel.com
 #                     : Tomasz Pielaszkiewicz <tomasz.pielaszkiewicz@intel.com>
+#                     : GPIO - Tan, Eric Thian Aun <eric.thian.aun.tan@intel.com>
 # SDL Contact         : Kai Svahn <kai.svahn@intel.com>
 # Configs             : CONFIG_MMC
 #                       CONFIG_MMC_SDHCI
@@ -108,7 +110,14 @@ ssh://git-gar-1.devtools.intel.com:29418/otc_nvme_linux-kernel for-intel-next
 #                       CONFIG_SCSI_LOWLEVEL
 #                       CONFIG_SCSI_UFSHCD
 #                       CONFIG_SCSI_UFSHCD_PCI
-#ssh://git-amr-3.devtools.intel.com:29418/otc_mmc-linux for-eywa
+#                       CONFIG_PINCTRL_CEDARFORK
+#                       CONFIG_PINCTRL_DENVERTON
+#	                CONFIG_PINCTRL_ELKHARTLAKE
+#	                CONFIG_PINCTRL_EMMITSBURG
+#	                CONFIG_PINCTRL_ICELAKE
+#	                CONFIG_PINCTRL_TIGERLAKE
+#	                CONFIG_PINCTRL_WHITLEY
+ssh://git-amr-3.devtools.intel.com:29418/otc_mmc-linux for-eywa
 
 # NTB
 # ICX NTB intel_ntb_hw driver
