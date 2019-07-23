@@ -473,7 +473,7 @@ ssh://git-amr-4.devtools.intel.com:29418/otc_power-kernel.git chrome-dmc-patch
 # Contributor		: Kyle Pelton <kyle.d.pelton@intel.com>
 # SDL Contact		: Charles Prestopine <charles.d.prestopine@intel.com>
 # Configs		: CONFIG_LOGO=y, CONFIG_LOGO_LINUX_NEXT_CLUT224=y
-#ssh://git-amr-4.devtools.intel.com:29418/otc_power-kernel.git intel_next_branding
+ssh://git-amr-4.devtools.intel.com:29418/otc_power-kernel.git intel_next_branding
 
 # Introduce PASID XSAVES supervisor state
 # Classification       : Intel Confidential
