@@ -251,12 +251,12 @@ ssh://git-amr-4.devtools.intel.com:29418/otc_power-kernel.git powertop
 # Configs             : https://eclists.intel.com/sympa/arc/intel-next/2018-04/msg00055.html
 #ssh://git-ccr-1.devtools.intel.com:29418/otc_edac_driver-linux.git for-intel-next
 
-# Enumeration of AVX512 CPUIDS patch for Intel-next
+# TGL, EHL PMC core driver changes and new AVX512 cpuid support
 # Classification      : Intel Confidential
 # Contributor         : Kammela, Gayatri <gayatri.kammela@intel.com>
 # IP/Information Owner: Charney, Mark <mark.charney@intel.com>
 # SDL Contact         : Prestopine, Charles D <charles.d.prestopine@intel.com>
-#ssh://git-ger-6.devtools.intel.com:29418/secure_git_internal_repo-my_internal_repo.git avx512_cpuids
+ssh://git-ger-6.devtools.intel.com:29418/secure_git_internal_repo-my_internal_repo.git avx512_cpuids
 
 # Enable Ethernet TSN driver for SNPS QOS
 # Classification       : Intel Confidential
