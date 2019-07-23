@@ -432,12 +432,12 @@ ssh://git-amr-2.devtools.intel.com:29418/rt_linux-linux.git cache-pseudo-locking
 #ssh://git-gar-1.devtools.intel.com:29418/chrome_ba_pnp-pmc_driver.git linux5.1-rc3
 
 # Interrupt Message Store
-# Classification      : Intel Confidential
+# Classification      : Public
 # SDL Contact         : Ashok Raj ashok.raj@intel.com
 # IP Owners           : Megha Dey <megha.dey@intel.com>
 # Contributor         : Megha Dey <megha.dey@intel.com>
 # Configs             : CONFIG_MSI_IMS
-#ssh://git-amr-4.devtools.intel.com:29418/otc_core_linux-linux.git interrupt_message_store
+ssh://git-amr-4.devtools.intel.com:29418/otc_core_linux-linux.git interrupt_message_store
 
 # Intel Gaussian & Neural Accelerator driver
 # Classification       : Intel Confidential
