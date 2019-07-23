@@ -454,12 +454,13 @@ ssh://git-amr-4.devtools.intel.com:29418/otc_core_linux-linux.git interrupt_mess
 # Configs              : CONFIG_CBC_LDISC
 #ssh://git-gar-1.devtools.intel.com:29418/cbc_ldisc-cbc-ldisc.git for-eywa
 
-# PCI driver changes
+# Intel PCI driver related fixes
 # Classification       : Public
 # SDL Contact          : Ashok Raj <ashok.raj@intel.com>
 # IP Owners            : Ashok Raj <ashok.raj@intel.com>
 # Contributor          : Sathyanarayanan <sathyanarayanan.kuppuswamy@intel.com>
-#ssh://git@gitlab.devtools.intel.com:29418/skuppusw/linux.git pci-next
+# Configs              : CONFIG_PCIE_DPC=y, CONFIG_PCIE_EDR=y
+ssh://git@gitlab.devtools.intel.com:29418/skuppusw/linux.git pci-next
 
 
 # Intel Speed Select Technologies (SST)
