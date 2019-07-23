@@ -1239,12 +1239,29 @@ struct rapl_package *rapl_find_package_domain(int cpu, struct rapl_if_priv *priv
 }
 EXPORT_SYMBOL_GPL(rapl_find_package_domain);
 
+static void rapl_set_package_domain_name(struct rapl_package *rp, int cpu)
+{
+	struct cpuinfo_x86 *c = &cpu_data(cpu);
+
+	if (rp->priv->ignore_slave_die) {
+		snprintf(rp->name, PACKAGE_DOMAIN_NAME_LENGTH, "package-%d",
+			 c->phys_proc_id);
+		return;
+	}
+
+	if (topology_max_die_per_package() > 1)
+		snprintf(rp->name, PACKAGE_DOMAIN_NAME_LENGTH,
+			 "package-%d-die-%d", c->phys_proc_id, c->cpu_die_id);
+	else
+		snprintf(rp->name, PACKAGE_DOMAIN_NAME_LENGTH, "package-%d",
+			 c->phys_proc_id);
+}
+
 /* called from CPU hotplug notifier, hotplug lock held */
 struct rapl_package *rapl_add_package(int cpu, struct rapl_if_priv *priv)
 {
 	int id = topology_logical_die_id(cpu);
 	struct rapl_package *rp;
-	struct cpuinfo_x86 *c = &cpu_data(cpu);
 	int ret;
 
 	if (!rapl_defaults)
@@ -1259,12 +1276,7 @@ struct rapl_package *rapl_add_package(int cpu, struct rapl_if_priv *priv)
 	rp->lead_cpu = cpu;
 	rp->priv = priv;
 
-	if (topology_max_die_per_package() > 1)
-		snprintf(rp->name, PACKAGE_DOMAIN_NAME_LENGTH,
-			 "package-%d-die-%d", c->phys_proc_id, c->cpu_die_id);
-	else
-		snprintf(rp->name, PACKAGE_DOMAIN_NAME_LENGTH, "package-%d",
-			 c->phys_proc_id);
+	rapl_set_package_domain_name(rp, cpu);
 
 	/* check if the package contains valid domains */
 	if (rapl_detect_domains(rp, cpu) || rapl_defaults->check_unit(rp, cpu)) {
