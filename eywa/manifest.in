@@ -328,7 +328,7 @@ ssh://git-amr-4.devtools.intel.com:29418/otc_power-kernel.git powertop
 # IP contact           : Kuo-Lang Tseng <kuo-lang.tseng@intel.com>
 # Contributor          : Reinette Chatre <reinette.chatre@intel.com>
 # Configs              : CONFIG_X86_CPU_RESCTRL=y
-ssh://git-amr-2.devtools.intel.com:29418/rt_linux-linux.git for-intel-next
+ssh://git-amr-2.devtools.intel.com:29418/rt_linux-linux.git cache-pseudo-locking/for-intel-next
 
 # IPU driver 19WW29 release to intel-next
 # Classification       : Intel Confidential
