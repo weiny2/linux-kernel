@@ -146,7 +146,7 @@ ssh://git-ger-8.devtools.intel.com:29418/sfip_linux-linux-mei.git cse-5.3
 # IP/Information Owner: Guangyu Ren <guangyu.ren@intel.com>
 # SDL Contact         : Guangyu Ren <guangyu.ren@intel.com>
 # Configs             : https://eclists.intel.com/sympa/arc/intel-next/2018-03/msg00028.html
-#ssh://git-amr-4.devtools.intel.com:29418/otc_linux_spandruv-internal.git to_eywa_intel_ish
+ssh://git-amr-4.devtools.intel.com:29418/otc_linux_spandruv-internal.git to_eywa_intel_ish
 
 # cpufreq/performance
 # Classification      : Public
