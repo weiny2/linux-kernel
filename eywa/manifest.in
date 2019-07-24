@@ -137,7 +137,7 @@ ssh://git-amr-3.devtools.intel.com:29418/otc_mmc-linux for-eywa
 #                     : Alexander Usyskin <alexander.usyskin@intel.com>
 #                     : Tomas Winkler <tomas.winkler@intel.com>
 # Configs             : https://eclists.intel.com/sympa/arc/intel-next/2019-03/msg00049.html
-#ssh://git-ger-8.devtools.intel.com:29418/sfip_linux-linux-mei.git cse-5.2
+ssh://git-ger-8.devtools.intel.com:29418/sfip_linux-linux-mei.git cse-5.3
 
 # ISH
 # Intel Integrated Sensor Hub enabling
