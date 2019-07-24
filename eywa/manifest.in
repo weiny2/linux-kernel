@@ -581,7 +581,7 @@ ssh://git-amr-4.devtools.intel.com:29418/otc_linux_spandruv-internal.git to_eywa
 # Contributor         : Srinivas Pandruvada <srinivas.pandruvada@intel.com>
 # IP owner            : Chen, Stanley <stanley.chen@intel.com>
 # Configs: CONFIG_INTEL_SPEED_SELECT_INTERFACE
-#ssh://git-amr-4.devtools.intel.com:29418/otc_linux_spandruv-internal.git intel-sst
+ssh://git-amr-4.devtools.intel.com:29418/otc_linux_spandruv-internal.git intel-sst
 
 # AiA branch
 # AiA umwait/umnoitor/tpause instructions
