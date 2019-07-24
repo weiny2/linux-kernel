@@ -239,7 +239,7 @@ ssh://git-amr-4.devtools.intel.com:29418/otc_power-kernel.git powertop
 #                       Usyskin, Alexander <alexnder.usyskin@intel.com>
 #                       Winkler, Tomas <tomas.winkler@intel.com>
 #Configs              : https://eclists.intel.com/sympa/arc/intel-next/2019-05/msg00084.html 
-#ssh://git-ger-8.devtools.intel.com:29418/sfip_linux-linux-mei.git rpmb
+ssh://git-ger-8.devtools.intel.com:29418/sfip_linux-linux-mei.git rpmb
 
 # Linux EDAC support for Icelake-SP/Icelake-D server.
 # RAS EDAC patches for intel-next
