@@ -1,6 +1,5 @@
 #black list file for branches that are currently not merging
 #format is <branch str>#<reason for disabling>
 git://github.com/jsakkine-intel/linux-sgx.git next # merge conflicts on 7/22. Needs to rebase on v5.3-rc1
-ssh://git-amr-1.devtools.intel.com:29418/svos_kernel-next.git svos-next-pull-5.3 # Build failure on 07/24.
 ssh://git@gitlab.devtools.intel.com:29418/otc-clk-server/linux-dsa/kernel.git intel-next # Build failure - Depends on PASID branch which is yet to be added.
 ssh://git-amr-4.devtools.intel.com:29418/otc_audio-linux.git sof-for-next-5.3-rc1 # Build Failure with allyesconfig.
