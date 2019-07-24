@@ -193,7 +193,7 @@ ssh://git-amr-4.devtools.intel.com:29418/otc_power-kernel.git intel_idle_all
 #                     : Beeman Strong <beeman.strong@intel.com> - Atom
 #                     : Jeremiah D. Williamson <jeremiah.d.williamson@intel.com> - Uncore
 # SDL Contact         : Andi Kleen <andi.kleen@intel.com>
-#ssh://git-amr-2.devtools.intel.com:29418/kan_lkp-perf-intel-next.git perf-intel-next
+ssh://git-amr-2.devtools.intel.com:29418/kan_lkp-perf-intel-next.git perf-intel-next
 
 # powerTOP OOT
 # Enable out of tree powertop
