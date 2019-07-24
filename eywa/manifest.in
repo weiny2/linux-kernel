@@ -573,7 +573,7 @@ ssh://git-amr-1.devtools.intel.com:29418/svos_kernel-next.git svos-next-pull-5.3
 # Config              : CONFIG_INT340X_THERMAL
 # SDL Contact         : Prestopine, Charles D <charles.d.prestopine@intel.com>
 # IP Owners           : Hermerding, Jim G <jim.g.hermerding@intel.com>
-#ssh://git-amr-4.devtools.intel.com:29418/otc_linux_spandruv-internal.git to_eywa_thermal
+ssh://git-amr-4.devtools.intel.com:29418/otc_linux_spandruv-internal.git to_eywa_thermal
 
 # Speed Select Technologies (SST)
 # Classification      : Intel Confidential
