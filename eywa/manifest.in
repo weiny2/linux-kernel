@@ -557,7 +557,9 @@ ssh://git-amr-4.devtools.intel.com:29418/otc_audio-linux.git sof-for-next-5.3-rc
 # Config              : CONFIG_SVOS=n CONFIG_SVFS_ACPI=n
 # SDLC Contact        : Stonecypher, Thomas EdwardX <thomas.edwardx.stonecypher@intel.com>
 # IP Owner            : Stonecypher, Thomas EdwardX <thomas.edwardx.stonecypher@intel.com>
-#ssh://git-amr-1.devtools.intel.com:29418/svos_kernel-next.git svos-next-pull-5.2
+ssh://git-amr-1.devtools.intel.com:29418/svos_kernel-next.git svos-next-pull-5.3 
+
+
 # TLB Shootdown
 # Classification      : Intel Confidential
 # Config              : CONFIG_X86_INTEL_RAR
