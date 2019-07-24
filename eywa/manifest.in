@@ -614,7 +614,7 @@ ssh://git-amr-1.devtools.intel.com:29418/svos_kernel-next.git svos-next-pull-5.3
 # SDL Contact         : Dave Jiang <dave.jiang@intel.com> 
 # IP Owner            : Rajesh Pamujula <rajesh.s.pamujula@intel.com>
 # Config:             : CONFIG_INTEL_IOMMU=y, CONFIG_INTEL_IOMMU_SVM=y, CONFIG_DMA_ENGINE=y, CONFIG_INTEL_DSA=m, CONFIG_DMATEST=m
-#ssh://git@gitlab.devtools.intel.com:29418/otc-clk-server/linux-dsa/kernel.git intel-next
+ssh://git@gitlab.devtools.intel.com:29418/otc-clk-server/linux-dsa/kernel.git intel-next
 
 # Keystore driver enabling
 # Clasification       : Intel Confidential
