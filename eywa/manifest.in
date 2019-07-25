@@ -452,7 +452,7 @@ ssh://git-amr-4.devtools.intel.com:29418/otc_core_linux-linux.git interrupt_mess
 # SDLC Contact         : Edapalapati, Padmarao <padmarao.edapalapati@intel.com> 
 # IP Owner             : CBC: Tabrah, Ryan <ryan.tabrah@intel.com>
 # Configs              : CONFIG_CBC_LDISC
-#ssh://git-gar-1.devtools.intel.com:29418/cbc_ldisc-cbc-ldisc.git for-eywa
+ssh://git-gar-1.devtools.intel.com:29418/cbc_ldisc-cbc-ldisc.git for-eywa
 
 # Intel PCI driver related fixes
 # Classification       : Public
