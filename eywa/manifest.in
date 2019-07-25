@@ -249,7 +249,7 @@ ssh://git-ger-8.devtools.intel.com:29418/sfip_linux-linux-mei.git rpmb
 #                     : Wadhawan, Puneet <puneet.wadhawan@intel.com>
 # SDL Contact         : Luck, Tony <tony.luck@intel.com>
 # Configs             : https://eclists.intel.com/sympa/arc/intel-next/2018-04/msg00055.html
-#ssh://git-ccr-1.devtools.intel.com:29418/otc_edac_driver-linux.git for-intel-next
+ssh://git-ccr-1.devtools.intel.com:29418/otc_edac_driver-linux.git for-intel-next
 
 # TGL, EHL PMC core driver changes and new AVX512 cpuid support
 # Classification      : Intel Confidential
