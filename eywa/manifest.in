@@ -445,7 +445,7 @@ ssh://git-amr-4.devtools.intel.com:29418/otc_core_linux-linux.git interrupt_mess
 # Contributor          : Zalewski, Mariusz <mariusz.zalewski@intel.com>
 # IP Owner             : Krolikowski, Rafal <rafal.krolikowski@intel.com>
 # Configs              : https://eclists.intel.com/sympa/arc/intel-next/2019-03/msg00064.html
-#ssh://git-gar-1.devtools.intel.com:29418/itsg_ml_integ-gna_driver_v_2_x.git for-intel-next-v5.2-rc1
+ssh://git-gar-1.devtools.intel.com:29418/itsg_ml_integ-gna_driver_v_2_x.git for-intel-next-v5.3-rc1
 
 # CBC (Carrier Board Communication) line discipline kernel module enablement
 # Classification       : Public
