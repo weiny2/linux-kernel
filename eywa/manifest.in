@@ -302,7 +302,7 @@ ssh://git-ger-6.devtools.intel.com:29418/secure_git_internal_repo-my_internal_re
 # IP Owner             : Ashok Raj <ashok.raj@intel.com>
 # 		       : Lu Baolu <baolu.lu@linux.intel.com>
 # Configs              :
-#ssh://git-ccr-1.devtools.intel.com:29418/iommu_next-siov.git for_intel_next_5.2-rc3
+ssh://git-ccr-1.devtools.intel.com:29418/iommu_next-siov.git for_intel_next_5.3-rc1
 
 # USB Type-C Support
 # IP: Type-C USB
