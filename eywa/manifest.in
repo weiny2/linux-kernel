@@ -717,4 +717,4 @@ ssh://git@gitlab.devtools.intel.com:29418/otc-clk-server/linux-dsa/kernel.git in
 # SDLC Contact          : Chen, Peter <peter.chen@intel.com>
 # IP/Information Owner  : Xu, Yu <yu.xu@intel.com>
 # Contributor           : Tingqian Li <tingqian.li@intel.com>
-#ssh://git@gitlab.devtools.intel.com:29418/kmb_integration/vpusmm_driver.git for-intel-next
+ssh://git@gitlab.devtools.intel.com:29418/kmb_integration/vpusmm_driver.git for-intel-next
