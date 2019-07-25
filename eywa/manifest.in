@@ -724,4 +724,4 @@ ssh://git@gitlab.devtools.intel.com:29418/kmb_integration/vpusmm_driver.git for-
 # Contributor		: Chang S. Bae <chang.seok.bae@intel.com> 
 # IP/Information Owner	: Bob Valentine <bob.valentine@intel.com> 
 # SDL Contact		: Israel Hirsh <israel.hirsh@intel.com>
-git://git-amr-4.devtools.intel.com:29418/linux_cbae1_share-kl.git amx
+ssh://git-amr-4.devtools.intel.com:29418/linux_cbae1_share-kl.git amx
