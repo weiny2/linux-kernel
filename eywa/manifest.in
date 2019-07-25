@@ -344,7 +344,7 @@ ssh://git-amr-2.devtools.intel.com:29418/rt_linux-linux.git cache-pseudo-locking
 # Contributor          : Moeller, Jon <jon.moeller@.intel.com>
 # IP Owner             : Upadhyaya, Gautam <gautam.upadhyaya@intel.com>
 # Configs              : https://eclists.intel.com/sympa/arc/intel-next/2018-11/msg00027.html
-#git://github.com/mchinth/linux.git sep_socwatch_linux_5_2
+git://github.com/mchinth/linux.git sep_socwatch_linux_5_3
 
 # Multi-Key Total Memory Encryption enabling
 # Classification       : Intel Confidential
