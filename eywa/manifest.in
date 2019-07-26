@@ -510,7 +510,7 @@ ssh://git-amr-4.devtools.intel.com:29418/otc_audio-linux.git sof-for-next-5.3-rc
 # IP/Information Owner: Ravi V. Shankar <ravi.v.shankar@intel.com>
 # SDL Contact         : Ashok Raj <ashok.raj@intel.com>
 # Configs	      :
-#ssh://git-amr-4.devtools.intel.com:29418/enabling_cldemote_in_linux_kerne-linux_git.git pasid
+ssh://git-amr-4.devtools.intel.com:29418/enabling_cldemote_in_linux_kerne-linux_git.git pasid
 
 #IOMMU vSVA changes since v5.1-rc3
 # Classification      : Public
