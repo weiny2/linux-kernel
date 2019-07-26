@@ -352,7 +352,7 @@ git://github.com/mchinth/linux.git sep_socwatch_linux_5_3
 # SDL Contact          : Robert Kasten <robert.a.kasten@intel.com>
 # IP Owner             : Baiju Patel <baiju.v.patel@intel.com>
 # Configs              : X86_INTEL_MKTME
-#ssh://git-ger-3.devtools.intel.com:29418/linux_mktme-linux.git mktme/integration
+ssh://git-ger-3.devtools.intel.com:29418/linux_mktme-linux.git mktme/integration
 
 # TPM2 driver for TPM2 Trusted Application running in OPTEE Keembay
 # Classification       : Intel Confidential
