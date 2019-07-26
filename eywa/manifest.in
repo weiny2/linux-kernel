@@ -319,7 +319,7 @@ ssh://git-ccr-1.devtools.intel.com:29418/iommu_next-siov.git for_intel_next_5.3-
 # Contributor          : Zhang, Rui <rui.zhang@intel.com>
 # SDL Contact          : Prestopine, Charles D <charles.d.prestopine@intel.com>
 # IP Owners            : Fields, Evelyn <evelyn.fields@intel.com>
-#ssh://git-ccr-1.devtools.intel.com:29418/otc_linux_rui-rapl for-intel-next
+ssh://git-ccr-1.devtools.intel.com:29418/otc_linux_rui-rapl for-intel-next
 
 # Cache Pseudo-Locking
 # Cache Pseudo-Locking in Intel Cache Allocation Technology (CAT)
