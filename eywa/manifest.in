@@ -61,7 +61,7 @@ git://github.com/jsakkine-intel/linux-sgx.git next
 # IP/Information Owner: Rodrigo Vivi <rodrigo.vivi@intel.com>
 # SDL Contact         : Rodrigo Vivi <rodrigo.vivi@intel.com>
 # Configs             : https://eclists.intel.com/sympa/arc/intel-next/2018-04/msg00005.html
-#ssh://git-amr-1.devtools.intel.com:29418/otc_gen_graphics-drm-intel.git for-intel-next
+ssh://git-amr-1.devtools.intel.com:29418/otc_gen_graphics-drm-intel.git for-intel-next
 
 # #AC Split lock
 # Enable #AC for split locked accesses
