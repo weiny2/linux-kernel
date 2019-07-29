@@ -123,4 +123,6 @@ source "drivers/staging/hp/Kconfig"
 
 source "drivers/staging/wfx/Kconfig"
 
+source "drivers/staging/hqmv2/Kconfig"
+
 endif # STAGING
