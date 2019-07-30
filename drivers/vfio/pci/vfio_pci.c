@@ -358,7 +358,7 @@ int vfio_pci_iommu_dev_fault_handler(struct iommu_fault *fault, void *data)
 		return -ENOENT;
 
 	mutex_lock(&vdev->fault_queue_lock);
-
+	dev_dbg(&vdev->pdev->dev, "%s, enque fault event\n", __func__);
 	head = reg->head;
 	tail = reg->tail;
 	size = reg->nb_entries;
@@ -381,6 +381,7 @@ unlock:
 		return -EINVAL;
 
 	mutex_lock(&vdev->igate);
+	dev_dbg(&vdev->pdev->dev, "%s, signal QEMU\n", __func__);
 	if (vdev->ext_irqs[ext_irq_index].trigger)
 		eventfd_signal(vdev->ext_irqs[ext_irq_index].trigger, 1);
 	mutex_unlock(&vdev->igate);
