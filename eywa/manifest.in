@@ -336,7 +336,7 @@ ssh://git-amr-2.devtools.intel.com:29418/rt_linux-linux.git cache-pseudo-locking
 # IP owner             : Cao Bingbu <bingbu.cao@intel.com>
 # Contributor          : Meng Wei <wei.meng@intel.com>
 # Configs	       :
-#ssh://git-ccr-1.devtools.intel.com:29418/icg_camera-kernel intel-next-release-embargoed
+ssh://git-ccr-1.devtools.intel.com:29418/icg_camera-kernel intel-next-release-embargoed
 
 # SoCWatch and SEP drivers for both native and ACRN hypervisor
 # Classification       : Intel Confidential
