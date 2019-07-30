@@ -598,7 +598,7 @@ ssh://git-amr-4.devtools.intel.com:29418/otc_linux_spandruv-internal.git intel-s
 # IP/Information Owner: Wang, Kai Z <kai.z.wang@intel.com>
 # SDL Contact         : Wang, Kai Z <kai.z.wang@intel.com>
 # Configs             : CONFIG_TRUSTY=m, CONFIG_TRUSTY_LOG=m, CONFIG_TRUSTY_VIRTIO=m, CONFIG_TRUSTY_VIRTIO_IPC=m and CONFIG_TRUSTY_BACKUP_TIMER=m
-#ssh://git-amr-7.devtools.intel.com:29418/trusty_for_intel_next-intel-next.git trusty-5.2
+ssh://git-amr-7.devtools.intel.com:29418/trusty_for_intel_next-intel-next.git trusty-5.3
 
 # Enable BFLOAT16
 # Classification      : Public
