@@ -622,7 +622,7 @@ ssh://git@gitlab.devtools.intel.com:29418/otc-clk-server/linux-dsa/kernel.git in
 # SDL Contact         : Wang, Kai Z <kai.z.wang@intel.com>
 # IP Owner            : Wang, Kai Z <kai.z.wang@intel.com>
 # Config:             : CONFIG_KEYSTORE=m
-#ssh://git-amr-7.devtools.intel.com:29418/trusty_for_intel_next-intel-next.git keystore-5.2
+ssh://git-amr-7.devtools.intel.com:29418/trusty_for_intel_next-intel-next.git keystore-5.3
 
 # ACRN/GVT-g Hypervisor 
 # Classification      : Public
