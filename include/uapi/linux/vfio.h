@@ -1033,6 +1033,24 @@ struct vfio_iommu_type1_cache_invalidate {
 };
 #define VFIO_IOMMU_CACHE_INVALIDATE      _IO(VFIO_TYPE, VFIO_BASE + 26)
 
+/**
+ * VFIO_IOMMU_PAGE_RESPONSE - _IOWR(VFIO_TYPE, VFIO_BASE + 27,
+ *			      struct vfio_iommu_type1_page_resp)
+ *
+ * Propagate guest IOMMU page response to the host.
+ *
+ * Availability of this feature depends on the device, its bus, the underlying
+ * IOMMU and the CPU architecture.
+ *
+ * returns: 0 on success, -errno on failure.
+ */
+struct vfio_iommu_type1_page_resp {
+	__u32   argsz;
+	__u32   flags;
+	struct iommu_page_response pgresp;
+};
+#define VFIO_IOMMU_PAGE_RESP     _IO(VFIO_TYPE, VFIO_BASE + 27)
+
 /* -------- Additional API for SPAPR TCE (Server POWERPC) IOMMU -------- */
 
 /*

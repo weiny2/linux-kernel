@@ -2448,6 +2448,15 @@ static int vfio_cache_inv_fn(struct device *dev, void *data)
 						dev, cache_inv_info);
 }
 
+static int vfio_page_resp_fn(struct device *dev, void *data)
+{
+	struct domain_capsule *dc = (struct domain_capsule *)data;
+	struct iommu_page_response *pgresp =
+		(struct iommu_page_response *) dc->data;
+
+	return iommu_page_response(dev, dc->domain, pgresp);
+}
+
 static long vfio_iommu_type1_ioctl(void *iommu_data,
 				   unsigned int cmd, unsigned long arg)
 {
@@ -2692,6 +2701,28 @@ static long vfio_iommu_type1_ioctl(void *iommu_data,
 					    cache_info);
 		mutex_unlock(&iommu->lock);
 		return ret;
+	} else if (cmd == VFIO_IOMMU_PAGE_RESP) {
+		struct vfio_iommu_type1_page_resp resp;
+		int ret;
+printk("%s, resp - 1\n", __func__);
+		minsz = offsetofend(struct vfio_iommu_type1_page_resp,
+				    pgresp);
+
+		if (copy_from_user(&resp, (void __user *)arg, minsz))
+			return -EFAULT;
+
+printk("%s, resp - 2\n", __func__);
+		if (resp.argsz < minsz || resp.flags)
+			return -EINVAL;
+
+printk("%s, resp - 3\n", __func__);
+		mutex_lock(&iommu->lock);
+		ret = vfio_iommu_for_each_dev(iommu, vfio_page_resp_fn,
+					    &resp.pgresp);
+		mutex_unlock(&iommu->lock);
+printk("%s, resp - 4, ret: %d\n", __func__, ret);
+		return ret;
+
 	}
 
 	return -ENOTTY;
