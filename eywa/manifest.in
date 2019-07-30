@@ -678,7 +678,7 @@ ssh://git@gitlab.devtools.intel.com:29418/otc-clk-server/linux-dsa/kernel.git in
 # SDLC contact        : Tan, Seng Kai <seng.kai.tan@intel.com>
 # Configs             : CONFIG_XLINK_PCIE_LH_DRIVER=m
 #                       CONFIG_XLINK_PCIE_RH_DRIVER=m
-#ssh://git@gitlab.devtools.intel.com:29418/OWR/IoTG/ESE/Linux-Integration/KMB/xlink.git int/vpu-driver
+ssh://git@gitlab.devtools.intel.com:29418/OWR/IoTG/ESE/Linux-Integration/KMB/xlink.git int/vpu-driver
 
 # MTRR: Trust BIOS programming
 # Mechanism to skip the MTRR initialization if already performed by BIOS
