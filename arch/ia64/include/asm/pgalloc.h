@@ -92,7 +92,7 @@ static inline pgtable_t pte_alloc_one(struct mm_struct *mm)
 	if (!pg)
 		return NULL;
 	page = virt_to_page(pg);
-	if (!pgtable_page_ctor(page)) {
+	if (!pgtable_pte_page_ctor(page)) {
 		quicklist_free(0, NULL, pg);
 		return NULL;
 	}
@@ -106,7 +106,7 @@ static inline pte_t *pte_alloc_one_kernel(struct mm_struct *mm)
 
 static inline void pte_free(struct mm_struct *mm, pgtable_t pte)
 {
-	pgtable_page_dtor(pte);
+	pgtable_pte_page_dtor(pte);
 	quicklist_free_page(0, NULL, pte);
 }
 

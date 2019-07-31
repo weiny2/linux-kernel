@@ -124,7 +124,7 @@ static inline struct page *pte_alloc_one(struct mm_struct *mm)
 	if (!ptepage)
 		return NULL;
 	clear_highpage(ptepage);
-	if (!pgtable_page_ctor(ptepage)) {
+	if (!pgtable_pte_page_ctor(ptepage)) {
 		__free_page(ptepage);
 		return NULL;
 	}
@@ -150,7 +150,7 @@ static inline void pte_free_slow(struct page *ptepage)
 
 static inline void pte_free(struct mm_struct *mm, struct page *ptepage)
 {
-	pgtable_page_dtor(ptepage);
+	pgtable_pte_page_dtor(ptepage);
 	__free_page(ptepage);
 }
 
