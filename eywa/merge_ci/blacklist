@@ -5,3 +5,4 @@ ssh://git@gitlab.devtools.intel.com:29418/otc-clk-server/linux-dsa/kernel.git in
 ssh://git-amr-1.devtools.intel.com:29418/otc_gen_graphics-drm-intel.git for-intel-next # Build failure on 7/29
 ssh://git@gitlab.devtools.intel.com:29418/OWR/IoTG/ESE/Linux-Integration/KMB/xlink.git int/vpu-driver # Disabled - merge conflict 07/30
 ssh://git-amr-7.devtools.intel.com:29418/trusty_for_intel_next-intel-next.git keystore-5.3 #DISABLED - build failure 07/30
+git://git.kernel.org/pub/scm/linux/kernel/git/rafael/linux-pm.git testing #DISABLED - failed to pass build test 7/31
