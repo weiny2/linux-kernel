@@ -430,10 +430,10 @@ static inline bool queue_pages_required(struct page *page,
 
 /*
  * queue_pages_pmd() has four possible return values:
- * 2 - there is unmovable page, and MPOL_MF_MOVE* & MPOL_MF_STRICT were
+ * 0 - pages are placed on the right node or queued successfully.
+ * 1 - there is unmovable page, and MPOL_MF_MOVE* & MPOL_MF_STRICT were
  *     specified.
- * 1 - pages are placed on the right node or queued successfully.
- * 0 - THP was split.
+ * 2 - THP was split.
  * -EIO - is migration entry or only MPOL_MF_STRICT was specified and an
  *        existing page was already on a node that does not follow the
  *        policy.
@@ -454,19 +454,17 @@ static int queue_pages_pmd(pmd_t *pmd, spinlock_t *ptl, unsigned long addr,
 	if (is_huge_zero_page(page)) {
 		spin_unlock(ptl);
 		__split_huge_pmd(walk->vma, pmd, addr, false, NULL);
+		ret = 2;
 		goto out;
 	}
-	if (!queue_pages_required(page, qp)) {
-		ret = 1;
+	if (!queue_pages_required(page, qp))
 		goto unlock;
-	}
 
-	ret = 1;
 	flags = qp->flags;
 	/* go to thp migration */
 	if (flags & (MPOL_MF_MOVE | MPOL_MF_MOVE_ALL)) {
 		if (!vma_migratable(walk->vma)) {
-			ret = 2;
+			ret = 1;
 			goto unlock;
 		}
 
@@ -482,6 +480,13 @@ out:
 /*
  * Scan through pages checking if pages follow certain conditions,
  * and move them to the pagelist if they do.
+ *
+ * queue_pages_pte_range() has three possible return values:
+ * 0 - pages are placed on the right node or queued successfully.
+ * 1 - there is unmovable page, and MPOL_MF_MOVE* & MPOL_MF_STRICT were
+ *     specified.
+ * -EIO - only MPOL_MF_STRICT was specified and an existing page was already
+ *        on a node that does not follow the policy.
  */
 static int queue_pages_pte_range(pmd_t *pmd, unsigned long addr,
 			unsigned long end, struct mm_walk *walk)
@@ -498,23 +503,10 @@ static int queue_pages_pte_range(pmd_t *pmd, unsigned long addr,
 	ptl = pmd_trans_huge_lock(pmd, vma);
 	if (ptl) {
 		ret = queue_pages_pmd(pmd, ptl, addr, end, walk);
-		switch (ret) {
-		/* THP was split, fall through to pte walk */
-		case 0:
-			break;
-		/* Pages are placed on the right node or queued successfully */
-		case 1:
-			return 0;
-		/*
-		 * Met unmovable pages, MPOL_MF_MOVE* & MPOL_MF_STRICT
-		 * were specified.
-		 */
-		case 2:
-			return 1;
-		case -EIO:
+		if (ret != 2)
 			return ret;
-		}
 	}
+	/* THP was split, fall through to pte walk */
 
 	if (pmd_trans_unstable(pmd))
 		return 0;
@@ -537,7 +529,7 @@ static int queue_pages_pte_range(pmd_t *pmd, unsigned long addr,
 		if (flags & (MPOL_MF_MOVE | MPOL_MF_MOVE_ALL)) {
 			/* MPOL_MF_STRICT must be specified if we get here */
 			if (!vma_migratable(vma)) {
-				has_unmovable |= true;
+				has_unmovable = true;
 				break;
 			}
 			migrate_page_add(page, qp->pagelist, flags);
@@ -1276,32 +1268,32 @@ static long do_mbind(unsigned long start, unsigned long len,
 	ret = queue_pages_range(mm, start, end, nmask,
 			  flags | MPOL_MF_INVERT, &pagelist);
 
-	if (ret < 0)
+	if (ret < 0) {
 		err = -EIO;
-	else {
-		err = mbind_range(mm, start, end, new);
-
-		if (!err) {
-			int nr_failed = 0;
-
-			if (!list_empty(&pagelist)) {
-				WARN_ON_ONCE(flags & MPOL_MF_LAZY);
-				nr_failed = migrate_pages(&pagelist, new_page,
-					NULL, start, MIGRATE_SYNC,
-					MR_MEMPOLICY_MBIND);
-				if (nr_failed)
-					putback_movable_pages(&pagelist);
-			}
-
-			if ((ret > 0) ||
-			    (nr_failed && (flags & MPOL_MF_STRICT)))
-				err = -EIO;
-		} else
-			putback_movable_pages(&pagelist);
+		goto up_out;
 	}
 
+	err = mbind_range(mm, start, end, new);
+
+	if (!err) {
+		int nr_failed = 0;
+
+		if (!list_empty(&pagelist)) {
+			WARN_ON_ONCE(flags & MPOL_MF_LAZY);
+			nr_failed = migrate_pages(&pagelist, new_page, NULL,
+				start, MIGRATE_SYNC, MR_MEMPOLICY_MBIND);
+			if (nr_failed)
+				putback_movable_pages(&pagelist);
+		}
+
+		if ((ret > 0) || (nr_failed && (flags & MPOL_MF_STRICT)))
+			err = -EIO;
+	} else
+		putback_movable_pages(&pagelist);
+
+up_out:
 	up_write(&mm->mmap_sem);
- mpol_out:
+mpol_out:
 	mpol_put(new);
 	return err;
 }
