@@ -1,7 +1,6 @@
 #black list file for branches that are currently not merging
 #format is <branch str>#<reason for disabling>
 git://github.com/jsakkine-intel/linux-sgx.git next # merge conflicts on 7/22. Needs to rebase on v5.3-rc1
-ssh://git@gitlab.devtools.intel.com:29418/otc-clk-server/linux-dsa/kernel.git intel-next # Build failure - Depends on PASID branch which is yet to be added.
 ssh://git-amr-1.devtools.intel.com:29418/otc_gen_graphics-drm-intel.git for-intel-next # Build failure on 7/29
 ssh://git@gitlab.devtools.intel.com:29418/OWR/IoTG/ESE/Linux-Integration/KMB/xlink.git int/vpu-driver # Disabled - merge conflict 07/30
 ssh://git-amr-4.devtools.intel.com:29418/enabling_cldemote_in_linux_kerne-linux_git.git pasid #DISABLED - build failure 7/31
