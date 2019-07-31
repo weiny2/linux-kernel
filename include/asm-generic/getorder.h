@@ -25,14 +25,9 @@
  * to hold an object of the specified size.
  *
  * The result is undefined if the size is 0.
- *
- * This function may be used to initialise variables with compile time
- * evaluations of constants.
  */
 static inline __attribute_const__ int get_order(unsigned long size)
 {
-	int order;
-
 	if (__builtin_constant_p(size)) {
 		if (!size)
 			return BITS_PER_LONG - PAGE_SHIFT;
@@ -46,11 +41,10 @@ static inline __attribute_const__ int get_order(unsigned long size)
 	size--;
 	size >>= PAGE_SHIFT;
 #if BITS_PER_LONG == 32
-	order = fls(size);
+	return fls(size);
 #else
-	order = fls64(size);
+	return fls64(size);
 #endif
-	return order;
 }
 
 #endif	/* __ASSEMBLY__ */
