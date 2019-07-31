@@ -496,26 +496,11 @@ nouveau_range_fault(struct hmm_mirror *mirror, struct hmm_range *range)
 				 range->start, range->end,
 				 PAGE_SHIFT);
 	if (ret) {
-<<<<<<< HEAD
-		up_read(&range->vma->vm_mm->mmap_sem);
-=======
 		up_read(&range->hmm->mm->mmap_sem);
->>>>>>> linux-next/akpm-base
 		return (int)ret;
 	}
 
 	if (!hmm_range_wait_until_valid(range, HMM_RANGE_DEFAULT_TIMEOUT)) {
-<<<<<<< HEAD
-		up_read(&range->vma->vm_mm->mmap_sem);
-		return -EAGAIN;
-	}
-
-	ret = hmm_range_fault(range, true);
-	if (ret <= 0) {
-		if (ret == 0)
-			ret = -EBUSY;
-		up_read(&range->vma->vm_mm->mmap_sem);
-=======
 		up_read(&range->hmm->mm->mmap_sem);
 		return -EBUSY;
 	}
@@ -525,7 +510,6 @@ nouveau_range_fault(struct hmm_mirror *mirror, struct hmm_range *range)
 		if (ret == 0)
 			ret = -EBUSY;
 		up_read(&range->hmm->mm->mmap_sem);
->>>>>>> linux-next/akpm-base
 		hmm_range_unregister(range);
 		return ret;
 	}
