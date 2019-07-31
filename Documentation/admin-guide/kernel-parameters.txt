@@ -2011,6 +2011,12 @@
 			Built with CONFIG_DEBUG_KMEMLEAK_DEFAULT_OFF=y,
 			the default is off.
 
+	kmemleak.mempool=
+			[KNL] Boot-time tuning of the minimum kmemleak
+			metadata pool size.
+			Format: <int>
+			Default: NR_CPUS * 4
+
 	kprobe_event=[probe-list]
 			[FTRACE] Add kprobe events and enable at boot time.
 			The probe-list is a semicolon delimited list of probe
