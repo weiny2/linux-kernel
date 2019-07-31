@@ -408,7 +408,7 @@ retry_locked:
 		} else {  /* flags & FOLL_SPLIT_PMD */
 			spin_unlock(ptl);
 			split_huge_pmd(vma, pmd, address);
-			ret = pte_alloc(mm, pmd);
+			ret = pte_alloc(mm, pmd) ? -ENOMEM : 0;
 		}
 
 		return ret ? ERR_PTR(ret) :
