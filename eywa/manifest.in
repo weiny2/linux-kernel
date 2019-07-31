@@ -280,7 +280,7 @@ ssh://git-ger-6.devtools.intel.com:29418/secure_git_internal_repo-my_internal_re
 # COE audio support
 # IP: CoE audio features and additions
 # Classification       : Intel Confidential
-# Contributor          : Rojewski, Cezary <cezary.rojewski@intel.com>
+# Contributor          : Lewandowski, Gustaw <gustaw.lewandowski@intel.com>
 # SDL Contact          : Uzieblo, Olgierd <olgierd.uzieblo@intel.com>
 # IP Owners            : Kaczmarski, Filip filip.kaczmarski@intel.com
 # Configs              : CONFIG_SND_SOC_INTEL_SST_TOPLEVEL
@@ -288,7 +288,7 @@ ssh://git-ger-6.devtools.intel.com:29418/secure_git_internal_repo-my_internal_re
 #                        CONFIG_SND_SOC_INTEL_SKYLAKE
 #                        CONFIG_SND_SOC_ACPI_INTEL_MATCH
 #                        CONFIG_SND_SOC_INTEL_MACH
-#ssh://git-gar-1.devtools.intel.com:29418/eig_audio-kernel.git us_integ
+ssh://git-gar-1.devtools.intel.com:29418/eig_audio_integ-kernel.git for-intel-next
 
 # IOMMU scalable mode
 # IP: Intel IOMMU
