@@ -262,7 +262,6 @@ bool smu_clk_dpm_is_enabled(struct smu_context *smu, enum smu_clk_type clk_type)
 	}
 
 	if(!smu_feature_is_enabled(smu, feature_id)) {
-		pr_warn("smu %d clk dpm feature %d is not enabled\n", clk_type, feature_id);
 		return false;
 	}
 
@@ -356,7 +355,7 @@ int smu_update_table(struct smu_context *smu, enum smu_table_id table_index, int
 	int ret = 0;
 	int table_id = smu_table_get_index(smu, table_index);
 
-	if (!table_data || table_id >= smu_table->table_count)
+	if (!table_data || table_id >= smu_table->table_count || table_id < 0)
 		return -EINVAL;
 
 	table = &smu_table->tables[table_index];
@@ -393,6 +392,17 @@ bool is_support_sw_smu(struct amdgpu_device *adev)
 		return true;
 	else
 		return false;
+}
+
+bool is_support_sw_smu_xgmi(struct amdgpu_device *adev)
+{
+	if (amdgpu_dpm != 1)
+		return false;
+
+	if (adev->asic_type == CHIP_VEGA20)
+		return true;
+
+	return false;
 }
 
 int smu_sys_get_pp_table(struct smu_context *smu, void **table)
@@ -476,10 +486,12 @@ int smu_feature_init_dpm(struct smu_context *smu)
 int smu_feature_is_enabled(struct smu_context *smu, enum smu_feature_mask mask)
 {
 	struct smu_feature *feature = &smu->smu_feature;
-	uint32_t feature_id;
+	int feature_id;
 	int ret = 0;
 
 	feature_id = smu_feature_get_index(smu, mask);
+	if (feature_id < 0)
+		return 0;
 
 	WARN_ON(feature_id > feature->feature_num);
 
@@ -494,10 +506,12 @@ int smu_feature_set_enabled(struct smu_context *smu, enum smu_feature_mask mask,
 			    bool enable)
 {
 	struct smu_feature *feature = &smu->smu_feature;
-	uint32_t feature_id;
+	int feature_id;
 	int ret = 0;
 
 	feature_id = smu_feature_get_index(smu, mask);
+	if (feature_id < 0)
+		return -EINVAL;
 
 	WARN_ON(feature_id > feature->feature_num);
 
@@ -520,10 +534,12 @@ failed:
 int smu_feature_is_supported(struct smu_context *smu, enum smu_feature_mask mask)
 {
 	struct smu_feature *feature = &smu->smu_feature;
-	uint32_t feature_id;
+	int feature_id;
 	int ret = 0;
 
 	feature_id = smu_feature_get_index(smu, mask);
+	if (feature_id < 0)
+		return 0;
 
 	WARN_ON(feature_id > feature->feature_num);
 
@@ -539,10 +555,12 @@ int smu_feature_set_supported(struct smu_context *smu,
 			      bool enable)
 {
 	struct smu_feature *feature = &smu->smu_feature;
-	uint32_t feature_id;
+	int feature_id;
 	int ret = 0;
 
 	feature_id = smu_feature_get_index(smu, mask);
+	if (feature_id < 0)
+		return -EINVAL;
 
 	WARN_ON(feature_id > feature->feature_num);
 
@@ -563,6 +581,7 @@ static int smu_set_funcs(struct amdgpu_device *adev)
 	switch (adev->asic_type) {
 	case CHIP_VEGA20:
 	case CHIP_NAVI10:
+	case CHIP_NAVI14:
 		if (adev->pm.pp_feature & PP_OVERDRIVE_MASK)
 			smu->od_enabled = true;
 		smu_v11_0_set_smu_funcs(smu);

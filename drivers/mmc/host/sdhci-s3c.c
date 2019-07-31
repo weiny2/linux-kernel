@@ -611,6 +611,7 @@ static int sdhci_s3c_probe(struct platform_device *pdev)
 	switch (pdata->max_width) {
 	case 8:
 		host->mmc->caps |= MMC_CAP_8_BIT_DATA;
+		/* Fall through */
 	case 4:
 		host->mmc->caps |= MMC_CAP_4_BIT_DATA;
 		break;
@@ -745,7 +746,7 @@ static int sdhci_s3c_runtime_resume(struct device *dev)
 	clk_prepare_enable(busclk);
 	if (ourhost->cur_clk >= 0)
 		clk_prepare_enable(ourhost->clk_bus[ourhost->cur_clk]);
-	ret = sdhci_runtime_resume_host(host);
+	ret = sdhci_runtime_resume_host(host, 0);
 	return ret;
 }
 #endif

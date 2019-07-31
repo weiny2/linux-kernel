@@ -1,0 +1,16 @@
+arm/soc
+
+arm/dt
+
+arm/drivers
+	fsl/soc-5.3-2
+		git://git.kernel.org/pub/scm/linux/kernel/git/leo/linux tags/soc-fsl-next-v5.3-2
+
+arm/defconfig
+
+arm/late
+
+arm/fixes
+	patch
+		ARM: Delete netx a second time
+

@@ -12,7 +12,10 @@
 #include <linux/interrupt.h>
 #include <linux/v4l2-controls.h>
 #include <media/mpeg2-ctrls.h>
+#include <media/vp8-ctrls.h>
 #include <media/videobuf2-core.h>
+
+#define DEC_8190_ALIGN_MASK	0x07U
 
 struct hantro_dev;
 struct hantro_ctx;
@@ -45,6 +48,16 @@ struct hantro_jpeg_enc_hw_ctx {
  */
 struct hantro_mpeg2_dec_hw_ctx {
 	struct hantro_aux_buf qtable;
+};
+
+/**
+ * struct hantro_vp8d_hw_ctx
+ * @segment_map:	Segment map buffer.
+ * @prob_tbl:		Probability table buffer.
+ */
+struct hantro_vp8_dec_hw_ctx {
+	struct hantro_aux_buf segment_map;
+	struct hantro_aux_buf prob_tbl;
 };
 
 /**
@@ -82,10 +95,14 @@ extern const struct hantro_variant rk3399_vpu_variant;
 extern const struct hantro_variant rk3328_vpu_variant;
 extern const struct hantro_variant rk3288_vpu_variant;
 
+extern const u32 hantro_vp8_dec_mc_filter[8][6];
+
 void hantro_watchdog(struct work_struct *work);
 void hantro_run(struct hantro_ctx *ctx);
 void hantro_irq_done(struct hantro_dev *vpu, unsigned int bytesused,
 		     enum vb2_buffer_state result);
+void hantro_prepare_run(struct hantro_ctx *ctx);
+void hantro_finish_run(struct hantro_ctx *ctx);
 
 void hantro_h1_jpeg_enc_run(struct hantro_ctx *ctx);
 void rk3399_vpu_jpeg_enc_run(struct hantro_ctx *ctx);
@@ -98,5 +115,12 @@ void hantro_mpeg2_dec_copy_qtable(u8 *qtable,
 	const struct v4l2_ctrl_mpeg2_quantization *ctrl);
 int hantro_mpeg2_dec_init(struct hantro_ctx *ctx);
 void hantro_mpeg2_dec_exit(struct hantro_ctx *ctx);
+
+void hantro_g1_vp8_dec_run(struct hantro_ctx *ctx);
+void rk3399_vpu_vp8_dec_run(struct hantro_ctx *ctx);
+int hantro_vp8_dec_init(struct hantro_ctx *ctx);
+void hantro_vp8_dec_exit(struct hantro_ctx *ctx);
+void hantro_vp8_prob_update(struct hantro_ctx *ctx,
+			    const struct v4l2_ctrl_vp8_frame_header *hdr);
 
 #endif /* HANTRO_HW_H_ */

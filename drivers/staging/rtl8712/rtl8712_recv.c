@@ -107,7 +107,7 @@ void r8712_free_recv_priv(struct recv_priv *precvpriv)
 			    skb_queue_len(&precvpriv->free_recv_skb_queue));
 }
 
-int r8712_init_recvbuf(struct _adapter *padapter, struct recv_buf *precvbuf)
+void r8712_init_recvbuf(struct _adapter *padapter, struct recv_buf *precvbuf)
 {
 	precvbuf->transfer_len = 0;
 	precvbuf->len = 0;
@@ -118,10 +118,9 @@ int r8712_init_recvbuf(struct _adapter *padapter, struct recv_buf *precvbuf)
 		precvbuf->ptail = precvbuf->pbuf;
 		precvbuf->pend = precvbuf->pdata + MAX_RECVBUF_SZ;
 	}
-	return _SUCCESS;
 }
 
-int r8712_free_recvframe(union recv_frame *precvframe,
+void r8712_free_recvframe(union recv_frame *precvframe,
 		   struct  __queue *pfree_recv_queue)
 {
 	unsigned long irqL;
@@ -140,7 +139,6 @@ int r8712_free_recvframe(union recv_frame *precvframe,
 			precvpriv->free_recvframe_cnt++;
 	}
 	spin_unlock_irqrestore(&pfree_recv_queue->lock, irqL);
-	return _SUCCESS;
 }
 
 static void update_recvframe_attrib_from_recvstat(struct rx_pkt_attrib *pattrib,

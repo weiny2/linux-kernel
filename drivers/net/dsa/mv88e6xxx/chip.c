@@ -1423,7 +1423,6 @@ static int mv88e6xxx_vtu_get(struct mv88e6xxx_chip *chip, u16 vid,
 
 		/* Initialize a fresh VLAN entry */
 		memset(entry, 0, sizeof(*entry));
-		entry->valid = true;
 		entry->vid = vid;
 
 		/* Exclude all ports */
@@ -1618,6 +1617,9 @@ static int _mv88e6xxx_port_vlan_add(struct mv88e6xxx_chip *chip, int port,
 	if (err)
 		return err;
 
+	if (vlan.valid && vlan.member[port] == member)
+		return 0;
+	vlan.valid = true;
 	vlan.member[port] = member;
 
 	err = mv88e6xxx_vtu_loadpurge(chip, &vlan);
@@ -2721,6 +2723,7 @@ static int mv88e6xxx_mdios_register(struct mv88e6xxx_chip *chip,
 			err = mv88e6xxx_mdio_register(chip, child, true);
 			if (err) {
 				mv88e6xxx_mdios_unregister(chip);
+				of_node_put(child);
 				return err;
 			}
 		}

@@ -478,9 +478,7 @@ exar_pci_probe(struct pci_dev *pcidev, const struct pci_device_id *ent)
 
 	nr_ports = board->num_ports ? board->num_ports : pcidev->device & 0x0f;
 
-	priv = devm_kzalloc(&pcidev->dev, sizeof(*priv) +
-			    sizeof(unsigned int) * nr_ports,
-			    GFP_KERNEL);
+	priv = devm_kzalloc(&pcidev->dev, struct_size(priv, line, nr_ports), GFP_KERNEL);
 	if (!priv)
 		return -ENOMEM;
 
@@ -561,8 +559,7 @@ static int __maybe_unused exar_suspend(struct device *dev)
 
 static int __maybe_unused exar_resume(struct device *dev)
 {
-	struct pci_dev *pcidev = to_pci_dev(dev);
-	struct exar8250 *priv = pci_get_drvdata(pcidev);
+	struct exar8250 *priv = dev_get_drvdata(dev);
 	unsigned int i;
 
 	for (i = 0; i < priv->nr; i++)

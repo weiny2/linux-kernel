@@ -20,26 +20,19 @@ obj-m := $(filter-out $(obj-y),$(obj-m))
 # Filter out objects already built-in
 lib-y := $(filter-out $(obj-y), $(sort $(lib-y) $(lib-m)))
 
+# Subdirectories we need to descend into
+subdir-ym := $(sort $(subdir-y) $(subdir-m) $(patsubst %/,%, $(filter %/, $(obj-y) $(obj-m))))
+
 # Determine modorder.
 # Unfortunately, we don't have information about ordering between -y
 # and -m subdirs.  Just put -y's first.
 modorder	:= $(patsubst %/,%/modules.order, $(filter %/, $(obj-y)) $(obj-m:.o=.ko))
 
 # Handle objects in subdirs
-# ---------------------------------------------------------------------------
-# o if we encounter foo/ in $(obj-y), replace it by foo/built-in.a
-#   and add the directory to the list of dirs to descend into: $(subdir-y)
-# o if we encounter foo/ in $(obj-m), remove it from $(obj-m)
-#   and add the directory to the list of dirs to descend into: $(subdir-m)
-__subdir-y	:= $(patsubst %/,%,$(filter %/, $(obj-y)))
-subdir-y	+= $(__subdir-y)
-__subdir-m	:= $(patsubst %/,%,$(filter %/, $(obj-m)))
-subdir-m	+= $(__subdir-m)
+# When we encounter foo/ in $(obj-y), link foo/built-in.a into vmlinux,
+# but we do not do that for $(obj-m)
 obj-y		:= $(patsubst %/, %/built-in.a, $(obj-y))
 obj-m		:= $(filter-out %/, $(obj-m))
-
-# Subdirectories we need to descend into
-subdir-ym	:= $(sort $(subdir-y) $(subdir-m))
 
 # if $(foo-objs), $(foo-y), or $(foo-m) exists, foo.o is a composite object
 multi-used-y := $(sort $(foreach m,$(obj-y), $(if $(strip $($(m:.o=-objs)) $($(m:.o=-y))), $(m))))
@@ -186,28 +179,6 @@ $(foreach m, $(notdir $1), \
 	$(eval $(obj)/$m: \
 	$(addprefix $(obj)/, $(foreach s, $3, $($(m:%$(strip $2)=%$(s)))))))
 endef
-
-# LEX
-# ---------------------------------------------------------------------------
-quiet_cmd_flex = LEX     $@
-      cmd_flex = $(LEX) -o$@ -L $<
-
-$(obj)/%.lex.c: $(src)/%.l FORCE
-	$(call if_changed,flex)
-
-# YACC
-# ---------------------------------------------------------------------------
-quiet_cmd_bison = YACC    $@
-      cmd_bison = $(YACC) -o$@ -t -l $<
-
-$(obj)/%.tab.c: $(src)/%.y FORCE
-	$(call if_changed,bison)
-
-quiet_cmd_bison_h = YACC    $@
-      cmd_bison_h = $(YACC) -o/dev/null --defines=$@ -t -l $<
-
-$(obj)/%.tab.h: $(src)/%.y FORCE
-	$(call if_changed,bison_h)
 
 # Shipped files
 # ===========================================================================

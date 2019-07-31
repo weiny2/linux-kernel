@@ -242,6 +242,16 @@ enum smu_message_type
 	SMU_MSG_PowerDownJpeg,
 	SMU_MSG_BacoAudioD3PME,
 	SMU_MSG_ArmD3,
+	SMU_MSG_RunGfxDcBtc,
+	SMU_MSG_RunSocDcBtc,
+	SMU_MSG_SetMemoryChannelEnable,
+	SMU_MSG_SetDfSwitchType,
+	SMU_MSG_GetVoltageByDpm,
+	SMU_MSG_GetVoltageByDpmOverdrive,
+	SMU_MSG_PowerUpVcn0,
+	SMU_MSG_PowerDownVcn01,
+	SMU_MSG_PowerUpVcn1,
+	SMU_MSG_PowerDownVcn1,
 	SMU_MSG_MAX_COUNT,
 };
 
@@ -945,6 +955,7 @@ int smu_update_table(struct smu_context *smu, enum smu_table_id table_index, int
 		     void *table_data, bool drv2smu);
 
 bool is_support_sw_smu(struct amdgpu_device *adev);
+bool is_support_sw_smu_xgmi(struct amdgpu_device *adev);
 int smu_reset(struct smu_context *smu);
 int smu_common_read_sensor(struct smu_context *smu, enum amd_pp_sensors sensor,
 			   void *data, uint32_t *size);

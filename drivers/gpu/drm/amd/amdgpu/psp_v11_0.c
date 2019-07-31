@@ -43,6 +43,8 @@ MODULE_FIRMWARE("amdgpu/vega20_asd.bin");
 MODULE_FIRMWARE("amdgpu/vega20_ta.bin");
 MODULE_FIRMWARE("amdgpu/navi10_sos.bin");
 MODULE_FIRMWARE("amdgpu/navi10_asd.bin");
+MODULE_FIRMWARE("amdgpu/navi14_sos.bin");
+MODULE_FIRMWARE("amdgpu/navi14_asd.bin");
 
 /* address block */
 #define smnMP1_FIRMWARE_FLAGS		0x3010024
@@ -71,6 +73,9 @@ static int psp_v11_0_init_microcode(struct psp_context *psp)
 		break;
 	case CHIP_NAVI10:
 		chip_name = "navi10";
+		break;
+	case CHIP_NAVI14:
+		chip_name = "navi14";
 		break;
 	default:
 		BUG();
@@ -158,6 +163,7 @@ static int psp_v11_0_init_microcode(struct psp_context *psp)
 		}
 		break;
 	case CHIP_NAVI10:
+	case CHIP_NAVI14:
 		break;
 	default:
 		BUG();

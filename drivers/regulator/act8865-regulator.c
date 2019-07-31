@@ -16,6 +16,7 @@
 #include <linux/regulator/act8865.h>
 #include <linux/of.h>
 #include <linux/of_device.h>
+#include <linux/power_supply.h>
 #include <linux/regulator/of_regulator.h>
 #include <linux/regmap.h>
 
@@ -112,11 +113,18 @@
  * Field Definitions.
  */
 #define	ACT8865_ENA		0x80	/* ON - [7] */
+#define	ACT8865_DIS		0x40	/* DIS - [6] */
+
 #define	ACT8865_VSEL_MASK	0x3F	/* VSET - [5:0] */
 
 
 #define ACT8600_LDO10_ENA		0x40	/* ON - [6] */
 #define ACT8600_SUDCDC_VSEL_MASK	0xFF	/* SUDCDC VSET - [7:0] */
+
+#define ACT8600_APCH_CHG_ACIN		BIT(7)
+#define ACT8600_APCH_CHG_USB		BIT(6)
+#define ACT8600_APCH_CSTATE0		BIT(5)
+#define ACT8600_APCH_CSTATE1		BIT(4)
 
 /*
  * ACT8865 voltage number
@@ -228,12 +236,23 @@ static const struct regulator_ops act8865_ops = {
 };
 
 static const struct regulator_ops act8865_ldo_ops = {
+	.list_voltage		= regulator_list_voltage_linear_range,
+	.map_voltage		= regulator_map_voltage_linear_range,
+	.get_voltage_sel	= regulator_get_voltage_sel_regmap,
+	.set_voltage_sel	= regulator_set_voltage_sel_regmap,
+	.enable			= regulator_enable_regmap,
+	.disable		= regulator_disable_regmap,
+	.is_enabled		= regulator_is_enabled_regmap,
+	.set_pull_down		= regulator_set_pull_down_regmap,
+};
+
+static const struct regulator_ops act8865_fixed_ldo_ops = {
 	.enable			= regulator_enable_regmap,
 	.disable		= regulator_disable_regmap,
 	.is_enabled		= regulator_is_enabled_regmap,
 };
 
-#define ACT88xx_REG(_name, _family, _id, _vsel_reg, _supply)		\
+#define ACT88xx_REG_(_name, _family, _id, _vsel_reg, _supply, _ops)	\
 	[_family##_ID_##_id] = {					\
 		.name			= _name,			\
 		.of_match		= of_match_ptr(_name),		\
@@ -241,7 +260,7 @@ static const struct regulator_ops act8865_ldo_ops = {
 		.supply_name		= _supply,			\
 		.id			= _family##_ID_##_id,		\
 		.type			= REGULATOR_VOLTAGE,		\
-		.ops			= &act8865_ops,			\
+		.ops			= _ops,				\
 		.n_voltages		= ACT8865_VOLTAGE_NUM,		\
 		.linear_ranges		= act8865_voltage_ranges,	\
 		.n_linear_ranges	= ARRAY_SIZE(act8865_voltage_ranges), \
@@ -249,8 +268,16 @@ static const struct regulator_ops act8865_ldo_ops = {
 		.vsel_mask		= ACT8865_VSEL_MASK,		\
 		.enable_reg		= _family##_##_id##_CTRL,	\
 		.enable_mask		= ACT8865_ENA,			\
+		.pull_down_reg		= _family##_##_id##_CTRL,	\
+		.pull_down_mask		= ACT8865_DIS,			\
 		.owner			= THIS_MODULE,			\
 	}
+
+#define ACT88xx_REG(_name, _family, _id, _vsel_reg, _supply) \
+	ACT88xx_REG_(_name, _family, _id, _vsel_reg, _supply, &act8865_ops)
+
+#define ACT88xx_LDO(_name, _family, _id, _vsel_reg, _supply) \
+	ACT88xx_REG_(_name, _family, _id, _vsel_reg, _supply, &act8865_ldo_ops)
 
 static const struct regulator_desc act8600_regulators[] = {
 	ACT88xx_REG("DCDC1", ACT8600, DCDC1, VSET, "vp1"),
@@ -281,7 +308,7 @@ static const struct regulator_desc act8600_regulators[] = {
 		.of_match = of_match_ptr("LDO_REG9"),
 		.regulators_node = of_match_ptr("regulators"),
 		.id = ACT8600_ID_LDO9,
-		.ops = &act8865_ldo_ops,
+		.ops = &act8865_fixed_ldo_ops,
 		.type = REGULATOR_VOLTAGE,
 		.n_voltages = 1,
 		.fixed_uV = 3300000,
@@ -294,7 +321,7 @@ static const struct regulator_desc act8600_regulators[] = {
 		.of_match = of_match_ptr("LDO_REG10"),
 		.regulators_node = of_match_ptr("regulators"),
 		.id = ACT8600_ID_LDO10,
-		.ops = &act8865_ldo_ops,
+		.ops = &act8865_fixed_ldo_ops,
 		.type = REGULATOR_VOLTAGE,
 		.n_voltages = 1,
 		.fixed_uV = 1200000,
@@ -323,20 +350,20 @@ static const struct regulator_desc act8865_regulators[] = {
 	ACT88xx_REG("DCDC_REG1", ACT8865, DCDC1, VSET1, "vp1"),
 	ACT88xx_REG("DCDC_REG2", ACT8865, DCDC2, VSET1, "vp2"),
 	ACT88xx_REG("DCDC_REG3", ACT8865, DCDC3, VSET1, "vp3"),
-	ACT88xx_REG("LDO_REG1", ACT8865, LDO1, VSET, "inl45"),
-	ACT88xx_REG("LDO_REG2", ACT8865, LDO2, VSET, "inl45"),
-	ACT88xx_REG("LDO_REG3", ACT8865, LDO3, VSET, "inl67"),
-	ACT88xx_REG("LDO_REG4", ACT8865, LDO4, VSET, "inl67"),
+	ACT88xx_LDO("LDO_REG1", ACT8865, LDO1, VSET, "inl45"),
+	ACT88xx_LDO("LDO_REG2", ACT8865, LDO2, VSET, "inl45"),
+	ACT88xx_LDO("LDO_REG3", ACT8865, LDO3, VSET, "inl67"),
+	ACT88xx_LDO("LDO_REG4", ACT8865, LDO4, VSET, "inl67"),
 };
 
 static const struct regulator_desc act8865_alt_regulators[] = {
 	ACT88xx_REG("DCDC_REG1", ACT8865, DCDC1, VSET2, "vp1"),
 	ACT88xx_REG("DCDC_REG2", ACT8865, DCDC2, VSET2, "vp2"),
 	ACT88xx_REG("DCDC_REG3", ACT8865, DCDC3, VSET2, "vp3"),
-	ACT88xx_REG("LDO_REG1", ACT8865, LDO1, VSET, "inl45"),
-	ACT88xx_REG("LDO_REG2", ACT8865, LDO2, VSET, "inl45"),
-	ACT88xx_REG("LDO_REG3", ACT8865, LDO3, VSET, "inl67"),
-	ACT88xx_REG("LDO_REG4", ACT8865, LDO4, VSET, "inl67"),
+	ACT88xx_LDO("LDO_REG1", ACT8865, LDO1, VSET, "inl45"),
+	ACT88xx_LDO("LDO_REG2", ACT8865, LDO2, VSET, "inl45"),
+	ACT88xx_LDO("LDO_REG3", ACT8865, LDO3, VSET, "inl67"),
+	ACT88xx_LDO("LDO_REG4", ACT8865, LDO4, VSET, "inl67"),
 };
 
 #ifdef CONFIG_OF
@@ -370,6 +397,75 @@ static void act8865_power_off(void)
 	act8865 = i2c_get_clientdata(act8865_i2c_client);
 	regmap_write(act8865->regmap, act8865->off_reg, act8865->off_mask);
 	while (1);
+}
+
+static int act8600_charger_get_status(struct regmap *map)
+{
+	unsigned int val;
+	int ret;
+	u8 state0, state1;
+
+	ret = regmap_read(map, ACT8600_APCH_STAT, &val);
+	if (ret < 0)
+		return ret;
+
+	state0 = val & ACT8600_APCH_CSTATE0;
+	state1 = val & ACT8600_APCH_CSTATE1;
+
+	if (state0 && !state1)
+		return POWER_SUPPLY_STATUS_CHARGING;
+	if (!state0 && state1)
+		return POWER_SUPPLY_STATUS_NOT_CHARGING;
+	if (!state0 && !state1)
+		return POWER_SUPPLY_STATUS_DISCHARGING;
+
+	return POWER_SUPPLY_STATUS_UNKNOWN;
+}
+
+static int act8600_charger_get_property(struct power_supply *psy,
+		enum power_supply_property psp, union power_supply_propval *val)
+{
+	struct regmap *map = power_supply_get_drvdata(psy);
+	int ret;
+
+	switch (psp) {
+	case POWER_SUPPLY_PROP_STATUS:
+		ret = act8600_charger_get_status(map);
+		if (ret < 0)
+			return ret;
+
+		val->intval = ret;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static enum power_supply_property act8600_charger_properties[] = {
+	POWER_SUPPLY_PROP_STATUS,
+};
+
+static const struct power_supply_desc act8600_charger_desc = {
+	.name = "act8600-charger",
+	.type = POWER_SUPPLY_TYPE_BATTERY,
+	.properties = act8600_charger_properties,
+	.num_properties = ARRAY_SIZE(act8600_charger_properties),
+	.get_property = act8600_charger_get_property,
+};
+
+static int act8600_charger_probe(struct device *dev, struct regmap *regmap)
+{
+	struct power_supply *charger;
+	struct power_supply_config cfg = {
+		.drv_data = regmap,
+		.of_node = dev->of_node,
+	};
+
+	charger = devm_power_supply_register(dev, &act8600_charger_desc, &cfg);
+
+	return PTR_ERR_OR_ZERO(charger);
 }
 
 static int act8865_pmic_probe(struct i2c_client *client,
@@ -480,6 +576,15 @@ static int act8865_pmic_probe(struct i2c_client *client,
 		if (IS_ERR(rdev)) {
 			dev_err(dev, "failed to register %s\n", desc->name);
 			return PTR_ERR(rdev);
+		}
+	}
+
+	if (type == ACT8600) {
+		ret = act8600_charger_probe(dev, act8865->regmap);
+		if (ret < 0) {
+			if (ret != -EPROBE_DEFER)
+				dev_err(dev, "Failed to probe charger");
+			return ret;
 		}
 	}
 

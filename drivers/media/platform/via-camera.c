@@ -18,6 +18,7 @@
 #include <media/v4l2-device.h>
 #include <media/v4l2-ioctl.h>
 #include <media/v4l2-ctrls.h>
+#include <media/v4l2-event.h>
 #include <media/v4l2-image-sizes.h>
 #include <media/i2c/ov7670.h>
 #include <media/videobuf-dma-sg.h>
@@ -142,13 +143,11 @@ static struct via_camera *via_cam_info;
  * now this information must be managed at this level too.
  */
 static struct via_format {
-	__u8 *desc;
 	__u32 pixelformat;
 	int bpp;   /* Bytes per pixel */
 	u32 mbus_code;
 } via_formats[] = {
 	{
-		.desc		= "YUYV 4:2:2",
 		.pixelformat	= V4L2_PIX_FMT_YUYV,
 		.mbus_code	= MEDIA_BUS_FMT_YUYV8_2X8,
 		.bpp		= 2,
@@ -660,19 +659,22 @@ static const struct videobuf_queue_ops viacam_vb_ops = {
 static int viacam_open(struct file *filp)
 {
 	struct via_camera *cam = video_drvdata(filp);
+	int ret;
 
-	filp->private_data = cam;
 	/*
 	 * Note the new user.  If this is the first one, we'll also
 	 * need to power up the sensor.
 	 */
 	mutex_lock(&cam->lock);
-	if (cam->users == 0) {
-		int ret = viafb_request_dma();
+	ret = v4l2_fh_open(filp);
+	if (ret)
+		goto out;
+	if (v4l2_fh_is_singular_file(filp)) {
+		ret = viafb_request_dma();
 
 		if (ret) {
-			mutex_unlock(&cam->lock);
-			return ret;
+			v4l2_fh_release(filp);
+			goto out;
 		}
 		via_sensor_power_up(cam);
 		set_bit(CF_CONFIG_NEEDED, &cam->flags);
@@ -685,16 +687,19 @@ static int viacam_open(struct file *filp)
 				sizeof(struct videobuf_buffer), cam, NULL);
 	}
 	(cam->users)++;
+out:
 	mutex_unlock(&cam->lock);
-	return 0;
+	return ret;
 }
 
 static int viacam_release(struct file *filp)
 {
 	struct via_camera *cam = video_drvdata(filp);
+	bool last_open;
 
 	mutex_lock(&cam->lock);
 	(cam->users)--;
+	last_open = v4l2_fh_is_singular_file(filp);
 	/*
 	 * If the "owner" is closing, shut down any ongoing
 	 * operations.
@@ -714,11 +719,12 @@ static int viacam_release(struct file *filp)
 	/*
 	 * Last one out needs to turn out the lights.
 	 */
-	if (cam->users == 0) {
+	if (last_open) {
 		videobuf_mmap_free(&cam->vb_queue);
 		via_sensor_power_down(cam);
 		viafb_release_dma();
 	}
+	v4l2_fh_release(filp);
 	mutex_unlock(&cam->lock);
 	return 0;
 }
@@ -773,7 +779,7 @@ static __poll_t viacam_poll(struct file *filp, struct poll_table_struct *pt)
 {
 	struct via_camera *cam = video_drvdata(filp);
 
-	return videobuf_poll_stream(filp, &cam->vb_queue, pt);
+	return v4l2_ctrl_poll(filp, pt) | videobuf_poll_stream(filp, &cam->vb_queue, pt);
 }
 
 
@@ -811,7 +817,6 @@ static int viacam_enum_input(struct file *filp, void *priv,
 		return -EINVAL;
 
 	input->type = V4L2_INPUT_TYPE_CAMERA;
-	input->std = V4L2_STD_ALL; /* Not sure what should go here */
 	strscpy(input->name, "Camera", sizeof(input->name));
 	return 0;
 }
@@ -829,17 +834,6 @@ static int viacam_s_input(struct file *filp, void *priv, unsigned int i)
 	return 0;
 }
 
-static int viacam_s_std(struct file *filp, void *priv, v4l2_std_id std)
-{
-	return 0;
-}
-
-static int viacam_g_std(struct file *filp, void *priv, v4l2_std_id *std)
-{
-	*std = V4L2_STD_NTSC_M;
-	return 0;
-}
-
 /*
  * Video format stuff.	Here is our default format until
  * user space messes with things.
@@ -851,6 +845,7 @@ static const struct v4l2_pix_format viacam_def_pix_format = {
 	.field		= V4L2_FIELD_NONE,
 	.bytesperline	= VGA_WIDTH * 2,
 	.sizeimage	= VGA_WIDTH * VGA_HEIGHT * 2,
+	.colorspace	= V4L2_COLORSPACE_SRGB,
 };
 
 static const u32 via_def_mbus_code = MEDIA_BUS_FMT_YUYV8_2X8;
@@ -860,8 +855,6 @@ static int viacam_enum_fmt_vid_cap(struct file *filp, void *priv,
 {
 	if (fmt->index >= N_VIA_FMTS)
 		return -EINVAL;
-	strscpy(fmt->description, via_formats[fmt->index].desc,
-		sizeof(fmt->description));
 	fmt->pixelformat = via_formats[fmt->index].pixelformat;
 	return 0;
 }
@@ -897,6 +890,10 @@ static void viacam_fmt_post(struct v4l2_pix_format *userfmt,
 	userfmt->field = sensorfmt->field;
 	userfmt->bytesperline = 2 * userfmt->width;
 	userfmt->sizeimage = userfmt->bytesperline * userfmt->height;
+	userfmt->colorspace = sensorfmt->colorspace;
+	userfmt->ycbcr_enc = sensorfmt->ycbcr_enc;
+	userfmt->quantization = sensorfmt->quantization;
+	userfmt->xfer_func = sensorfmt->xfer_func;
 }
 
 
@@ -927,7 +924,7 @@ static int viacam_do_try_fmt(struct via_camera *cam,
 static int viacam_try_fmt_vid_cap(struct file *filp, void *priv,
 		struct v4l2_format *fmt)
 {
-	struct via_camera *cam = priv;
+	struct via_camera *cam = video_drvdata(filp);
 	struct v4l2_format sfmt;
 	int ret;
 
@@ -941,7 +938,7 @@ static int viacam_try_fmt_vid_cap(struct file *filp, void *priv,
 static int viacam_g_fmt_vid_cap(struct file *filp, void *priv,
 		struct v4l2_format *fmt)
 {
-	struct via_camera *cam = priv;
+	struct via_camera *cam = video_drvdata(filp);
 
 	mutex_lock(&cam->lock);
 	fmt->fmt.pix = cam->user_format;
@@ -952,7 +949,7 @@ static int viacam_g_fmt_vid_cap(struct file *filp, void *priv,
 static int viacam_s_fmt_vid_cap(struct file *filp, void *priv,
 		struct v4l2_format *fmt)
 {
-	struct via_camera *cam = priv;
+	struct via_camera *cam = video_drvdata(filp);
 	int ret;
 	struct v4l2_format sfmt;
 	struct via_format *f = via_find_format(fmt->fmt.pix.pixelformat);
@@ -992,9 +989,7 @@ static int viacam_querycap(struct file *filp, void *priv,
 {
 	strscpy(cap->driver, "via-camera", sizeof(cap->driver));
 	strscpy(cap->card, "via-camera", sizeof(cap->card));
-	cap->device_caps = V4L2_CAP_VIDEO_CAPTURE |
-		V4L2_CAP_READWRITE | V4L2_CAP_STREAMING;
-	cap->capabilities = cap->device_caps | V4L2_CAP_DEVICE_CAPS;
+	strscpy(cap->bus_info, "platform:via-camera", sizeof(cap->bus_info));
 	return 0;
 }
 
@@ -1004,7 +999,7 @@ static int viacam_querycap(struct file *filp, void *priv,
 static int viacam_reqbufs(struct file *filp, void *priv,
 		struct v4l2_requestbuffers *rb)
 {
-	struct via_camera *cam = priv;
+	struct via_camera *cam = video_drvdata(filp);
 
 	return videobuf_reqbufs(&cam->vb_queue, rb);
 }
@@ -1012,28 +1007,28 @@ static int viacam_reqbufs(struct file *filp, void *priv,
 static int viacam_querybuf(struct file *filp, void *priv,
 		struct v4l2_buffer *buf)
 {
-	struct via_camera *cam = priv;
+	struct via_camera *cam = video_drvdata(filp);
 
 	return videobuf_querybuf(&cam->vb_queue, buf);
 }
 
 static int viacam_qbuf(struct file *filp, void *priv, struct v4l2_buffer *buf)
 {
-	struct via_camera *cam = priv;
+	struct via_camera *cam = video_drvdata(filp);
 
 	return videobuf_qbuf(&cam->vb_queue, buf);
 }
 
 static int viacam_dqbuf(struct file *filp, void *priv, struct v4l2_buffer *buf)
 {
-	struct via_camera *cam = priv;
+	struct via_camera *cam = video_drvdata(filp);
 
 	return videobuf_dqbuf(&cam->vb_queue, buf, filp->f_flags & O_NONBLOCK);
 }
 
 static int viacam_streamon(struct file *filp, void *priv, enum v4l2_buf_type t)
 {
-	struct via_camera *cam = priv;
+	struct via_camera *cam = video_drvdata(filp);
 	int ret = 0;
 
 	if (t != V4L2_BUF_TYPE_VIDEO_CAPTURE)
@@ -1084,7 +1079,7 @@ out:
 
 static int viacam_streamoff(struct file *filp, void *priv, enum v4l2_buf_type t)
 {
-	struct via_camera *cam = priv;
+	struct via_camera *cam = video_drvdata(filp);
 	int ret;
 
 	if (t != V4L2_BUF_TYPE_VIDEO_CAPTURE)
@@ -1113,33 +1108,38 @@ out:
 static int viacam_g_parm(struct file *filp, void *priv,
 		struct v4l2_streamparm *parm)
 {
-	struct via_camera *cam = priv;
+	struct via_camera *cam = video_drvdata(filp);
 	int ret;
 
 	mutex_lock(&cam->lock);
 	ret = v4l2_g_parm_cap(video_devdata(filp), cam->sensor, parm);
 	mutex_unlock(&cam->lock);
-	parm->parm.capture.readbuffers = cam->n_cap_bufs;
 	return ret;
 }
 
 static int viacam_s_parm(struct file *filp, void *priv,
 		struct v4l2_streamparm *parm)
 {
-	struct via_camera *cam = priv;
+	struct via_camera *cam = video_drvdata(filp);
 	int ret;
 
 	mutex_lock(&cam->lock);
 	ret = v4l2_s_parm_cap(video_devdata(filp), cam->sensor, parm);
 	mutex_unlock(&cam->lock);
-	parm->parm.capture.readbuffers = cam->n_cap_bufs;
 	return ret;
 }
 
 static int viacam_enum_framesizes(struct file *filp, void *priv,
 		struct v4l2_frmsizeenum *sizes)
 {
+	unsigned int i;
+
 	if (sizes->index != 0)
+		return -EINVAL;
+	for (i = 0; i < N_VIA_FMTS; i++)
+		if (sizes->pixel_format == via_formats[i].pixelformat)
+			break;
+	if (i >= N_VIA_FMTS)
 		return -EINVAL;
 	sizes->type = V4L2_FRMSIZE_TYPE_CONTINUOUS;
 	sizes->stepwise.min_width = QCIF_WIDTH;
@@ -1153,7 +1153,7 @@ static int viacam_enum_framesizes(struct file *filp, void *priv,
 static int viacam_enum_frameintervals(struct file *filp, void *priv,
 		struct v4l2_frmivalenum *interval)
 {
-	struct via_camera *cam = priv;
+	struct via_camera *cam = video_drvdata(filp);
 	struct v4l2_subdev_frame_interval_enum fie = {
 		.index = interval->index,
 		.code = cam->mbus_code,
@@ -1161,8 +1161,17 @@ static int viacam_enum_frameintervals(struct file *filp, void *priv,
 		.height = cam->sensor_format.height,
 		.which = V4L2_SUBDEV_FORMAT_ACTIVE,
 	};
+	unsigned int i;
 	int ret;
 
+	for (i = 0; i < N_VIA_FMTS; i++)
+		if (interval->pixel_format == via_formats[i].pixelformat)
+			break;
+	if (i >= N_VIA_FMTS)
+		return -EINVAL;
+	if (interval->width < QCIF_WIDTH || interval->width > VGA_WIDTH ||
+	    interval->height < QCIF_HEIGHT || interval->height > VGA_HEIGHT)
+		return -EINVAL;
 	mutex_lock(&cam->lock);
 	ret = sensor_call(cam, pad, enum_frame_interval, NULL, &fie);
 	mutex_unlock(&cam->lock);
@@ -1179,8 +1188,6 @@ static const struct v4l2_ioctl_ops viacam_ioctl_ops = {
 	.vidioc_enum_input	= viacam_enum_input,
 	.vidioc_g_input		= viacam_g_input,
 	.vidioc_s_input		= viacam_s_input,
-	.vidioc_s_std		= viacam_s_std,
-	.vidioc_g_std		= viacam_g_std,
 	.vidioc_enum_fmt_vid_cap = viacam_enum_fmt_vid_cap,
 	.vidioc_try_fmt_vid_cap = viacam_try_fmt_vid_cap,
 	.vidioc_g_fmt_vid_cap	= viacam_g_fmt_vid_cap,
@@ -1196,6 +1203,8 @@ static const struct v4l2_ioctl_ops viacam_ioctl_ops = {
 	.vidioc_s_parm		= viacam_s_parm,
 	.vidioc_enum_framesizes = viacam_enum_framesizes,
 	.vidioc_enum_frameintervals = viacam_enum_frameintervals,
+	.vidioc_subscribe_event		= v4l2_ctrl_subscribe_event,
+	.vidioc_unsubscribe_event	= v4l2_event_unsubscribe,
 };
 
 /*----------------------------------------------------------------------------*/
@@ -1267,10 +1276,11 @@ static struct viafb_pm_hooks viacam_pm_hooks = {
 static const struct video_device viacam_v4l_template = {
 	.name		= "via-camera",
 	.minor		= -1,
-	.tvnorms	= V4L2_STD_NTSC_M,
 	.fops		= &viacam_fops,
 	.ioctl_ops	= &viacam_ioctl_ops,
 	.release	= video_device_release_empty, /* Check this */
+	.device_caps	= V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_READWRITE |
+			  V4L2_CAP_STREAMING,
 };
 
 /*
@@ -1427,10 +1437,10 @@ static int viacam_probe(struct platform_device *pdev)
 	 */
 	cam->vdev = viacam_v4l_template;
 	cam->vdev.v4l2_dev = &cam->v4l2_dev;
+	video_set_drvdata(&cam->vdev, cam);
 	ret = video_register_device(&cam->vdev, VFL_TYPE_GRABBER, -1);
 	if (ret)
 		goto out_irq;
-	video_set_drvdata(&cam->vdev, cam);
 
 #ifdef CONFIG_PM
 	/*
@@ -1464,6 +1474,9 @@ static int viacam_remove(struct platform_device *pdev)
 
 	video_unregister_device(&cam->vdev);
 	v4l2_device_unregister(&cam->v4l2_dev);
+#ifdef CONFIG_PM
+	viafb_pm_unregister(&viacam_pm_hooks);
+#endif
 	free_irq(viadev->pdev->irq, cam);
 	via_sensor_power_release(cam);
 	v4l2_ctrl_handler_free(&cam->ctrl_handler);

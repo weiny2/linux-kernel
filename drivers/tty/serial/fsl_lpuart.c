@@ -214,6 +214,7 @@
 #define UARTFIFO_TXSIZE_OFF	4
 #define UARTFIFO_RXFE		0x00000008
 #define UARTFIFO_RXSIZE_OFF	0
+#define UARTFIFO_DEPTH(x)	(0x1 << ((x) ? ((x) + 1) : 0))
 
 #define UARTWATER_COUNT_MASK	0xff
 #define UARTWATER_TXCNT_OFF	8
@@ -1097,12 +1098,11 @@ static inline int lpuart_start_rx_dma(struct lpuart_port *sport)
 	if (sport->rx_dma_rng_buf_len < 16)
 		sport->rx_dma_rng_buf_len = 16;
 
-	ring->buf = kmalloc(sport->rx_dma_rng_buf_len, GFP_ATOMIC);
+	ring->buf = kzalloc(sport->rx_dma_rng_buf_len, GFP_ATOMIC);
 	if (!ring->buf)
 		return -ENOMEM;
 
 	sg_init_one(&sport->rx_sgl, ring->buf, sport->rx_dma_rng_buf_len);
-	sg_set_buf(&sport->rx_sgl, ring->buf, sport->rx_dma_rng_buf_len);
 	nent = dma_map_sg(sport->port.dev, &sport->rx_sgl, 1, DMA_FROM_DEVICE);
 
 	if (!nent) {
@@ -1381,13 +1381,12 @@ static int lpuart_startup(struct uart_port *port)
 	/* determine FIFO size and enable FIFO mode */
 	temp = readb(sport->port.membase + UARTPFIFO);
 
-	sport->txfifo_size = 0x1 << (((temp >> UARTPFIFO_TXSIZE_OFF) &
-		UARTPFIFO_FIFOSIZE_MASK) + 1);
-
+	sport->txfifo_size = UARTFIFO_DEPTH((temp >> UARTPFIFO_TXSIZE_OFF) &
+					    UARTPFIFO_FIFOSIZE_MASK);
 	sport->port.fifosize = sport->txfifo_size;
 
-	sport->rxfifo_size = 0x1 << (((temp >> UARTPFIFO_RXSIZE_OFF) &
-		UARTPFIFO_FIFOSIZE_MASK) + 1);
+	sport->rxfifo_size = UARTFIFO_DEPTH((temp >> UARTPFIFO_RXSIZE_OFF) &
+					    UARTPFIFO_FIFOSIZE_MASK);
 
 	spin_lock_irqsave(&sport->port.lock, flags);
 
@@ -1432,13 +1431,12 @@ static int lpuart32_startup(struct uart_port *port)
 	/* determine FIFO size */
 	temp = lpuart32_read(&sport->port, UARTFIFO);
 
-	sport->txfifo_size = 0x1 << (((temp >> UARTFIFO_TXSIZE_OFF) &
-		UARTFIFO_FIFOSIZE_MASK) - 1);
-
+	sport->txfifo_size = UARTFIFO_DEPTH((temp >> UARTFIFO_TXSIZE_OFF) &
+					    UARTFIFO_FIFOSIZE_MASK);
 	sport->port.fifosize = sport->txfifo_size;
 
-	sport->rxfifo_size = 0x1 << (((temp >> UARTFIFO_RXSIZE_OFF) &
-		UARTFIFO_FIFOSIZE_MASK) - 1);
+	sport->rxfifo_size = UARTFIFO_DEPTH((temp >> UARTFIFO_RXSIZE_OFF) &
+					    UARTFIFO_FIFOSIZE_MASK);
 
 	spin_lock_irqsave(&sport->port.lock, flags);
 
@@ -2288,6 +2286,7 @@ static int __init lpuart32_imx_early_console_setup(struct earlycon_device *devic
 OF_EARLYCON_DECLARE(lpuart, "fsl,vf610-lpuart", lpuart_early_console_setup);
 OF_EARLYCON_DECLARE(lpuart32, "fsl,ls1021a-lpuart", lpuart32_early_console_setup);
 OF_EARLYCON_DECLARE(lpuart32, "fsl,imx7ulp-lpuart", lpuart32_imx_early_console_setup);
+OF_EARLYCON_DECLARE(lpuart32, "fsl,imx8qxp-lpuart", lpuart32_imx_early_console_setup);
 EARLYCON_DECLARE(lpuart, lpuart_early_console_setup);
 EARLYCON_DECLARE(lpuart32, lpuart32_early_console_setup);
 
@@ -2319,8 +2318,6 @@ static int lpuart_probe(struct platform_device *pdev)
 	sport = devm_kzalloc(&pdev->dev, sizeof(*sport), GFP_KERNEL);
 	if (!sport)
 		return -ENOMEM;
-
-	pdev->dev.coherent_dma_mask = 0;
 
 	ret = of_alias_get_id(np, "serial");
 	if (ret < 0) {

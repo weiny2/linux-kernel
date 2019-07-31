@@ -1369,7 +1369,10 @@ smb2_ioctl_query_info(const unsigned int xid,
 	struct cifs_fid fid;
 	struct kvec qi_iov[1];
 	struct kvec io_iov[SMB2_IOCTL_IOV_SIZE];
+	struct kvec si_iov[SMB2_SET_INFO_IOV_SIZE];
 	struct kvec close_iov[1];
+	unsigned int size[2];
+	void *data[2];
 
 	memset(rqst, 0, sizeof(rqst));
 	resp_buftype[0] = resp_buftype[1] = resp_buftype[2] = CIFS_NO_BUFFER;
@@ -1404,7 +1407,6 @@ smb2_ioctl_query_info(const unsigned int xid,
 
 	memset(&oparms, 0, sizeof(oparms));
 	oparms.tcon = tcon;
-	oparms.desired_access = FILE_READ_ATTRIBUTES | READ_CONTROL;
 	oparms.disposition = FILE_OPEN;
 	if (is_dir)
 		oparms.create_options = CREATE_NOT_FILE;
@@ -1413,9 +1415,6 @@ smb2_ioctl_query_info(const unsigned int xid,
 	oparms.fid = &fid;
 	oparms.reconnect = false;
 
-	/*
-	 * FSCTL codes encode the special access they need in the fsctl code.
-	 */
 	if (qi.flags & PASSTHRU_FSCTL) {
 		switch (qi.info_type & FSCTL_DEVICE_ACCESS_MASK) {
 		case FSCTL_DEVICE_ACCESS_FILE_READ_WRITE_ACCESS:
@@ -1431,6 +1430,10 @@ smb2_ioctl_query_info(const unsigned int xid,
 			oparms.desired_access = GENERIC_WRITE;
 			break;
 		}
+	} else if (qi.flags & PASSTHRU_SET_INFO) {
+		oparms.desired_access = GENERIC_WRITE;
+	} else {
+		oparms.desired_access = FILE_READ_ATTRIBUTES | READ_CONTROL;
 	}
 
 	rc = SMB2_open_init(tcon, &rqst[0], &oplock, &oparms, path);
@@ -1453,6 +1456,24 @@ smb2_ioctl_query_info(const unsigned int xid,
 					     qi.info_type, true, buffer,
 					     qi.output_buffer_length,
 					     CIFSMaxBufSize);
+		}
+	} else if (qi.flags == PASSTHRU_SET_INFO) {
+		/* Can eventually relax perm check since server enforces too */
+		if (!capable(CAP_SYS_ADMIN))
+			rc = -EPERM;
+		else  {
+			memset(&si_iov, 0, sizeof(si_iov));
+			rqst[1].rq_iov = si_iov;
+			rqst[1].rq_nvec = 1;
+
+			size[0] = 8;
+			data[0] = buffer;
+
+			rc = SMB2_set_info_init(tcon, &rqst[1],
+					COMPOUND_FID, COMPOUND_FID,
+					current->tgid,
+					FILE_END_OF_FILE_INFORMATION,
+					SMB2_O_INFO_FILE, 0, data, size);
 		}
 	} else if (qi.flags == PASSTHRU_QUERY_INFO) {
 		memset(&qi_iov, 0, sizeof(qi_iov));
@@ -4070,7 +4091,6 @@ receive_encrypted_standard(struct TCP_Server_Info *server,
 {
 	int ret, length;
 	char *buf = server->smallbuf;
-	char *tmpbuf;
 	struct smb2_sync_hdr *shdr;
 	unsigned int pdu_length = server->pdu_size;
 	unsigned int buf_size;
@@ -4100,18 +4120,15 @@ receive_encrypted_standard(struct TCP_Server_Info *server,
 		return length;
 
 	next_is_large = server->large_buf;
- one_more:
+one_more:
 	shdr = (struct smb2_sync_hdr *)buf;
 	if (shdr->NextCommand) {
-		if (next_is_large) {
-			tmpbuf = server->bigbuf;
+		if (next_is_large)
 			next_buffer = (char *)cifs_buf_get();
-		} else {
-			tmpbuf = server->smallbuf;
+		else
 			next_buffer = (char *)cifs_small_buf_get();
-		}
 		memcpy(next_buffer,
-		       tmpbuf + le32_to_cpu(shdr->NextCommand),
+		       buf + le32_to_cpu(shdr->NextCommand),
 		       pdu_length - le32_to_cpu(shdr->NextCommand));
 	}
 
@@ -4140,12 +4157,21 @@ receive_encrypted_standard(struct TCP_Server_Info *server,
 		pdu_length -= le32_to_cpu(shdr->NextCommand);
 		server->large_buf = next_is_large;
 		if (next_is_large)
-			server->bigbuf = next_buffer;
+			server->bigbuf = buf = next_buffer;
 		else
-			server->smallbuf = next_buffer;
-
-		buf += le32_to_cpu(shdr->NextCommand);
+			server->smallbuf = buf = next_buffer;
 		goto one_more;
+	} else if (ret != 0) {
+		/*
+		 * ret != 0 here means that we didn't get to handle_mid() thus
+		 * server->smallbuf and server->bigbuf are still valid. We need
+		 * need to free next_buffer because it is not going to be used
+		 * anywhere.
+		 */
+		if (next_is_large)
+			free_rsp_buf(CIFS_LARGE_BUFFER, next_buffer);
+		else
+			free_rsp_buf(CIFS_SMALL_BUFFER, next_buffer);
 	}
 
 	return ret;

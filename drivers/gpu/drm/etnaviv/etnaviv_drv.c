@@ -4,8 +4,16 @@
  */
 
 #include <linux/component.h>
+#include <linux/dma-mapping.h>
 #include <linux/of_platform.h>
+#include <linux/uaccess.h>
+
+#include <drm/drm_debugfs.h>
+#include <drm/drm_drv.h>
+#include <drm/drm_file.h>
+#include <drm/drm_ioctl.h>
 #include <drm/drm_of.h>
+#include <drm/drm_prime.h>
 
 #include "etnaviv_cmdbuf.h"
 #include "etnaviv_drv.h"
@@ -430,17 +438,17 @@ static int etnaviv_ioctl_pm_query_sig(struct drm_device *dev, void *data,
 static const struct drm_ioctl_desc etnaviv_ioctls[] = {
 #define ETNA_IOCTL(n, func, flags) \
 	DRM_IOCTL_DEF_DRV(ETNAVIV_##n, etnaviv_ioctl_##func, flags)
-	ETNA_IOCTL(GET_PARAM,    get_param,    DRM_AUTH|DRM_RENDER_ALLOW),
-	ETNA_IOCTL(GEM_NEW,      gem_new,      DRM_AUTH|DRM_RENDER_ALLOW),
-	ETNA_IOCTL(GEM_INFO,     gem_info,     DRM_AUTH|DRM_RENDER_ALLOW),
-	ETNA_IOCTL(GEM_CPU_PREP, gem_cpu_prep, DRM_AUTH|DRM_RENDER_ALLOW),
-	ETNA_IOCTL(GEM_CPU_FINI, gem_cpu_fini, DRM_AUTH|DRM_RENDER_ALLOW),
-	ETNA_IOCTL(GEM_SUBMIT,   gem_submit,   DRM_AUTH|DRM_RENDER_ALLOW),
-	ETNA_IOCTL(WAIT_FENCE,   wait_fence,   DRM_AUTH|DRM_RENDER_ALLOW),
-	ETNA_IOCTL(GEM_USERPTR,  gem_userptr,  DRM_AUTH|DRM_RENDER_ALLOW),
-	ETNA_IOCTL(GEM_WAIT,     gem_wait,     DRM_AUTH|DRM_RENDER_ALLOW),
-	ETNA_IOCTL(PM_QUERY_DOM, pm_query_dom, DRM_AUTH|DRM_RENDER_ALLOW),
-	ETNA_IOCTL(PM_QUERY_SIG, pm_query_sig, DRM_AUTH|DRM_RENDER_ALLOW),
+	ETNA_IOCTL(GET_PARAM,    get_param,    DRM_RENDER_ALLOW),
+	ETNA_IOCTL(GEM_NEW,      gem_new,      DRM_RENDER_ALLOW),
+	ETNA_IOCTL(GEM_INFO,     gem_info,     DRM_RENDER_ALLOW),
+	ETNA_IOCTL(GEM_CPU_PREP, gem_cpu_prep, DRM_RENDER_ALLOW),
+	ETNA_IOCTL(GEM_CPU_FINI, gem_cpu_fini, DRM_RENDER_ALLOW),
+	ETNA_IOCTL(GEM_SUBMIT,   gem_submit,   DRM_RENDER_ALLOW),
+	ETNA_IOCTL(WAIT_FENCE,   wait_fence,   DRM_RENDER_ALLOW),
+	ETNA_IOCTL(GEM_USERPTR,  gem_userptr,  DRM_RENDER_ALLOW),
+	ETNA_IOCTL(GEM_WAIT,     gem_wait,     DRM_RENDER_ALLOW),
+	ETNA_IOCTL(PM_QUERY_DOM, pm_query_dom, DRM_RENDER_ALLOW),
+	ETNA_IOCTL(PM_QUERY_SIG, pm_query_sig, DRM_RENDER_ALLOW),
 };
 
 static const struct vm_operations_struct vm_ops = {
@@ -462,17 +470,13 @@ static const struct file_operations fops = {
 };
 
 static struct drm_driver etnaviv_drm_driver = {
-	.driver_features    = DRIVER_GEM |
-				DRIVER_PRIME |
-				DRIVER_RENDER,
+	.driver_features    = DRIVER_GEM | DRIVER_RENDER,
 	.open               = etnaviv_open,
 	.postclose           = etnaviv_postclose,
 	.gem_free_object_unlocked = etnaviv_gem_free_object,
 	.gem_vm_ops         = &vm_ops,
 	.prime_handle_to_fd = drm_gem_prime_handle_to_fd,
 	.prime_fd_to_handle = drm_gem_prime_fd_to_handle,
-	.gem_prime_export   = drm_gem_prime_export,
-	.gem_prime_import   = drm_gem_prime_import,
 	.gem_prime_pin      = etnaviv_gem_prime_pin,
 	.gem_prime_unpin    = etnaviv_gem_prime_unpin,
 	.gem_prime_get_sg_table = etnaviv_gem_prime_get_sg_table,

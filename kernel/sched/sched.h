@@ -483,7 +483,8 @@ struct cfs_rq {
 	struct load_weight	load;
 	unsigned long		runnable_weight;
 	unsigned int		nr_running;
-	unsigned int		h_nr_running;
+	unsigned int		h_nr_running;      /* SCHED_{NORMAL,BATCH,IDLE} */
+	unsigned int		idle_h_nr_running; /* SCHED_IDLE */
 
 	u64			exec_clock;
 	u64			min_vruntime;
@@ -776,9 +777,6 @@ struct root_domain {
 	 */
 	struct perf_domain __rcu *pd;
 };
-
-extern struct root_domain def_root_domain;
-extern struct mutex sched_domains_mutex;
 
 extern void init_defrootdomain(void);
 extern int sched_init_domains(const struct cpumask *cpu_map);
@@ -1261,16 +1259,18 @@ enum numa_topology_type {
 extern enum numa_topology_type sched_numa_topology_type;
 extern int sched_max_numa_distance;
 extern bool find_numa_distance(int distance);
-#endif
-
-#ifdef CONFIG_NUMA
 extern void sched_init_numa(void);
 extern void sched_domains_numa_masks_set(unsigned int cpu);
 extern void sched_domains_numa_masks_clear(unsigned int cpu);
+extern int sched_numa_find_closest(const struct cpumask *cpus, int cpu);
 #else
 static inline void sched_init_numa(void) { }
 static inline void sched_domains_numa_masks_set(unsigned int cpu) { }
 static inline void sched_domains_numa_masks_clear(unsigned int cpu) { }
+static inline int sched_numa_find_closest(const struct cpumask *cpus, int cpu)
+{
+	return nr_cpu_ids;
+}
 #endif
 
 #ifdef CONFIG_NUMA_BALANCING

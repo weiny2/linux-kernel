@@ -516,17 +516,32 @@ static int swdev_get_port_parent_id(struct net_device *dev,
 	return 0;
 }
 
+static int port_get_phys_name(struct net_device *netdev, char *name,
+			      size_t len)
+{
+	struct ethsw_port_priv *port_priv = netdev_priv(netdev);
+	int err;
+
+	err = snprintf(name, len, "p%d", port_priv->idx);
+	if (err >= len)
+		return -EINVAL;
+
+	return 0;
+}
+
 static const struct net_device_ops ethsw_port_ops = {
 	.ndo_open		= port_open,
 	.ndo_stop		= port_stop,
 
 	.ndo_set_mac_address	= eth_mac_addr,
+	.ndo_get_stats64	= port_get_stats,
 	.ndo_change_mtu		= port_change_mtu,
 	.ndo_has_offload_stats	= port_has_offload_stats,
 	.ndo_get_offload_stats	= port_get_offload_stats,
 
 	.ndo_start_xmit		= port_dropframe,
 	.ndo_get_port_parent_id	= swdev_get_port_parent_id,
+	.ndo_get_phys_port_name = port_get_phys_name,
 };
 
 static void ethsw_links_state_update(struct ethsw_core *ethsw)
@@ -673,11 +688,12 @@ static int port_attr_br_flags_set(struct net_device *netdev,
 		return 0;
 
 	/* Learning is enabled per switch */
-	err = ethsw_set_learning(port_priv->ethsw_data, flags & BR_LEARNING);
+	err = ethsw_set_learning(port_priv->ethsw_data,
+				 !!(flags & BR_LEARNING));
 	if (err)
 		goto exit;
 
-	err = ethsw_port_set_flood(port_priv, flags & BR_FLOOD);
+	err = ethsw_port_set_flood(port_priv, !!(flags & BR_FLOOD));
 
 exit:
 	return err;
@@ -1458,13 +1474,23 @@ static int ethsw_probe_port(struct ethsw_core *ethsw, u16 port_idx)
 	err = register_netdev(port_netdev);
 	if (err < 0) {
 		dev_err(dev, "register_netdev error %d\n", err);
-		free_netdev(port_netdev);
-		return err;
+		goto err_register_netdev;
 	}
 
 	ethsw->ports[port_idx] = port_priv;
 
-	return ethsw_port_init(port_priv, port_idx);
+	err = ethsw_port_init(port_priv, port_idx);
+	if (err)
+		goto err_ethsw_port_init;
+
+	return 0;
+
+err_ethsw_port_init:
+	unregister_netdev(port_netdev);
+err_register_netdev:
+	free_netdev(port_netdev);
+
+	return err;
 }
 
 static int ethsw_probe(struct fsl_mc_device *sw_dev)
@@ -1482,7 +1508,8 @@ static int ethsw_probe(struct fsl_mc_device *sw_dev)
 	ethsw->dev = dev;
 	dev_set_drvdata(dev, ethsw);
 
-	err = fsl_mc_portal_allocate(sw_dev, 0, &ethsw->mc_io);
+	err = fsl_mc_portal_allocate(sw_dev, FSL_MC_IO_ATOMIC_CONTEXT_PORTAL,
+				     &ethsw->mc_io);
 	if (err) {
 		if (err == -ENXIO)
 			err = -EPROBE_DEFER;

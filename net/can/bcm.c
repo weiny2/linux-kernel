@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: ((GPL-2.0 WITH Linux-syscall-note) OR BSD-3-Clause)
 /*
  * bcm.c - Broadcast Manager to filter/send (cyclic) CAN content
  *
@@ -1679,6 +1680,13 @@ static int bcm_recvmsg(struct socket *sock, struct msghdr *msg, size_t size,
 	return size;
 }
 
+int bcm_sock_no_ioctlcmd(struct socket *sock, unsigned int cmd,
+			 unsigned long arg)
+{
+	/* no ioctls for socket layer -> hand it down to NIC layer */
+	return -ENOIOCTLCMD;
+}
+
 static const struct proto_ops bcm_ops = {
 	.family        = PF_CAN,
 	.release       = bcm_release,
@@ -1688,7 +1696,7 @@ static const struct proto_ops bcm_ops = {
 	.accept        = sock_no_accept,
 	.getname       = sock_no_getname,
 	.poll          = datagram_poll,
-	.ioctl         = can_ioctl,	/* use can_ioctl() from af_can.c */
+	.ioctl         = bcm_sock_no_ioctlcmd,
 	.gettstamp     = sock_gettstamp,
 	.listen        = sock_no_listen,
 	.shutdown      = sock_no_shutdown,

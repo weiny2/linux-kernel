@@ -114,14 +114,12 @@ static const struct v4l2_fmtdesc omap_formats[] = {
 		 *      Byte 0                    Byte 1
 		 *      g2 g1 g0 b4 b3 b2 b1 b0   r4 r3 r2 r1 r0 g5 g4 g3
 		 */
-		.description = "RGB565, le",
 		.pixelformat = V4L2_PIX_FMT_RGB565,
 	},
 	{
 		/* Note:  V4L2 defines RGB32 as: RGB-8-8-8-8  we use
 		 *  this for RGB24 unpack mode, the last 8 bits are ignored
 		 * */
-		.description = "RGB32, le",
 		.pixelformat = V4L2_PIX_FMT_RGB32,
 	},
 	{
@@ -129,15 +127,12 @@ static const struct v4l2_fmtdesc omap_formats[] = {
 		 *        this for RGB24 packed mode
 		 *
 		 */
-		.description = "RGB24, le",
 		.pixelformat = V4L2_PIX_FMT_RGB24,
 	},
 	{
-		.description = "YUYV (YUV 4:2:2), packed",
 		.pixelformat = V4L2_PIX_FMT_YUYV,
 	},
 	{
-		.description = "UYVY, packed",
 		.pixelformat = V4L2_PIX_FMT_UYVY,
 	},
 };
@@ -841,7 +836,7 @@ static void omap_vout_buffer_release(struct videobuf_queue *q,
 static __poll_t omap_vout_poll(struct file *file,
 				   struct poll_table_struct *wait)
 {
-	struct omap_vout_device *vout = file->private_data;
+	struct omap_vout_device *vout = video_drvdata(file);
 	struct videobuf_queue *q = &vout->vbq;
 
 	return videobuf_poll_stream(file, q, wait);
@@ -876,7 +871,7 @@ static int omap_vout_mmap(struct file *file, struct vm_area_struct *vma)
 	void *pos;
 	unsigned long start = vma->vm_start;
 	unsigned long size = (vma->vm_end - vma->vm_start);
-	struct omap_vout_device *vout = file->private_data;
+	struct omap_vout_device *vout = video_drvdata(file);
 	struct videobuf_queue *q = &vout->vbq;
 
 	v4l2_dbg(1, debug, &vout->vid_dev->v4l2_dev,
@@ -935,7 +930,7 @@ static int omap_vout_release(struct file *file)
 	unsigned int ret, i;
 	struct videobuf_queue *q;
 	struct omapvideo_info *ovid;
-	struct omap_vout_device *vout = file->private_data;
+	struct omap_vout_device *vout = video_drvdata(file);
 
 	v4l2_dbg(1, debug, &vout->vid_dev->v4l2_dev, "Entering %s\n", __func__);
 	ovid = &vout->vid_info;
@@ -988,7 +983,7 @@ static int omap_vout_release(struct file *file)
 		vout->mmap_count = 0;
 
 	vout->opened -= 1;
-	file->private_data = NULL;
+	v4l2_fh_release(file);
 
 	if (vout->buffer_allocated)
 		videobuf_mmap_free(q);
@@ -1000,9 +995,8 @@ static int omap_vout_release(struct file *file)
 static int omap_vout_open(struct file *file)
 {
 	struct videobuf_queue *q;
-	struct omap_vout_device *vout = NULL;
-
-	vout = video_drvdata(file);
+	struct omap_vout_device *vout = video_drvdata(file);
+	int ret;
 
 	if (vout == NULL)
 		return -ENODEV;
@@ -1013,9 +1007,11 @@ static int omap_vout_open(struct file *file)
 	if (vout->opened)
 		return -EBUSY;
 
-	vout->opened += 1;
+	ret = v4l2_fh_open(file);
+	if (ret)
+		return ret;
 
-	file->private_data = vout;
+	vout->opened += 1;
 	vout->type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
 
 	q = &vout->vbq;
@@ -1039,15 +1035,11 @@ static int omap_vout_open(struct file *file)
 static int vidioc_querycap(struct file *file, void *fh,
 		struct v4l2_capability *cap)
 {
-	struct omap_vout_device *vout = fh;
+	struct omap_vout_device *vout = video_drvdata(file);
 
 	strscpy(cap->driver, VOUT_NAME, sizeof(cap->driver));
 	strscpy(cap->card, vout->vfd->name, sizeof(cap->card));
 	cap->bus_info[0] = '\0';
-	cap->device_caps = V4L2_CAP_STREAMING | V4L2_CAP_VIDEO_OUTPUT |
-		V4L2_CAP_VIDEO_OUTPUT_OVERLAY;
-	cap->capabilities = cap->device_caps | V4L2_CAP_DEVICE_CAPS;
-
 	return 0;
 }
 
@@ -1060,8 +1052,6 @@ static int vidioc_enum_fmt_vid_out(struct file *file, void *fh,
 		return -EINVAL;
 
 	fmt->flags = omap_formats[index].flags;
-	strscpy(fmt->description, omap_formats[index].description,
-		sizeof(fmt->description));
 	fmt->pixelformat = omap_formats[index].pixelformat;
 
 	return 0;
@@ -1070,7 +1060,7 @@ static int vidioc_enum_fmt_vid_out(struct file *file, void *fh,
 static int vidioc_g_fmt_vid_out(struct file *file, void *fh,
 			struct v4l2_format *f)
 {
-	struct omap_vout_device *vout = fh;
+	struct omap_vout_device *vout = video_drvdata(file);
 
 	f->fmt.pix = vout->pix;
 	return 0;
@@ -1083,7 +1073,7 @@ static int vidioc_try_fmt_vid_out(struct file *file, void *fh,
 	struct omap_overlay *ovl;
 	struct omapvideo_info *ovid;
 	struct omap_video_timings *timing;
-	struct omap_vout_device *vout = fh;
+	struct omap_vout_device *vout = video_drvdata(file);
 	struct omap_dss_device *dssdev;
 
 	ovid = &vout->vid_info;
@@ -1110,7 +1100,7 @@ static int vidioc_s_fmt_vid_out(struct file *file, void *fh,
 	struct omap_overlay *ovl;
 	struct omapvideo_info *ovid;
 	struct omap_video_timings *timing;
-	struct omap_vout_device *vout = fh;
+	struct omap_vout_device *vout = video_drvdata(file);
 	struct omap_dss_device *dssdev;
 
 	if (vout->streaming)
@@ -1176,7 +1166,7 @@ static int vidioc_try_fmt_vid_overlay(struct file *file, void *fh,
 			struct v4l2_format *f)
 {
 	int ret = 0;
-	struct omap_vout_device *vout = fh;
+	struct omap_vout_device *vout = video_drvdata(file);
 	struct omap_overlay *ovl;
 	struct omapvideo_info *ovid;
 	struct v4l2_window *win = &f->fmt.win;
@@ -1202,7 +1192,7 @@ static int vidioc_s_fmt_vid_overlay(struct file *file, void *fh,
 	int ret = 0;
 	struct omap_overlay *ovl;
 	struct omapvideo_info *ovid;
-	struct omap_vout_device *vout = fh;
+	struct omap_vout_device *vout = video_drvdata(file);
 	struct v4l2_window *win = &f->fmt.win;
 
 	mutex_lock(&vout->lock);
@@ -1229,7 +1219,7 @@ static int vidioc_g_fmt_vid_overlay(struct file *file, void *fh,
 	u32 key_value =  0;
 	struct omap_overlay *ovl;
 	struct omapvideo_info *ovid;
-	struct omap_vout_device *vout = fh;
+	struct omap_vout_device *vout = video_drvdata(file);
 	struct omap_overlay_manager_info info;
 	struct v4l2_window *win = &f->fmt.win;
 
@@ -1250,7 +1240,7 @@ static int vidioc_g_fmt_vid_overlay(struct file *file, void *fh,
 
 static int vidioc_g_selection(struct file *file, void *fh, struct v4l2_selection *sel)
 {
-	struct omap_vout_device *vout = fh;
+	struct omap_vout_device *vout = video_drvdata(file);
 	struct v4l2_pix_format *pix = &vout->pix;
 
 	if (sel->type != V4L2_BUF_TYPE_VIDEO_OUTPUT)
@@ -1277,7 +1267,7 @@ static int vidioc_g_selection(struct file *file, void *fh, struct v4l2_selection
 static int vidioc_s_selection(struct file *file, void *fh, struct v4l2_selection *sel)
 {
 	int ret = -EINVAL;
-	struct omap_vout_device *vout = fh;
+	struct omap_vout_device *vout = video_drvdata(file);
 	struct omapvideo_info *ovid;
 	struct omap_overlay *ovl;
 	struct omap_video_timings *timing;
@@ -1419,7 +1409,7 @@ static int vidioc_reqbufs(struct file *file, void *fh,
 {
 	int ret = 0;
 	unsigned int i, num_buffers = 0;
-	struct omap_vout_device *vout = fh;
+	struct omap_vout_device *vout = video_drvdata(file);
 	struct videobuf_queue *q = &vout->vbq;
 
 	if (req->type != V4L2_BUF_TYPE_VIDEO_OUTPUT)
@@ -1484,7 +1474,7 @@ reqbuf_err:
 static int vidioc_querybuf(struct file *file, void *fh,
 			struct v4l2_buffer *b)
 {
-	struct omap_vout_device *vout = fh;
+	struct omap_vout_device *vout = video_drvdata(file);
 
 	return videobuf_querybuf(&vout->vbq, b);
 }
@@ -1492,7 +1482,7 @@ static int vidioc_querybuf(struct file *file, void *fh,
 static int vidioc_qbuf(struct file *file, void *fh,
 			struct v4l2_buffer *buffer)
 {
-	struct omap_vout_device *vout = fh;
+	struct omap_vout_device *vout = video_drvdata(file);
 	struct videobuf_queue *q = &vout->vbq;
 
 	if ((V4L2_BUF_TYPE_VIDEO_OUTPUT != buffer->type) ||
@@ -1519,7 +1509,7 @@ static int vidioc_qbuf(struct file *file, void *fh,
 
 static int vidioc_dqbuf(struct file *file, void *fh, struct v4l2_buffer *b)
 {
-	struct omap_vout_device *vout = fh;
+	struct omap_vout_device *vout = video_drvdata(file);
 	struct videobuf_queue *q = &vout->vbq;
 
 	int ret;
@@ -1547,7 +1537,7 @@ static int vidioc_streamon(struct file *file, void *fh, enum v4l2_buf_type i)
 {
 	int ret = 0, j;
 	u32 addr = 0, mask = 0;
-	struct omap_vout_device *vout = fh;
+	struct omap_vout_device *vout = video_drvdata(file);
 	struct videobuf_queue *q = &vout->vbq;
 	struct omapvideo_info *ovid = &vout->vid_info;
 
@@ -1632,7 +1622,7 @@ static int vidioc_streamoff(struct file *file, void *fh, enum v4l2_buf_type i)
 {
 	u32 mask = 0;
 	int ret = 0, j;
-	struct omap_vout_device *vout = fh;
+	struct omap_vout_device *vout = video_drvdata(file);
 	struct omapvideo_info *ovid = &vout->vid_info;
 
 	if (!vout->streaming)
@@ -1670,7 +1660,7 @@ static int vidioc_s_fbuf(struct file *file, void *fh,
 	int enable = 0;
 	struct omap_overlay *ovl;
 	struct omapvideo_info *ovid;
-	struct omap_vout_device *vout = fh;
+	struct omap_vout_device *vout = video_drvdata(file);
 	struct omap_overlay_manager_info info;
 	enum omap_dss_trans_key_type key_type = OMAP_DSS_COLOR_KEY_GFX_DST;
 
@@ -1741,7 +1731,7 @@ static int vidioc_g_fbuf(struct file *file, void *fh,
 {
 	struct omap_overlay *ovl;
 	struct omapvideo_info *ovid;
-	struct omap_vout_device *vout = fh;
+	struct omap_vout_device *vout = video_drvdata(file);
 	struct omap_overlay_manager_info info;
 
 	ovid = &vout->vid_info;
@@ -1870,6 +1860,8 @@ static int __init omap_vout_setup_video_data(struct omap_vout_device *vout)
 	vfd->fops = &omap_vout_fops;
 	vfd->v4l2_dev = &vout->vid_dev->v4l2_dev;
 	vfd->vfl_dir = VFL_DIR_TX;
+	vfd->device_caps = V4L2_CAP_STREAMING | V4L2_CAP_VIDEO_OUTPUT |
+			   V4L2_CAP_VIDEO_OUTPUT_OVERLAY;
 	mutex_init(&vout->lock);
 
 	vfd->minor = -1;
