@@ -7,34 +7,6 @@
 #include <linux/compiler.h>
 #include <linux/log2.h>
 
-/*
- * Runtime evaluation of get_order()
- */
-static inline __attribute_const__
-int __get_order(unsigned long size)
-{
-	int order;
-
-	if (__builtin_constant_p(size)) {
-		if (!size)
-			return BITS_PER_LONG - PAGE_SHIFT;
-
-		if (size < (1UL << PAGE_SHIFT))
-			return 0;
-
-		return ilog2((size) - 1) - PAGE_SHIFT + 1;
-	}
-
-	size--;
-	size >>= PAGE_SHIFT;
-#if BITS_PER_LONG == 32
-	order = fls(size);
-#else
-	order = fls64(size);
-#endif
-	return order;
-}
-
 /**
  * get_order - Determine the allocation order of a memory size
  * @size: The size for which to get the order
@@ -57,10 +29,29 @@ int __get_order(unsigned long size)
  * This function may be used to initialise variables with compile time
  * evaluations of constants.
  */
-#define get_order(n)						\
-(								\
-	__get_order(n)						\
-)
+static inline __attribute_const__ int get_order(unsigned long size)
+{
+	int order;
+
+	if (__builtin_constant_p(size)) {
+		if (!size)
+			return BITS_PER_LONG - PAGE_SHIFT;
+
+		if (size < (1UL << PAGE_SHIFT))
+			return 0;
+
+		return ilog2((size) - 1) - PAGE_SHIFT + 1;
+	}
+
+	size--;
+	size >>= PAGE_SHIFT;
+#if BITS_PER_LONG == 32
+	order = fls(size);
+#else
+	order = fls64(size);
+#endif
+	return order;
+}
 
 #endif	/* __ASSEMBLY__ */
 
