@@ -538,7 +538,7 @@ static int queue_pages_pte_range(pmd_t *pmd, unsigned long addr,
 			 * need migrate other LRU pages.
 			 */
 			if (migrate_page_add(page, qp->pagelist, flags))
-				has_unmovable |= true;
+				has_unmovable = true;
 		} else
 			break;
 	}
@@ -971,17 +971,6 @@ static int migrate_page_add(struct page *page, struct list_head *pagelist,
 				unsigned long flags)
 {
 	struct page *head = compound_head(page);
-
-	/*
-	 * Non-movable page may reach here.  And, there may be
-	 * temporaty off LRU pages or non-LRU movable pages.
-	 * Treat them as unmovable pages since they can't be
-	 * isolated, so they can't be moved at the moment.  It
-	 * should return -EIO for this case too.
-	 */
-	if (!PageLRU(head) && (flags & MPOL_MF_STRICT))
-		return -EIO;
-
 	/*
 	 * Avoid migrating a page that is shared with others.
 	 */
@@ -991,6 +980,15 @@ static int migrate_page_add(struct page *page, struct list_head *pagelist,
 			mod_node_page_state(page_pgdat(head),
 				NR_ISOLATED_ANON + page_is_file_cache(head),
 				hpage_nr_pages(head));
+		} else if (flags & MPOL_MF_STRICT) {
+			/*
+			 * Non-movable page may reach here.  And, there may be
+			 * temporary off LRU pages or non-LRU movable pages.
+			 * Treat them as unmovable pages since they can't be
+			 * isolated, so they can't be moved at the moment.  It
+			 * should return -EIO for this case too.
+			 */
+			return -EIO;
 		}
 	}
 
