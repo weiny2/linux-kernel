@@ -192,7 +192,9 @@ static int __replace_page(struct vm_area_struct *vma, unsigned long addr,
 		page_add_new_anon_rmap(new_page, vma, addr, false);
 		mem_cgroup_commit_charge(new_page, memcg, false, false);
 		lru_cache_add_active_or_unevictable(new_page, vma);
-	}
+	} else
+		/* no new page, just dec_mm_counter for old_page */
+		dec_mm_counter(mm, MM_ANONPAGES);
 
 	if (!PageAnon(old_page)) {
 		dec_mm_counter(mm, mm_counter_file(old_page));
@@ -496,6 +498,10 @@ retry:
 		ref_ctr_updated = 1;
 	}
 
+	ret = 0;
+	if (!is_register && !PageAnon(old_page))
+		goto put_old;
+
 	ret = anon_vma_prepare(vma);
 	if (ret)
 		goto put_old;
@@ -509,10 +515,11 @@ retry:
 	copy_highpage(new_page, old_page);
 	copy_to_page(new_page, vaddr, &opcode, UPROBE_SWBP_INSN_SIZE);
 
-	/* try orig_page only for unregister and anonymous old_page */
-	if (!is_register && PageAnon(old_page)) {
+	if (!is_register) {
 		struct page *orig_page;
 		pgoff_t index;
+
+		VM_BUG_ON_PAGE(!PageAnon(old_page), old_page);
 
 		index = vaddr_to_offset(vma, vaddr & PAGE_MASK) >> PAGE_SHIFT;
 		orig_page = find_get_page(vma->vm_file->f_inode->i_mapping,
@@ -524,9 +531,6 @@ retry:
 				/* let go new_page */
 				put_page(new_page);
 				new_page = NULL;
-
-				/* dec_mm_counter for old_page */
-				dec_mm_counter(mm, MM_ANONPAGES);
 			}
 			put_page(orig_page);
 		}
