@@ -30,6 +30,7 @@
 #include <linux/backing-dev.h>
 #include <linux/pagevec.h>
 #include <linux/cleancache.h>
+#include <linux/psi.h>
 #include "internal.h"
 
 /*
@@ -389,6 +390,8 @@ mpage_readpages(struct address_space *mapping, struct list_head *pages,
 		.get_block = get_block,
 		.is_readahead = true,
 	};
+	bool refault = false;
+	unsigned long pflags;
 	unsigned page_idx;
 
 	for (page_idx = 0; page_idx < nr_pages; page_idx++) {
@@ -404,10 +407,16 @@ mpage_readpages(struct address_space *mapping, struct list_head *pages,
 			args.bio = do_mpage_readpage(&args);
 		}
 		put_page(page);
+		if (PageWorkingset(page) && !refault) {
+			psi_memstall_enter(&pflags);
+			refault = true;
+		}
 	}
 	BUG_ON(!list_empty(pages));
 	if (args.bio)
 		mpage_bio_submit(REQ_OP_READ, REQ_RAHEAD, args.bio);
+	if (refault)
+		psi_memstall_leave(&pflags);
 	return 0;
 }
 EXPORT_SYMBOL(mpage_readpages);

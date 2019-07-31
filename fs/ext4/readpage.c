@@ -44,6 +44,7 @@
 #include <linux/backing-dev.h>
 #include <linux/pagevec.h>
 #include <linux/cleancache.h>
+#include <linux/psi.h>
 
 #include "ext4.h"
 
@@ -116,6 +117,8 @@ int ext4_mpage_readpages(struct address_space *mapping,
 	int length;
 	unsigned relative_block = 0;
 	struct ext4_map_blocks map;
+	bool refault = false;
+	unsigned long pflags;
 
 	map.m_pblk = 0;
 	map.m_lblk = 0;
@@ -134,6 +137,10 @@ int ext4_mpage_readpages(struct address_space *mapping,
 			if (add_to_page_cache_lru(page, mapping, page->index,
 				  readahead_gfp_mask(mapping)))
 				goto next_page;
+			if (PageWorkingset(page) && !refault) {
+				psi_memstall_enter(&pflags);
+				refault = true;
+			}
 		}
 
 		if (page_has_buffers(page))
@@ -291,5 +298,7 @@ int ext4_mpage_readpages(struct address_space *mapping,
 	BUG_ON(pages && !list_empty(pages));
 	if (bio)
 		submit_bio(bio);
+	if (refault)
+		psi_memstall_leave(&pflags);
 	return 0;
 }

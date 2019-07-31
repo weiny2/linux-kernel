@@ -22,6 +22,7 @@
 #include <linux/mm_inline.h>
 #include <linux/blk-cgroup.h>
 #include <linux/fadvise.h>
+#include <linux/psi.h>
 
 #include "internal.h"
 
@@ -92,6 +93,9 @@ int read_cache_pages(struct address_space *mapping, struct list_head *pages,
 	int ret = 0;
 
 	while (!list_empty(pages)) {
+		unsigned long pflags;
+		bool refault;
+
 		page = lru_to_page(pages);
 		list_del(&page->lru);
 		if (add_to_page_cache_lru(page, mapping, page->index,
@@ -101,7 +105,15 @@ int read_cache_pages(struct address_space *mapping, struct list_head *pages,
 		}
 		put_page(page);
 
+		refault = PageWorkingset(page);
+		if (refault)
+			psi_memstall_enter(&pflags);
+
 		ret = filler(data, page);
+
+		if (refault)
+			psi_memstall_leave(&pflags);
+
 		if (unlikely(ret)) {
 			read_cache_pages_invalidate_pages(mapping, pages);
 			break;
@@ -132,8 +144,18 @@ static int read_pages(struct address_space *mapping, struct file *filp,
 	for (page_idx = 0; page_idx < nr_pages; page_idx++) {
 		struct page *page = lru_to_page(pages);
 		list_del(&page->lru);
-		if (!add_to_page_cache_lru(page, mapping, page->index, gfp))
+		if (!add_to_page_cache_lru(page, mapping, page->index, gfp)) {
+			bool refault = PageWorkingset(page);
+			unsigned long pflags;
+
+			if (refault)
+				psi_memstall_enter(&pflags);
+
 			mapping->a_ops->readpage(filp, page);
+
+			if (refault)
+				psi_memstall_leave(&pflags);
+		}
 		put_page(page);
 	}
 	ret = 0;
