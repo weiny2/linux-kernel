@@ -725,3 +725,9 @@ ssh://git@gitlab.devtools.intel.com:29418/kmb_integration/vpusmm_driver.git for-
 # IP/Information Owner	: Bob Valentine <bob.valentine@intel.com> 
 # SDL Contact		: Israel Hirsh <israel.hirsh@intel.com>
 ssh://git-amr-4.devtools.intel.com:29418/linux_cbae1_share-kl.git amx
+
+# Fix up branch for DSA and CoE audio branch Makefiles
+# Classification        : Intel Confidential
+# Contributor           : Kyle Pelton <kyle.d.pelton@intel.com>
+# SDL Contact           : Charles Prestopine <charles.d.prestopine@intel.com>
+ssh://git-amr-4.devtools.intel.com:29418/otc_power-kernel.git fixups
