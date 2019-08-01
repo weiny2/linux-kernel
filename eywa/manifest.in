@@ -275,7 +275,7 @@ ssh://git-ger-6.devtools.intel.com:29418/secure_git_internal_repo-my_internal_re
 # Contributor          : Alexander Shishkin <alexander.shishkin@linux.intel.com>
 # Configs              : CONFIG_STM*=m CONFIG_INTEL_TH*=m 
 # Supplementary tool   : https://git-amr-1.devtools.intel.com/gerrit/gitweb?p=linux-npk-npktool.git;tflink=projects.linux-npk/scm.npktool
-#ssh://git-amr-4.devtools.intel.com:29418/ash-pullme.git intel_th-for-intel-next
+ssh://git-amr-4.devtools.intel.com:29418/ash-pullme.git intel_th-for-intel-next
 
 # COE audio support
 # IP: CoE audio features and additions
