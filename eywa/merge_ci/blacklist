@@ -5,3 +5,4 @@ ssh://git-amr-1.devtools.intel.com:29418/otc_gen_graphics-drm-intel.git for-inte
 ssh://git@gitlab.devtools.intel.com:29418/OWR/IoTG/ESE/Linux-Integration/KMB/xlink.git int/vpu-driver # Disabled - merge conflict 07/30
 ssh://git-gar-1.devtools.intel.com:29418/eig_audio_integ-kernel.git for-intel-next # DISABLED due to build failure 07/31
 ssh://git@gitlab.devtools.intel.com:29418/otc-clk-server/linux-dsa/kernel.git intel-next #DISABLED due to build failures 07/31
+ssh://git-amr-4.devtools.intel.com:29418/otc_power-kernel.git fixups #DISABLED since both the branches these changes related to are disabled 07/31
