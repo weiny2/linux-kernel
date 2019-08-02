@@ -171,7 +171,7 @@ ssh://git-amr-4.devtools.intel.com:29418/otc_power-kernel.git intel_idle_all
 # IP/Information Owner: Abdul Rahman Ismail <abdul.r.ismail@intel.com>
 # SDL Contact         : Kai Svahn <kai.svahn@intel.com>
 # Configs             : https://eclists.intel.com/sympa/arc/intel-next/2019-05/msg00087.html
-#ssh://git-amr-4.devtools.intel.com:29418/otc_usb-xhci.git for-eywa
+ssh://git-amr-4.devtools.intel.com:29418/otc_usb-xhci.git for-eywa
 
 # LPSS/SMBus/GPIO/SPI-NOR/PCI/Thunderbolt driver enabling
 # Classification      : Intel Confidential
