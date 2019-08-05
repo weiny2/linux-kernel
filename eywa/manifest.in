@@ -512,7 +512,7 @@ ssh://git-amr-4.devtools.intel.com:29418/otc_audio-linux.git sof-for-next-5.3-rc
 # Configs	      :
 ssh://git-amr-4.devtools.intel.com:29418/enabling_cldemote_in_linux_kerne-linux_git.git pasid
 
-#IOMMU vSVA changes since v5.1-rc3
+#IOMMU vSVA changes since v5.3
 # Classification      : Public
 # Contributor         : Jacob Pan <jacob.jun.pan@linux.intel.com>
 #			Liu Yi L <yi.l.liu@intel.com>
@@ -523,7 +523,7 @@ ssh://git-amr-4.devtools.intel.com:29418/enabling_cldemote_in_linux_kerne-linux_
 # SDL Contact         : Ashok Raj <ashok.raj@intel.com>
 #  			Pan, Jacob jun <jacob.jun.pan@intel.com>
 # Configs             :
-#ssh://git-amr-4.devtools.intel.com:29418/linux_iommu-iommu.git sva_v6_for_intel_next
+ssh://git-amr-4.devtools.intel.com:29418/linux_iommu-iommu.git sva_intel_next
 
 # Perf core updates, Intel PT/AUX related
 # Classification      : Public
