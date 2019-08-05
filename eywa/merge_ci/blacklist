@@ -5,3 +5,4 @@ ssh://git@gitlab.devtools.intel.com:29418/OWR/IoTG/ESE/Linux-Integration/KMB/xli
 ssh://git-gar-1.devtools.intel.com:29418/eig_audio_integ-kernel.git for-intel-next # DISABLED due to build failure 07/31
 ssh://git-amr-4.devtools.intel.com:29418/otc_power-kernel.git fixups #DISABLED since both the branches these changes related to are disabled 07/31
 ssh://git-gar-1.devtools.intel.com:29418/itsg_ml_integ-gna_driver_v_2_x.git for-intel-next-v5.3-rc1 #DISABLED build failure on 8/5
+ssh://git@gitlab.devtools.intel.com:29418/otc-clk-server/linux-dsa/kernel.git intel-next #DISABLED build failure on 8/5
