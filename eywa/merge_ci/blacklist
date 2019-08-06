@@ -5,3 +5,4 @@ ssh://git@gitlab.devtools.intel.com:29418/OWR/IoTG/ESE/Linux-Integration/KMB/xli
 ssh://git-gar-1.devtools.intel.com:29418/eig_audio_integ-kernel.git for-intel-next # DISABLED due to build failure 07/31
 ssh://git-amr-4.devtools.intel.com:29418/linux_iommu-iommu.git sva-intel-next #DISABLED due to merge conflicts on 8/5
 ssh://git@gitlab.devtools.intel.com:29418/OWR/IoTG/ESE/Connectivity/Linux-Ethernet/ese_linux_net_next.git dev/master #DISABLED merge conflicts 08/06
+ssh://git-amr-4.devtools.intel.com:29418/mwesterb-linux.git for-eywa #DSIABLED conflicts with Tomas's branch 08/06
