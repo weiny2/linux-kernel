@@ -311,7 +311,7 @@ ssh://git-ccr-1.devtools.intel.com:29418/iommu_next-siov.git for_intel_next_5.3-
 # SDL Contact          : Svahn Kai <kai.svahn@intel.com>
 # IP Owner             : Vijay Kadgi <vijaykumar.b.kadgi@intel.com>
 # Config               : https://eclists.intel.com/sympa/arc/intel-next/2019-04/msg00023.html
-#ssh://git-amr-4.devtools.intel.com:29418/otc_usb-typec.git for-eywa
+ssh://git-amr-4.devtools.intel.com:29418/otc_usb-typec.git for-eywa
 
 # intel_rapl support for Icelake server, Cannonlake desktop,
 # Icelake desktop, ElkhartLake and Tigerlake mobile
