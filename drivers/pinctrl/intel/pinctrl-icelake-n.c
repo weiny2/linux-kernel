@@ -16,7 +16,7 @@
 
 #define ICL_PAD_OWN	0x020
 #define ICL_PADCFGLOCK	0x080
-#define ICL_HOSTSW_OWN	0x0b0
+#define ICL_HOSTSW_OWN	0x0c0
 #define ICL_GPI_IS	0x100
 #define ICL_GPI_IE	0x120
 
