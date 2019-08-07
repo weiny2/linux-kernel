@@ -220,16 +220,20 @@ ssh://git-amr-4.devtools.intel.com:29418/otc_power-kernel.git powertop
 # SDL Contact         : Svahn, Kai <kai.svahn@intel.com>
 #ssh://git-amr-3.devtools.intel.com:29418/otc_mmc-linux intel-pt-perf-tools-v5.2
 
-# otc_usb gadget
+# otc_usb gadget - USB/ADC/TGPIO/PWM/QEP/MCAN
 # USB Peripheral patches for intel-next
 # Classification      : Intel Confidential
 # Contributor         : Felipe Balbi <felipe.balbi@linux.intel.com>
 # IP/Information Owner: Ismail, Abdul Rahman <abdul.r.ismail@intel.com>
 #   			Hall, Christopher S <christopher.s.hall@intel.com>
-#   			Lim, Key Seong <key.seong.lim@intel.com>
+#   			Tan, Raymond <raymond.tan@intel.com>
 # SDL Contact         : Svahn, Kai <kai.svahn@intel.com>
-# Configs             : https://eclists.intel.com/sympa/arc/intel-next/2019-05/msg00088.html 
-#ssh://git-amr-4.devtools.intel.com:29418/otc_usb-gadget.git for-eywa
+# Configs             : CONFIG_CAN_M_CAN_PCI, CONFIG_CAN_CALC_BITTIMING
+#                       CONFIG_INTEL_ADC, CONFIG_INTEL_QEP, CONFIG_PTP_INTEL_PMCTGPIO,
+#                       CONFIG_PTP_INTEL_TGPIO, CONFIG_PWM_DWC, CONFIG_USB_DWC3,
+#                       CONFIG_USB_DWC3_PCI, CONFIG_USB_GADGET, CONFIG_USB_MASS_STORAGE
+#                       CONFIG_USB_SUPPORT, CONFIG_USB_ZERO
+ssh://git-amr-4.devtools.intel.com:29418/otc_usb-gadget.git for-eywa
 
 # RPMB (CSE) support and SPD (storage proxy driver)
 # Classification      : Public
