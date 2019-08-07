@@ -17,7 +17,7 @@
 #define EBG_PAD_OWN	0x0a0
 #define EBG_PADCFGLOCK	0x100
 #define EBG_HOSTSW_OWN	0x130
-#define EBG_GPI_IS	0x100
+#define EBG_GPI_IS	0x200
 #define EBG_GPI_IE	0x210
 
 #define EBG_GPP(r, s, e)				\
