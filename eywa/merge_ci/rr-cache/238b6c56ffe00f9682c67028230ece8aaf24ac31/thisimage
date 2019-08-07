@@ -126,6 +126,13 @@ config INTEL_MID_PTI
 	  an Intel Atom (non-netbook) mobile device containing a MIPI
 	  P1149.7 standard implementation.
 
+config INTEL_QEP
+	tristate "Intel Quadrature Encoder"
+	depends on PCI
+	default n
+	help
+	  Support for Intel Quadrature Encoder Devices
+
 config SGI_IOC4
 	tristate "SGI IOC4 Base IO support"
 	depends on PCI
