@@ -1067,6 +1067,12 @@ static const struct idle_cpu idle_cpu_knl __initconst = {
 	.use_acpi = true,
 };
 
+static const struct idle_cpu idle_cpu_cml __initconst = {
+	.state_table = skl_cstates,
+	.disable_promotion_to_c1e = true,
+	.use_acpi = true,
+};
+
 static const struct idle_cpu idle_cpu_bxt __initconst = {
 	.state_table = bxt_cstates,
 	.disable_promotion_to_c1e = true,
@@ -1110,6 +1116,8 @@ static const struct x86_cpu_id intel_idle_ids[] __initconst = {
 	X86_MATCH_INTEL_FAM6_MODEL(KABYLAKE_L,		&idle_cpu_skl),
 	X86_MATCH_INTEL_FAM6_MODEL(KABYLAKE,		&idle_cpu_skl),
 	X86_MATCH_INTEL_FAM6_MODEL(SKYLAKE_X,		&idle_cpu_skx),
+	X86_MATCH_INTEL_FAM6_MODEL(COMETLAKE,		&idle_cpu_cml),
+	X86_MATCH_INTEL_FAM6_MODEL(COMETLAKE_L,		&idle_cpu_cml),
 	X86_MATCH_INTEL_FAM6_MODEL(XEON_PHI_KNL,	&idle_cpu_knl),
 	X86_MATCH_INTEL_FAM6_MODEL(XEON_PHI_KNM,	&idle_cpu_knl),
 	X86_MATCH_INTEL_FAM6_MODEL(ATOM_GOLDMONT,	&idle_cpu_bxt),
