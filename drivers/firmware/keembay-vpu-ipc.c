@@ -1357,19 +1357,19 @@ static int keembay_vpu_ipc_probe(struct platform_device *pdev)
 	spin_lock_init(&vpu_dev->lock);
 	init_waitqueue_head(&vpu_dev->ready_queue);
 
+	/* Retrieve clocks */
+	rc = retrieve_clocks(vpu_dev);
+	if (rc) {
+		dev_err(dev, "Failed to retrieve clocks %d\n", rc);
+		return rc;
+	}
+
 	/* Retrieve memory regions, allocate memory */
 	rc = setup_reserved_memory(vpu_dev);
 	if (rc) {
 		dev_err(dev, "Failed to set up reserved memory regions: %d\n",
 			rc);
 		return rc;
-	}
-
-	/* Retrieve clocks */
-	rc = retrieve_clocks(vpu_dev);
-	if (rc) {
-		dev_err(dev, "Failed to retrieve clocks %d\n", rc);
-		goto probe_fail_post_resmem_setup;
 	}
 
 	/* Request watchdog timer resources */
