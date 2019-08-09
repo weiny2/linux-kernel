@@ -210,7 +210,7 @@ ssh://git-amr-4.devtools.intel.com:29418/otc_power-kernel.git powertop
 # IP/Information Owner: Shanbhogue, Vedvyas <vedvyas.shanbhogue@intel.com>
 # SDL Contact         : Chang S. Bae <chang.seok.bae@intel.com>
 # Configs             : CRYPTO_AES_KL_INTEL
-#ssh://git-amr-4.devtools.intel.com:29418/linux_cbae1_share-kl.git kl
+ssh://git-amr-4.devtools.intel.com:29418/linux_cbae1_share-kl.git kl
 
 # Intel PT perf tools
 # Updates to perf tools for Intel PT
