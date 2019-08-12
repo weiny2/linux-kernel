@@ -735,3 +735,11 @@ ssh://git-amr-4.devtools.intel.com:29418/linux_cbae1_share-kl.git amx
 # Contributor           : Kyle Pelton <kyle.d.pelton@intel.com>
 # SDL Contact           : Charles Prestopine <charles.d.prestopine@intel.com>
 ssh://git-amr-4.devtools.intel.com:29418/otc_power-kernel.git fixups
+
+# Telemetry 
+# Classification        : Intel Confidential
+# Contributer           : David E. Box <david.e.box@intel.com>
+# IP/Information Owner  : Ramamurthy Krithivas <ramamurthy.krithivas@intel.com>
+# SDL Contact           : David E. Box <david.e.box@intel.com>
+# Config                : CONFIG_MFD_INTEL_CTA, CONFIG_INTEL_CTA_TELEM
+ssh://git-amr-3.devtools.intel.com:29418/otc_linux_debox1-dev cta_arch
