@@ -1,6 +1,6 @@
 #
 # Automatically generated file; DO NOT EDIT.
-# Linux/x86 5.3.0-rc3 Kernel Configuration
+# Linux/x86 5.3.0-rc4 Kernel Configuration
 #
 
 #
@@ -2657,7 +2657,6 @@ CONFIG_DAVICOM_PHY=m
 # CONFIG_DP83TC811_PHY is not set
 # CONFIG_DP83848_PHY is not set
 # CONFIG_DP83867_PHY is not set
-# CONFIG_DWXPCS is not set
 # CONFIG_FIXED_PHY is not set
 CONFIG_ICPLUS_PHY=m
 # CONFIG_INTEL_XWAY_PHY is not set
@@ -3824,6 +3823,7 @@ CONFIG_LPC_ICH=y
 CONFIG_LPC_SCH=m
 # CONFIG_INTEL_SOC_PMIC_BXTWC is not set
 # CONFIG_INTEL_SOC_PMIC_CHTDC_TI is not set
+# CONFIG_MFD_INTEL_CTA is not set
 CONFIG_MFD_INTEL_LPSS=m
 CONFIG_MFD_INTEL_LPSS_ACPI=m
 CONFIG_MFD_INTEL_LPSS_PCI=m
@@ -6147,6 +6147,7 @@ CONFIG_WMI_BMOF=m
 # CONFIG_INTEL_VBTN is not set
 CONFIG_INTEL_IPS=m
 CONFIG_INTEL_PMC_CORE=y
+# CONFIG_INTEL_CTA_TELEM is not set
 # CONFIG_IBM_RTL is not set
 # CONFIG_SAMSUNG_LAPTOP is not set
 CONFIG_MXM_WMI=m
