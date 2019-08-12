@@ -269,7 +269,7 @@ ssh://git-ger-6.devtools.intel.com:29418/secure_git_internal_repo-my_internal_re
 # IP Owners            : Kasichainula, Kishore <kishore.kasichainula@intel.com>
 # Configs              : CONFIG_STMMAC_ETH=m
 #                        CONFIG_STMMAC_PCI=m
-ssh://git@gitlab.devtools.intel.com:29418/OWR/IoTG/ESE/Connectivity/Linux-Ethernet/ese_linux_net_next.git dev/master
+#DISABLED due to merge conflicts on 8/12 ssh://git@gitlab.devtools.intel.com:29418/OWR/IoTG/ESE/Connectivity/Linux-Ethernet/ese_linux_net_next.git dev/master
 
 # Intel Trace Hub
 # Contains support for Ice Lake and Tiger Lake and MIPI SyS-T protocol support.
@@ -527,7 +527,7 @@ ssh://git-amr-4.devtools.intel.com:29418/enabling_cldemote_in_linux_kerne-linux_
 # SDL Contact         : Ashok Raj <ashok.raj@intel.com>
 #  			Pan, Jacob jun <jacob.jun.pan@intel.com>
 # Configs             :
-ssh://git-amr-4.devtools.intel.com:29418/linux_iommu-iommu.git sva-intel-next
+#DISABLED due to merge conflicts on 8/5 ssh://git-amr-4.devtools.intel.com:29418/linux_iommu-iommu.git sva-intel-next
 
 # Perf core updates, Intel PT/AUX related
 # Classification      : Public
@@ -682,7 +682,7 @@ ssh://git-amr-7.devtools.intel.com:29418/trusty_for_intel_next-intel-next.git ke
 # SDLC contact        : Tan, Seng Kai <seng.kai.tan@intel.com>
 # Configs             : CONFIG_XLINK_PCIE_LH_DRIVER=m
 #                       CONFIG_XLINK_PCIE_RH_DRIVER=m
-ssh://git@gitlab.devtools.intel.com:29418/OWR/IoTG/ESE/Linux-Integration/KMB/xlink.git int/vpu-driver
+#Disabled build failure 08/08 ssh://git@gitlab.devtools.intel.com:29418/OWR/IoTG/ESE/Linux-Integration/KMB/xlink.git int/vpu-driver
 
 # MTRR: Trust BIOS programming
 # Mechanism to skip the MTRR initialization if already performed by BIOS
@@ -742,4 +742,4 @@ ssh://git-amr-4.devtools.intel.com:29418/otc_power-kernel.git fixups
 # IP/Information Owner  : Ramamurthy Krithivas <ramamurthy.krithivas@intel.com>
 # SDL Contact           : David E. Box <david.e.box@intel.com>
 # Config                : CONFIG_MFD_INTEL_CTA, CONFIG_INTEL_CTA_TELEM
-ssh://git-amr-3.devtools.intel.com:29418/otc_linux_debox1-dev cta_arch
+ssh://git-amr-3.devtools.intel.com:29418/otc_linux_debox1-dev.git cta_arch
