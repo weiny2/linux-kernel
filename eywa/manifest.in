@@ -126,7 +126,7 @@ ssh://git-amr-3.devtools.intel.com:29418/otc_mmc-linux for-eywa
 # IP/Information Owner: Rajesh Pamujula <rajesh.s.pamujula@intel.com>
 # SDL Contact         : Dave Jiang <dave.jiang@intel.com>
 # Configs             : https://eclists.intel.com/sympa/arc/intel-next/2019-01/msg00007.html
-#ssh://git-amr-1.devtools.intel.com:29418/csig_storage_group-linux-kernel.git ntb-next-upstream
+ssh://git-amr-1.devtools.intel.com:29418/csig_storage_group-linux-kernel.git ntb-next-upstream
 
 # MEI
 # CSE/CSME MEI driver and MEI client drivers
