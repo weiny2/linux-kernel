@@ -26,7 +26,7 @@
 
 /**
  * put_user_pages_dirty_lock() - release and optionally dirty gup-pinned pages
- * @pages:  array of pages to be maybe marked dirty, and definitely released.
+ * @pages:  array of pages to be put
  * @npages: number of pages in the @pages array.
  * @make_dirty: whether to mark the pages dirty
  *
@@ -50,12 +50,6 @@ void put_user_pages_dirty_lock(struct page **pages, unsigned long npages,
 			       bool make_dirty)
 {
 	unsigned long index;
-
-	/*
-	 * TODO: this can be optimized for huge pages: if a series of pages is
-	 * physically contiguous and part of the same compound page, then a
-	 * single operation to the head page should suffice.
-	 */
 
 	if (!make_dirty) {
 		put_user_pages(pages, npages);
@@ -93,7 +87,7 @@ EXPORT_SYMBOL(put_user_pages_dirty_lock);
 
 /**
  * put_user_pages() - release an array of gup-pinned pages.
- * @pages:  array of pages to be marked dirty and released.
+ * @pages:  array of pages to be put
  * @npages: number of pages in the @pages array.
  *
  * For each page in the @pages array, release the page using put_user_page().
@@ -104,11 +98,6 @@ void put_user_pages(struct page **pages, unsigned long npages)
 {
 	unsigned long index;
 
-	/*
-	 * TODO: this can be optimized for huge pages: if a series of pages is
-	 * physically contiguous and part of the same compound page, then a
-	 * single operation to the head page should suffice.
-	 */
 	for (index = 0; index < npages; index++)
 		put_user_page(pages[index]);
 }
