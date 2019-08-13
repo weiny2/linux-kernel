@@ -534,7 +534,7 @@ static int ib_umem_odp_map_dma_single_page(
 	}
 
 out:
-	put_user_page(page);
+	vaddr_unpin_pages(&page, 1, &umem_odp->umem.vaddr_pin, false);
 
 	if (remove_existing_mapping) {
 		ib_umem_notifier_start_account(umem_odp);
@@ -635,9 +635,10 @@ int ib_umem_odp_map_dma_pages(struct ib_umem_odp *umem_odp, u64 user_virt,
 		 * complex (and doesn't gain us much performance in most use
 		 * cases).
 		 */
-		npages = get_user_pages_remote(owning_process, owning_mm,
+		npages = vaddr_pin_pages_remote(owning_process, owning_mm,
 				user_virt, gup_num_pages,
-				flags, local_page_list, NULL, NULL);
+				flags, local_page_list, NULL, NULL,
+				&umem_odp->umem.vaddr_pin);
 		up_read(&owning_mm->mmap_sem);
 
 		if (npages < 0) {
@@ -657,7 +658,9 @@ int ib_umem_odp_map_dma_pages(struct ib_umem_odp *umem_odp, u64 user_virt,
 					ret = -EFAULT;
 					break;
 				}
-				put_user_page(local_page_list[j]);
+				vaddr_unpin_pages(&local_page_list[j], 1,
+						  &umem_odp->umem.vaddr_pin,
+						  false);
 				continue;
 			}
 
@@ -684,8 +687,10 @@ int ib_umem_odp_map_dma_pages(struct ib_umem_odp *umem_odp, u64 user_virt,
 			 * ib_umem_odp_map_dma_single_page().
 			 */
 			if (npages - (j + 1) > 0)
-				put_user_pages(&local_page_list[j+1],
-					       npages - (j + 1));
+				vaddr_unpin_pages(&local_page_list[j+1],
+						  npages - (j + 1),
+						  &umem_odp->umem.vaddr_pin,
+						  false);
 			break;
 		}
 	}
