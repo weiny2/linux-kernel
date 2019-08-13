@@ -108,6 +108,8 @@
 #define MEI_DEV_ID_MCC        0x4B70  /* Mule Creek Canyon (EHL) */
 #define MEI_DEV_ID_MCC_4      0x4B75  /* Mule Creek Canyon 4 (EHL) */
 
+#define MEI_DEV_ID_EGLS       0x1BE0  /* Emmitsburg (Eagle Stream) WS */
+
 /*
  * MEI HW Section
  */
