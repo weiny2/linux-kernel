@@ -2509,6 +2509,38 @@ long vaddr_pin_pages(unsigned long addr, unsigned long nr_pages,
 EXPORT_SYMBOL(vaddr_pin_pages);
 
 /**
+ * vaddr_pin_pages_remote pin pages by virtual address and return the pages to
+ * the user.
+ *
+ * @tsk:	the task_struct to use for page fault accounting, or
+ *		NULL if faults are not to be recorded.
+ * @mm:		mm_struct of target mm
+ * @addr:	start address
+ * @nr_pages:	number of pages to pin
+ * @gup_flags:	flags to use for the pin
+ * @pages:	array of pages returned
+ * @vaddr_pin:	initialized meta information this pin is to be associated
+ * with.
+ *
+ * This is the "vaddr_pin_pages" corresponding variant to
+ * get_user_pages_remote(), but with FOLL_PIN semantics: the implementation sets
+ * FOLL_PIN. That, in turn, means that the pages must ultimately be released
+ * by put_user_page().
+ */
+long vaddr_pin_pages_remote(struct task_struct *tsk, struct mm_struct *mm,
+			    unsigned long start, unsigned long nr_pages,
+			    unsigned int gup_flags, struct page **pages,
+			    struct vm_area_struct **vmas, int *locked,
+			    struct vaddr_pin *vaddr_pin)
+{
+	gup_flags |= FOLL_TOUCH | FOLL_REMOTE | FOLL_PIN;
+
+	return __get_user_pages_locked(tsk, mm, start, nr_pages, pages, vmas,
+				       locked, gup_flags, vaddr_pin);
+}
+EXPORT_SYMBOL(vaddr_pin_pages_remote);
+
+/**
  * vaddr_unpin_pages - counterpart to vaddr_pin_pages
  *
  * @pages: array of pages returned
