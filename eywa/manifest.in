@@ -750,4 +750,4 @@ ssh://git-amr-3.devtools.intel.com:29418/otc_linux_debox1-dev.git cta_arch
 # IP/Information Owner  : Ashok Raj <ashok.raj@intel.com>, Vakharwala, Rupin H <rupin.h.vakharwala@intel.com>
 # SDL Contact           : Ashok Raj <ashok.raj@intel.com>, Sohil Mehta <sohil.mehta@intel.com>
 # Config                : 
-https://git-amr-1.devtools.intel.com:29418/intel_next_icl_i-secure_git_intel_next.git master
+ssh://git-amr-1.devtools.intel.com:29418/intel_next_icl_i-secure_git_intel_next.git master
