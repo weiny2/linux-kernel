@@ -2484,6 +2484,9 @@ EXPORT_SYMBOL_GPL(get_user_pages_fast);
  * being made against.  Usually "current->mm".
  *
  * Expects mmap_sem to be read locked.
+ *
+ * Implementation note: this sets FOLL_PIN, which means that the pages must
+ * ultimately be released by put_user_page().
  */
 long vaddr_pin_pages(unsigned long addr, unsigned long nr_pages,
 		     unsigned int gup_flags, struct page **pages,
@@ -2491,7 +2494,7 @@ long vaddr_pin_pages(unsigned long addr, unsigned long nr_pages,
 {
 	long ret;
 
-	gup_flags |= FOLL_LONGTERM;
+	gup_flags |= FOLL_LONGTERM | FOLL_PIN;
 
 	if (!vaddr_pin || (!vaddr_pin->mm && !vaddr_pin->f_owner))
 		return -EINVAL;
