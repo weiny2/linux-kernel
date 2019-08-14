@@ -3,3 +3,10 @@ config KEEMBAY_IPC
 	help
 	  KeemBay IPC enables communication between KeemBay CPU Sub-System
 	  (CSS) and KeemBay Media Sub-System (MSS).
+
+config KEEMBAY_IPC_TEST
+	tristate "Enable Keem Bay IPC Test Module"
+	depends on KEEMBAY_IPC
+	help
+	  KeemBay IPC enables communication between KeemBay CPU Sub-System
+	  (CSS) and KeemBay Media Sub-System (MSS).
