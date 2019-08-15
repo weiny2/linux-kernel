@@ -3729,10 +3729,17 @@ void __init set_proc_pid_nlink(void)
 struct proc_file_pins_private {
 	struct inode *inode;
 	struct task_struct *task;
+	struct mm_struct *mm;
 	struct files_struct *files;
 	unsigned int nr_pins;
 	struct xarray fps;
 } __randomize_layout;
+
+static void release_fp(struct proc_file_pins_private *priv)
+{
+	up_read(&priv->mm->mmap_sem);
+	mmput(priv->mm);
+}
 
 static void print_fd_file_pin(struct seq_file *m, struct file *file,
 			    unsigned long i)
@@ -3772,6 +3779,18 @@ static int store_fd(const void *priv , struct file *file, unsigned i)
 	return 0;
 }
 
+static void store_mm_pins(struct proc_file_pins_private *priv)
+{
+	struct mm_file_pin *fp;
+	struct mm_file_pin *tmp;
+
+	list_for_each_entry_safe(fp, tmp, &priv->mm->file_pins, list) {
+		xa_store(&priv->fps, priv->nr_pins, fp, GFP_KERNEL);
+		priv->nr_pins++;
+	}
+}
+
+
 static void *fp_start(struct seq_file *m, loff_t *ppos)
 {
 	struct proc_file_pins_private *priv = m->private;
@@ -3781,7 +3800,11 @@ static void *fp_start(struct seq_file *m, loff_t *ppos)
 	if (!priv->task)
 		return ERR_PTR(-ESRCH);
 
+	if (!priv->mm || !mmget_not_zero(priv->mm))
+		return NULL;
+
 	priv->files = get_files_struct(priv->task);
+	down_read(&priv->mm->mmap_sem);
 
 	xa_destroy(&priv->fps);
 	priv->nr_pins = 0;
@@ -3790,8 +3813,13 @@ static void *fp_start(struct seq_file *m, loff_t *ppos)
 	if (priv->files)
 		iterate_fd(priv->files, 0, store_fd, priv);
 
-	if (pos >= priv->nr_pins)
+	/* store mm_file_pins as xa entries */
+	store_mm_pins(priv);
+
+	if (pos >= priv->nr_pins) {
+		release_fp(priv);
 		return NULL;
+	}
 
 	return xa_load(&priv->fps, pos);
 }
@@ -3801,8 +3829,10 @@ static void *fp_next(struct seq_file *m, void *v, loff_t *pos)
 	struct proc_file_pins_private *priv = m->private;
 
 	(*pos)++;
-	if ((*pos) >= priv->nr_pins)
+	if ((*pos) >= priv->nr_pins) {
+		release_fp(priv);
 		return NULL;
+	}
 
 	return xa_load(&priv->fps, *pos);
 }
@@ -3810,6 +3840,9 @@ static void *fp_next(struct seq_file *m, void *v, loff_t *pos)
 static void fp_stop(struct seq_file *m, void *v)
 {
 	struct proc_file_pins_private *priv = m->private;
+
+	if (v)
+		release_fp(priv);
 
 	if (priv->task) {
 		put_task_struct(priv->task);
@@ -3835,6 +3868,11 @@ static int show_fp(struct seq_file *m, void *v)
 		if (file)
 			print_fd_file_pin(m, file, fd);
 		rcu_read_unlock();
+	} else {
+		struct mm_file_pin *fp = v;
+
+		seq_puts(m, "mm: ");
+		seq_file_path(m, fp->file, "\n");
 	}
 
 	return 0;
@@ -3858,7 +3896,14 @@ static int proc_file_pins_open(struct inode *inode, struct file *file)
 
 	xa_init(&priv->fps);
 	priv->inode = inode;
+	priv->mm = proc_mem_open(inode, PTRACE_MODE_READ);
 	priv->task = NULL;
+	if (IS_ERR(priv->mm)) {
+		int err = PTR_ERR(priv->mm);
+
+		seq_release_private(inode, file);
+		return err;
+	}
 
 	return 0;
 }
@@ -3872,6 +3917,9 @@ static int proc_file_pins_release(struct inode *inode, struct file *file)
 	 * NULL here... */
 	WARN_ON(priv->files);
 	WARN_ON(priv->task);
+
+	if (priv->mm)
+		mmdrop(priv->mm);
 
 	xa_destroy(&priv->fps);
 
