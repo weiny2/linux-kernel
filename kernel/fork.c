@@ -675,6 +675,7 @@ void __mmdrop(struct mm_struct *mm)
 	BUG_ON(mm == &init_mm);
 	WARN_ON_ONCE(mm == current->mm);
 	WARN_ON_ONCE(mm == current->active_mm);
+	WARN_ON(!list_empty(&mm->file_pins));
 	mm_free_pgd(mm);
 	destroy_context(mm);
 	mmu_notifier_mm_destroy(mm);
@@ -1013,6 +1014,8 @@ static struct mm_struct *mm_init(struct mm_struct *mm, struct task_struct *p,
 	mm->pmd_huge_pte = NULL;
 #endif
 	mm_init_uprobes_state(mm);
+	INIT_LIST_HEAD(&mm->file_pins);
+	spin_lock_init(&mm->fp_lock);
 
 	if (current->mm) {
 		mm->flags = current->mm->flags & MMF_INIT_MASK;

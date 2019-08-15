@@ -516,6 +516,8 @@ struct mm_struct {
 		/* HMM needs to track a few things per mm */
 		struct hmm *hmm;
 #endif
+		struct list_head file_pins;
+		spinlock_t fp_lock; /* lock file_pins */
 	} __randomize_layout;
 
 	/*
