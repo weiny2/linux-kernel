@@ -168,6 +168,7 @@
 #include <linux/pid_namespace.h>
 #include <linux/hashtable.h>
 #include <linux/percpu.h>
+#include <linux/sched/mm.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/filelock.h>
@@ -3054,6 +3055,72 @@ static void release_file_file_pin(struct kref *ref)
 	kfree(fp);
 }
 
+static struct mm_file_pin *alloc_mm_file_pin(struct inode *inode,
+					     struct file *file)
+{
+	struct mm_file_pin *fp = kzalloc(sizeof(*fp), GFP_ATOMIC);
+
+	if (!fp)
+		return ERR_PTR(-ENOMEM);
+
+	INIT_LIST_HEAD(&fp->list);
+	kref_init(&fp->ref);
+	return fp;
+}
+
+/**
+ * This object bridges files and the mm struct for the purpose of tracking
+ * which files have GUP pins on them.
+ */
+static int add_file_pin_to_mm(struct vaddr_pin *vaddr_pin, struct inode *inode,
+			      struct file *file)
+{
+	struct mm_file_pin *fp;
+
+	list_for_each_entry(fp, &vaddr_pin->mm->file_pins, list) {
+		if (fp->inode == inode) {
+			kref_get(&fp->ref);
+			return 0;
+		}
+	}
+
+	fp = alloc_mm_file_pin(inode, file);
+	if (IS_ERR(fp))
+		return PTR_ERR(fp);
+
+	fp->inode = igrab(inode);
+	if (!fp->inode) {
+		kfree(fp);
+		return -EFAULT;
+	}
+
+	fp->file = get_file(file);
+	fp->mm = vaddr_pin->mm;
+	mmgrab(fp->mm);
+	atomic_inc(&fp->file->fp_cnt);
+
+	spin_lock(&fp->mm->fp_lock);
+	list_add(&fp->list, &fp->mm->file_pins);
+	spin_unlock(&fp->mm->fp_lock);
+
+	return 0;
+}
+
+static void release_mm_file_pin(struct kref *ref)
+{
+	struct mm_file_pin *fp = container_of(ref, struct mm_file_pin, ref);
+
+	spin_lock(&fp->mm->fp_lock);
+	list_del(&fp->list);
+	spin_unlock(&fp->mm->fp_lock);
+
+	mmdrop(fp->mm);
+	atomic_dec(&fp->file->fp_cnt);
+	fput(fp->file);
+	iput(fp->inode);
+	kfree(fp);
+}
+
 static void remove_file_file_pin(struct vaddr_pin *vaddr_pin)
 {
 	struct file_file_pin *fp;
@@ -3065,16 +3132,31 @@ static void remove_file_file_pin(struct vaddr_pin *vaddr_pin)
 	}
 }
 
+static void remove_mm_file_pin(struct vaddr_pin *vaddr_pin,
+			       struct inode *inode)
+{
+	struct mm_file_pin *fp;
+	struct mm_file_pin *tmp;
+
+	list_for_each_entry_safe(fp, tmp, &vaddr_pin->mm->file_pins, list) {
+		if (fp->inode == inode)
+			kref_put(&fp->ref, release_mm_file_pin);
+	}
+}
+
 static bool add_file_pin(struct vaddr_pin *vaddr_pin, struct inode *inode,
 			 struct file *file)
 {
 	bool ret = true;
 
-	if (!vaddr_pin || !vaddr_pin->f_owner)
+	if (!vaddr_pin || (!vaddr_pin->f_owner && !vaddr_pin->mm))
 		return false;
 
 	if (vaddr_pin->f_owner) {
 		if (add_file_pin_to_f_owner(vaddr_pin, inode, file))
+			ret = false;
+	} else {
+		if (add_file_pin_to_mm(vaddr_pin, inode, file))
 			ret = false;
 	}
 
@@ -3086,7 +3168,7 @@ void mapping_release_file(struct vaddr_pin *vaddr_pin, struct page *page)
 	struct inode *inode;
 
 	if (WARN_ON(!page) || WARN_ON(!vaddr_pin) ||
-	    WARN_ON(!vaddr_pin->f_owner))
+	    WARN_ON(!vaddr_pin->mm && !vaddr_pin->f_owner))
 		return;
 
 	if (PageAnon(page) ||
@@ -3096,7 +3178,10 @@ void mapping_release_file(struct vaddr_pin *vaddr_pin, struct page *page)
 
 	inode = page->mapping->host;
 
-	remove_file_file_pin(vaddr_pin);
+	if (vaddr_pin->f_owner)
+		remove_file_file_pin(vaddr_pin);
+	else
+		remove_mm_file_pin(vaddr_pin, inode);
 }
 EXPORT_SYMBOL_GPL(mapping_release_file);
 
