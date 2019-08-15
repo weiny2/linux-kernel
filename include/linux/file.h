@@ -9,6 +9,7 @@
 #include <linux/compiler.h>
 #include <linux/types.h>
 #include <linux/posix_types.h>
+#include <linux/kref.h>
 
 struct file;
 
@@ -90,5 +91,29 @@ extern void fd_install(unsigned int fd, struct file *file);
 
 extern void flush_delayed_fput(void);
 extern void __fput_sync(struct file *);
+
+/**
+ * struct file_file_pin
+ *
+ * Associate a pin'ed file with another file owner.
+ *
+ * Subsystems such as RDMA have the ability to pin memory which is associated
+ * with a file descriptor which can be passed to other processes without
+ * necessarily having that memory accessed in the remote processes address
+ * space.
+ *
+ * @file file backing memory which was pined by a GUP caller
+ * @f_owner the file representing the GUP owner
+ * @list of all file pins this owner has
+ *       (struct file *)->file_pins
+ * @ref number of times this pin was taken (roughly the number of pages pinned
+ *      in the file)
+ */
+struct file_file_pin {
+	struct file *file;
+	struct file *f_owner;
+	struct list_head list;
+	struct kref ref;
+};
 
 #endif /* __LINUX_FILE_H */

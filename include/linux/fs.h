@@ -963,6 +963,19 @@ struct file {
 #endif /* #ifdef CONFIG_EPOLL */
 	struct address_space	*f_mapping;
 	errseq_t		f_wb_err;
+
+	/*
+	 * File Pin information
+	 *
+	 * This information is applicable to 2 different types of "files" The
+	 * file_pins list is applicable to a "file" (backing a file descriptor)
+	 * which is being used to pin other files (those representing memory
+	 * backed by file systems).  The fp_cnt applies to the files backed by
+	 * file systems directly.
+	 */
+	struct list_head        file_pins; /* List of struct file_file_pin */
+	spinlock_t              fp_lock;   /* Lock the above list */
+	atomic_t                fp_cnt;
 } __randomize_layout
   __attribute__((aligned(4)));	/* lest something weird decides that 2 is OK */
 

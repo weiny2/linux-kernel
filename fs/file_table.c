@@ -46,6 +46,8 @@ static void file_free_rcu(struct rcu_head *head)
 {
 	struct file *f = container_of(head, struct file, f_u.fu_rcuhead);
 
+	WARN_ON(!list_empty(&f->file_pins));
+	WARN_ON(atomic_read(&f->fp_cnt) != 0);
 	put_cred(f->f_cred);
 	kmem_cache_free(filp_cachep, f);
 }
@@ -117,6 +119,10 @@ static struct file *__alloc_file(int flags, const struct cred *cred)
 	f->f_flags = flags;
 	f->f_mode = OPEN_FMODE(flags);
 	/* f->f_version: 0 */
+
+	INIT_LIST_HEAD(&f->file_pins);
+	spin_lock_init(&f->fp_lock);
+	atomic_set(&f->fp_cnt, 0);
 
 	return f;
 }
