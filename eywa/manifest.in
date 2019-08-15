@@ -751,3 +751,11 @@ ssh://git-amr-3.devtools.intel.com:29418/otc_linux_debox1-dev.git cta_arch
 # SDL Contact           : Ashok Raj <ashok.raj@intel.com>, Sohil Mehta <sohil.mehta@intel.com>
 # Config                : 
 ssh://git-amr-1.devtools.intel.com:29418/intel_next_icl_i-secure_git_intel_next.git master
+
+# Classification	: Intel Confidential
+# SDL Contact		: hari.chand.balasubramaniam@intel.com
+# IP Owner		: N/A (vsi_video_sales@verisilicon.com)
+# Contributer		: hari.chand.balasubramaniam@intel.com
+# Authorized contact	: vsi_video_sales@verisilicon.com
+# Config		: CONFIG_DRM_HANTRO_THB
+ssh://git-amr-1.devtools.intel.com:29418/iotg_keembay-hantrodriver thb_0629_v5.3-rc3_v3	
