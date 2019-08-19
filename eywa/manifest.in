@@ -665,7 +665,7 @@ ssh://git-amr-7.devtools.intel.com:29418/trusty_for_intel_next-intel-next.git ke
 # Contributor          : Yu-cheng Yu <yu-cheng.yu@intel.com>
 # IP Owner             : Vedvyas Shanbhogue <vedvyas.shanbhogue@intel.com>
 # Configs              :
-#git://github.com/yyu168/linux_cet cet
+git://github.com/yyu168/linux_cet cet
 
 #VMDOS
 # Classification      : Intel Confidential
