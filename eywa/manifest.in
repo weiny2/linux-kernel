@@ -70,7 +70,7 @@ ssh://git-amr-1.devtools.intel.com:29418/otc_gen_graphics-drm-intel.git for-inte
 # IP/Information Owner: Ravi V. Shankar <ravi.v.shankar@intel.com>
 # SDL Contact         : Ashok Raj <ashok.raj@intel.com>
 # Configs	      :
-#ssh://git-amr-4.devtools.intel.com:29418/enabling_cldemote_in_linux_kerne-linux_git.git split_lock
+ssh://git-amr-4.devtools.intel.com:29418/enabling_cldemote_in_linux_kerne-linux_git.git split_lock
 
 # nvme-pci
 # Enables the NVMe driver for the Tiger Lake/ KSL-R platforms.
