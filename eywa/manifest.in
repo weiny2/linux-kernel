@@ -425,7 +425,7 @@ ssh://git@gitlab.devtools.intel.com:29418/OWR/IoTG/ESE/Audio/keembay_linux_sound
 # SDL Contact         : Qihua, Zhuang <qihua.zhuang@intel.com>
 # IP Owner            : Baofeng, Tian <baofeng.tian@intel.com>
 # Contributor         : Baofeng, Tian <baofeng.tian@intel.com>
-#ssh://git-amr-4.devtools.intel.com:29418/otc_android_dnt_domain-boot_dnt_kernel_domain.git for-sos-intel-next
+ssh://git-amr-4.devtools.intel.com:29418/otc_android_dnt_domain-boot_dnt_kernel_domain.git for-sos-intel-next
 
 # Intel ICL-NNP SoC   : Intel ICL Neural Network Processor Support.
 # Classification      : Intel Confidential (EMBARGO) 
