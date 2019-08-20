@@ -1,6 +1,5 @@
 #black list file for branches that are currently not merging
 #format is <branch str>#<reason for disabling>
 ssh://git@gitlab.devtools.intel.com:29418/OWR/IoTG/ESE/Linux-Integration/KMB/xlink.git int/vpu-driver #Disabled build failure 08/08
-ssh://git@gitlab.devtools.intel.com:29418/OWR/IoTG/ESE/Connectivity/Linux-Ethernet/ese_linux_net_next.git dev/master #DISABLED due to merge conflicts on 8/12
 git://github.com/yyu168/linux_cet cet #DISABLED due merge conflicts on 8/19
 ssh://git-amr-4.devtools.intel.com:29418/linux_iommu-iommu.git sva-intel-next #DISABLED due build failure
