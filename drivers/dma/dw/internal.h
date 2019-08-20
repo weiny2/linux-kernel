@@ -86,4 +86,12 @@ static __maybe_unused const struct dw_dma_chip_pdata idma32_chip_pdata = {
 	.acpi_controller_free = dw_dma_acpi_controller_free,
 };
 
+static __maybe_unused const struct dw_dma_chip_pdata xbar_chip_pdata = {
+	.pdata = &idma32_pdata,
+	.probe = idma32_dma_probe,
+	.remove = idma32_dma_remove,
+	.acpi_controller_register = xbar_acpi_controller_register,
+	.acpi_controller_free = xbar_acpi_controller_free,
+};
+
 #endif /* _DMA_DW_INTERNAL_H */
