@@ -758,4 +758,4 @@ ssh://git-amr-1.devtools.intel.com:29418/intel_next_icl_i-secure_git_intel_next.
 # Contributer		: hari.chand.balasubramaniam@intel.com
 # Authorized contact	: vsi_video_sales@verisilicon.com
 # Config		: CONFIG_DRM_HANTRO_THB
-ssh://git-amr-1.devtools.intel.com:29418/iotg_keembay-hantrodriver thb_0629_v5.3-rc3_v3	
+ssh://git-amr-1.devtools.intel.com:29418/iotg_keembay-hantrodriver thb_0629_v5.3-rc5	
