@@ -527,7 +527,7 @@ ssh://git-amr-4.devtools.intel.com:29418/enabling_cldemote_in_linux_kerne-linux_
 # SDL Contact         : Ashok Raj <ashok.raj@intel.com>
 #  			Pan, Jacob jun <jacob.jun.pan@intel.com>
 # Configs             :
-#DISABLED due to merge conflicts on 8/5 ssh://git-amr-4.devtools.intel.com:29418/linux_iommu-iommu.git sva-intel-next
+ssh://git-amr-4.devtools.intel.com:29418/linux_iommu-iommu.git sva-intel-next
 
 # Perf core updates, Intel PT/AUX related
 # Classification      : Public
