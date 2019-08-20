@@ -2,5 +2,4 @@
 #format is <branch str>#<reason for disabling>
 ssh://git@gitlab.devtools.intel.com:29418/OWR/IoTG/ESE/Linux-Integration/KMB/xlink.git int/vpu-driver #Disabled build failure 08/08
 ssh://git@gitlab.devtools.intel.com:29418/OWR/IoTG/ESE/Connectivity/Linux-Ethernet/ese_linux_net_next.git dev/master #DISABLED due to merge conflicts on 8/12
-ssh://git-amr-1.devtools.intel.com:29418/iotg_keembay-hantrodriver thb_0629_v5.3-rc3_v3 #DISABLED due build failure 08/15
 git://github.com/yyu168/linux_cet cet #DISABLED due merge conflicts on 8/19
