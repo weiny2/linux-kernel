@@ -1,4 +1,3 @@
 #black list file for branches that are currently not merging
 #format is <branch str>#<reason for disabling>
-ssh://git@gitlab.devtools.intel.com:29418/OWR/IoTG/ESE/Linux-Integration/KMB/xlink.git int/vpu-driver #Disabled build failure 08/08
 git://github.com/yyu168/linux_cet cet #DISABLED due merge conflicts on 8/19
