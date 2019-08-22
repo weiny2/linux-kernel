@@ -679,19 +679,46 @@ static inline int need_do_async_reclaim(struct btrfs_fs_info *fs_info,
 		!test_bit(BTRFS_FS_STATE_REMOUNTING, &fs_info->fs_state));
 }
 
-static bool wake_all_tickets(struct list_head *head)
+static bool maybe_fail_all_tickets(struct btrfs_fs_info *fs_info,
+				   struct btrfs_space_info *space_info)
 {
 	struct reserve_ticket *ticket;
+	u64 tickets_id = space_info->tickets_id;
+	u64 first_ticket_bytes = 0;
 
-	while (!list_empty(head)) {
-		ticket = list_first_entry(head, struct reserve_ticket, list);
+	while (!list_empty(&space_info->tickets) &&
+	       tickets_id == space_info->tickets_id) {
+		ticket = list_first_entry(&space_info->tickets,
+					  struct reserve_ticket, list);
+
+		/*
+		 * may_commit_transaction will avoid committing the transaction
+		 * if it doesn't feel like the space reclaimed by the commit
+		 * would result in the ticket succeeding.  However if we have a
+		 * smaller ticket in the queue it may be small enough to be
+		 * satisified by committing the transaction, so if any
+		 * subsequent ticket is smaller than the first ticket go ahead
+		 * and send us back for another loop through the enospc flushing
+		 * code.
+		 */
+		if (first_ticket_bytes == 0)
+			first_ticket_bytes = ticket->bytes;
+		else if (first_ticket_bytes > ticket->bytes)
+			return true;
+
 		list_del_init(&ticket->list);
 		ticket->error = -ENOSPC;
 		wake_up(&ticket->wait);
-		if (ticket->bytes != ticket->orig_bytes)
-			return true;
+
+		/*
+		 * We're just throwing tickets away, so more flushing may not
+		 * trip over btrfs_try_granting_tickets, so we need to call it
+		 * here to see if we can make progress with the next ticket in
+		 * the list.
+		 */
+		btrfs_try_granting_tickets(fs_info, space_info);
 	}
-	return false;
+	return (tickets_id != space_info->tickets_id);
 }
 
 /*
@@ -759,7 +786,7 @@ static void btrfs_async_reclaim_metadata_space(struct work_struct *work)
 		if (flush_state > COMMIT_TRANS) {
 			commit_cycles++;
 			if (commit_cycles > 2) {
-				if (wake_all_tickets(&space_info->tickets)) {
+				if (maybe_fail_all_tickets(fs_info, space_info)) {
 					flush_state = FLUSH_DELAYED_ITEMS_NR;
 					commit_cycles--;
 				} else {
