@@ -30,7 +30,7 @@
             "branch_type": "internal nonexpiring",
             "config_options": [],
             "contributor": [],
-            "description": "intel-next\u00a0scripts and patches",
+            "description": "intel-next scripts and patches",
             "enabled": true,
             "ip_owner": [],
             "jira": "",
@@ -45,7 +45,7 @@
             "branch_type": "internal nonexpiring",
             "config_options": [],
             "contributor": [],
-            "description": "intel-next\u00a0scripts and patches",
+            "description": "intel-next scripts and patches",
             "enabled": true,
             "ip_owner": [],
             "jira": "",
@@ -1327,7 +1327,7 @@
                 }
             ],
             "description": "CoE audio features and additions",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Filip Kaczmarski",
@@ -2679,7 +2679,7 @@
             ],
             "contributor": [
                 {
-                    "name": "Tian\u00a0Baofeng",
+                    "name": "Tian Baofeng",
                     "email": "baofeng.tian@intel.com"
                 }
             ],
@@ -2687,7 +2687,7 @@
             "enabled": true,
             "ip_owner": [
                 {
-                    "name": "Tian\u00a0\u00a0Baofeng",
+                    "name": "Tian  Baofeng",
                     "email": "baofeng.tian@intel.com"
                 }
             ],
