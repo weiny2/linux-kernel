@@ -1,3 +1,4 @@
 #black list file for branches that are currently not merging
 #format is <branch str>#<reason for disabling>
 git://github.com/yyu168/linux_cet cet #DISABLED due merge conflicts on 8/19
+ssh://git-gar-1.devtools.intel.com:29418/eig_audio_integ-kernel.git for-intel-next #Disabled due to merge conflcits with drm on 08/22
