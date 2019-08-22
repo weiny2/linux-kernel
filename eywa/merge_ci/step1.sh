@@ -12,7 +12,8 @@ function clean_build {
 }
 
 function run_blacklist {
-	./blacklist.py
+	#./blacklist.py
+	return
 }
 
 function append_test_branch {
@@ -55,19 +56,20 @@ EOF
 }
 
 function gen_manifest {
-	pushd .
-	cd ./eywa
 	if [ -z $skip_fetch ]; then
-		./gen-manifest.sh
+		./merge.py -g
+		if [ $? != 0 ]; then
+                   echo "merge.py -g failed to generate manifest. look at intel-next-merge*.log"
+		fi
 	else
-		./gen-manifest.sh -s
-	fi
+		./merge.py -g -s
+		if [ $? != 0 ]; then
+                   echo "merge.py -g failed to generate manifest. look at intel-next-merge*.log"
+		fi
 
-	mv manifest ..
-	popd
+	fi
 	rm README*
 	#RUN replace.py script to replace any branches
-	./replace.py
 }
 
 exit_usage() {
@@ -124,12 +126,8 @@ fi
 
 #check to see if both options are set
 if [[ ! -z "$merge_test_branch" ]]; then
-	run_blacklist
 	append_test_branch "$merge_test_branch"
 elif [[ ! -z "$merge_single_branch" ]]; then
 	create_single_branch "$merge_single_branch"
-else
-	run_blacklist
 fi
-
 gen_manifest
