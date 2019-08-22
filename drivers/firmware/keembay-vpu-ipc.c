@@ -223,6 +223,7 @@ static int vpu_ipc_handle_event(struct vpu_ipc_dev *vpu_dev,
 {
 	unsigned long flags;
 	int rc = -EINVAL;
+	struct device *dev = &vpu_dev->pdev->dev;
 
 	/* Atomic update of state */
 	spin_lock_irqsave(&vpu_dev->lock, flags);
@@ -273,6 +274,10 @@ static int vpu_ipc_handle_event(struct vpu_ipc_dev *vpu_dev,
 	}
 
 	spin_unlock_irqrestore(&vpu_dev->lock, flags);
+
+	if (rc)
+		dev_err(dev, "Can't handle event %d in state %d\n",
+				event, vpu_dev->state);
 
 	return rc;
 }
@@ -1027,7 +1032,6 @@ static int kickoff_vpu_sequence(struct vpu_ipc_dev *vpu_dev,
 				int (*boot_fn)(struct vpu_ipc_dev *))
 {
 	int rc;
-	int event_rc;
 	int error_close_rc;
 	struct device *dev = &vpu_dev->pdev->dev;
 
@@ -1084,13 +1088,6 @@ close_and_kickoff_failed:
 	}
 
 kickoff_failed:
-	event_rc = vpu_ipc_handle_event(vpu_ipc_dev,
-					KEEMBAY_VPU_EVENT_BOOT_FAILED);
-	if (event_rc < 0)
-		dev_err(dev, "Fatal error: failed to handle fail event.\n");
-
-	/* Prefer original 'rc' to the 'event_rc'. */
-
 	return rc;
 }
 
@@ -1144,6 +1141,7 @@ EXPORT_SYMBOL(intel_keembay_vpu_ipc_recv);
 int intel_keembay_vpu_startup(const char *firmware_name)
 {
 	int rc;
+	int event_rc;
 	const struct firmware *fw;
 	struct device *dev = &vpu_ipc_dev->pdev->dev;
 
@@ -1159,7 +1157,7 @@ int intel_keembay_vpu_startup(const char *firmware_name)
 	rc = request_firmware(&fw, firmware_name, &vpu_ipc_dev->pdev->dev);
 	if (rc < 0) {
 		dev_err(dev, "Couldn't find firmware: %d\n", rc);
-		return rc;
+		goto boot_failed_no_fw;
 	}
 
 	/* Do checks on the firmware header. */
@@ -1178,11 +1176,26 @@ int intel_keembay_vpu_startup(const char *firmware_name)
 
 	/* Try 'boot' sequence */
 	rc = kickoff_vpu_sequence(vpu_ipc_dev, request_vpu_boot);
-	if (rc < 0)
+	if (rc < 0) {
 		dev_err(dev, "Failed to boot VPU.\n");
+		goto boot_failed;
+	}
+
+	release_firmware(fw);
+	return 0;
 
 boot_failed:
 	release_firmware(fw);
+
+boot_failed_no_fw:
+	event_rc = vpu_ipc_handle_event(vpu_ipc_dev,
+			KEEMBAY_VPU_EVENT_BOOT_FAILED);
+	if (event_rc < 0)
+		dev_err(dev, "Fatal error: failed to handle fail event: %d.\n",
+				event_rc);
+
+	/* Prefer original 'rc' to the 'event_rc'. */
+
 	return rc;
 }
 EXPORT_SYMBOL(intel_keembay_vpu_startup);
@@ -1198,6 +1211,7 @@ EXPORT_SYMBOL(intel_keembay_vpu_startup);
 int intel_keembay_vpu_reset(void)
 {
 	int rc;
+	int event_rc;
 	struct device *dev = &vpu_ipc_dev->pdev->dev;
 
 	rc = vpu_ipc_handle_event(vpu_ipc_dev, KEEMBAY_VPU_EVENT_RESET);
@@ -1210,8 +1224,22 @@ int intel_keembay_vpu_reset(void)
 
 	/* Try 'reset' sequence */
 	rc = kickoff_vpu_sequence(vpu_ipc_dev, request_vpu_reset);
-	if (rc < 0)
+	if (rc < 0) {
 		dev_err(dev, "Failed to reset VPU.\n");
+		goto reset_failed;
+	}
+
+	return 0;
+
+reset_failed:
+	/* Reset failed somewhere, reset the state. */
+	event_rc = vpu_ipc_handle_event(vpu_ipc_dev,
+			KEEMBAY_VPU_EVENT_BOOT_FAILED);
+	if (event_rc < 0)
+		dev_err(dev, "Fatal error: failed to handle fail event: %d.\n",
+				event_rc);
+
+	/* Prefer original 'rc' to the 'event_rc'. */
 
 	return rc;
 }
