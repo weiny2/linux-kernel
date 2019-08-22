@@ -269,7 +269,7 @@ ssh://git-ger-6.devtools.intel.com:29418/secure_git_internal_repo-my_internal_re
 # IP Owners            : Kasichainula, Kishore <kishore.kasichainula@intel.com>
 # Configs              : CONFIG_STMMAC_ETH=m
 #                        CONFIG_STMMAC_PCI=m
-#DISABLED due to merge conflicts on 8/12 ssh://git@gitlab.devtools.intel.com:29418/OWR/IoTG/ESE/Connectivity/Linux-Ethernet/ese_linux_net_next.git dev/master
+ssh://git@gitlab.devtools.intel.com:29418/OWR/IoTG/ESE/Connectivity/Linux-Ethernet/ese_linux_net_next.git dev/master
 
 # Intel Trace Hub
 # Contains support for Ice Lake and Tiger Lake and MIPI SyS-T protocol support.
