@@ -2584,7 +2584,7 @@
             "stuck_at_ref": ""
         },
         {
-            "branch": "thb_0629_v5.3-rc3_v3",
+            "branch": "thb_0629_v5.3-rc5",
             "branch_type": "expiring",
             "config_options": [
                 {
