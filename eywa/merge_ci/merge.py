@@ -57,6 +57,7 @@ def git_add_remote(name,repo_url,current_remotes):
 def git_fetch_remote(name):
     print("Fetching {}".format(name))
     run_git_cmd("git fetch --prune --force {}".format(name))
+    sys.stdout.flush()
 
 def sanitize_repo_name(repo_url):
     #This is a special case for Len's branch which has a ~ in it
