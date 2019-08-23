@@ -222,6 +222,36 @@
             "stuck_at_ref": ""
         },
         {
+            "branch": "split_lock",
+            "branch_type": "expiring",
+            "config_options": [],
+            "contributor": [
+                {
+                    "name": "Fenghua Yu",
+                    "email": "fenghua.yu@intel.com"
+                }
+            ],
+            "description": "Enable split lock detection",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Ravi Shankar",
+                    "email": "ravi.v.shankar@intel.com"
+                }
+            ],
+            "jira": "NEXT-1574",
+            "name": "split_lock",
+            "repourl": "ssh://git-amr-4.devtools.intel.com:29418/enabling_cldemote_in_linux_kerne-linux_git",
+            "sdl_contact": [
+                {
+                    "name": "Ashok Raj",
+                    "email": "ashok.raj@intel.com"
+                }
+            ],
+            "status": "public",
+            "stuck_at_ref": ""
+        },
+        {
             "branch": "for-intel-next",
             "branch_type": "internal nonexpiring",
             "config_options": [
@@ -2590,36 +2620,6 @@
                 {
                     "name": "Hari Chand balasubramaniam",
                     "email": "hari.chand.balasubramaniam@intel.com"
-                }
-            ],
-            "status": "public",
-            "stuck_at_ref": ""
-        },
-        {
-            "branch": "split_lock",
-            "branch_type": "expiring",
-            "config_options": [],
-            "contributor": [
-                {
-                    "name": "Fenghua Yu",
-                    "email": "fenghua.yu@intel.com"
-                }
-            ],
-            "description": "Enable split lock detection",
-            "enabled": true,
-            "ip_owner": [
-                {
-                    "name": "Ravi Shankar",
-                    "email": "ravi.v.shankar@intel.com"
-                }
-            ],
-            "jira": "NEXT-1574",
-            "name": "split_lock",
-            "repourl": "ssh://git-amr-4.devtools.intel.com:29418/enabling_cldemote_in_linux_kerne-linux_git",
-            "sdl_contact": [
-                {
-                    "name": "Ashok Raj",
-                    "email": "ashok.raj@intel.com"
                 }
             ],
             "status": "public",
