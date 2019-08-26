@@ -4,36 +4,7 @@
 import json
 
 #file location for blacklist 
-blacklist_loc ="blacklist"
-manifest_loc = "eywa/manifest.in"
-def read_blacklist():
-    #print("Reading blacklist file")
-    blacklist = []
-    with open(blacklist_loc) as f:
-        data = f.read()
-        for line in data.split("\n"):
-            if len(line) > 0 and line[0] != "#": #skip comments in blacklist file
-                line_to_bl,reason = line.split("#")
-                blacklist.append((line_to_bl.strip(),reason))
-    return blacklist
-
-def gen_new_manifest(blacklist):
-    #print("Running blacklist against manifest.in")
-    fobj = open(manifest_loc)
-    lines_to_write =[]
-    lines = fobj.read()
-    fobj.close()
-    dis_count = 0
-    for line in lines.split("\n"):
-        outline = line
-        for bentry,reason in blacklist:
-            if bentry in line and reason not in line:
-                #print("Disabled {}".format(outline))
-		#comment out line with reason
-                outline = "#" +reason + " "+ outline
-                dis_count+=1   
-        lines_to_write.append(outline)
-    return "\n".join(lines_to_write)
+manifest_loc = "eywa/manifest"
 
 def add_branch(branches,repo,branch,project):
     for entry in branches:
@@ -49,7 +20,9 @@ def get_branches(manifest_str):
     eywa_branch = r"ssh://git-amr-1.devtools.intel.com:29418/otc_intel_next-linux.git"
     for line in manifest_str.split("\n"):
         if eywa_branch not in line and len(line) > 0 and line[0] !="#":
-            repo,branch = line.split()
+            parsed = line.split()
+            repo = parsed[0]
+            branch = parsed[1]
             branch_name = branch.replace("/","_")
             branch_name = branch_name.replace(".","_")
             project = repo.split("://")[1]
@@ -61,8 +34,7 @@ def get_branches(manifest_str):
     return branches
 
 def main():
-    blacklist = read_blacklist()
-    manifest = gen_new_manifest(blacklist)
+    manifest = open(manifest_loc).read()
     print(json.dumps(get_branches(manifest),sort_keys=True,indent=4))
 
 if __name__== "__main__":
