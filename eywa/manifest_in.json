@@ -2752,6 +2752,60 @@
             ],
             "status": "public",
             "stuck_at_ref": ""
+        },
+        {
+            "branch": "acrn_staging_next",
+            "branch_type": "expiring",
+            "config_options": [],
+            "contributor": [
+                {
+                    "name": "Yakui Zhao",
+                    "email": "yakui.zhao@intel.com"
+                }
+            ],
+            "description": "ACRN/GVT-g Hypervisor to intel-next kernel",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Jason CJ Chenn",
+                    "email": "Jason.cj.chen@intel.com"
+                },
+                {
+                    "name": "MingQiang Chi",
+                    "email": "Mingqiang.chi@intel.com"
+                },
+                {
+                    "name": "Fei1 Li",
+                    "email": "fei1.li@intel.com"
+                },
+                {
+                    "name": "FengWei Yin",
+                    "email": "Fengwei.yin@intel.com"
+                },
+                {
+                    "name": "Yakui Zhao",
+                    "email": "yakui.zhao@intel.com"
+                },
+                {
+                    "name": "Shuo A Liu",
+                    "email": "shuo.a.liu@intel.com"
+                },
+                {
+                    "name": "Yu1, Wang",
+                    "email": "yu1.wang@intel.com"
+                }
+            ],
+            "jira": "",
+            "name": "ACRN",
+            "repourl": "git://github.com/projectacrn/acrn-kernel.git",
+            "sdl_contact": [
+                {
+                    "name": "Yao Michael",
+                    "email": "Michael.yao@intel.com"
+                }
+            ],
+            "status": "public",
+            "stuck_at_ref": ""
         }
     ]
 }
