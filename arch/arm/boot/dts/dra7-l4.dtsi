@@ -3045,7 +3045,6 @@
 
 		target-module@84000 {			/* 0x48484000, ap 3 10.0 */
 			compatible = "ti,sysc-omap4-simple", "ti,sysc";
-			ti,hwmods = "gmac";
 			reg = <0x85200 0x4>,
 			      <0x85208 0x4>,
 			      <0x85204 0x4>;
@@ -3103,9 +3102,10 @@
 
 				davinci_mdio: mdio@1000 {
 					compatible = "ti,cpsw-mdio","ti,davinci_mdio";
+					clocks = <&gmac_clkctrl DRA7_GMAC_GMAC_CLKCTRL 0>;
+					clock-names = "fck";
 					#address-cells = <1>;
 					#size-cells = <0>;
-					ti,hwmods = "davinci_mdio";
 					bus_freq = <1000000>;
 					reg = <0x1000 0x100>;
 				};
