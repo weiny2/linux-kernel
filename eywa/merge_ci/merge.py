@@ -274,7 +274,7 @@ def main():
     if  continue_merge == False:
         gen_manifest(online,skip_fetch,fetch_single)
         if run_gen_manifest:
-            print("manfiest generation has completed")
+            print("Manifest generation has completed")
             return
         #We are starting a new merge so reset the repo
         reset_repo(manifest)
