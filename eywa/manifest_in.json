@@ -2397,7 +2397,7 @@
                 }
             ],
             "description": "PCIe VPU drivers for IOTG Keem Bay Xlink",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Seng Kai Tan",
@@ -2756,7 +2756,56 @@
         {
             "branch": "acrn_staging_next",
             "branch_type": "expiring",
-            "config_options": [],
+            "config_options": [
+                {
+                    "name": "CONFIG_ACRN",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_X86_X2APIC",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_VIRTIO_PCI",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_VIRTIO_PCI_LEGACY",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_ACRN_VIRTIO_DEVICES",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_VBS",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_VBS_RNG",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_ACRN_SHARED_BUFFER",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_ACRN_TRACE",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_ACRN_HVLOG",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_ACRN_HV_NPK_LOG",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_ACRN_VHM",
+                    "value": "y"
+                }
+            ],
             "contributor": [
                 {
                     "name": "Yakui Zhao",
