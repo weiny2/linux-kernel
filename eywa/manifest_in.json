@@ -2795,7 +2795,7 @@
                     "email": "yu1.wang@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1580",
             "name": "ACRN",
             "repourl": "git://github.com/projectacrn/acrn-kernel.git",
             "sdl_contact": [
