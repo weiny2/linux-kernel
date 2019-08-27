@@ -2874,7 +2874,7 @@
                     "email": "kyle.d.pelton@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1578",
             "name": "clear_patches",
             "repourl": "ssh://git-amr-4.devtools.intel.com:29418/otc_power-kernel.git",
             "sdl_contact": [
