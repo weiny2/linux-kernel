@@ -1,6 +1,6 @@
 #
 # Automatically generated file; DO NOT EDIT.
-# Linux/x86 5.3.0-rc5 Kernel Configuration
+# Linux/x86 5.3.0-rc6 Kernel Configuration
 #
 
 #
@@ -3246,6 +3246,7 @@ CONFIG_I2C_ALGOBIT=y
 # PC SMBus host controller drivers
 #
 # CONFIG_I2C_ALI1535 is not set
+# CONFIG_I2C_VIRTIO is not set
 # CONFIG_I2C_ALI1563 is not set
 # CONFIG_I2C_ALI15X3 is not set
 # CONFIG_I2C_AMD756 is not set
@@ -3461,6 +3462,7 @@ CONFIG_GPIO_SCH=m
 # CONFIG_GPIO_PCI_IDIO_16 is not set
 # CONFIG_GPIO_PCIE_IDIO_24 is not set
 # CONFIG_GPIO_RDC321X is not set
+# CONFIG_GPIO_VIRTIO is not set
 # end of PCI GPIO expanders
 
 #
@@ -5985,6 +5987,8 @@ CONFIG_VIRTIO_PCI_LEGACY=y
 # CONFIG_VIRTIO_INPUT is not set
 CONFIG_VIRTIO_MMIO=m
 CONFIG_VIRTIO_MMIO_CMDLINE_DEVICES=y
+CONFIG_ACRN_VIRTIO_DEVICES=y
+# CONFIG_VIRTIO_PMD is not set
 
 #
 # Microsoft Hyper-V guest support
