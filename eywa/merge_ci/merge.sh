@@ -159,7 +159,7 @@ do_merge() {
 			if [ $? -ne 0 ]; then
 				output=`git rerere diff`
 				if [ "$output" = "" ]; then
-					echo "Rerere handled conflicts.. Priting log and continuing merge"
+					echo "Rerere handled conflicts.. Printing log and continuing merge"
 					echo "merge log"
 					git diff --stat --stat-width=200 --cached
 					git commit --no-edit
