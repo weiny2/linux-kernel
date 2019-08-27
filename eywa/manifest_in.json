@@ -1801,7 +1801,7 @@
                 }
             ],
             "description": "Multi-Key Total Memory Encryption enabling",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Baiju Patel",
