@@ -739,16 +739,6 @@ static int uac_mixer_unit_get_channels(struct mixer_build *state,
 				       struct uac_mixer_unit_descriptor *desc)
 {
 	int mu_channels;
-<<<<<<< HEAD
-
-	if (desc->bLength < sizeof(*desc))
-		return -EINVAL;
-	if (!desc->bNrInPins)
-		return -EINVAL;
-	if (desc->bLength < sizeof(*desc) + desc->bNrInPins)
-		return -EINVAL;
-=======
->>>>>>> linux-next/akpm-base
 
 	switch (state->mixer->protocol) {
 	case UAC_VERSION_1:
