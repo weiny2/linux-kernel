@@ -3432,13 +3432,11 @@ static const struct fs_parameter_enum shmem_param_enums[] = {
 	{ Opt_huge,	"always",	SHMEM_HUGE_ALWAYS },
 	{ Opt_huge,	"within_size",	SHMEM_HUGE_WITHIN_SIZE },
 	{ Opt_huge,	"advise",	SHMEM_HUGE_ADVISE },
-	{ Opt_huge,	"deny",		SHMEM_HUGE_DENY },
-	{ Opt_huge,	"force",	SHMEM_HUGE_FORCE },
 	{}
 };
 
 const struct fs_parameter_description shmem_fs_parameters = {
-	.name		= "shmem",
+	.name		= "tmpfs",
 	.specs		= shmem_param_specs,
 	.enums		= shmem_param_enums,
 };
@@ -3448,9 +3446,9 @@ static void shmem_apply_options(struct shmem_sb_info *sbinfo,
 				unsigned long inodes_in_use)
 {
 	struct shmem_fs_context *ctx = fc->fs_private;
-	struct mempolicy *old = NULL;
 
-	if (test_bit(Opt_nr_blocks, &ctx->changes))
+	if (test_bit(Opt_nr_blocks, &ctx->changes) ||
+	    test_bit(Opt_size, &ctx->changes))
 		sbinfo->max_blocks = ctx->max_blocks;
 	if (test_bit(Opt_nr_inodes, &ctx->changes)) {
 		sbinfo->max_inodes = ctx->max_inodes;
@@ -3459,8 +3457,11 @@ static void shmem_apply_options(struct shmem_sb_info *sbinfo,
 	if (test_bit(Opt_huge, &ctx->changes))
 		sbinfo->huge = ctx->huge;
 	if (test_bit(Opt_mpol, &ctx->changes)) {
-		old = sbinfo->mpol;
-		sbinfo->mpol = ctx->mpol;
+		/*
+		 * Update sbinfo->mpol now while stat_lock is held.
+		 * Leave shmem_free_fc() to free the old mpol if any.
+		 */
+		swap(sbinfo->mpol, ctx->mpol);
 	}
 
 	if (fc->purpose != FS_CONTEXT_FOR_RECONFIGURE) {
@@ -3471,8 +3472,6 @@ static void shmem_apply_options(struct shmem_sb_info *sbinfo,
 		if (test_bit(Opt_mode, &ctx->changes))
 			sbinfo->mode = ctx->mode;
 	}
-
-	mpol_put(old);
 }
 
 static int shmem_parse_param(struct fs_context *fc, struct fs_parameter *param)
@@ -3498,7 +3497,7 @@ static int shmem_parse_param(struct fs_context *fc, struct fs_parameter *param)
 			rest++;
 		}
 		if (*rest)
-			return invalf(fc, "shmem: Invalid size");
+			goto bad_value;
 		ctx->max_blocks = DIV_ROUND_UP(size, PAGE_SIZE);
 		break;
 
@@ -3506,55 +3505,59 @@ static int shmem_parse_param(struct fs_context *fc, struct fs_parameter *param)
 		rest = param->string;
 		ctx->max_blocks = memparse(param->string, &rest);
 		if (*rest)
-			return invalf(fc, "shmem: Invalid nr_blocks");
+			goto bad_value;
 		break;
+
 	case Opt_nr_inodes:
 		rest = param->string;
 		ctx->max_inodes = memparse(param->string, &rest);
 		if (*rest)
-			return invalf(fc, "shmem: Invalid nr_inodes");
+			goto bad_value;
 		break;
+
 	case Opt_mode:
 		ctx->mode = result.uint_32 & 07777;
 		break;
+
 	case Opt_uid:
 		ctx->uid = make_kuid(current_user_ns(), result.uint_32);
 		if (!uid_valid(ctx->uid))
-			return invalf(fc, "shmem: Invalid uid");
+			goto bad_value;
 		break;
 
 	case Opt_gid:
 		ctx->gid = make_kgid(current_user_ns(), result.uint_32);
 		if (!gid_valid(ctx->gid))
-			return invalf(fc, "shmem: Invalid gid");
+			goto bad_value;
 		break;
 
 	case Opt_huge:
-#ifdef CONFIG_TRANSPARENT_HUGE_PAGECACHE
-		if (!has_transparent_hugepage() &&
-		    result.uint_32 != SHMEM_HUGE_NEVER)
-			return invalf(fc, "shmem: Huge pages disabled");
-
 		ctx->huge = result.uint_32;
+		if (ctx->huge != SHMEM_HUGE_NEVER &&
+		    !(IS_ENABLED(CONFIG_TRANSPARENT_HUGE_PAGECACHE) &&
+		      has_transparent_hugepage()))
+			goto unsupported_parameter;
 		break;
-#else
-		return invalf(fc, "shmem: huge= option disabled");
-#endif
 
-	case Opt_mpol: {
-#ifdef CONFIG_NUMA
-		struct mempolicy *mpol;
-		if (mpol_parse_str(param->string, &mpol))
-			return invalf(fc, "shmem: Invalid mpol=");
-		mpol_put(ctx->mpol);
-		ctx->mpol = mpol;
-#endif
-		break;
-	}
+	case Opt_mpol:
+		if (IS_ENABLED(CONFIG_NUMA)) {
+			struct mempolicy *mpol;
+			if (mpol_parse_str(param->string, &mpol))
+				goto bad_value;
+			mpol_put(ctx->mpol);
+			ctx->mpol = mpol;
+			break;
+		}
+		goto unsupported_parameter;
 	}
 
 	__set_bit(opt, &ctx->changes);
 	return 0;
+
+unsupported_parameter:
+	return invalf(fc, "tmpfs: Unsupported parameter '%s'", param->key);
+bad_value:
+	return invalf(fc, "tmpfs: Bad value for '%s'", param->key);
 }
 
 /*
@@ -3572,14 +3575,15 @@ static int shmem_reconfigure(struct fs_context *fc)
 	unsigned long inodes_in_use;
 
 	spin_lock(&sbinfo->stat_lock);
-	if (test_bit(Opt_nr_blocks, &ctx->changes)) {
+	if (test_bit(Opt_nr_blocks, &ctx->changes) ||
+	    test_bit(Opt_size, &ctx->changes)) {
 		if (ctx->max_blocks && !sbinfo->max_blocks) {
 			spin_unlock(&sbinfo->stat_lock);
-			return invalf(fc, "shmem: Can't retroactively limit nr_blocks");
+			return invalf(fc, "tmpfs: Cannot retroactively limit size");
 		}
 		if (percpu_counter_compare(&sbinfo->used_blocks, ctx->max_blocks) > 0) {
 			spin_unlock(&sbinfo->stat_lock);
-			return invalf(fc, "shmem: Too few blocks for current use");
+			return invalf(fc, "tmpfs: Too small a size for current use");
 		}
 	}
 
@@ -3587,11 +3591,11 @@ static int shmem_reconfigure(struct fs_context *fc)
 	if (test_bit(Opt_nr_inodes, &ctx->changes)) {
 		if (ctx->max_inodes && !sbinfo->max_inodes) {
 			spin_unlock(&sbinfo->stat_lock);
-			return invalf(fc, "shmem: Can't retroactively limit nr_inodes");
+			return invalf(fc, "tmpfs: Cannot retroactively limit inodes");
 		}
 		if (ctx->max_inodes < inodes_in_use) {
 			spin_unlock(&sbinfo->stat_lock);
-			return invalf(fc, "shmem: Too few inodes for current use");
+			return invalf(fc, "tmpfs: Too few inodes for current use");
 		}
 	}
 
