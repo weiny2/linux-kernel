@@ -1092,6 +1092,12 @@
 			the framebuffer, pass the 'ram' option so that it is
 			mapped with the correct attributes.
 
+		linflex,<addr>
+			Use early console provided by Freescale LinFlex UART
+			serial driver for NXP S32V234 SoCs. A valid base
+			address must be provided, and the serial port must
+			already be setup and configured.
+
 	earlyprintk=	[X86,SH,ARM,M68k,S390]
 			earlyprintk=vga
 			earlyprintk=sclp
@@ -1813,7 +1819,7 @@
 			  synchronously.
 
 	iommu.passthrough=
-			[ARM64] Configure DMA to bypass the IOMMU by default.
+			[ARM64, X86] Configure DMA to bypass the IOMMU by default.
 			Format: { "0" | "1" }
 			0 - Use IOMMU translation for DMA.
 			1 - Bypass the IOMMU for DMA.
@@ -2263,6 +2269,15 @@
 	lockd.nlm_udpport=M	[NFS] Assign UDP port.
 			Format: <integer>
 
+	lockdown=	[SECURITY]
+			{ integrity | confidentiality }
+			Enable the kernel lockdown feature. If set to
+			integrity, kernel features that allow userland to
+			modify the running kernel are disabled. If set to
+			confidentiality, kernel features that allow userland
+			to extract confidential information from the kernel
+			are also disabled.
+
 	locktorture.nreaders_stress= [KNL]
 			Set the number of locking read-acquisition kthreads.
 			Defaults to being automatically set based on the
@@ -2375,7 +2390,7 @@
 
 	machvec=	[IA-64] Force the use of a particular machine-vector
 			(machvec) in a generic kernel.
-			Example: machvec=hpzx1_swiotlb
+			Example: machvec=hpzx1
 
 	machtype=	[Loongson] Share the same kernel image file between different
 			 yeeloong laptop.
@@ -3172,6 +3187,11 @@
 			This can be set from sysctl after boot.
 			See Documentation/admin-guide/sysctl/vm.rst for details.
 
+	of_devlink	[KNL] Make device links from common DT bindings. Useful
+			for optimizing probe order and making sure resources
+			aren't turned off before the consumer devices have
+			probed.
+
 	ohci1394_dma=early	[HW] enable debugging via the ohci1394 driver.
 			See Documentation/debugging-via-ohci1394.txt for more
 			info.
@@ -3454,12 +3474,13 @@
 				specify the device is described above.
 				If <order of align> is not specified,
 				PAGE_SIZE is used as alignment.
-				PCI-PCI bridge can be specified, if resource
+				A PCI-PCI bridge can be specified if resource
 				windows need to be expanded.
 				To specify the alignment for several
 				instances of a device, the PCI vendor,
 				device, subvendor, and subdevice may be
-				specified, e.g., 4096@pci:8086:9c22:103c:198f
+				specified, e.g., 12@pci:8086:9c22:103c:198f
+				for 4096-byte alignment.
 		ecrc=		Enable/disable PCIe ECRC (transaction layer
 				end-to-end CRC checking).
 				bios: Use BIOS/firmware settings. This is the
@@ -3839,12 +3860,13 @@
 			RCU_BOOST is not set, valid values are 0-99 and
 			the default is zero (non-realtime operation).
 
-	rcutree.rcu_nocb_leader_stride= [KNL]
-			Set the number of NOCB kthread groups, which
-			defaults to the square root of the number of
-			CPUs.  Larger numbers reduces the wakeup overhead
-			on the per-CPU grace-period kthreads, but increases
-			that same overhead on each group's leader.
+	rcutree.rcu_nocb_gp_stride= [KNL]
+			Set the number of NOCB callback kthreads in
+			each group, which defaults to the square root
+			of the number of CPUs.	Larger numbers reduce
+			the wakeup overhead on the global grace-period
+			kthread, but increases that same overhead on
+			each group's NOCB grace-period kthread.
 
 	rcutree.qhimark= [KNL]
 			Set threshold of queued RCU callbacks beyond which
@@ -4048,6 +4070,10 @@
 
 	rcutorture.verbose= [KNL]
 			Enable additional printk() statements.
+
+	rcupdate.rcu_cpu_stall_ftrace_dump= [KNL]
+			Dump ftrace buffer after reporting RCU CPU
+			stall warning.
 
 	rcupdate.rcu_cpu_stall_suppress= [KNL]
 			Suppress RCU CPU stall warning messages.

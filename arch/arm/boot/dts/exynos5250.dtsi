@@ -346,6 +346,7 @@
 			clock-names = "sata", "sclk_sata";
 			phys = <&sata_phy>;
 			phy-names = "sata-phy";
+			ports-implemented = <0x1>;
 			status = "disabled";
 		};
 
@@ -617,12 +618,8 @@
 
 			clocks = <&clock CLK_USB2>;
 			clock-names = "usbhost";
-			#address-cells = <1>;
-			#size-cells = <0>;
-			port@0 {
-				reg = <0>;
-				phys = <&usb2_phy_gen 1>;
-			};
+			phys = <&usb2_phy_gen 1>;
+			phy-names = "host";
 		};
 
 		ohci: usb@12120000 {
@@ -632,12 +629,8 @@
 
 			clocks = <&clock CLK_USB2>;
 			clock-names = "usbhost";
-			#address-cells = <1>;
-			#size-cells = <0>;
-			port@0 {
-				reg = <0>;
-				phys = <&usb2_phy_gen 1>;
-			};
+			phys = <&usb2_phy_gen 1>;
+			phy-names = "host";
 		};
 
 		usb2_phy_gen: phy@12130000 {

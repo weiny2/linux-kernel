@@ -202,7 +202,7 @@ acpi_ut_execute_CID(struct acpi_namespace_node *device_node,
 	char *next_id_string;
 	u32 string_area_size;
 	u32 length;
-	u32 cid_list_size;
+	size_t cid_list_size;
 	acpi_status status;
 	u32 count;
 	u32 i;
@@ -262,10 +262,7 @@ acpi_ut_execute_CID(struct acpi_namespace_node *device_node,
 	 * 2) Size of the CID PNP_DEVICE_ID array +
 	 * 3) Size of the actual CID strings
 	 */
-	cid_list_size = sizeof(struct acpi_pnp_device_id_list) +
-	    ((count - 1) * sizeof(struct acpi_pnp_device_id)) +
-	    string_area_size;
-
+	cid_list_size = struct_size(cid_list, ids, count - 1) + string_area_size;
 	cid_list = ACPI_ALLOCATE_ZEROED(cid_list_size);
 	if (!cid_list) {
 		status = AE_NO_MEMORY;

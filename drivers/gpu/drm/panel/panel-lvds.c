@@ -147,8 +147,11 @@ static int panel_lvds_parse_dt(struct panel_lvds *lvds)
 	int ret;
 
 	ret = of_get_display_timing(np, "panel-timing", &timing);
-	if (ret < 0)
+	if (ret < 0) {
+		dev_err(lvds->dev, "%pOF: problems parsing panel-timing (%d)\n",
+			np, ret);
 		return ret;
+	}
 
 	videomode_from_timing(&timing, &lvds->video_mode);
 
@@ -257,9 +260,7 @@ static int panel_lvds_probe(struct platform_device *pdev)
 	 */
 
 	/* Register the panel. */
-	drm_panel_init(&lvds->panel);
-	lvds->panel.dev = lvds->dev;
-	lvds->panel.funcs = &panel_lvds_funcs;
+	drm_panel_init(&lvds->panel, lvds->dev, &panel_lvds_funcs);
 
 	ret = drm_panel_add(&lvds->panel);
 	if (ret < 0)

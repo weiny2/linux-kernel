@@ -302,6 +302,13 @@ enum hclge_fc_mode {
 	HCLGE_FC_DEFAULT
 };
 
+enum hclge_link_fail_code {
+	HCLGE_LF_NORMAL,
+	HCLGE_LF_REF_CLOCK_LOST,
+	HCLGE_LF_XSFP_TX_DISABLE,
+	HCLGE_LF_XSFP_ABSENT,
+};
+
 #define HCLGE_PG_NUM		4
 #define HCLGE_SCH_MODE_SP	0
 #define HCLGE_SCH_MODE_DWRR	1
@@ -530,50 +537,6 @@ enum HCLGE_FD_META_DATA {
 struct key_info {
 	u8 key_type;
 	u8 key_length; /* use bit as unit */
-};
-
-static const struct key_info meta_data_key_info[] = {
-	{ PACKET_TYPE_ID, 6},
-	{ IP_FRAGEMENT, 1},
-	{ ROCE_TYPE, 1},
-	{ NEXT_KEY, 5},
-	{ VLAN_NUMBER, 2},
-	{ SRC_VPORT, 12},
-	{ DST_VPORT, 12},
-	{ TUNNEL_PACKET, 1},
-};
-
-static const struct key_info tuple_key_info[] = {
-	{ OUTER_DST_MAC, 48},
-	{ OUTER_SRC_MAC, 48},
-	{ OUTER_VLAN_TAG_FST, 16},
-	{ OUTER_VLAN_TAG_SEC, 16},
-	{ OUTER_ETH_TYPE, 16},
-	{ OUTER_L2_RSV, 16},
-	{ OUTER_IP_TOS, 8},
-	{ OUTER_IP_PROTO, 8},
-	{ OUTER_SRC_IP, 32},
-	{ OUTER_DST_IP, 32},
-	{ OUTER_L3_RSV, 16},
-	{ OUTER_SRC_PORT, 16},
-	{ OUTER_DST_PORT, 16},
-	{ OUTER_L4_RSV, 32},
-	{ OUTER_TUN_VNI, 24},
-	{ OUTER_TUN_FLOW_ID, 8},
-	{ INNER_DST_MAC, 48},
-	{ INNER_SRC_MAC, 48},
-	{ INNER_VLAN_TAG_FST, 16},
-	{ INNER_VLAN_TAG_SEC, 16},
-	{ INNER_ETH_TYPE, 16},
-	{ INNER_L2_RSV, 16},
-	{ INNER_IP_TOS, 8},
-	{ INNER_IP_PROTO, 8},
-	{ INNER_SRC_IP, 32},
-	{ INNER_DST_IP, 32},
-	{ INNER_L3_RSV, 16},
-	{ INNER_SRC_PORT, 16},
-	{ INNER_DST_PORT, 16},
-	{ INNER_L4_RSV, 32},
 };
 
 #define MAX_KEY_LENGTH	400
@@ -806,9 +769,8 @@ struct hclge_dev {
 	u16 adminq_work_limit; /* Num of admin receive queue desc to process */
 	unsigned long service_timer_period;
 	unsigned long service_timer_previous;
-	struct timer_list service_timer;
 	struct timer_list reset_timer;
-	struct work_struct service_task;
+	struct delayed_work service_task;
 	struct work_struct rst_service_task;
 	struct work_struct mbx_service_task;
 
@@ -864,6 +826,10 @@ struct hclge_dev {
 
 	DECLARE_KFIFO(mac_tnl_log, struct hclge_mac_tnl_stats,
 		      HCLGE_MAC_TNL_LOG_SIZE);
+
+	/* affinity mask and notify for misc interrupt */
+	cpumask_t affinity_mask;
+	struct irq_affinity_notify affinity_notify;
 };
 
 /* VPort level vlan tag configuration for TX direction */
@@ -990,7 +956,6 @@ int hclge_buffer_alloc(struct hclge_dev *hdev);
 int hclge_rss_init_hw(struct hclge_dev *hdev);
 void hclge_rss_indir_init_cfg(struct hclge_dev *hdev);
 
-int hclge_inform_reset_assert_to_vf(struct hclge_vport *vport);
 void hclge_mbx_handler(struct hclge_dev *hdev);
 int hclge_reset_tqp(struct hnae3_handle *handle, u16 queue_id);
 void hclge_reset_vf_queue(struct hclge_vport *vport, u16 queue_id);
@@ -1018,4 +983,7 @@ int hclge_update_port_base_vlan_cfg(struct hclge_vport *vport, u16 state,
 int hclge_push_vf_port_base_vlan_info(struct hclge_vport *vport, u8 vfid,
 				      u16 state, u16 vlan_tag, u16 qos,
 				      u16 vlan_proto);
+void hclge_task_schedule(struct hclge_dev *hdev, unsigned long delay_time);
+int hclge_query_bd_num_cmd_send(struct hclge_dev *hdev,
+				struct hclge_desc *desc);
 #endif

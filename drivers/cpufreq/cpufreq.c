@@ -1807,8 +1807,8 @@ void cpufreq_suspend(void)
 		}
 
 		if (cpufreq_driver->suspend && cpufreq_driver->suspend(policy))
-			pr_err("%s: Failed to suspend driver: %p\n", __func__,
-				policy);
+			pr_err("%s: Failed to suspend driver: %s\n", __func__,
+				cpufreq_driver->name);
 	}
 
 suspend:
@@ -2140,7 +2140,7 @@ int cpufreq_driver_target(struct cpufreq_policy *policy,
 			  unsigned int target_freq,
 			  unsigned int relation)
 {
-	int ret = -EINVAL;
+	int ret;
 
 	down_write(&policy->rwsem);
 

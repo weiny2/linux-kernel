@@ -673,11 +673,8 @@ static int max77686_init_rtc_regmap(struct max77686_rtc_info *info)
 		struct platform_device *pdev = to_platform_device(info->dev);
 
 		info->rtc_irq = platform_get_irq(pdev, 0);
-		if (info->rtc_irq < 0) {
-			dev_err(info->dev, "Failed to get rtc interrupts: %d\n",
-				info->rtc_irq);
+		if (info->rtc_irq < 0)
 			return info->rtc_irq;
-		}
 	} else {
 		info->rtc_irq =  parent_i2c->irq;
 	}
@@ -693,11 +690,11 @@ static int max77686_init_rtc_regmap(struct max77686_rtc_info *info)
 		goto add_rtc_irq;
 	}
 
-	info->rtc = i2c_new_dummy(parent_i2c->adapter,
-				  info->drv_data->rtc_i2c_addr);
-	if (!info->rtc) {
+	info->rtc = i2c_new_dummy_device(parent_i2c->adapter,
+					 info->drv_data->rtc_i2c_addr);
+	if (IS_ERR(info->rtc)) {
 		dev_err(info->dev, "Failed to allocate I2C device for RTC\n");
-		return -ENODEV;
+		return PTR_ERR(info->rtc);
 	}
 
 	info->rtc_regmap = devm_regmap_init_i2c(info->rtc,

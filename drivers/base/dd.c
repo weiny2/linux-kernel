@@ -554,8 +554,15 @@ re_probe:
 			goto probe_failed;
 	}
 
+	if (device_add_groups(dev, drv->dev_groups)) {
+		dev_err(dev, "device_add_groups() failed\n");
+		goto dev_groups_failed;
+	}
+
 	if (test_remove) {
 		test_remove = false;
+
+		device_remove_groups(dev, drv->dev_groups);
 
 		if (dev->bus->remove)
 			dev->bus->remove(dev);
@@ -584,6 +591,11 @@ re_probe:
 		 drv->bus->name, __func__, dev_name(dev), drv->name);
 	goto done;
 
+dev_groups_failed:
+	if (dev->bus->remove)
+		dev->bus->remove(dev);
+	else if (drv->remove)
+		drv->remove(dev);
 probe_failed:
 	if (dev->bus)
 		blocking_notifier_call_chain(&dev->bus->p->bus_notifier,
@@ -698,6 +710,12 @@ int driver_probe_device(struct device_driver *drv, struct device *dev)
 	pr_debug("bus: '%s': %s: matched device %s with driver %s\n",
 		 drv->bus->name, __func__, dev_name(dev), drv->name);
 
+	if (drv->edit_links) {
+		if (drv->edit_links(dev))
+			dev->has_edit_links = true;
+		else
+			device_link_remove_from_wfs(dev);
+	}
 	pm_runtime_get_suppliers(dev);
 	if (dev->parent)
 		pm_runtime_get_sync(dev->parent);
@@ -785,6 +803,29 @@ struct device_attach_data {
 	 */
 	bool have_async;
 };
+
+static int __driver_edit_links(struct device_driver *drv, void *data)
+{
+	struct device *dev = data;
+
+	if (!drv->edit_links)
+		return 0;
+
+	if (driver_match_device(drv, dev) <= 0)
+		return 0;
+
+	return drv->edit_links(dev);
+}
+
+int driver_edit_links(struct device *dev)
+{
+	int ret;
+
+	device_lock(dev);
+	ret = bus_for_each_drv(dev->bus, NULL, dev, __driver_edit_links);
+	device_unlock(dev);
+	return ret;
+}
 
 static int __device_attach_driver(struct device_driver *drv, void *_data)
 {
@@ -1113,6 +1154,8 @@ static void __device_release_driver(struct device *dev, struct device *parent)
 						     dev);
 
 		pm_runtime_put_sync(dev);
+
+		device_remove_groups(dev, drv->dev_groups);
 
 		if (dev->bus && dev->bus->remove)
 			dev->bus->remove(dev);

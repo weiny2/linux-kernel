@@ -740,7 +740,7 @@ enum ice_status ice_init_hw(struct ice_hw *hw)
 
 	ice_get_itr_intrl_gran(hw);
 
-	status = ice_init_all_ctrlq(hw);
+	status = ice_create_all_ctrlq(hw);
 	if (status)
 		goto err_unroll_cqinit;
 
@@ -855,7 +855,7 @@ err_unroll_sched:
 err_unroll_alloc:
 	devm_kfree(ice_hw_to_dev(hw), hw->port_info);
 err_unroll_cqinit:
-	ice_shutdown_all_ctrlq(hw);
+	ice_destroy_all_ctrlq(hw);
 	return status;
 }
 
@@ -881,7 +881,7 @@ void ice_deinit_hw(struct ice_hw *hw)
 
 	/* Attempt to disable FW logging before shutting down control queues */
 	ice_cfg_fw_log(hw, false);
-	ice_shutdown_all_ctrlq(hw);
+	ice_destroy_all_ctrlq(hw);
 
 	/* Clear VSI contexts if not already cleared */
 	ice_clear_all_vsi_ctx(hw);
@@ -1078,6 +1078,7 @@ static const struct ice_ctx_ele ice_rlan_ctx_info[] = {
 	ICE_CTX_STORE(ice_rlan_ctx, tphdata_ena,	1,	195),
 	ICE_CTX_STORE(ice_rlan_ctx, tphhead_ena,	1,	196),
 	ICE_CTX_STORE(ice_rlan_ctx, lrxqthresh,		3,	198),
+	ICE_CTX_STORE(ice_rlan_ctx, prefena,		1,	201),
 	{ 0 }
 };
 
@@ -1088,13 +1089,19 @@ static const struct ice_ctx_ele ice_rlan_ctx_info[] = {
  * @rxq_index: the index of the Rx queue
  *
  * Converts rxq context from sparse to dense structure and then writes
- * it to HW register space
+ * it to HW register space and enables the hardware to prefetch descriptors
+ * instead of only fetching them on demand
  */
 enum ice_status
 ice_write_rxq_ctx(struct ice_hw *hw, struct ice_rlan_ctx *rlan_ctx,
 		  u32 rxq_index)
 {
 	u8 ctx_buf[ICE_RXQ_CTX_SZ] = { 0 };
+
+	if (!rlan_ctx)
+		return ICE_ERR_BAD_PTR;
+
+	rlan_ctx->prefena = 1;
 
 	ice_set_ctx((u8 *)rlan_ctx, ctx_buf, ice_rlan_ctx_info);
 	return ice_copy_rxq_ctx_to_hw(hw, ctx_buf, rxq_index);
@@ -2024,7 +2031,7 @@ enum ice_status ice_update_link_info(struct ice_port_info *pi)
 		if (!pcaps)
 			return ICE_ERR_NO_MEMORY;
 
-		status = ice_aq_get_phy_caps(pi, false, ICE_AQC_REPORT_SW_CFG,
+		status = ice_aq_get_phy_caps(pi, false, ICE_AQC_REPORT_TOPO_CAP,
 					     pcaps, NULL);
 		if (!status)
 			memcpy(li->module_type, &pcaps->module_type,
@@ -2174,27 +2181,24 @@ ice_cfg_phy_fec(struct ice_aqc_set_phy_cfg_data *cfg, enum ice_fec_mode fec)
 {
 	switch (fec) {
 	case ICE_FEC_BASER:
-		/* Clear auto FEC and RS bits, and AND BASE-R ability
+		/* Clear RS bits, and AND BASE-R ability
 		 * bits and OR request bits.
 		 */
-		cfg->caps &= ~ICE_AQC_PHY_EN_AUTO_FEC;
 		cfg->link_fec_opt &= ICE_AQC_PHY_FEC_10G_KR_40G_KR4_EN |
 				     ICE_AQC_PHY_FEC_25G_KR_CLAUSE74_EN;
 		cfg->link_fec_opt |= ICE_AQC_PHY_FEC_10G_KR_40G_KR4_REQ |
 				     ICE_AQC_PHY_FEC_25G_KR_REQ;
 		break;
 	case ICE_FEC_RS:
-		/* Clear auto FEC and BASE-R bits, and AND RS ability
+		/* Clear BASE-R bits, and AND RS ability
 		 * bits and OR request bits.
 		 */
-		cfg->caps &= ~ICE_AQC_PHY_EN_AUTO_FEC;
 		cfg->link_fec_opt &= ICE_AQC_PHY_FEC_25G_RS_CLAUSE91_EN;
 		cfg->link_fec_opt |= ICE_AQC_PHY_FEC_25G_RS_528_REQ |
 				     ICE_AQC_PHY_FEC_25G_RS_544_REQ;
 		break;
 	case ICE_FEC_NONE:
-		/* Clear auto FEC and all FEC option bits. */
-		cfg->caps &= ~ICE_AQC_PHY_EN_AUTO_FEC;
+		/* Clear all FEC option bits. */
 		cfg->link_fec_opt &= ~ICE_AQC_PHY_FEC_MASK;
 		break;
 	case ICE_FEC_AUTO:
@@ -3240,40 +3244,44 @@ void ice_replay_post(struct ice_hw *hw)
 /**
  * ice_stat_update40 - read 40 bit stat from the chip and update stat values
  * @hw: ptr to the hardware info
- * @hireg: high 32 bit HW register to read from
- * @loreg: low 32 bit HW register to read from
+ * @reg: offset of 64 bit HW register to read from
  * @prev_stat_loaded: bool to specify if previous stats are loaded
  * @prev_stat: ptr to previous loaded stat value
  * @cur_stat: ptr to current stat value
  */
 void
-ice_stat_update40(struct ice_hw *hw, u32 hireg, u32 loreg,
-		  bool prev_stat_loaded, u64 *prev_stat, u64 *cur_stat)
+ice_stat_update40(struct ice_hw *hw, u32 reg, bool prev_stat_loaded,
+		  u64 *prev_stat, u64 *cur_stat)
 {
-	u64 new_data;
-
-	new_data = rd32(hw, loreg);
-	new_data |= ((u64)(rd32(hw, hireg) & 0xFFFF)) << 32;
+	u64 new_data = rd64(hw, reg) & (BIT_ULL(40) - 1);
 
 	/* device stats are not reset at PFR, they likely will not be zeroed
-	 * when the driver starts. So save the first values read and use them as
-	 * offsets to be subtracted from the raw values in order to report stats
-	 * that count from zero.
+	 * when the driver starts. Thus, save the value from the first read
+	 * without adding to the statistic value so that we report stats which
+	 * count up from zero.
 	 */
-	if (!prev_stat_loaded)
+	if (!prev_stat_loaded) {
 		*prev_stat = new_data;
+		return;
+	}
+
+	/* Calculate the difference between the new and old values, and then
+	 * add it to the software stat value.
+	 */
 	if (new_data >= *prev_stat)
-		*cur_stat = new_data - *prev_stat;
+		*cur_stat += new_data - *prev_stat;
 	else
 		/* to manage the potential roll-over */
-		*cur_stat = (new_data + BIT_ULL(40)) - *prev_stat;
-	*cur_stat &= 0xFFFFFFFFFFULL;
+		*cur_stat += (new_data + BIT_ULL(40)) - *prev_stat;
+
+	/* Update the previously stored value to prepare for next read */
+	*prev_stat = new_data;
 }
 
 /**
  * ice_stat_update32 - read 32 bit stat from the chip and update stat values
  * @hw: ptr to the hardware info
- * @reg: HW register to read from
+ * @reg: offset of HW register to read from
  * @prev_stat_loaded: bool to specify if previous stats are loaded
  * @prev_stat: ptr to previous loaded stat value
  * @cur_stat: ptr to current stat value
@@ -3287,17 +3295,26 @@ ice_stat_update32(struct ice_hw *hw, u32 reg, bool prev_stat_loaded,
 	new_data = rd32(hw, reg);
 
 	/* device stats are not reset at PFR, they likely will not be zeroed
-	 * when the driver starts. So save the first values read and use them as
-	 * offsets to be subtracted from the raw values in order to report stats
-	 * that count from zero.
+	 * when the driver starts. Thus, save the value from the first read
+	 * without adding to the statistic value so that we report stats which
+	 * count up from zero.
 	 */
-	if (!prev_stat_loaded)
+	if (!prev_stat_loaded) {
 		*prev_stat = new_data;
+		return;
+	}
+
+	/* Calculate the difference between the new and old values, and then
+	 * add it to the software stat value.
+	 */
 	if (new_data >= *prev_stat)
-		*cur_stat = new_data - *prev_stat;
+		*cur_stat += new_data - *prev_stat;
 	else
 		/* to manage the potential roll-over */
-		*cur_stat = (new_data + BIT_ULL(32)) - *prev_stat;
+		*cur_stat += (new_data + BIT_ULL(32)) - *prev_stat;
+
+	/* Update the previously stored value to prepare for next read */
+	*prev_stat = new_data;
 }
 
 /**

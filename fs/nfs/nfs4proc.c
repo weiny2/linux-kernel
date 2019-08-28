@@ -1073,14 +1073,26 @@ static const struct rpc_call_ops nfs40_call_sync_ops = {
 	.rpc_call_done = nfs40_call_sync_done,
 };
 
+static int nfs4_call_sync_custom(struct rpc_task_setup *task_setup)
+{
+	int ret;
+	struct rpc_task *task;
+
+	task = rpc_run_task(task_setup);
+	if (IS_ERR(task))
+		return PTR_ERR(task);
+
+	ret = task->tk_status;
+	rpc_put_task(task);
+	return ret;
+}
+
 static int nfs4_call_sync_sequence(struct rpc_clnt *clnt,
 				   struct nfs_server *server,
 				   struct rpc_message *msg,
 				   struct nfs4_sequence_args *args,
 				   struct nfs4_sequence_res *res)
 {
-	int ret;
-	struct rpc_task *task;
 	struct nfs_client *clp = server->nfs_client;
 	struct nfs4_call_sync_data data = {
 		.seq_server = server,
@@ -1094,14 +1106,7 @@ static int nfs4_call_sync_sequence(struct rpc_clnt *clnt,
 		.callback_data = &data
 	};
 
-	task = rpc_run_task(&task_setup);
-	if (IS_ERR(task))
-		ret = PTR_ERR(task);
-	else {
-		ret = task->tk_status;
-		rpc_put_task(task);
-	}
-	return ret;
+	return nfs4_call_sync_custom(&task_setup);
 }
 
 int nfs4_call_sync(struct rpc_clnt *clnt,
@@ -6018,7 +6023,6 @@ int nfs4_proc_setclientid(struct nfs_client *clp, u32 program,
 		.rpc_resp = res,
 		.rpc_cred = cred,
 	};
-	struct rpc_task *task;
 	struct rpc_task_setup task_setup_data = {
 		.rpc_client = clp->cl_rpcclient,
 		.rpc_message = &msg,
@@ -6051,17 +6055,12 @@ int nfs4_proc_setclientid(struct nfs_client *clp, u32 program,
 	dprintk("NFS call  setclientid auth=%s, '%s'\n",
 		clp->cl_rpcclient->cl_auth->au_ops->au_name,
 		clp->cl_owner_id);
-	task = rpc_run_task(&task_setup_data);
-	if (IS_ERR(task)) {
-		status = PTR_ERR(task);
-		goto out;
-	}
-	status = task->tk_status;
+
+	status = nfs4_call_sync_custom(&task_setup_data);
 	if (setclientid.sc_cred) {
 		clp->cl_acceptor = rpcauth_stringify_acceptor(setclientid.sc_cred);
 		put_rpccred(setclientid.sc_cred);
 	}
-	rpc_put_task(task);
 out:
 	trace_nfs4_setclientid(clp, status);
 	dprintk("NFS reply setclientid: %d\n", status);
@@ -7645,6 +7644,8 @@ int nfs4_proc_fsid_present(struct inode *inode, const struct cred *cred)
 static int _nfs4_proc_secinfo(struct inode *dir, const struct qstr *name, struct nfs4_secinfo_flavors *flavors, bool use_integrity)
 {
 	int status;
+	struct rpc_clnt *clnt = NFS_SERVER(dir)->client;
+	struct nfs_client *clp = NFS_SERVER(dir)->nfs_client;
 	struct nfs4_secinfo_arg args = {
 		.dir_fh = NFS_FH(dir),
 		.name   = name,
@@ -7657,26 +7658,37 @@ static int _nfs4_proc_secinfo(struct inode *dir, const struct qstr *name, struct
 		.rpc_argp = &args,
 		.rpc_resp = &res,
 	};
-	struct rpc_clnt *clnt = NFS_SERVER(dir)->client;
+	struct nfs4_call_sync_data data = {
+		.seq_server = NFS_SERVER(dir),
+		.seq_args = &args.seq_args,
+		.seq_res = &res.seq_res,
+	};
+	struct rpc_task_setup task_setup = {
+		.rpc_client = clnt,
+		.rpc_message = &msg,
+		.callback_ops = clp->cl_mvops->call_sync_ops,
+		.callback_data = &data,
+		.flags = RPC_TASK_NO_ROUND_ROBIN,
+	};
 	const struct cred *cred = NULL;
 
 	if (use_integrity) {
-		clnt = NFS_SERVER(dir)->nfs_client->cl_rpcclient;
-		cred = nfs4_get_clid_cred(NFS_SERVER(dir)->nfs_client);
+		clnt = clp->cl_rpcclient;
+		task_setup.rpc_client = clnt;
+
+		cred = nfs4_get_clid_cred(clp);
 		msg.rpc_cred = cred;
 	}
 
 	dprintk("NFS call  secinfo %s\n", name->name);
 
-	nfs4_state_protect(NFS_SERVER(dir)->nfs_client,
-		NFS_SP4_MACH_CRED_SECINFO, &clnt, &msg);
+	nfs4_state_protect(clp, NFS_SP4_MACH_CRED_SECINFO, &clnt, &msg);
+	nfs4_init_sequence(&args.seq_args, &res.seq_res, 0, 0);
+	status = nfs4_call_sync_custom(&task_setup);
 
-	status = nfs4_call_sync(clnt, NFS_SERVER(dir), &msg, &args.seq_args,
-				&res.seq_res, RPC_TASK_NO_ROUND_ROBIN);
 	dprintk("NFS reply  secinfo: %d\n", status);
 
 	put_cred(cred);
-
 	return status;
 }
 
@@ -8344,7 +8356,6 @@ static const struct rpc_call_ops nfs4_get_lease_time_ops = {
 
 int nfs4_proc_get_lease_time(struct nfs_client *clp, struct nfs_fsinfo *fsinfo)
 {
-	struct rpc_task *task;
 	struct nfs4_get_lease_time_args args;
 	struct nfs4_get_lease_time_res res = {
 		.lr_fsinfo = fsinfo,
@@ -8366,17 +8377,9 @@ int nfs4_proc_get_lease_time(struct nfs_client *clp, struct nfs_fsinfo *fsinfo)
 		.callback_data = &data,
 		.flags = RPC_TASK_TIMEOUT,
 	};
-	int status;
 
 	nfs4_init_sequence(&args.la_seq_args, &res.lr_seq_res, 0, 1);
-	task = rpc_run_task(&task_setup);
-
-	if (IS_ERR(task))
-		return PTR_ERR(task);
-
-	status = task->tk_status;
-	rpc_put_task(task);
-	return status;
+	return nfs4_call_sync_custom(&task_setup);
 }
 
 #ifdef CONFIG_NFS_V4_1
@@ -8845,7 +8848,6 @@ static int nfs41_proc_reclaim_complete(struct nfs_client *clp,
 		const struct cred *cred)
 {
 	struct nfs4_reclaim_complete_data *calldata;
-	struct rpc_task *task;
 	struct rpc_message msg = {
 		.rpc_proc = &nfs4_procedures[NFSPROC4_CLNT_RECLAIM_COMPLETE],
 		.rpc_cred = cred,
@@ -8854,7 +8856,7 @@ static int nfs41_proc_reclaim_complete(struct nfs_client *clp,
 		.rpc_client = clp->cl_rpcclient,
 		.rpc_message = &msg,
 		.callback_ops = &nfs4_reclaim_complete_call_ops,
-		.flags = RPC_TASK_ASYNC | RPC_TASK_NO_ROUND_ROBIN,
+		.flags = RPC_TASK_NO_ROUND_ROBIN,
 	};
 	int status = -ENOMEM;
 
@@ -8869,15 +8871,7 @@ static int nfs41_proc_reclaim_complete(struct nfs_client *clp,
 	msg.rpc_argp = &calldata->arg;
 	msg.rpc_resp = &calldata->res;
 	task_setup_data.callback_data = calldata;
-	task = rpc_run_task(&task_setup_data);
-	if (IS_ERR(task)) {
-		status = PTR_ERR(task);
-		goto out;
-	}
-	status = rpc_wait_for_completion_task(task);
-	if (status == 0)
-		status = task->tk_status;
-	rpc_put_task(task);
+	status = nfs4_call_sync_custom(&task_setup_data);
 out:
 	dprintk("<-- %s status=%d\n", __func__, status);
 	return status;
@@ -9362,18 +9356,32 @@ _nfs41_proc_secinfo_no_name(struct nfs_server *server, struct nfs_fh *fhandle,
 		.rpc_resp = &res,
 	};
 	struct rpc_clnt *clnt = server->client;
+	struct nfs4_call_sync_data data = {
+		.seq_server = server,
+		.seq_args = &args.seq_args,
+		.seq_res = &res.seq_res,
+	};
+	struct rpc_task_setup task_setup = {
+		.rpc_client = server->client,
+		.rpc_message = &msg,
+		.callback_ops = server->nfs_client->cl_mvops->call_sync_ops,
+		.callback_data = &data,
+		.flags = RPC_TASK_NO_ROUND_ROBIN,
+	};
 	const struct cred *cred = NULL;
 	int status;
 
 	if (use_integrity) {
 		clnt = server->nfs_client->cl_rpcclient;
+		task_setup.rpc_client = clnt;
+
 		cred = nfs4_get_clid_cred(server->nfs_client);
 		msg.rpc_cred = cred;
 	}
 
 	dprintk("--> %s\n", __func__);
-	status = nfs4_call_sync(clnt, server, &msg, &args.seq_args,
-				&res.seq_res, RPC_TASK_NO_ROUND_ROBIN);
+	nfs4_init_sequence(&args.seq_args, &res.seq_res, 0, 0);
+	status = nfs4_call_sync_custom(&task_setup);
 	dprintk("<-- %s status=%d\n", __func__, status);
 
 	put_cred(cred);

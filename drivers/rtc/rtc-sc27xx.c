@@ -614,10 +614,8 @@ static int sprd_rtc_probe(struct platform_device *pdev)
 	}
 
 	rtc->irq = platform_get_irq(pdev, 0);
-	if (rtc->irq < 0) {
-		dev_err(&pdev->dev, "failed to get RTC irq number\n");
+	if (rtc->irq < 0)
 		return rtc->irq;
-	}
 
 	rtc->rtc = devm_rtc_allocate_device(&pdev->dev);
 	if (IS_ERR(rtc->rtc))
@@ -656,7 +654,6 @@ static int sprd_rtc_probe(struct platform_device *pdev)
 	rtc->rtc->range_max = 5662310399LL;
 	ret = rtc_register_device(rtc->rtc);
 	if (ret) {
-		dev_err(&pdev->dev, "failed to register rtc device\n");
 		device_init_wakeup(&pdev->dev, 0);
 		return ret;
 	}

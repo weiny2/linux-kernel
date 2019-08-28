@@ -5,13 +5,17 @@
  * Authors: Matthew Garrett
  *          Dave Airlie
  */
+
 #include <linux/module.h>
 #include <linux/console.h>
-#include <drm/drmP.h>
+
+#include <drm/drm_drv.h>
+#include <drm/drm_file.h>
+#include <drm/drm_ioctl.h>
+#include <drm/drm_pci.h>
+#include <drm/drm_pciids.h>
 
 #include "mgag200_drv.h"
-
-#include <drm/drm_pciids.h>
 
 /*
  * This is the generic driver code. This binds the driver to the drm core,
@@ -42,7 +46,7 @@ MODULE_DEVICE_TABLE(pci, pciidlist);
 
 static int mga_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
-	drm_fb_helper_remove_conflicting_pci_framebuffers(pdev, 0, "mgag200drmfb");
+	drm_fb_helper_remove_conflicting_pci_framebuffers(pdev, "mgag200drmfb");
 
 	return drm_get_pci_dev(pdev, ent, &driver);
 }

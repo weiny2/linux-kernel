@@ -20,7 +20,7 @@ kernel which allows different filesystem implementations to coexist.
 
 VFS system calls open(2), stat(2), read(2), write(2), chmod(2) and so on
 are called from a process context.  Filesystem locking is described in
-the document Documentation/filesystems/Locking.
+the document Documentation/filesystems/locking.rst.
 
 
 Directory Entry Cache (dcache)
@@ -195,8 +195,8 @@ and provides a fill_super() callback instead.  The generic variants are:
 ``mount_nodev``
 	mount a filesystem that is not backed by a device
 
-``mount_single``
-	mount a filesystem which shares the instance between all mounts
+``vfs_get_super``
+	mount a filesystem with one of a number of superblock sharing options.
 
 A fill_super() callback implementation has the following arguments:
 

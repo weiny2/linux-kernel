@@ -1133,7 +1133,9 @@ copy:
 			}
 			/* Update the skb. */
 			if (merge) {
-				skb_shinfo(skb)->frags[i - 1].size += copy;
+				skb_frag_size_add(
+						&skb_shinfo(skb)->frags[i - 1],
+						copy);
 			} else {
 				skb_fill_page_desc(skb, i, page, off, copy);
 				if (off + copy < pg_size) {
@@ -1246,7 +1248,7 @@ new_buf:
 
 		i = skb_shinfo(skb)->nr_frags;
 		if (skb_can_coalesce(skb, i, page, offset)) {
-			skb_shinfo(skb)->frags[i - 1].size += copy;
+			skb_frag_size_add(&skb_shinfo(skb)->frags[i - 1], copy);
 		} else if (i < MAX_SKB_FRAGS) {
 			get_page(page);
 			skb_fill_page_desc(skb, i, page, offset, copy);

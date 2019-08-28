@@ -1010,6 +1010,13 @@ static int ice_vsi_init(struct ice_vsi *vsi)
 			ICE_AQ_VSI_SEC_FLAG_ENA_MAC_ANTI_SPOOF;
 	}
 
+	/* Allow control frames out of main VSI */
+	if (vsi->type == ICE_VSI_PF) {
+		ctxt->info.sec_flags |= ICE_AQ_VSI_SEC_FLAG_ALLOW_DEST_OVRD;
+		ctxt->info.valid_sections |=
+			cpu_to_le16(ICE_AQ_VSI_PROP_SECURITY_VALID);
+	}
+
 	ret = ice_add_vsi(hw, vsi->idx, ctxt, NULL);
 	if (ret) {
 		dev_err(&pf->pdev->dev,
@@ -1129,12 +1136,7 @@ static int ice_vsi_alloc_q_vectors(struct ice_vsi *vsi)
 		return -EEXIST;
 	}
 
-	if (test_bit(ICE_FLAG_MSIX_ENA, pf->flags)) {
-		num_q_vectors = vsi->num_q_vectors;
-	} else {
-		err = -EINVAL;
-		goto err_out;
-	}
+	num_q_vectors = vsi->num_q_vectors;
 
 	for (v_idx = 0; v_idx < num_q_vectors; v_idx++) {
 		err = ice_vsi_alloc_q_vector(vsi, v_idx);
@@ -1179,9 +1181,6 @@ static int ice_vsi_setup_vector_base(struct ice_vsi *vsi)
 			vsi->vsi_num, vsi->base_vector);
 		return -EEXIST;
 	}
-
-	if (!test_bit(ICE_FLAG_MSIX_ENA, pf->flags))
-		return -ENOENT;
 
 	num_q_vectors = vsi->num_q_vectors;
 	/* reserve slots from OS requested IRQs */
@@ -1477,40 +1476,32 @@ void ice_update_eth_stats(struct ice_vsi *vsi)
 	prev_es = &vsi->eth_stats_prev;
 	cur_es = &vsi->eth_stats;
 
-	ice_stat_update40(hw, GLV_GORCH(vsi_num), GLV_GORCL(vsi_num),
-			  vsi->stat_offsets_loaded, &prev_es->rx_bytes,
-			  &cur_es->rx_bytes);
+	ice_stat_update40(hw, GLV_GORCL(vsi_num), vsi->stat_offsets_loaded,
+			  &prev_es->rx_bytes, &cur_es->rx_bytes);
 
-	ice_stat_update40(hw, GLV_UPRCH(vsi_num), GLV_UPRCL(vsi_num),
-			  vsi->stat_offsets_loaded, &prev_es->rx_unicast,
-			  &cur_es->rx_unicast);
+	ice_stat_update40(hw, GLV_UPRCL(vsi_num), vsi->stat_offsets_loaded,
+			  &prev_es->rx_unicast, &cur_es->rx_unicast);
 
-	ice_stat_update40(hw, GLV_MPRCH(vsi_num), GLV_MPRCL(vsi_num),
-			  vsi->stat_offsets_loaded, &prev_es->rx_multicast,
-			  &cur_es->rx_multicast);
+	ice_stat_update40(hw, GLV_MPRCL(vsi_num), vsi->stat_offsets_loaded,
+			  &prev_es->rx_multicast, &cur_es->rx_multicast);
 
-	ice_stat_update40(hw, GLV_BPRCH(vsi_num), GLV_BPRCL(vsi_num),
-			  vsi->stat_offsets_loaded, &prev_es->rx_broadcast,
-			  &cur_es->rx_broadcast);
+	ice_stat_update40(hw, GLV_BPRCL(vsi_num), vsi->stat_offsets_loaded,
+			  &prev_es->rx_broadcast, &cur_es->rx_broadcast);
 
 	ice_stat_update32(hw, GLV_RDPC(vsi_num), vsi->stat_offsets_loaded,
 			  &prev_es->rx_discards, &cur_es->rx_discards);
 
-	ice_stat_update40(hw, GLV_GOTCH(vsi_num), GLV_GOTCL(vsi_num),
-			  vsi->stat_offsets_loaded, &prev_es->tx_bytes,
-			  &cur_es->tx_bytes);
+	ice_stat_update40(hw, GLV_GOTCL(vsi_num), vsi->stat_offsets_loaded,
+			  &prev_es->tx_bytes, &cur_es->tx_bytes);
 
-	ice_stat_update40(hw, GLV_UPTCH(vsi_num), GLV_UPTCL(vsi_num),
-			  vsi->stat_offsets_loaded, &prev_es->tx_unicast,
-			  &cur_es->tx_unicast);
+	ice_stat_update40(hw, GLV_UPTCL(vsi_num), vsi->stat_offsets_loaded,
+			  &prev_es->tx_unicast, &cur_es->tx_unicast);
 
-	ice_stat_update40(hw, GLV_MPTCH(vsi_num), GLV_MPTCL(vsi_num),
-			  vsi->stat_offsets_loaded, &prev_es->tx_multicast,
-			  &cur_es->tx_multicast);
+	ice_stat_update40(hw, GLV_MPTCL(vsi_num), vsi->stat_offsets_loaded,
+			  &prev_es->tx_multicast, &cur_es->tx_multicast);
 
-	ice_stat_update40(hw, GLV_BPTCH(vsi_num), GLV_BPTCL(vsi_num),
-			  vsi->stat_offsets_loaded, &prev_es->tx_broadcast,
-			  &cur_es->tx_broadcast);
+	ice_stat_update40(hw, GLV_BPTCL(vsi_num), vsi->stat_offsets_loaded,
+			  &prev_es->tx_broadcast, &cur_es->tx_broadcast);
 
 	ice_stat_update32(hw, GLV_TEPC(vsi_num), vsi->stat_offsets_loaded,
 			  &prev_es->tx_errors, &cur_es->tx_errors);
@@ -2156,6 +2147,9 @@ ice_vsi_stop_tx_rings(struct ice_vsi *vsi, enum ice_disq_rst_src rst_src,
 		if (status == ICE_ERR_RESET_ONGOING) {
 			dev_dbg(&pf->pdev->dev,
 				"Reset in progress. LAN Tx queues already disabled\n");
+		} else if (status == ICE_ERR_DOES_NOT_EXIST) {
+			dev_dbg(&pf->pdev->dev,
+				"LAN Tx queues does not exist, nothing to disabled\n");
 		} else if (status) {
 			dev_err(&pf->pdev->dev,
 				"Failed to disable LAN Tx queues, error: %d\n",
@@ -2519,7 +2513,7 @@ ice_vsi_setup(struct ice_pf *pf, struct ice_port_info *pi,
 
 	/* configure VSI nodes based on number of queues and TC's */
 	for (i = 0; i < vsi->tc_cfg.numtc; i++)
-		max_txqs[i] = pf->num_lan_tx;
+		max_txqs[i] = vsi->alloc_txq;
 
 	status = ice_cfg_vsi_lan(vsi->port_info, vsi->idx, vsi->tc_cfg.ena_tc,
 				 max_txqs);
@@ -2547,7 +2541,7 @@ ice_vsi_setup(struct ice_pf *pf, struct ice_port_info *pi,
 		ice_cfg_sw_lldp(vsi, true, true);
 
 		/* Rx LLDP packets */
-		if (!test_bit(ICE_FLAG_ENABLE_FW_LLDP, pf->flags))
+		if (!test_bit(ICE_FLAG_FW_LLDP_AGENT, pf->flags))
 			ice_cfg_sw_lldp(vsi, false, true);
 	}
 
@@ -2610,39 +2604,36 @@ void ice_vsi_free_irq(struct ice_vsi *vsi)
 {
 	struct ice_pf *pf = vsi->back;
 	int base = vsi->base_vector;
+	int i;
 
-	if (test_bit(ICE_FLAG_MSIX_ENA, pf->flags)) {
-		int i;
+	if (!vsi->q_vectors || !vsi->irqs_ready)
+		return;
 
-		if (!vsi->q_vectors || !vsi->irqs_ready)
-			return;
+	ice_vsi_release_msix(vsi);
+	if (vsi->type == ICE_VSI_VF)
+		return;
 
-		ice_vsi_release_msix(vsi);
-		if (vsi->type == ICE_VSI_VF)
-			return;
+	vsi->irqs_ready = false;
+	ice_for_each_q_vector(vsi, i) {
+		u16 vector = i + base;
+		int irq_num;
 
-		vsi->irqs_ready = false;
-		ice_for_each_q_vector(vsi, i) {
-			u16 vector = i + base;
-			int irq_num;
+		irq_num = pf->msix_entries[vector].vector;
 
-			irq_num = pf->msix_entries[vector].vector;
+		/* free only the irqs that were actually requested */
+		if (!vsi->q_vectors[i] ||
+		    !(vsi->q_vectors[i]->num_ring_tx ||
+		      vsi->q_vectors[i]->num_ring_rx))
+			continue;
 
-			/* free only the irqs that were actually requested */
-			if (!vsi->q_vectors[i] ||
-			    !(vsi->q_vectors[i]->num_ring_tx ||
-			      vsi->q_vectors[i]->num_ring_rx))
-				continue;
+		/* clear the affinity notifier in the IRQ descriptor */
+		irq_set_affinity_notifier(irq_num, NULL);
 
-			/* clear the affinity notifier in the IRQ descriptor */
-			irq_set_affinity_notifier(irq_num, NULL);
-
-			/* clear the affinity_mask in the IRQ descriptor */
-			irq_set_affinity_hint(irq_num, NULL);
-			synchronize_irq(irq_num);
-			devm_free_irq(&pf->pdev->dev, irq_num,
-				      vsi->q_vectors[i]);
-		}
+		/* clear the affinity_mask in the IRQ descriptor */
+		irq_set_affinity_hint(irq_num, NULL);
+		synchronize_irq(irq_num);
+		devm_free_irq(&pf->pdev->dev, irq_num,
+			      vsi->q_vectors[i]);
 	}
 }
 
@@ -2821,15 +2812,17 @@ void ice_vsi_dis_irq(struct ice_vsi *vsi)
 	}
 
 	/* disable each interrupt */
-	if (test_bit(ICE_FLAG_MSIX_ENA, pf->flags)) {
-		ice_for_each_q_vector(vsi, i)
-			wr32(hw, GLINT_DYN_CTL(vsi->q_vectors[i]->reg_idx), 0);
+	ice_for_each_q_vector(vsi, i)
+		wr32(hw, GLINT_DYN_CTL(vsi->q_vectors[i]->reg_idx), 0);
 
-		ice_flush(hw);
+	ice_flush(hw);
 
-		ice_for_each_q_vector(vsi, i)
-			synchronize_irq(pf->msix_entries[i + base].vector);
-	}
+	/* don't call synchronize_irq() for VF's from the host */
+	if (vsi->type == ICE_VSI_VF)
+		return;
+
+	ice_for_each_q_vector(vsi, i)
+		synchronize_irq(pf->msix_entries[i + base].vector);
 }
 
 /**
@@ -2895,7 +2888,7 @@ int ice_vsi_release(struct ice_vsi *vsi)
 		/* The Rx rule will only exist to remove if the LLDP FW
 		 * engine is currently stopped
 		 */
-		if (!test_bit(ICE_FLAG_ENABLE_FW_LLDP, pf->flags))
+		if (!test_bit(ICE_FLAG_FW_LLDP_AGENT, pf->flags))
 			ice_cfg_sw_lldp(vsi, false, false);
 	}
 
@@ -2986,6 +2979,10 @@ int ice_vsi_rebuild(struct ice_vsi *vsi)
 		if (ret)
 			goto err_rings;
 
+		ret = ice_vsi_setup_vector_base(vsi);
+		if (ret)
+			goto err_vectors;
+
 		ret = ice_vsi_set_q_vectors_reg_idx(vsi);
 		if (ret)
 			goto err_vectors;
@@ -3007,10 +3004,6 @@ int ice_vsi_rebuild(struct ice_vsi *vsi)
 		if (ret)
 			goto err_rings;
 
-		ret = ice_vsi_setup_vector_base(vsi);
-		if (ret)
-			goto err_vectors;
-
 		ret = ice_vsi_set_q_vectors_reg_idx(vsi);
 		if (ret)
 			goto err_vectors;
@@ -3028,7 +3021,7 @@ int ice_vsi_rebuild(struct ice_vsi *vsi)
 
 	/* configure VSI nodes based on number of queues and TC's */
 	for (i = 0; i < vsi->tc_cfg.numtc; i++)
-		max_txqs[i] = pf->num_lan_tx;
+		max_txqs[i] = vsi->alloc_txq;
 
 	status = ice_cfg_vsi_lan(vsi->port_info, vsi->idx, vsi->tc_cfg.ena_tc,
 				 max_txqs);
@@ -3145,7 +3138,7 @@ int ice_vsi_cfg_tc(struct ice_vsi *vsi, u8 ena_tc)
 		if (ena_tc & BIT(i))
 			num_tc++;
 		/* populate max_txqs per TC */
-		max_txqs[i] = pf->num_lan_tx;
+		max_txqs[i] = vsi->alloc_txq;
 	}
 
 	vsi->tc_cfg.ena_tc = ena_tc;
@@ -3188,3 +3181,33 @@ out:
 	return ret;
 }
 #endif /* CONFIG_DCB */
+
+/**
+ * ice_vsi_cfg_mac_fltr - Add or remove a MAC address filter for a VSI
+ * @vsi: the VSI being configured MAC filter
+ * @macaddr: the MAC address to be added.
+ * @set: Add or delete a MAC filter
+ *
+ * Adds or removes MAC address filter entry for VF VSI
+ */
+enum ice_status
+ice_vsi_cfg_mac_fltr(struct ice_vsi *vsi, const u8 *macaddr, bool set)
+{
+	LIST_HEAD(tmp_add_list);
+	enum ice_status status;
+
+	 /* Update MAC filter list to be added or removed for a VSI */
+	if (ice_add_mac_to_list(vsi, &tmp_add_list, macaddr)) {
+		status = ICE_ERR_NO_MEMORY;
+		goto cfg_mac_fltr_exit;
+	}
+
+	if (set)
+		status = ice_add_mac(&vsi->back->hw, &tmp_add_list);
+	else
+		status = ice_remove_mac(&vsi->back->hw, &tmp_add_list);
+
+cfg_mac_fltr_exit:
+	ice_free_fltr_list(&vsi->back->pdev->dev, &tmp_add_list);
+	return status;
+}

@@ -620,6 +620,10 @@ static int nfs_page_async_flush(struct nfs_pageio_descriptor *pgio,
 	WARN_ON_ONCE(test_bit(PG_CLEAN, &req->wb_flags));
 
 	/* If there is a fatal error that covers this write, just exit */
+<<<<<<< HEAD
+=======
+	mapping = page_file_mapping(page);
+>>>>>>> linux-next/akpm-base
 	ret = pgio->pg_error;
 	if (nfs_error_is_fatal_on_server(ret))
 		goto out_launder;

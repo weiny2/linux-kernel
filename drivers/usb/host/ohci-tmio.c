@@ -97,10 +97,13 @@ static void tmio_stop_hc(struct platform_device *dev)
 	switch (ohci->num_ports) {
 		default:
 			dev_err(&dev->dev, "Unsupported amount of ports: %d\n", ohci->num_ports);
+			/* fall through */
 		case 3:
 			pm |= CCR_PM_USBPW3;
+			/* fall through */
 		case 2:
 			pm |= CCR_PM_USBPW2;
+			/* fall through */
 		case 1:
 			pm |= CCR_PM_USBPW1;
 	}
@@ -153,7 +156,7 @@ static const struct hc_driver ohci_tmio_hc_driver = {
 
 	/* generic hardware linkage */
 	.irq =			ohci_irq,
-	.flags =		HCD_USB11 | HCD_MEMORY,
+	.flags =		HCD_USB11 | HCD_DMA | HCD_MEMORY,
 
 	/* basic lifecycle operations */
 	.start =		ohci_tmio_start,

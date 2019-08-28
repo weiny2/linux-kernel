@@ -24,6 +24,7 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
+#include <linux/prefetch.h>
 #include <linux/proc_fs.h>
 #include <linux/slab.h>
 #include <linux/usb/ch9.h>
@@ -34,8 +35,6 @@
 #include <linux/debugfs.h>
 #include <linux/seq_file.h>
 #endif
-
-#include <mach/hardware.h>
 
 /*
  * USB device configuration structure
@@ -2265,7 +2264,7 @@ static void udc_handle_ep0_setup(struct lpc32xx_udc *udc)
 		default:
 			break;
 		}
-
+		break;
 
 	case USB_REQ_SET_ADDRESS:
 		if (reqtype == (USB_TYPE_STANDARD | USB_RECIP_DEVICE)) {
@@ -3061,11 +3060,8 @@ static int lpc32xx_udc_probe(struct platform_device *pdev)
 	/* Get IRQs */
 	for (i = 0; i < 4; i++) {
 		udc->udp_irq[i] = platform_get_irq(pdev, i);
-		if (udc->udp_irq[i] < 0) {
-			dev_err(udc->dev,
-				"irq resource %d not available!\n", i);
+		if (udc->udp_irq[i] < 0)
 			return udc->udp_irq[i];
-		}
 	}
 
 	udc->udp_baseaddr = devm_ioremap_resource(dev, res);

@@ -1434,7 +1434,7 @@ static void spi_pump_messages(struct kthread_work *work)
  */
 static void spi_set_thread_rt(struct spi_controller *ctlr)
 {
-	struct sched_param param = { .sched_priority = MAX_RT_PRIO - 1 };
+	struct sched_param param = { .sched_priority = MAX_RT_PRIO / 2 };
 
 	dev_info(&ctlr->dev,
 		"will run message pump with realtime priority\n");
@@ -2105,8 +2105,8 @@ static int match_true(struct device *dev, void *data)
 	return 1;
 }
 
-static ssize_t spi_slave_show(struct device *dev,
-			      struct device_attribute *attr, char *buf)
+static ssize_t slave_show(struct device *dev, struct device_attribute *attr,
+			  char *buf)
 {
 	struct spi_controller *ctlr = container_of(dev, struct spi_controller,
 						   dev);
@@ -2117,9 +2117,8 @@ static ssize_t spi_slave_show(struct device *dev,
 		       child ? to_spi_device(child)->modalias : NULL);
 }
 
-static ssize_t spi_slave_store(struct device *dev,
-			       struct device_attribute *attr, const char *buf,
-			       size_t count)
+static ssize_t slave_store(struct device *dev, struct device_attribute *attr,
+			   const char *buf, size_t count)
 {
 	struct spi_controller *ctlr = container_of(dev, struct spi_controller,
 						   dev);
@@ -2157,7 +2156,7 @@ static ssize_t spi_slave_store(struct device *dev,
 	return count;
 }
 
-static DEVICE_ATTR(slave, 0644, spi_slave_show, spi_slave_store);
+static DEVICE_ATTR_RW(slave);
 
 static struct attribute *spi_slave_attrs[] = {
 	&dev_attr_slave.attr,
@@ -2236,7 +2235,7 @@ struct spi_controller *__spi_alloc_controller(struct device *dev,
 EXPORT_SYMBOL_GPL(__spi_alloc_controller);
 
 #ifdef CONFIG_OF
-static int of_spi_register_master(struct spi_controller *ctlr)
+static int of_spi_get_gpio_numbers(struct spi_controller *ctlr)
 {
 	int nb, i, *cs;
 	struct device_node *np = ctlr->dev.of_node;
@@ -2269,7 +2268,7 @@ static int of_spi_register_master(struct spi_controller *ctlr)
 	return 0;
 }
 #else
-static int of_spi_register_master(struct spi_controller *ctlr)
+static int of_spi_get_gpio_numbers(struct spi_controller *ctlr)
 {
 	return 0;
 }
@@ -2456,7 +2455,7 @@ int spi_register_controller(struct spi_controller *ctlr)
 			ctlr->mode_bits |= SPI_CS_HIGH;
 		} else {
 			/* Legacy code path for GPIOs from DT */
-			status = of_spi_register_master(ctlr);
+			status = of_spi_get_gpio_numbers(ctlr);
 			if (status)
 				return status;
 		}
@@ -3652,37 +3651,25 @@ EXPORT_SYMBOL_GPL(spi_write_then_read);
 /*-------------------------------------------------------------------------*/
 
 #if IS_ENABLED(CONFIG_OF)
-static int __spi_of_device_match(struct device *dev, const void *data)
-{
-	return dev->of_node == data;
-}
-
 /* must call put_device() when done with returned spi_device device */
 struct spi_device *of_find_spi_device_by_node(struct device_node *node)
 {
-	struct device *dev = bus_find_device(&spi_bus_type, NULL, node,
-						__spi_of_device_match);
+	struct device *dev = bus_find_device_by_of_node(&spi_bus_type, node);
+
 	return dev ? to_spi_device(dev) : NULL;
 }
 EXPORT_SYMBOL_GPL(of_find_spi_device_by_node);
 #endif /* IS_ENABLED(CONFIG_OF) */
 
 #if IS_ENABLED(CONFIG_OF_DYNAMIC)
-static int __spi_of_controller_match(struct device *dev, const void *data)
-{
-	return dev->of_node == data;
-}
-
 /* the spi controllers are not using spi_bus, so we find it with another way */
 static struct spi_controller *of_find_spi_controller_by_node(struct device_node *node)
 {
 	struct device *dev;
 
-	dev = class_find_device(&spi_master_class, NULL, node,
-				__spi_of_controller_match);
+	dev = class_find_device_by_of_node(&spi_master_class, node);
 	if (!dev && IS_ENABLED(CONFIG_SPI_SLAVE))
-		dev = class_find_device(&spi_slave_class, NULL, node,
-					__spi_of_controller_match);
+		dev = class_find_device_by_of_node(&spi_slave_class, node);
 	if (!dev)
 		return NULL;
 
@@ -3753,11 +3740,6 @@ static int spi_acpi_controller_match(struct device *dev, const void *data)
 	return ACPI_COMPANION(dev->parent) == data;
 }
 
-static int spi_acpi_device_match(struct device *dev, const void *data)
-{
-	return ACPI_COMPANION(dev) == data;
-}
-
 static struct spi_controller *acpi_spi_find_controller_by_adev(struct acpi_device *adev)
 {
 	struct device *dev;
@@ -3777,8 +3759,7 @@ static struct spi_device *acpi_spi_find_device_by_adev(struct acpi_device *adev)
 {
 	struct device *dev;
 
-	dev = bus_find_device(&spi_bus_type, NULL, adev, spi_acpi_device_match);
-
+	dev = bus_find_device_by_acpi_dev(&spi_bus_type, adev);
 	return dev ? to_spi_device(dev) : NULL;
 }
 
