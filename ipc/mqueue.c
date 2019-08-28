@@ -1334,7 +1334,7 @@ out_fput:
 out:
 	if (sock)
 		netlink_detachskb(sock, nc);
-	else if (nc)
+	else
 		dev_kfree_skb(nc);
 
 	return ret;
