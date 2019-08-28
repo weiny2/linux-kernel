@@ -162,7 +162,7 @@ static inline int split_huge_page(struct page *page)
 {
 	return split_huge_page_to_list(page, NULL);
 }
-void deferred_split_huge_page(struct page *page);
+void deferred_split_huge_page(struct page *page, unsigned int nr);
 
 void __split_huge_pmd(struct vm_area_struct *vma, pmd_t *pmd,
 		unsigned long address, bool freeze, struct page *page);
@@ -324,7 +324,10 @@ static inline int split_huge_page(struct page *page)
 {
 	return 0;
 }
-static inline void deferred_split_huge_page(struct page *page) {}
+static inline void deferred_split_huge_page(struct page *page, unsigned int nr)
+{
+}
+
 #define split_huge_pmd(__vma, __pmd, __address)	\
 	do { } while (0)
 

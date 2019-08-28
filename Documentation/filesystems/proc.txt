@@ -968,8 +968,8 @@ ShmemHugePages: Memory used by shared memory (shmem) and tmpfs allocated
               with huge pages
 ShmemPmdMapped: Shared memory mapped into userspace with huge pages
 KReclaimable: Kernel allocations that the kernel will attempt to reclaim
-              under memory pressure. Includes SReclaimable (below), and other
-              direct allocations with a shrinker.
+              under memory pressure. Includes SReclaimable (below), deferred
+              split THPs, and other direct allocations with a shrinker.
         Slab: in-kernel data structures cache
 SReclaimable: Part of Slab, that might be reclaimed, such as caches
   SUnreclaim: Part of Slab, that cannot be reclaimed on memory pressure

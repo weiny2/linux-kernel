@@ -525,6 +525,7 @@ void prep_transhuge_page(struct page *page)
 
 	INIT_LIST_HEAD(page_deferred_list(page));
 	set_compound_page_dtor(page, TRANSHUGE_PAGE_DTOR);
+	page[2].nr_freeable = 0;
 }
 
 static unsigned long __thp_get_unmapped_area(struct file *filp, unsigned long len,
@@ -2799,6 +2800,10 @@ int split_huge_page_to_list(struct page *page, struct list_head *list)
 		if (!list_empty(page_deferred_list(head))) {
 			ds_queue->split_queue_len--;
 			list_del(page_deferred_list(head));
+			__mod_node_page_state(page_pgdat(page),
+					NR_KERNEL_MISC_RECLAIMABLE,
+					-head[2].nr_freeable);
+			head[2].nr_freeable = 0;
 		}
 		if (mapping)
 			__dec_node_page_state(page, NR_SHMEM_THPS);
@@ -2849,11 +2854,14 @@ void free_transhuge_page(struct page *page)
 		ds_queue->split_queue_len--;
 		list_del(page_deferred_list(page));
 	}
+	__mod_node_page_state(page_pgdat(page), NR_KERNEL_MISC_RECLAIMABLE,
+			      -page[2].nr_freeable);
+	page[2].nr_freeable = 0;
 	spin_unlock_irqrestore(&ds_queue->split_queue_lock, flags);
 	free_compound_page(page);
 }
 
-void deferred_split_huge_page(struct page *page)
+void deferred_split_huge_page(struct page *page, unsigned int nr)
 {
 	struct deferred_split *ds_queue = get_deferred_split_queue(page);
 #ifdef CONFIG_MEMCG
@@ -2877,6 +2885,9 @@ void deferred_split_huge_page(struct page *page)
 		return;
 
 	spin_lock_irqsave(&ds_queue->split_queue_lock, flags);
+	page[2].nr_freeable += nr;
+	__mod_node_page_state(page_pgdat(page), NR_KERNEL_MISC_RECLAIMABLE,
+			      nr);
 	if (list_empty(page_deferred_list(page))) {
 		count_vm_event(THP_DEFERRED_SPLIT_PAGE);
 		list_add_tail(page_deferred_list(page), &ds_queue->split_queue);
