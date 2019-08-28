@@ -173,9 +173,4 @@ static inline void update_mmu_cache(struct vm_area_struct *vma,
 #include <asm-generic/pgtable.h>
 #endif /* !__ASSEMBLY__ */
 
-/*
- * No page table caches to initialise
- */
-#define pgtable_cache_init()	do { } while (0)
-
 #endif /* _M68K_PGTABLE_H */
