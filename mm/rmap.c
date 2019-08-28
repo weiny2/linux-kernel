@@ -1287,7 +1287,7 @@ static void page_remove_anon_compound_rmap(struct page *page)
 
 	if (nr) {
 		__mod_node_page_state(page_pgdat(page), NR_ANON_MAPPED, -nr);
-		deferred_split_huge_page(page);
+		deferred_split_huge_page(page, nr);
 	}
 }
 
@@ -1321,7 +1321,7 @@ void page_remove_rmap(struct page *page, bool compound)
 		clear_page_mlock(page);
 
 	if (PageTransCompound(page))
-		deferred_split_huge_page(compound_head(page));
+		deferred_split_huge_page(compound_head(page), 1);
 
 	/*
 	 * It would be tidy to reset the PageAnon mapping here,

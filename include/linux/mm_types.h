@@ -138,7 +138,8 @@ struct page {
 		};
 		struct {	/* Second tail page of compound page */
 			unsigned long _compound_pad_1;	/* compound_head */
-			unsigned long _compound_pad_2;
+			/* Freeable normal pages for deferred split shrinker */
+			unsigned long nr_freeable;
 			/* For both global and memcg */
 			struct list_head deferred_list;
 		};
