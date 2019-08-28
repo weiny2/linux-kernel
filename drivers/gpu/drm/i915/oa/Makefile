@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0
 # SPDX-License-Identifier: MIT
 
 # For building individual subdir files on the command line
