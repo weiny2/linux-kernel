@@ -705,6 +705,14 @@ static inline pte_t pte_modify(pte_t pte, pgprot_t newprot)
 	val &= _PAGE_CHG_MASK;
 	val |= check_pgprot(newprot) & ~_PAGE_CHG_MASK;
 	val = flip_protnone_guard(oldval, val, PTE_PFN_MASK);
+
+	if (pte_dirty(pte)) {
+		if (static_cpu_has(X86_FEATURE_SHSTK) && !(val & _PAGE_RW))
+			val |= _PAGE_DIRTY_SW;
+		else
+			val |= _PAGE_DIRTY_HW;
+	}
+
 	return __pte(val);
 }
 
@@ -715,6 +723,14 @@ static inline pmd_t pmd_modify(pmd_t pmd, pgprot_t newprot)
 	val &= _HPAGE_CHG_MASK;
 	val |= check_pgprot(newprot) & ~_HPAGE_CHG_MASK;
 	val = flip_protnone_guard(oldval, val, PHYSICAL_PMD_PAGE_MASK);
+
+	if (pmd_dirty(pmd)) {
+		if (static_cpu_has(X86_FEATURE_SHSTK) && !(val & _PAGE_RW))
+			val |= _PAGE_DIRTY_SW;
+		else
+			val |= _PAGE_DIRTY_HW;
+	}
+
 	return __pmd(val);
 }
 
