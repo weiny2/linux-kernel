@@ -2859,12 +2859,7 @@
         {
             "branch": "clear_linux_patches_for_next",
             "branch_type": "expiring",
-            "config_options": [
-                {
-                    "name": "test",
-                    "value": "y"
-                }
-            ],
+            "config_options": [],
             "contributor": [
                 {
                     "name": "Kyle Pelton",
