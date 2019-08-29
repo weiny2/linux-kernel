@@ -2083,7 +2083,7 @@
                 }
             ],
             "description": "Add Audio SOF drivers, included embargoed TGL and JSL support",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Michal Grodzicki",
