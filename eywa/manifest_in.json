@@ -147,7 +147,7 @@
             "repourl": "git://git.infradead.org/users/jjs/linux-tpmdd.git",
             "sdl_contact": [],
             "status": "public",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "f0aa14ba05d1fbcb0e01a53c08e25bcd910dc00b"
         },
         {
             "branch": "next",
