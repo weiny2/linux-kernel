@@ -650,4 +650,13 @@ static inline void pci_aer_clear_fatal_status(struct pci_dev *dev) { }
 static inline void pci_aer_clear_device_status(struct pci_dev *dev) { }
 #endif
 
+#ifdef CONFIG_ACPI
+int pci_acpi_program_hp_params(struct pci_dev *dev);
+#else
+static inline int pci_acpi_program_hp_params(struct pci_dev *dev)
+{
+	return -ENODEV;
+}
+#endif
+
 #endif /* DRIVERS_PCI_H */
