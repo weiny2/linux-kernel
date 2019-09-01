@@ -44,6 +44,8 @@ DECLARE_EVENT_CLASS(iomap_page_class,
 		  __entry->length)
 )
 
+struct inode;
+
 #define DEFINE_PAGE_EVENT(name)		\
 DEFINE_EVENT(iomap_page_class, name,	\
 	TP_PROTO(struct inode *inode, struct page *page, unsigned long off, \
