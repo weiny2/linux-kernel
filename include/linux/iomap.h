@@ -231,8 +231,8 @@ int iomap_writepages(struct address_space *mapping,
  */
 #define IOMAP_DIO_UNWRITTEN	(1 << 0)	/* covers unwritten extent(s) */
 #define IOMAP_DIO_COW		(1 << 1)	/* covers COW extent(s) */
-typedef int (iomap_dio_end_io_t)(struct kiocb *iocb, ssize_t ret,
-		unsigned flags);
+typedef int (iomap_dio_end_io_t)(struct kiocb *iocb, ssize_t size, int error,
+				 unsigned int flags);
 ssize_t iomap_dio_rw(struct kiocb *iocb, struct iov_iter *iter,
 		const struct iomap_ops *ops, iomap_dio_end_io_t end_io);
 int iomap_dio_iopoll(struct kiocb *kiocb, bool spin);
