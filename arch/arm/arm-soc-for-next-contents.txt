@@ -17,6 +17,20 @@ arm/soc
 		ARM: orion/mvebu: unify debug-ll virtual addresses
 	lpc32xx/multiplatform
 		Merge branch 'lpc32xx/multiplatform' into arm/soc
+	vexpress/soc
+		git://git.kernel.org/pub/scm/linux/kernel/git/sudeep.holla/linux tags/vexpress-update-5.4
+	aspeed/soc
+		git://git.kernel.org/pub/scm/linux/kernel/git/joel/aspeed tags/aspeed-5.4-arch
+	imx/soc
+		git://git.kernel.org/pub/scm/linux/kernel/git/shawnguo/linux tags/imx-soc-5.4
+	at91/soc
+		git://git.kernel.org/pub/scm/linux/kernel/git/at91/linux tags/at91-5.4-soc
+	omap/soc
+		git://git.kernel.org/pub/scm/linux/kernel/git/tmlind/linux-omap tags/omap-for-v5.4/soc-signed
+	zynq/soc
+		https://github.com/Xilinx/linux-xlnx tags/zynq-soc-for-v5.4
+	renesas/soc
+		git://git.kernel.org/pub/scm/linux/kernel/git/geert/renesas-devel tags/renesas-arm-soc-for-v5.4-tag1
 
 arm/dt
 	patch
@@ -36,6 +50,56 @@ arm/dt
 		git://git.kernel.org/pub/scm/linux/kernel/git/sudeep.holla/linux tags/juno-update-5.4
 	vexpress/dt
 		git://git.kernel.org/pub/scm/linux/kernel/git/sudeep.holla/linux tags/vexpress-dt-updates-5.4
+	samsung/dt
+		git://git.kernel.org/pub/scm/linux/kernel/git/krzk/linux tags/samsung-dt-5.4
+	rockchip/dt32-1
+		git://git.kernel.org/pub/scm/linux/kernel/git/mmind/linux-rockchip tags/v5.4-rockchip-dts32-1
+	rockchip/dt64-1
+		git://git.kernel.org/pub/scm/linux/kernel/git/mmind/linux-rockchip tags/v5.4-rockchip-dts64-1
+	socfpga/dt
+		git://git.kernel.org/pub/scm/linux/kernel/git/dinguyen/linux tags/socfpga_dts_updates_for_v5.4
+	amlogic/dt
+		git://git.kernel.org/pub/scm/linux/kernel/git/khilman/linux-amlogic tags/amlogic-dt
+	amlogic/dt64
+		git://git.kernel.org/pub/scm/linux/kernel/git/khilman/linux-amlogic tags/amlogic-dt64
+		contains amlogic/clk
+	renesas/dt-for-5.4
+		git://git.kernel.org/pub/scm/linux/kernel/git/geert/renesas-devel tags/renesas-arm-dt-for-v5.4-tag1
+	renesas/dt64-2
+		git://git.kernel.org/pub/scm/linux/kernel/git/geert/renesas-devel tags/renesas-arm64-dt-for-v5.4-tag2
+	renesas/dt-bindings-2
+		git://git.kernel.org/pub/scm/linux/kernel/git/geert/renesas-devel tags/renesas-dt-bindings-for-v5.4-tag2
+	sunxi/dt
+		git://git.kernel.org/pub/scm/linux/kernel/git/sunxi/linux tags/sunxi-dt-for-5.4-1
+	mediatek/dt
+		git://git.kernel.org/pub/scm/linux/kernel/git/matthias.bgg/linux tags/v5.3-next-dts32
+	mediatek/dt64
+		git://git.kernel.org/pub/scm/linux/kernel/git/matthias.bgg/linux tags/v5.3-next-dts64
+	omap/dt-2
+		git://git.kernel.org/pub/scm/linux/kernel/git/tmlind/linux-omap tags/omap-for-v5.4/dt-take2-signed
+	aspeed/dt
+		git://git.kernel.org/pub/scm/linux/kernel/git/joel/aspeed tags/aspeed-5.4-devicetree
+	imx/dt-bindings
+		git://git.kernel.org/pub/scm/linux/kernel/git/shawnguo/linux tags/imx-bindings-5.4
+	imx/dt+clocks
+		git://git.kernel.org/pub/scm/linux/kernel/git/shawnguo/linux tags/imx-dt-clkdep-5.4
+		contains imx/clk
+	imx/dt32
+		git://git.kernel.org/pub/scm/linux/kernel/git/shawnguo/linux tags/imx-dt-5.4
+	imx/dt64
+		git://git.kernel.org/pub/scm/linux/kernel/git/shawnguo/linux tags/imx-dt64-5.4
+	at91/dt
+		git://git.kernel.org/pub/scm/linux/kernel/git/at91/linux tags/at91-5.4-dt
+	mvebu/dt
+		git://git.infradead.org/linux-mvebu tags/mvebu-dt-5.4-1
+	mvebu/dt64
+		git://git.infradead.org/linux-mvebu tags/mvebu-dt64-5.4-1
+	ux500/dt-3
+		git://git.kernel.org/pub/scm/linux/kernel/git/linusw/linux-stericsson tags/ux500-dts-v5.4-3
+	amlogic/dt-2.1
+		git://git.kernel.org/pub/scm/linux/kernel/git/khilman/linux-amlogic tags/amlogic-dt64-2.1
+		contains amlogic/drivers
+		contains amlogic/drivers-2.1
 
 arm/drivers
 	fsl/soc-5.3-2
@@ -54,6 +118,24 @@ arm/drivers
 		git://git.kernel.org/pub/scm/linux/kernel/git/sudeep.holla/linux tags/scmi-updates-5.4
 	drivers/tee
 		git://git.linaro.org/people/jens.wiklander/linux-tee tags/tee-optee-for-5.4
+	samsung/chipid
+		git://git.kernel.org/pub/scm/linux/kernel/git/krzk/linux tags/samsung-drivers-5.4
+	renesas/drivers-2
+		git://git.kernel.org/pub/scm/linux/kernel/git/geert/renesas-devel tags/renesas-drivers-for-v5.4-tag2
+	fsl/dpaa
+		git://git.kernel.org/pub/scm/linux/kernel/git/leo/linux tags/soc-fsl-next-v5.4
+	patch
+		ARM: scoop: Use the right include
+	amlogic/drivers
+		git://git.kernel.org/pub/scm/linux/kernel/git/khilman/linux-amlogic tags/amlogic-drivers
+	sunxi/drivers
+		git://git.kernel.org/pub/scm/linux/kernel/git/sunxi/linux tags/sunxi-drivers-for-5.4-2
+	mediatek/drivers
+		git://git.kernel.org/pub/scm/linux/kernel/git/matthias.bgg/linux tags/v5.3-next-soc
+	amlogic/drivers-2.1
+		git://git.kernel.org/pub/scm/linux/kernel/git/khilman/linux-amlogic tags/amlogic-drivers-2.1
+	imx/drivers
+		git://git.kernel.org/pub/scm/linux/kernel/git/shawnguo/linux tags/imx-drivers-5.4
 
 arm/defconfig
 	patch
@@ -62,15 +144,13 @@ arm/defconfig
 		ARM: multi_v7_defconfig: Enable SPI_STM32_QSPI support
 	stm32/defconfig
 		git://git.kernel.org/pub/scm/linux/kernel/git/atorgue/stm32 tags/stm32-defconfig-for-v5.4-1
-
-arm/newsoc
-
-arm/late
-
-arm/fixes
-	<no branch> (a5580eb394c8a48afc3e64aaad68db0d44662cc6)
-		git://git.kernel.org/pub/scm/linux/kernel/git/shawnguo/linux tags/imx-fixes-5.3-2
-	<no branch> (4a65bbb9109ed7edd4b6ed7168ced48abb8561a2)
-		git://git.kernel.org/pub/scm/linux/kernel/git/tmlind/linux-omap tags/omap-for-v5.3/fixes-rc4
-	<no branch> (dc7f2cb218b5ef65ab3d455a0e62d27e44075203)
-		git://git.kernel.org/pub/scm/linux/kernel/git/khilman/linux-amlogic tags/amlogic-fixes
+	hisi/defconfig
+		git://github.com/hisilicon/linux-hisi tags/hisi-arm64-defconfig-for-5.4
+	socfpga/defconfig
+		git://git.kernel.org/pub/scm/linux/kernel/git/dinguyen/linux tags/arm64_defconfig_watchdog_for_v5.4
+	sunxi/defconfig
+		git://git.kernel.org/pub/scm/linux/kernel/git/sunxi/linux tags/sunxi-config64-for-5.4-1
+	aspeed/defconfig
+		git://git.kernel.org/pub/scm/linux/kernel/git/joel/aspeed tags/aspeed-5.4-defconfig
+	imx/defconfig
+		git://git.kernel.org/pub/scm/linux/kernel/git/shawnguo/linux tags/imx-defconfig-5.4
