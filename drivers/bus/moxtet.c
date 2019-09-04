@@ -514,7 +514,7 @@ static ssize_t output_write(struct file *file, const char __user *buf,
 	struct moxtet *moxtet = file->private_data;
 	u8 bin[TURRIS_MOX_MAX_MODULES];
 	u8 hex[sizeof(bin) * 2 + 1];
-	size_t res;
+	ssize_t res;
 	loff_t dummy = 0;
 	int err, i;
 
@@ -819,7 +819,6 @@ static int moxtet_probe(struct spi_device *spi)
 static int moxtet_remove(struct spi_device *spi)
 {
 	struct moxtet *moxtet = spi_get_drvdata(spi);
-	int dummy;
 
 	free_irq(moxtet->dev_irq, moxtet);
 
@@ -827,7 +826,7 @@ static int moxtet_remove(struct spi_device *spi)
 
 	moxtet_unregister_debugfs(moxtet);
 
-	dummy = device_for_each_child(moxtet->dev, NULL, __unregister);
+	device_for_each_child(moxtet->dev, NULL, __unregister);
 
 	mutex_destroy(&moxtet->lock);
 
