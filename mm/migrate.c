@@ -2084,7 +2084,13 @@ int migrate_misplaced_page(struct page *page, struct vm_area_struct *vma,
 	}
 
 	list_add(&page->lru, &migratepages);
-	m_detail.reason = MR_NUMA_MISPLACED;
+	/* Promote from slow memory node to fast memory node */
+	if (next_migration_node(node) != -1 &&
+	    next_promotion_node(page_to_nid(page)) != -1) {
+		m_detail.reason = MR_PROMOTION;
+		m_detail.h_reason = MR_HMEM_AUTONUMA_PROMOTE;
+	} else
+		m_detail.reason = MR_NUMA_MISPLACED;
 	nr_remaining = migrate_pages(&migratepages, alloc_misplaced_dst_page,
 				     NULL, node, MIGRATE_ASYNC, &m_detail);
 	if (nr_remaining) {
