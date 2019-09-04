@@ -31,6 +31,8 @@ arm/soc
 		https://github.com/Xilinx/linux-xlnx tags/zynq-soc-for-v5.4
 	renesas/soc
 		git://git.kernel.org/pub/scm/linux/kernel/git/geert/renesas-devel tags/renesas-arm-soc-for-v5.4-tag1
+	davinci/soc
+		git://git.kernel.org/pub/scm/linux/kernel/git/nsekhar/linux-davinci tags/davinci-for-v5.4/soc
 
 arm/dt
 	patch
@@ -100,6 +102,14 @@ arm/dt
 		git://git.kernel.org/pub/scm/linux/kernel/git/khilman/linux-amlogic tags/amlogic-dt64-2.1
 		contains amlogic/drivers
 		contains amlogic/drivers-2.1
+	bitmain/dt
+		git://git.kernel.org/pub/scm/linux/kernel/git/mani/linux-bitmain tags/bitmain-soc-5.4
+	davinci/dt
+		git://git.kernel.org/pub/scm/linux/kernel/git/nsekhar/linux-davinci tags/davinci-for-v5.4/dt
+	qcom/dt
+		git://git.kernel.org/pub/scm/linux/kernel/git/qcom/linux tags/qcom-arm64-for-5.4
+	brcm/dt
+		https://github.com/Broadcom/stblinux tags/arm-soc/for-5.4/devicetree
 
 arm/drivers
 	fsl/soc-5.3-2
@@ -136,6 +146,19 @@ arm/drivers
 		git://git.kernel.org/pub/scm/linux/kernel/git/khilman/linux-amlogic tags/amlogic-drivers-2.1
 	imx/drivers
 		git://git.kernel.org/pub/scm/linux/kernel/git/shawnguo/linux tags/imx-drivers-5.4
+	davinci/fbdev
+		git://git.kernel.org/pub/scm/linux/kernel/git/nsekhar/linux-davinci tags/davinci-for-v5.4/fbdev
+	patch
+		bus: moxtet: remove set but not used variable 'dummy'
+		bus: moxtet: fix unsigned comparison to less than zero
+		dt-bindings: firmware: Document cznic,turris-mox-rwtm binding
+		firmware: Add Turris Mox rWTM firmware driver
+		firmware: turris-mox-rwtm: Add sysfs documentation
+		net: remove ks8695 driver
+		net: remove w90p910-ether driver
+		spi: remove w90x900 driver
+		fbdev: remove w90x900/nuc900 platform drivers
+		bus: imx-weim: remove incorrect __init annotations
 
 arm/defconfig
 	patch
@@ -154,3 +177,43 @@ arm/defconfig
 		git://git.kernel.org/pub/scm/linux/kernel/git/joel/aspeed tags/aspeed-5.4-defconfig
 	imx/defconfig
 		git://git.kernel.org/pub/scm/linux/kernel/git/shawnguo/linux tags/imx-defconfig-5.4
+	brcm/defconfig
+		https://github.com/Broadcom/stblinux tags/arm-soc/for-5.4/defconfig
+	brcm/defconfig-64
+		https://github.com/Broadcom/stblinux tags/arm-soc/for-5.4/defconfig-arm64
+	qcom/defconfig
+		git://git.kernel.org/pub/scm/linux/kernel/git/qcom/linux tags/qcom-arm64-defconfig-for-5.4
+	qcom/defconfig-2
+		git://git.kernel.org/pub/scm/linux/kernel/git/qcom/linux tags/qcom-defconfig-for-5.4
+	qcom/drivers
+		git://git.kernel.org/pub/scm/linux/kernel/git/qcom/linux tags/qcom-drivers-for-5.4
+	patch
+		arm64: defconfig: Enable Qualcomm GENI based I2C controller
+		arm64: defconfig: Enable the EFI Framebuffer
+		arm64: defconfig: Enable Qualcomm QUSB2 PHY
+
+arm/newsoc
+
+arm/late
+	omap/sysc
+		git://git.kernel.org/pub/scm/linux/kernel/git/tmlind/linux-omap tags/omap-for-v5.4/ti-sysc-signed
+	omap/sysc-2
+		git://git.kernel.org/pub/scm/linux/kernel/git/tmlind/linux-omap tags/omap-for-v5.4/ti-sysc-part2-signed
+	omap/sysc-pdata
+		git://git.kernel.org/pub/scm/linux/kernel/git/tmlind/linux-omap tags/omap-for-v5.4/ti-sysc-drop-pdata-take2-signed
+	omap/sysc-sgx
+		git://git.kernel.org/pub/scm/linux/kernel/git/tmlind/linux-omap tags/omap-for-v5.4/ti-sysc-sgx-signed
+	ti/k3-dt
+		git://git.kernel.org/pub/scm/linux/kernel/git/kristo/linux tags/ti-k3-soc-for-v5.4
+	mvebu/dt-2
+		git://git.infradead.org/linux-mvebu tags/mvebu-dt64-5.4-2
+		contains drivers/reset
+		contains drivers/scmi
+		contains drivers/tee
+		contains fsl/soc-5.3-2
+		contains mvebu/dt64
+		contains renesas/drivers
+
+arm/fixes
+	<no branch> (45f5d5a9e34d3fe4140a9a3b5f7ebe86c252440a)
+		git://git.kernel.org/pub/scm/linux/kernel/git/horms/renesas tags/renesas-fixes-for-v5.3
