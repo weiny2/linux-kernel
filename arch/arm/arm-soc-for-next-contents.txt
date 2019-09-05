@@ -35,6 +35,8 @@ arm/soc
 		git://git.kernel.org/pub/scm/linux/kernel/git/nsekhar/linux-davinci tags/davinci-for-v5.4/soc
 	samsung/soc
 		git://git.kernel.org/pub/scm/linux/kernel/git/krzk/linux tags/samsung-soc-5.4-2
+	patch
+		arm64: exynos: Enable exynos-chipid driver
 
 arm/dt
 	patch
@@ -114,6 +116,14 @@ arm/dt
 		https://github.com/Broadcom/stblinux tags/arm-soc/for-5.4/devicetree
 	samsung/dt-2
 		git://git.kernel.org/pub/scm/linux/kernel/git/krzk/linux tags/samsung-dt-5.4-2
+	aspeed/dt-2
+		git://git.kernel.org/pub/scm/linux/kernel/git/joel/aspeed tags/aspeed-5.4-devicetree-2
+	rockchip/dt32-2
+		git://git.kernel.org/pub/scm/linux/kernel/git/mmind/linux-rockchip tags/v5.4-rockchip-dts32-2
+	rockchip/dt64-2
+		git://git.kernel.org/pub/scm/linux/kernel/git/mmind/linux-rockchip tags/v5.4-rockchip-dts64-2
+	patch
+		arm64: dts: qcom: Add Lenovo Yoga C630
 
 arm/drivers
 	fsl/soc-5.3-2
@@ -168,6 +178,8 @@ arm/drivers
 		soc: ti: ti_sci_pm_domains: Add support for exclusive and shared access
 	samsung/soc-driver
 		git://git.kernel.org/pub/scm/linux/kernel/git/krzk/linux tags/samsung-drivers-5.4-2
+	patch
+		bus: uniphier-system-bus: use devm_platform_ioremap_resource()
 
 arm/defconfig
 	patch
@@ -228,3 +240,5 @@ arm/late
 arm/fixes
 	<no branch> (45f5d5a9e34d3fe4140a9a3b5f7ebe86c252440a)
 		git://git.kernel.org/pub/scm/linux/kernel/git/horms/renesas tags/renesas-fixes-for-v5.3
+	renesas/fixes-3
+		git://git.kernel.org/pub/scm/linux/kernel/git/horms/renesas tags/renesas-fixes2-for-v5.3
