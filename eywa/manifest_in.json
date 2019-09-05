@@ -2915,6 +2915,45 @@
             ],
             "status": "public",
             "stuck_at_ref": ""
+        },
+        {
+            "branch": "gfx-dm-di4in",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "CONFIG_DRM_I915_MEMTRACK",
+                    "value": "y"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Yugang Fan",
+                    "email": "yugang.fan@intel.com"
+                }
+            ],
+            "description": "2 patches from Android GFX domain branch\nrebased for drm intel latest “for-intel-next” branch",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Sourab Gupta",
+                    "email": "sourab.gupta@intel.com"
+                },
+                {
+                    "name": "Gao Chun",
+                    "email": "chun.gao@intel.com"
+                }
+            ],
+            "jira": "NEXT-1583",
+            "name": "Android GFX",
+            "repourl": "ssh://git-amr-1.devtools.intel.com:29418/aose_graphics_media-pkt_graphics.git",
+            "sdl_contact": [
+                {
+                    "name": "Yugang Fan",
+                    "email": "yugang.fan@intel.com"
+                }
+            ],
+            "status": "public",
+            "stuck_at_ref": ""
         }
     ]
 }
