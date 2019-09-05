@@ -1,6 +1,6 @@
 #
 # Automatically generated file; DO NOT EDIT.
-# Linux/x86 5.3.0-rc6 Kernel Configuration
+# Linux/x86 5.3.0-rc7 Kernel Configuration
 #
 
 #
@@ -6145,6 +6145,7 @@ CONFIG_DRM_I915_ALPHA_SUPPORT=y
 CONFIG_DRM_I915_FORCE_PROBE="*"
 CONFIG_DRM_I915_CAPTURE_ERROR=y
 CONFIG_DRM_I915_COMPRESS_ERROR=y
+CONFIG_DRM_I915_MEMTRACK=y
 CONFIG_DRM_I915_USERPTR=y
 CONFIG_DRM_I915_GVT=y
 CONFIG_DRM_I915_GVT_KVMGT=m
@@ -6205,7 +6206,6 @@ CONFIG_DRM_ANALOGIX_ANX78XX=m
 # end of Display Interface Bridges
 
 # CONFIG_DRM_ETNAVIV is not set
-CONFIG_DRM_HISI_HIBMC=m
 # CONFIG_DRM_GM12U320 is not set
 # CONFIG_TINYDRM_HX8357D is not set
 CONFIG_TINYDRM_ILI9225=m
@@ -7134,6 +7134,7 @@ CONFIG_USBIP_VHCI_NR_HCS=1
 CONFIG_USBIP_HOST=m
 CONFIG_USBIP_VUDC=m
 # CONFIG_USBIP_DEBUG is not set
+# CONFIG_USB_CDNS3 is not set
 CONFIG_USB_MUSB_HDRC=m
 # CONFIG_USB_MUSB_HOST is not set
 # CONFIG_USB_MUSB_GADGET is not set
@@ -8484,13 +8485,6 @@ CONFIG_SOUNDWIRE_INTEL=m
 # i.MX SoC drivers
 #
 # end of i.MX SoC drivers
-
-#
-# IXP4xx SoC drivers
-#
-# CONFIG_IXP4XX_QMGR is not set
-# CONFIG_IXP4XX_NPE is not set
-# end of IXP4xx SoC drivers
 
 #
 # Qualcomm SoC drivers
