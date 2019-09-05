@@ -1,4 +1,8 @@
 {
+    "metadata": {
+        "kernel_cycle": "v5.3",
+        "jira_epic":"NEXT-1493"
+    },
     "master_branch": {
         "branch": "master",
         "contributor": [],
