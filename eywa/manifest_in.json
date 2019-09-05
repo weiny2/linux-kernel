@@ -254,12 +254,7 @@
         {
             "branch": "for-intel-next",
             "branch_type": "internal nonexpiring",
-            "config_options": [
-                {
-                    "name": "",
-                    "value": ""
-                }
-            ],
+            "config_options": [],
             "contributor": [
                 {
                     "name": "Shyjumon",
@@ -2931,7 +2926,7 @@
                     "email": "yugang.fan@intel.com"
                 }
             ],
-            "description": "2 patches from Android GFX domain branch\nrebased for drm intel latest “for-intel-next” branch",
+            "description": "2 patches from Android GFX domain branch rebased for drm intel latest “for-intel-next” branch",
             "enabled": true,
             "ip_owner": [
                 {
