@@ -2689,7 +2689,11 @@ struct request_queue *blk_mq_init_queue(struct blk_mq_tag_set *set)
 	if (!uninit_q)
 		return ERR_PTR(-ENOMEM);
 
-	q = blk_mq_init_allocated_queue(set, uninit_q);
+	/*
+	 * Initialize the queue without an elevator. device_add_disk() will do
+	 * the initialization.
+	 */
+	q = blk_mq_init_allocated_queue(set, uninit_q, false);
 	if (IS_ERR(q))
 		blk_cleanup_queue(uninit_q);
 
@@ -2840,10 +2844,9 @@ static unsigned int nr_hw_queues(struct blk_mq_tag_set *set)
 }
 
 struct request_queue *blk_mq_init_allocated_queue(struct blk_mq_tag_set *set,
-						  struct request_queue *q)
+						  struct request_queue *q,
+						  bool elevator_init)
 {
-	int ret = -ENOMEM;
-
 	/* mark the queue as mq asap */
 	q->mq_ops = set->ops;
 
@@ -2904,16 +2907,11 @@ struct request_queue *blk_mq_init_allocated_queue(struct blk_mq_tag_set *set,
 	blk_mq_add_queue_tag_set(set, q);
 	blk_mq_map_swqueue(q);
 
-	if (!(set->flags & BLK_MQ_F_NO_SCHED)) {
-		ret = elevator_init_mq(q);
-		if (ret)
-			goto err_tag_set;
-	}
+	if (elevator_init)
+		elevator_init_mq(q);
 
 	return q;
 
-err_tag_set:
-	blk_mq_del_queue_tag_set(q);
 err_hctxs:
 	kfree(q->queue_hw_ctx);
 	q->nr_hw_queues = 0;
