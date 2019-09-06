@@ -24,14 +24,21 @@
 #define I10NM_GET_IMC_BAR(d, i, reg)	\
 	pci_read_config_dword((d)->uracu, 0xd8 + (i) * 4, &(reg))
 #define I10NM_GET_DIMMMTR(m, i, j)	\
-	(*(u32 *)((m)->mbase + 0x2080c + (i) * 0x4000 + (j) * 4))
+	(*(u32 *)((m)->mbase + 0x2080c + (i) * (m)->ch_mmapio_sz + (j) * 4))
 #define I10NM_GET_MCDDRTCFG(m, i, j)	\
-	(*(u32 *)((m)->mbase + 0x20970 + (i) * 0x4000 + (j) * 4))
+	(*(u32 *)((m)->mbase + 0x20970 + (i) * (m)->ch_mmapio_sz + (j) * 4))
 
 #define I10NM_GET_SCK_MMIO_BASE(reg)	(GET_BITFIELD(reg, 0, 28) << 23)
 #define I10NM_GET_IMC_MMIO_OFFSET(reg)	(GET_BITFIELD(reg, 0, 10) << 12)
 #define I10NM_GET_IMC_MMIO_SIZE(reg)	((GET_BITFIELD(reg, 13, 23) - \
 					 GET_BITFIELD(reg, 0, 10) + 1) << 12)
+
+struct res_config {
+	enum type type;
+	unsigned int ubox_did;
+	int bus_cfg_off;
+	int ch_mmapio_sz;
+};
 
 static struct list_head *i10nm_edac_list;
 
@@ -122,11 +129,18 @@ static int i10nm_get_all_munits(void)
 	return 0;
 }
 
+static struct res_config icx_cfg = {
+	.type		= I10NM,
+	.ubox_did	= 0x3452,
+	.bus_cfg_off	= 0xcc,
+	.ch_mmapio_sz	= 0x4000,
+};
+
 static const struct x86_cpu_id i10nm_cpuids[] = {
-	{ X86_VENDOR_INTEL, 6, INTEL_FAM6_ATOM_TREMONT_D, 0, 0 },
-	{ X86_VENDOR_INTEL, 6, INTEL_FAM6_ICELAKE_X, 0, 0 },
-	{ X86_VENDOR_INTEL, 6, INTEL_FAM6_ICELAKE_D, 0, 0 },
-	{ }
+	INTEL_CPU_FAM6(ATOM_TREMONT_D, icx_cfg),
+	INTEL_CPU_FAM6(ICELAKE_X, icx_cfg),
+	INTEL_CPU_FAM6(ICELAKE_D, icx_cfg),
+	{}
 };
 MODULE_DEVICE_TABLE(x86cpu, i10nm_cpuids);
 
@@ -134,7 +148,7 @@ static bool i10nm_check_ecc(struct skx_imc *imc, int chan)
 {
 	u32 mcmtr;
 
-	mcmtr = *(u32 *)(imc->mbase + 0x20ef8 + chan * 0x4000);
+	mcmtr = *(u32 *)(imc->mbase + 0x20ef8 + imc->ch_mmapio_sz * chan);
 	edac_dbg(1, "ch%d mcmtr reg %x\n", chan, mcmtr);
 
 	return !!GET_BITFIELD(mcmtr, 2, 2);
@@ -234,6 +248,7 @@ static int __init i10nm_init(void)
 {
 	u8 mc = 0, src_id = 0, node_id = 0;
 	const struct x86_cpu_id *id;
+	struct res_config *cfg;
 	const char *owner;
 	struct skx_dev *d;
 	int rc, i, off[3] = {0xd0, 0xc8, 0xcc};
@@ -248,12 +263,14 @@ static int __init i10nm_init(void)
 	id = x86_match_cpu(i10nm_cpuids);
 	if (!id)
 		return -ENODEV;
+	cfg = (struct res_config *)id->driver_data;
 
 	rc = skx_get_hi_lo(0x09a2, off, &tolm, &tohm);
 	if (rc)
 		return rc;
 
-	rc = skx_get_all_bus_mappings(0x3452, 0xcc, I10NM, &i10nm_edac_list);
+	rc = skx_get_all_bus_mappings(cfg->ubox_did, cfg->bus_cfg_off,
+				      cfg->type, &i10nm_edac_list);
 	if (rc < 0)
 		goto fail;
 	if (rc == 0) {
@@ -283,6 +300,7 @@ static int __init i10nm_init(void)
 			d->imc[i].lmc = i;
 			d->imc[i].src_id  = src_id;
 			d->imc[i].node_id = node_id;
+			d->imc[i].ch_mmapio_sz = cfg->ch_mmapio_sz;
 
 			rc = skx_register_mci(&d->imc[i], d->imc[i].mdev,
 					      "Intel_10nm Socket", EDAC_MOD_STR,

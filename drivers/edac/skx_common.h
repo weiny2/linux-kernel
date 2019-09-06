@@ -59,6 +59,7 @@ struct skx_dev {
 		struct mem_ctl_info *mci;
 		struct pci_dev *mdev; /* for i10nm CPU */
 		void __iomem *mbase;  /* for i10nm CPU */
+		int ch_mmapio_sz;     /* for i10nm CPU */
 		u8 mc;	/* system wide mc# */
 		u8 lmc;	/* socket relative mc# */
 		u8 src_id, node_id;
