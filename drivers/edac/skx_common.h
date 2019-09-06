@@ -83,7 +83,8 @@ struct skx_pvt {
 
 enum type {
 	SKX,
-	I10NM
+	I10NM,
+	SPR
 };
 
 enum {

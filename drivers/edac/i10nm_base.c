@@ -136,10 +136,18 @@ static struct res_config icx_cfg = {
 	.ch_mmapio_sz	= 0x4000,
 };
 
+static struct res_config spr_cfg = {
+	.type		= SPR,
+	.ubox_did	= 0x3252,
+	.bus_cfg_off	= 0xd0,
+	.ch_mmapio_sz	= 0x8000,
+};
+
 static const struct x86_cpu_id i10nm_cpuids[] = {
 	INTEL_CPU_FAM6(ATOM_TREMONT_D, icx_cfg),
 	INTEL_CPU_FAM6(ICELAKE_X, icx_cfg),
 	INTEL_CPU_FAM6(ICELAKE_D, icx_cfg),
+	INTEL_CPU_FAM6(SAPPHIRERAPIDS, spr_cfg),
 	{}
 };
 MODULE_DEVICE_TABLE(x86cpu, i10nm_cpuids);
