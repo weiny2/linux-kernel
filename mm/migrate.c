@@ -406,6 +406,9 @@ int migrate_page_move_mapping(struct address_space *mapping,
 	int dirty;
 	int expected_count = expected_page_refs(mapping, page) + extra_count;
 
+	if (page_count(page) != expected_count)
+		count_vm_events(PGMIGRATE_REFCOUNT_FAIL, hpage_nr_pages(page));
+
 	if (!mapping) {
 		/* Anonymous page without mapping */
 		if (page_count(page) != expected_count)
@@ -1541,6 +1544,9 @@ retry:
 					}
 				}
 				nr_failed++;
+
+				count_vm_events(PGMIGRATE_NOMEM_FAIL,
+						hpage_nr_pages(page));
 				goto out;
 			case -EAGAIN:
 				retry++;
@@ -1993,8 +1999,11 @@ static int numamigrate_isolate_page(pg_data_t *pgdat, struct page *page)
 	VM_BUG_ON_PAGE(compound_order(page) && !PageTransHuge(page), page);
 
 	/* Avoid migrating to a node that is nearly full */
-	if (!migrate_balanced_pgdat(pgdat, 1UL << compound_order(page)))
+	if (!migrate_balanced_pgdat(pgdat, 1UL << compound_order(page))) {
+		count_vm_events(PGMIGRATE_DST_NODE_FULL_FAIL,
+			hpage_nr_pages(page));
 		return 0;
+	}
 
 	if (isolate_lru_page(page))
 		return 0;
@@ -2060,8 +2069,11 @@ int migrate_misplaced_page(struct page *page, struct vm_area_struct *vma,
 		goto out;
 
 	isolated = numamigrate_isolate_page(pgdat, page);
-	if (!isolated)
+	if (!isolated) {
+		count_vm_events(PGMIGRATE_NUMA_ISOLATE_FAIL,
+					hpage_nr_pages(page));
 		goto out;
+	}
 
 	list_add(&page->lru, &migratepages);
 	m_detail.reason = MR_NUMA_MISPLACED;
