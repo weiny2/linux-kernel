@@ -1,7 +1,7 @@
 {
     "metadata": {
         "kernel_cycle": "v5.3",
-        "jira_epic":"NEXT-1493"
+        "jira_epic": "NEXT-1493"
     },
     "master_branch": {
         "branch": "master",
@@ -2725,7 +2725,7 @@
                 }
             ],
             "description": "IOMMU vSVA changes",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Rupin H Vakharwala",
