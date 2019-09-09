@@ -37,6 +37,8 @@ arm/soc
 		git://git.kernel.org/pub/scm/linux/kernel/git/krzk/linux tags/samsung-soc-5.4-2
 	patch
 		arm64: exynos: Enable exynos-chipid driver
+		ARM: davinci: support multiplatform build for ARM v5
+		ARM: multi_v5_defconfig: make DaVinci part of the ARM v5 multiplatform build
 
 arm/dt
 	patch
@@ -236,9 +238,18 @@ arm/late
 		contains fsl/soc-5.3-2
 		contains mvebu/dt64
 		contains renesas/drivers
+	patch
+		ARM: dts: mmp2: trivial whitespace fix
+		ARM: dts: mmp2: fix the SPI nodes
+		ARM: dts: mmp2: add camera interfaces
+		ARM: dts: mmp2: specify reg-shift for the UARTs
+		ARM: dts: mmp2: rename the USB PHY node
+		ARM: dts: mmp2: add OLPC XO 1.75 machine
 
 arm/fixes
 	<no branch> (45f5d5a9e34d3fe4140a9a3b5f7ebe86c252440a)
 		git://git.kernel.org/pub/scm/linux/kernel/git/horms/renesas tags/renesas-fixes-for-v5.3
 	renesas/fixes-3
 		git://git.kernel.org/pub/scm/linux/kernel/git/horms/renesas tags/renesas-fixes2-for-v5.3
+	patch
+		soc: qcom: geni: Provide parameter error checking
