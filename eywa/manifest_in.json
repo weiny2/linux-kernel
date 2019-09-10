@@ -1024,7 +1024,7 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": "99d1e691b75ae9e7be90c1d00e4e44aa40c41166"
+            "stuck_at_ref": ""
         },
         {
             "branch": "rpmb",
