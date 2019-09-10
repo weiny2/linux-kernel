@@ -2089,6 +2089,10 @@ int migrate_misplaced_page(struct page *page, struct vm_area_struct *vma,
 	    next_promotion_node(page_to_nid(page)) != -1) {
 		m_detail.reason = MR_PROMOTION;
 		m_detail.h_reason = MR_HMEM_AUTONUMA_PROMOTE;
+	} else if (next_promotion_node(node) != -1 &&
+		   next_migration_node(page_to_nid(page)) != -1) {
+		m_detail.reason = MR_DEMOTION;
+		m_detail.h_reason = MR_HMEM_AUTONUMA_DEMOTE;
 	} else
 		m_detail.reason = MR_NUMA_MISPLACED;
 	nr_remaining = migrate_pages(&migratepages, alloc_misplaced_dst_page,
