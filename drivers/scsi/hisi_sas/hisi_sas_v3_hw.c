@@ -191,12 +191,30 @@
 #define PHY_CFG_PHY_RST_OFF		3
 #define PHY_CFG_PHY_RST_MSK		(0x1 << PHY_CFG_PHY_RST_OFF)
 #define PROG_PHY_LINK_RATE		(PORT_BASE + 0x8)
+#define CFG_PROG_PHY_LINK_RATE_OFF	8
+#define CFG_PROG_PHY_LINK_RATE_MSK	(0xf << CFG_PROG_PHY_LINK_RATE_OFF)
 #define PHY_CTRL			(PORT_BASE + 0x14)
 #define PHY_CTRL_RESET_OFF		0
 #define PHY_CTRL_RESET_MSK		(0x1 << PHY_CTRL_RESET_OFF)
 #define CMD_HDR_PIR_OFF			8
 #define CMD_HDR_PIR_MSK			(0x1 << CMD_HDR_PIR_OFF)
 #define SERDES_CFG			(PORT_BASE + 0x1c)
+#define CFG_ALOS_CHK_DISABLE_OFF	9
+#define CFG_ALOS_CHK_DISABLE_MSK	(0x1 << CFG_ALOS_CHK_DISABLE_OFF)
+#define SAS_PHY_BIST_CTRL		(PORT_BASE + 0x2c)
+#define CFG_BIST_MODE_SEL_OFF		0
+#define CFG_BIST_MODE_SEL_MSK		(0xf << CFG_BIST_MODE_SEL_OFF)
+#define CFG_LOOP_TEST_MODE_OFF		14
+#define CFG_LOOP_TEST_MODE_MSK		(0x3 << CFG_LOOP_TEST_MODE_OFF)
+#define CFG_RX_BIST_EN_OFF		16
+#define CFG_RX_BIST_EN_MSK		(0x1 << CFG_RX_BIST_EN_OFF)
+#define CFG_TX_BIST_EN_OFF		17
+#define CFG_TX_BIST_EN_MSK		(0x1 << CFG_TX_BIST_EN_OFF)
+#define CFG_BIST_TEST_OFF		18
+#define CFG_BIST_TEST_MSK		(0x1 << CFG_BIST_TEST_OFF)
+#define SAS_PHY_BIST_CODE		(PORT_BASE + 0x30)
+#define SAS_PHY_BIST_CODE1		(PORT_BASE + 0x34)
+#define SAS_BIST_ERR_CNT		(PORT_BASE + 0x38)
 #define SL_CFG				(PORT_BASE + 0x84)
 #define AIP_LIMIT			(PORT_BASE + 0x90)
 #define SL_CONTROL			(PORT_BASE + 0x94)
@@ -1356,7 +1374,10 @@ static void prep_ata_v3_hw(struct hisi_hba *hisi_hba,
 	hdr->dw1 = cpu_to_le32(dw1);
 
 	/* dw2 */
-	if (task->ata_task.use_ncq && hisi_sas_get_ncq_tag(task, &hdr_tag)) {
+	if (task->ata_task.use_ncq) {
+		struct ata_queued_cmd *qc = task->uldd_task;
+
+		hdr_tag = qc->tag;
 		task->ata_task.fis.sector_count |= (u8) (hdr_tag << 3);
 		dw2 |= hdr_tag << CMD_HDR_NCQ_TAG_OFF;
 	}
@@ -2573,8 +2594,8 @@ static int write_gpio_v3_hw(struct hisi_hba *hisi_hba, u8 reg_type,
 	return 0;
 }
 
-static int wait_cmds_complete_timeout_v3_hw(struct hisi_hba *hisi_hba,
-					    int delay_ms, int timeout_ms)
+static void wait_cmds_complete_timeout_v3_hw(struct hisi_hba *hisi_hba,
+					     int delay_ms, int timeout_ms)
 {
 	struct device *dev = hisi_hba->dev;
 	int entries, entries_old = 0, time;
@@ -2588,12 +2609,12 @@ static int wait_cmds_complete_timeout_v3_hw(struct hisi_hba *hisi_hba,
 		msleep(delay_ms);
 	}
 
-	if (time >= timeout_ms)
-		return -ETIMEDOUT;
+	if (time >= timeout_ms) {
+		dev_dbg(dev, "Wait commands complete timeout!\n");
+		return;
+	}
 
 	dev_dbg(dev, "wait commands complete %dms\n", time);
-
-	return 0;
 }
 
 static ssize_t intr_conv_v3_hw_show(struct device *dev,
@@ -2874,14 +2895,11 @@ static const struct hisi_sas_debugfs_reg debugfs_ras_reg = {
 
 static void debugfs_snapshot_prepare_v3_hw(struct hisi_hba *hisi_hba)
 {
-	struct device *dev = hisi_hba->dev;
-
 	set_bit(HISI_SAS_REJECT_CMD_BIT, &hisi_hba->flags);
 
 	hisi_sas_write32(hisi_hba, DLVRY_QUEUE_ENABLE, 0);
 
-	if (wait_cmds_complete_timeout_v3_hw(hisi_hba, 100, 5000) == -ETIMEDOUT)
-		dev_dbg(dev, "Wait commands complete timeout!\n");
+	wait_cmds_complete_timeout_v3_hw(hisi_hba, 100, 5000);
 
 	hisi_sas_kill_tasklets(hisi_hba);
 }
@@ -2923,6 +2941,113 @@ static void read_iost_itct_cache_v3_hw(struct hisi_hba *hisi_hba,
 		buf[i] = hisi_sas_read32(hisi_hba, TAB_DFX);
 }
 
+static void hisi_sas_bist_test_prep_v3_hw(struct hisi_hba *hisi_hba)
+{
+	u32 reg_val;
+	int phy_id = hisi_hba->debugfs_bist_phy_no;
+
+	/* disable PHY */
+	hisi_sas_phy_enable(hisi_hba, phy_id, 0);
+
+	/* disable ALOS */
+	reg_val = hisi_sas_phy_read32(hisi_hba, phy_id, SERDES_CFG);
+	reg_val |= CFG_ALOS_CHK_DISABLE_MSK;
+	hisi_sas_phy_write32(hisi_hba, phy_id, SERDES_CFG, reg_val);
+}
+
+static void hisi_sas_bist_test_restore_v3_hw(struct hisi_hba *hisi_hba)
+{
+	u32 reg_val;
+	int phy_id = hisi_hba->debugfs_bist_phy_no;
+
+	/* disable loopback */
+	reg_val = hisi_sas_phy_read32(hisi_hba, phy_id, SAS_PHY_BIST_CTRL);
+	reg_val &= ~(CFG_RX_BIST_EN_MSK | CFG_TX_BIST_EN_MSK |
+		     CFG_BIST_TEST_MSK);
+	hisi_sas_phy_write32(hisi_hba, phy_id, SAS_PHY_BIST_CTRL, reg_val);
+
+	/* enable ALOS */
+	reg_val = hisi_sas_phy_read32(hisi_hba, phy_id, SERDES_CFG);
+	reg_val &= ~CFG_ALOS_CHK_DISABLE_MSK;
+	hisi_sas_phy_write32(hisi_hba, phy_id, SERDES_CFG, reg_val);
+
+	/* restore the linkrate */
+	reg_val = hisi_sas_phy_read32(hisi_hba, phy_id, PROG_PHY_LINK_RATE);
+	/* init OOB link rate as 1.5 Gbits */
+	reg_val &= ~CFG_PROG_PHY_LINK_RATE_MSK;
+	reg_val |= (0x8 << CFG_PROG_PHY_LINK_RATE_OFF);
+	hisi_sas_phy_write32(hisi_hba, phy_id, PROG_PHY_LINK_RATE, reg_val);
+
+	/* enable PHY */
+	hisi_sas_phy_enable(hisi_hba, phy_id, 1);
+}
+
+#define SAS_PHY_BIST_CODE_INIT	0x1
+#define SAS_PHY_BIST_CODE1_INIT	0X80
+static int debugfs_set_bist_v3_hw(struct hisi_hba *hisi_hba, bool enable)
+{
+	u32 reg_val, mode_tmp;
+	u32 linkrate = hisi_hba->debugfs_bist_linkrate;
+	u32 phy_id = hisi_hba->debugfs_bist_phy_no;
+	u32 code_mode = hisi_hba->debugfs_bist_code_mode;
+	u32 path_mode = hisi_hba->debugfs_bist_mode;
+	struct device *dev = hisi_hba->dev;
+
+	dev_info(dev, "BIST info:linkrate=%d phy_id=%d code_mode=%d path_mode=%d\n",
+		 linkrate, phy_id, code_mode, path_mode);
+	mode_tmp = path_mode ? 2 : 1;
+	if (enable) {
+		/* some preparations before bist test */
+		hisi_sas_bist_test_prep_v3_hw(hisi_hba);
+
+		/* set linkrate of bit test*/
+		reg_val = hisi_sas_phy_read32(hisi_hba, phy_id,
+					      PROG_PHY_LINK_RATE);
+		reg_val &= ~CFG_PROG_PHY_LINK_RATE_MSK;
+		reg_val |= (linkrate << CFG_PROG_PHY_LINK_RATE_OFF);
+		hisi_sas_phy_write32(hisi_hba, phy_id,
+				     PROG_PHY_LINK_RATE, reg_val);
+
+		/* set code mode of bit test */
+		reg_val = hisi_sas_phy_read32(hisi_hba, phy_id,
+					      SAS_PHY_BIST_CTRL);
+		reg_val &= ~(CFG_BIST_MODE_SEL_MSK |
+				CFG_LOOP_TEST_MODE_MSK |
+				CFG_RX_BIST_EN_MSK |
+				CFG_TX_BIST_EN_MSK |
+				CFG_BIST_TEST_MSK);
+		reg_val |= ((code_mode << CFG_BIST_MODE_SEL_OFF) |
+			    (mode_tmp << CFG_LOOP_TEST_MODE_OFF) |
+			    CFG_BIST_TEST_MSK);
+		hisi_sas_phy_write32(hisi_hba, phy_id,
+				     SAS_PHY_BIST_CTRL, reg_val);
+
+		mdelay(100);
+		reg_val |= (CFG_RX_BIST_EN_MSK | CFG_TX_BIST_EN_MSK);
+		hisi_sas_phy_write32(hisi_hba, phy_id,
+				     SAS_PHY_BIST_CTRL, reg_val);
+
+		/* set the bist init value */
+		hisi_sas_phy_write32(hisi_hba, phy_id,
+				     SAS_PHY_BIST_CODE,
+				     SAS_PHY_BIST_CODE_INIT);
+		hisi_sas_phy_write32(hisi_hba, phy_id,
+				     SAS_PHY_BIST_CODE1,
+				     SAS_PHY_BIST_CODE1_INIT);
+
+		/* clear error bit */
+		mdelay(100);
+		hisi_sas_phy_read32(hisi_hba, phy_id, SAS_BIST_ERR_CNT);
+	} else {
+		/* disable bist test and recover it */
+		hisi_hba->debugfs_bist_cnt += hisi_sas_phy_read32(hisi_hba,
+				phy_id, SAS_BIST_ERR_CNT);
+		hisi_sas_bist_test_restore_v3_hw(hisi_hba);
+	}
+
+	return 0;
+}
+
 static struct scsi_host_template sht_v3_hw = {
 	.name			= DRV_NAME,
 	.module			= THIS_MODULE,
@@ -2958,7 +3083,6 @@ static const struct hisi_sas_hw hisi_sas_v3_hw = {
 	.prep_stp = prep_ata_v3_hw,
 	.prep_abort = prep_abort_v3_hw,
 	.start_delivery = start_delivery_v3_hw,
-	.slot_complete = slot_complete_v3_hw,
 	.phys_init = phys_init_v3_hw,
 	.phy_start = start_phy_v3_hw,
 	.phy_disable = disable_phy_v3_hw,
@@ -2978,6 +3102,7 @@ static const struct hisi_sas_hw hisi_sas_v3_hw = {
 	.snapshot_prepare = debugfs_snapshot_prepare_v3_hw,
 	.snapshot_restore = debugfs_snapshot_restore_v3_hw,
 	.read_iost_itct_cache = read_iost_itct_cache_v3_hw,
+	.set_bist = debugfs_set_bist_v3_hw,
 };
 
 static struct Scsi_Host *
@@ -3283,15 +3408,21 @@ static int hisi_sas_v3_resume(struct pci_dev *pdev)
 	pci_enable_wake(pdev, PCI_D0, 0);
 	pci_restore_state(pdev);
 	rc = pci_enable_device(pdev);
-	if (rc)
+	if (rc) {
 		dev_err(dev, "enable device failed during resume (%d)\n", rc);
+		return rc;
+	}
 
 	pci_set_master(pdev);
 	scsi_unblock_requests(shost);
 	clear_bit(HISI_SAS_REJECT_CMD_BIT, &hisi_hba->flags);
 
 	sas_prep_resume_ha(sha);
-	init_reg_v3_hw(hisi_hba);
+	rc = hw_init_v3_hw(hisi_hba);
+	if (rc) {
+		scsi_remove_host(shost);
+		pci_disable_device(pdev);
+	}
 	hisi_hba->hw->phys_init(hisi_hba);
 	sas_resume_ha(sha);
 	clear_bit(HISI_SAS_RESET_BIT, &hisi_hba->flags);
