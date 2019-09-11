@@ -696,6 +696,8 @@ static ssize_t migration_path_store(struct device *dev,
 static DEVICE_ATTR_RW(migration_path);
 static DEVICE_ATTR_RO(promotion_path);
 
+DEFINE_MUTEX(random_migrate_mutex);
+
 static ssize_t random_promote_mb_store(struct device *dev,
 				       struct device_attribute *attr,
 				       const char *buf, size_t count)
@@ -703,6 +705,7 @@ static ssize_t random_promote_mb_store(struct device *dev,
 	int err, nid = dev->id, tnid;
 	long size_mb, nr_page;
 	struct pglist_data *pgdat = NODE_DATA(nid);
+	struct random_migrate_state *rp_state = &pgdat->random_promote_state;
 
 	err = kstrtol(buf, 0, &size_mb);
 	if (err)
@@ -717,11 +720,48 @@ static ssize_t random_promote_mb_store(struct device *dev,
 	if (tnid == TERMINAL_NODE)
 		return -EINVAL;
 
-	node_random_migrate_pages(pgdat, nr_page, tnid);
+	mutex_lock(&random_migrate_mutex);
+	node_random_promote_stop(pgdat);
+	rp_state->nr_page = nr_page;
+	if (nr_page && !rp_state->period)
+		node_random_migrate_pages(pgdat, nr_page, tnid);
+	else if (nr_page)
+		node_random_promote_start(pgdat);
+	mutex_unlock(&random_migrate_mutex);
 
 	return count;
 }
 static DEVICE_ATTR_WO(random_promote_mb);
+
+static ssize_t random_promote_period_ms_store(struct device *dev,
+					      struct device_attribute *attr,
+					      const char *buf, size_t count)
+{
+	int err, nid = dev->id;
+	long period;
+	struct pglist_data *pgdat = NODE_DATA(nid);
+	struct random_migrate_state *rp_state = &pgdat->random_promote_state;
+
+	err = kstrtol(buf, 0, &period);
+	if (err)
+		return -EINVAL;
+
+	if (period < 0)
+		return -EINVAL;
+
+	if (next_promotion_node(nid) == TERMINAL_NODE)
+		return -EINVAL;
+
+	mutex_lock(&random_migrate_mutex);
+	node_random_promote_stop(pgdat);
+	rp_state->period = msecs_to_jiffies(period);
+	if (period && rp_state->nr_page)
+		node_random_promote_start(pgdat);
+	mutex_unlock(&random_migrate_mutex);
+
+	return count;
+}
+static DEVICE_ATTR_WO(random_promote_period_ms);
 
 static ssize_t random_demote_mb_store(struct device *dev,
 				      struct device_attribute *attr,
@@ -789,6 +829,7 @@ static struct attribute *node_dev_attrs[] = {
 	&dev_attr_migration_path.attr,
 	&dev_attr_promotion_path.attr,
 	&dev_attr_random_promote_mb.attr,
+	&dev_attr_random_promote_period_ms.attr,
 	&dev_attr_random_demote_mb.attr,
 	NULL
 };

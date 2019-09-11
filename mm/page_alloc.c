@@ -69,6 +69,7 @@
 #include <linux/lockdep.h>
 #include <linux/nmi.h>
 #include <linux/psi.h>
+#include <linux/node.h>
 
 #include <asm/sections.h>
 #include <asm/tlbflush.h>
@@ -6618,12 +6619,19 @@ static void pgdat_init_kcompactd(struct pglist_data *pgdat)
 static void pgdat_init_kcompactd(struct pglist_data *pgdat) {}
 #endif
 
+static void pgdat_init_random_migrate(struct pglist_data *pgdat)
+{
+	INIT_DELAYED_WORK(&pgdat->random_promote_state.work,
+			  node_random_promote_work);
+}
+
 static void __meminit pgdat_init_internals(struct pglist_data *pgdat)
 {
 	pgdat_resize_init(pgdat);
 
 	pgdat_init_split_queue(pgdat);
 	pgdat_init_kcompactd(pgdat);
+	pgdat_init_random_migrate(pgdat);
 
 	init_waitqueue_head(&pgdat->kswapd_wait);
 	init_waitqueue_head(&pgdat->pfmemalloc_wait);

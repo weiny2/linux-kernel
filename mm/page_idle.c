@@ -252,6 +252,21 @@ static inline unsigned long node_random_gen_random_max(unsigned long max)
 	return val % max;
 }
 
+static void node_random_mod_delayed_work(int nid, struct delayed_work *dwork,
+					 int delay)
+{
+	int tnid;
+
+	while (cpumask_empty(cpumask_of_node(nid))) {
+		tnid = next_promotion_node(nid);
+		if (tnid == -1)
+			break;
+		nid = tnid;
+	}
+
+	mod_delayed_work_node(nid, system_wq, dwork, delay);
+}
+
 void node_random_migrate_pages(struct pglist_data *pgdat, int nr_page,
 			       int target_nid)
 {
@@ -291,4 +306,28 @@ void node_random_migrate_pages(struct pglist_data *pgdat, int nr_page,
 		migrate_misplaced_page(page, NULL, target_nid);
 		nr++;
 	}
+}
+
+void node_random_promote_work(struct work_struct *work)
+{
+	struct pglist_data *pgdat = container_of(to_delayed_work(work),
+						 struct pglist_data,
+						 random_promote_state.work);
+	int nid = next_promotion_node(pgdat->node_id);
+
+	node_random_migrate_pages(pgdat, pgdat->random_promote_state.nr_page,
+				  nid);
+	node_random_promote_start(pgdat);
+}
+
+void node_random_promote_start(struct pglist_data *pgdat)
+{
+	node_random_mod_delayed_work(pgdat->node_id,
+				     &pgdat->random_promote_state.work,
+				     pgdat->random_promote_state.period);
+}
+
+void node_random_promote_stop(struct pglist_data *pgdat)
+{
+	cancel_delayed_work_sync(&pgdat->random_promote_state.work);
 }

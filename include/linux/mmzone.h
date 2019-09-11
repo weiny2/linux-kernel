@@ -20,6 +20,7 @@
 #include <linux/atomic.h>
 #include <linux/mm_types.h>
 #include <linux/page-flags.h>
+#include <linux/workqueue.h>
 #include <asm/page.h>
 
 /* Free memory management - zoned buddy allocator.  */
@@ -685,6 +686,12 @@ struct zonelist {
 extern struct page *mem_map;
 #endif
 
+struct random_migrate_state {
+	int nr_page;
+	int period;
+	struct delayed_work work;
+};
+
 /*
  * On NUMA machines, each NUMA node would have a pg_data_t to describe
  * it's memory layout. On UMA machines there is a single pglist_data which
@@ -776,6 +783,7 @@ typedef struct pglist_data {
 	unsigned long autonuma_threshold_try_migrate;
 	unsigned long autonuma_threshold;
 #endif
+	struct random_migrate_state random_promote_state;
 	/* Fields commonly accessed by the page reclaim scanner */
 	struct lruvec		lruvec;
 
