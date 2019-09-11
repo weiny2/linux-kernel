@@ -138,6 +138,9 @@ extern int next_migration_node(int current_node);
 extern int next_promotion_node(int current_node);
 extern void node_random_migrate_pages(struct pglist_data *pgdat, int nr_page,
 				      int target_nid);
+extern void node_random_promote_work(struct work_struct *work);
+extern void node_random_promote_start(struct pglist_data *pgdat);
+extern void node_random_promote_stop(struct pglist_data *pgdat);
 extern void unregister_one_node(int nid);
 extern int register_cpu_under_node(unsigned int cpu, unsigned int nid);
 extern int unregister_cpu_under_node(unsigned int cpu, unsigned int nid);
@@ -203,6 +206,12 @@ static inline int next_promotion_node(int current_node)
 
 static inline void node_random_migrate_pages(struct pglist_data *pgdat,
 					     int nr_page, int target_nid) {}
+
+static inline void node_random_promote_work(struct work_struct *work) {}
+
+static inline void node_random_promote_start(struct pglist_data *pgdat) {}
+
+static inline void node_random_promote_stop(struct pglist_data *pgdat) {}
 
 #endif
 
