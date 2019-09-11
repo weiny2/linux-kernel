@@ -696,6 +696,33 @@ static ssize_t migration_path_store(struct device *dev,
 static DEVICE_ATTR_RW(migration_path);
 static DEVICE_ATTR_RO(promotion_path);
 
+static ssize_t random_promote_mb_store(struct device *dev,
+				       struct device_attribute *attr,
+				       const char *buf, size_t count)
+{
+	int err, nid = dev->id, tnid;
+	long size_mb, nr_page;
+	struct pglist_data *pgdat = NODE_DATA(nid);
+
+	err = kstrtol(buf, 0, &size_mb);
+	if (err)
+		return -EINVAL;
+
+	/* MB to page */
+	nr_page = size_mb << (20 - PAGE_SHIFT);
+	if (nr_page < 0)
+		return -EINVAL;
+
+	tnid = next_promotion_node(nid);
+	if (tnid == TERMINAL_NODE)
+		return -EINVAL;
+
+	node_random_migrate_pages(pgdat, nr_page, tnid);
+
+	return count;
+}
+static DEVICE_ATTR_WO(random_promote_mb);
+
 /**
  * next_migration_node() - Get the next node in the migration path
  * @current_node: The starting node to lookup the next node
@@ -731,6 +758,7 @@ static struct attribute *node_dev_attrs[] = {
 	&dev_attr_vmstat.attr,
 	&dev_attr_migration_path.attr,
 	&dev_attr_promotion_path.attr,
+	&dev_attr_random_promote_mb.attr,
 	NULL
 };
 ATTRIBUTE_GROUPS(node_dev);

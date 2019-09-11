@@ -11,6 +11,9 @@
 #include <linux/mmu_notifier.h>
 #include <linux/page_ext.h>
 #include <linux/page_idle.h>
+#include <linux/node.h>
+#include <linux/migrate.h>
+#include <linux/random.h>
 
 #define BITMAP_CHUNK_SIZE	sizeof(u64)
 #define BITMAP_CHUNK_BITS	(BITMAP_CHUNK_SIZE * BITS_PER_BYTE)
@@ -236,3 +239,56 @@ static int __init page_idle_init(void)
 	return 0;
 }
 subsys_initcall(page_idle_init);
+
+static inline unsigned long node_random_gen_random_max(unsigned long max)
+{
+	unsigned long val;
+
+	if (max <= U32_MAX)
+		return prandom_u32_max(max);
+
+	prandom_bytes(&val, sizeof(val));
+
+	return val % max;
+}
+
+void node_random_migrate_pages(struct pglist_data *pgdat, int nr_page,
+			       int target_nid)
+{
+	int i, nr = 0;
+	unsigned long pfn;
+	struct page *page;
+
+	migrate_prep();
+
+	/* Stop when found target number of pages or tried enough times */
+	for (i = 0; i < nr_page * 8 && nr < nr_page; i++) {
+		pfn = pgdat->node_start_pfn +
+			node_random_gen_random_max(pgdat->node_spanned_pages);
+		if (!pfn_valid(pfn))
+			continue;
+		page = pfn_to_page(pfn);
+		/* TODO: support huge page and THP */
+		if (PageTransCompound(page) || !PageLRU(page) ||
+		    PageHuge(page))
+			continue;
+		/* Nodes PFN range may overlap */
+		if (page_pgdat(page) != pgdat)
+			continue;
+		if (!get_page_unless_zero(page))
+			continue;
+		/*
+		 * get_page_unless_zero() is fully ordered, just
+		 * prevent compiler from reordering.
+		 */
+		barrier();
+		if (PageTransCompound(page) || !PageLRU(page) ||
+		    PageHuge(page)) {
+			put_page(page);
+			continue;
+		}
+
+		migrate_misplaced_page(page, NULL, target_nid);
+		nr++;
+	}
+}

@@ -136,6 +136,8 @@ static inline int register_one_node(int nid)
 
 extern int next_migration_node(int current_node);
 extern int next_promotion_node(int current_node);
+extern void node_random_migrate_pages(struct pglist_data *pgdat, int nr_page,
+				      int target_nid);
 extern void unregister_one_node(int nid);
 extern int register_cpu_under_node(unsigned int cpu, unsigned int nid);
 extern int unregister_cpu_under_node(unsigned int cpu, unsigned int nid);
@@ -198,6 +200,10 @@ static inline int next_promotion_node(int current_node)
 {
 	return -1;
 }
+
+static inline void node_random_migrate_pages(struct pglist_data *pgdat,
+					     int nr_page, int target_nid) {}
+
 #endif
 
 #define to_node(device) container_of(device, struct node, dev)
