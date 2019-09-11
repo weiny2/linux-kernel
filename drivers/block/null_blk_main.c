@@ -141,7 +141,7 @@ static int g_bs = 512;
 module_param_named(bs, g_bs, int, 0444);
 MODULE_PARM_DESC(bs, "Block size (in bytes)");
 
-static int nr_devices = 1;
+static unsigned int nr_devices = 1;
 module_param(nr_devices, int, 0444);
 MODULE_PARM_DESC(nr_devices, "Number of devices to register");
 
@@ -1315,7 +1315,7 @@ static bool should_requeue_request(struct request *rq)
 
 static enum blk_eh_timer_return null_timeout_rq(struct request *rq, bool res)
 {
-	pr_info("null: rq %p timed out\n", rq);
+	pr_info("null_blk: rq %p timed out\n", rq);
 	blk_mq_complete_request(rq);
 	return BLK_EH_DONE;
 }
@@ -1767,6 +1767,10 @@ static int __init null_init(void)
 		pr_err("null_blk: legacy IO path no longer available\n");
 		return -EINVAL;
 	}
+	if (!nr_devices) {
+		pr_err("null_blk: invalid number of devices\n");
+		return -EINVAL;
+	}
 	if (g_queue_mode == NULL_Q_MQ && g_use_per_node_hctx) {
 		if (g_submit_queues != nr_online_nodes) {
 			pr_warn("null_blk: submit_queues param is set to %u.\n",
@@ -1812,7 +1816,7 @@ static int __init null_init(void)
 		}
 	}
 
-	pr_info("null: module loaded\n");
+	pr_info("null_blk: module loaded\n");
 	return 0;
 
 err_dev:
