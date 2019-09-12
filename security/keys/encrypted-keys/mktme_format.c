@@ -78,6 +78,9 @@ int mktme_keyid_from_key(struct key *key)
 	return 0;
 }
 
+static void mktme_clear_hardware_keyid(struct work_struct *work);
+static DECLARE_WORK(mktme_clear_work, mktme_clear_hardware_keyid);
+
 struct percpu_ref *encrypt_count;
 void mktme_percpu_ref_release(struct percpu_ref *ref)
 {
@@ -94,8 +97,9 @@ void mktme_percpu_ref_release(struct percpu_ref *ref)
 	}
 	percpu_ref_exit(ref);
 	spin_lock_irqsave(&mktme_lock, flags);
-	mktme_release_keyid(keyid);
+	mktme_map[keyid].state = KEYID_REF_RELEASED;
 	spin_unlock_irqrestore(&mktme_lock, flags);
+	schedule_work(&mktme_clear_work);
 }
 
 struct mktme_hw_program_info {
@@ -221,6 +225,33 @@ static int mktme_program_keyid(int keyid, struct mktme_payload *payload)
 	ret = mktme_program_all_keytables(kprog);
 	kmem_cache_free(mktme_prog_cache, kprog);
 	return ret;
+}
+
+static void mktme_clear_hardware_keyid(struct work_struct *work)
+{
+	struct mktme_payload *clear_payload;
+	unsigned long flags;
+	int keyid, ret;
+
+	clear_payload = kzalloc(sizeof(*clear_payload), GFP_KERNEL);
+	if (!clear_payload)
+		return;
+	clear_payload->keyid_ctrl |= MKTME_KEYID_CLEAR_KEY;
+
+	for (keyid = 1; keyid <= mktme_nr_keyids(); keyid++) {
+		if (mktme_map[keyid].state != KEYID_REF_RELEASED)
+			continue;
+
+		ret = mktme_program_keyid(keyid, clear_payload);
+		if (ret != MKTME_PROG_SUCCESS)
+			pr_debug("mktme: clear key failed [%s]\n",
+				 mktme_error[ret].msg);
+
+		spin_lock_irqsave(&mktme_lock, flags);
+		mktme_release_keyid(keyid);
+		spin_unlock_irqrestore(&mktme_lock, flags);
+	}
+	kfree(clear_payload); /* nothing secret in here */
 }
 
 int mktme_get_key(struct key *key, struct mktme_payload *payload)
