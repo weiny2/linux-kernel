@@ -686,10 +686,17 @@ struct zonelist {
 extern struct page *mem_map;
 #endif
 
+struct random_migrate_work_item;
+
 struct random_migrate_state {
 	int nr_page;
 	int period;
+	int threshold;
+	int threshold_max;
+	int nr_item;
+	unsigned long when_select;
 	struct delayed_work work;
+	struct random_migrate_work_item *work_items;
 };
 
 /*

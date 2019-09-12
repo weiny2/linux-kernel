@@ -14,6 +14,7 @@
 #include <linux/node.h>
 #include <linux/migrate.h>
 #include <linux/random.h>
+#include <linux/xarray.h>
 
 #define BITMAP_CHUNK_SIZE	sizeof(u64)
 #define BITMAP_CHUNK_BITS	(BITMAP_CHUNK_SIZE * BITS_PER_BYTE)
@@ -240,6 +241,15 @@ static int __init page_idle_init(void)
 }
 subsys_initcall(page_idle_init);
 
+#define NODE_RANDOM_CANDIDATE_MULTIPLE		8
+
+struct random_migrate_work_item {
+	int nr;
+	int threshold;
+	unsigned long when;
+	struct xarray pages;
+};
+
 static inline unsigned long node_random_gen_random_max(unsigned long max)
 {
 	unsigned long val;
@@ -250,6 +260,38 @@ static inline unsigned long node_random_gen_random_max(unsigned long max)
 	prandom_bytes(&val, sizeof(val));
 
 	return val % max;
+}
+
+static void flush_tlb_cpu(void *data)
+{
+	__flush_tlb();
+}
+
+static void flush_tlb_node(int nid)
+{
+	int cpu;
+	const struct cpumask *cpu_mask;
+
+	cpu = get_cpu();
+	cpu_mask = cpumask_of_node(nid);
+	smp_call_function_many(cpu_mask, flush_tlb_cpu, NULL, 1);
+	if (cpumask_test_cpu(cpu, cpu_mask))
+		flush_tlb_cpu(NULL);
+	put_cpu();
+}
+
+static void node_random_flush_tlb_node(int nid)
+{
+	int tnid;
+
+	while (cpumask_empty(cpumask_of_node(nid))) {
+		tnid = next_promotion_node(nid);
+		if (tnid == -1)
+			break;
+		nid = tnid;
+	}
+
+	flush_tlb_node(nid);
 }
 
 static void node_random_mod_delayed_work(int nid, struct delayed_work *dwork,
@@ -267,16 +309,26 @@ static void node_random_mod_delayed_work(int nid, struct delayed_work *dwork,
 	mod_delayed_work_node(nid, system_wq, dwork, delay);
 }
 
-void node_random_migrate_pages(struct pglist_data *pgdat, int nr_page,
-			       int target_nid)
+static void node_random_xas_add(struct xa_state *xas, void *entry)
+{
+	do {
+		xas_lock(xas);
+		xas_store(xas, entry);
+		if (!xas_error(xas))
+			xas_next(xas);
+		xas_unlock(xas);
+	} while (xas_nomem(xas, GFP_KERNEL | __GFP_THISNODE));
+}
+
+static int node_random_select_pages(struct pglist_data *pgdat, int nr_page,
+				    struct xarray *pages, bool put)
 {
 	int i, nr = 0;
 	unsigned long pfn;
 	struct page *page;
+	XA_STATE(xas, pages, 0);
 
-	migrate_prep();
-
-	/* Stop when found target number of pages or tried enough times */
+	/* Stop when selected target number of pages or tried enough times */
 	for (i = 0; i < nr_page * 8 && nr < nr_page; i++) {
 		pfn = pgdat->node_start_pfn +
 			node_random_gen_random_max(pgdat->node_spanned_pages);
@@ -303,26 +355,285 @@ void node_random_migrate_pages(struct pglist_data *pgdat, int nr_page,
 			continue;
 		}
 
-		migrate_misplaced_page(page, NULL, target_nid);
+		page_idle_clear_pte_refs(page);
+		set_page_idle(page);
+
+		node_random_xas_add(&xas, page);
 		nr++;
+
+		if (put)
+			put_page(page);
 	}
+
+	return nr;
+}
+
+static struct random_migrate_work_item *node_random_find_unused_item(
+	struct random_migrate_state *rm_state)
+{
+	int i;
+	struct random_migrate_work_item *item;
+
+	for (i = 0; i < rm_state->nr_item; i++) {
+		item = rm_state->work_items + i;
+		if (!item->nr)
+			return item;
+	}
+
+	return NULL;
+}
+
+static void node_random_promote_select(struct pglist_data *pgdat,
+				       struct random_migrate_state *rp_state)
+{
+	unsigned long now;
+	struct random_migrate_work_item *item;
+
+	item = node_random_find_unused_item(rp_state);
+	if (!item)
+		return;
+
+	item->nr = node_random_select_pages(
+			pgdat,
+			rp_state->nr_page * NODE_RANDOM_CANDIDATE_MULTIPLE,
+			&item->pages, true);
+
+	node_random_flush_tlb_node(pgdat->node_id);
+
+	now = jiffies;
+	item->threshold = rp_state->threshold;
+	item->when = now + item->threshold;
+
+	rp_state->when_select = now + rp_state->period;
+}
+
+static int node_random_keep_pages(struct xarray *pages, int nr, int target_nr,
+				  bool idle)
+{
+	int i, nrk = 0;
+	struct page *page;
+	XA_STATE(xas, pages, 0);
+	XA_STATE(xask, pages, 0);
+
+	for (i = 0; i < nr && nrk < target_nr * 2; i++) {
+		rcu_read_lock();
+		page = xas_load(&xas);
+		rcu_read_unlock();
+		if (PageTransCompound(page) || !PageLRU(page) ||
+		    PageHuge(page) || !get_page_unless_zero(page))
+			goto next;
+		barrier();
+		if (PageTransCompound(page) || PageHuge(page) ||
+		    !PageLRU(page)) {
+			put_page(page);
+			goto next;
+		}
+		if (page_is_idle(page))
+			page_idle_clear_pte_refs(page);
+		if (page_is_idle(page) != idle) {
+			put_page(page);
+			goto next;
+		}
+		node_random_xas_add(&xask, page);
+		nrk++;
+next:
+		rcu_read_lock();
+		xas_next(&xas);
+		rcu_read_unlock();
+	}
+
+	return nrk;
+}
+
+static void node_random_migrate(struct xarray *pages, int nr, int limit,
+				int target_nid)
+{
+	int i;
+	struct page *page;
+	XA_STATE(xas, pages, 0);
+
+	rcu_read_lock();
+	for (i = 0; i < nr && i < limit; i++) {
+		page = xas_load(&xas);
+		rcu_read_unlock();
+		migrate_misplaced_page(page, NULL, target_nid);
+		rcu_read_lock();
+		xas_next(&xas);
+	}
+	for (; i < nr; i++) {
+		page = xas_load(&xas);
+		put_page(page);
+		xas_next(&xas);
+	}
+	rcu_read_unlock();
+}
+
+static int random_migrate_threshold_max(struct random_migrate_state *rm_state)
+{
+	return max(rm_state->period, rm_state->threshold_max);
+}
+
+static void node_random_promote_check(struct pglist_data *pgdat,
+				      struct random_migrate_state *rp_state,
+				      struct random_migrate_work_item *item)
+{
+	int nrk, tnid, threshold;
+	int target_nr = rp_state->nr_page;
+
+	nrk = node_random_keep_pages(&item->pages, item->nr, target_nr, false);
+
+	threshold = item->threshold;
+	if (nrk > target_nr * 11 / 10) {
+		threshold = min(threshold * 9 / 10, threshold - 1);
+		threshold = max(threshold, 1);
+	} else if (nrk < target_nr * 9 / 10) {
+		threshold = max(threshold * 11 / 10, threshold + 1);
+		threshold = min(threshold, random_migrate_threshold_max(rp_state));
+	}
+	rp_state->threshold = threshold;
+
+	tnid = next_promotion_node(pgdat->node_id);
+	if (tnid == -1)
+		return;
+	node_random_migrate(&item->pages, nrk, target_nr, tnid);
+}
+
+static int random_migrate_init(struct pglist_data *pgdat,
+			       struct random_migrate_state *rm_state,
+			       int nr_item_force)
+{
+	int i, nr_item;
+	struct random_migrate_work_item *item;
+
+	if (rm_state->nr_item)
+		return 0;
+
+	if (nr_item_force)
+		nr_item = nr_item_force;
+	else
+		nr_item = random_migrate_threshold_max(rm_state) /
+			rm_state->period;
+	rm_state->work_items = kzalloc(sizeof(*rm_state->work_items) * nr_item,
+				       GFP_KERNEL);
+	if (!rm_state->work_items)
+		return -ENOMEM;
+	rm_state->nr_item = nr_item;
+
+	for (i = 0; i < nr_item; i++) {
+		item = rm_state->work_items + i;
+		xa_init_flags(&item->pages, GFP_KERNEL | __GFP_THISNODE);
+	}
+
+	return 0;
+}
+
+static void random_migrate_destroy(struct random_migrate_state *rm_state)
+{
+	int i;
+	struct random_migrate_work_item *item;
+
+	if (!rm_state->nr_item)
+		return;
+
+	for (i = 0; i < rm_state->nr_item; i++) {
+		item = rm_state->work_items + i;
+		xa_destroy(&item->pages);
+	}
+	kfree(rm_state->work_items);
+	rm_state->nr_item = 0;
+}
+
+int node_random_migrate_pages(struct pglist_data *pgdat,
+			      struct random_migrate_state *rm_state,
+			      int target_nid)
+{
+	int err, nr;
+	struct random_migrate_work_item *item;
+
+	err = random_migrate_init(pgdat, rm_state, 1);
+	if (err)
+		return err;
+
+	item = rm_state->work_items;
+	nr = node_random_select_pages(pgdat, rm_state->nr_page,
+				      &item->pages, false);
+	node_random_migrate(&item->pages, nr, nr, target_nid);
+
+	random_migrate_destroy(rm_state);
+
+	return 0;
+}
+
+static bool node_random_schedule_work(struct pglist_data *pgdat,
+				      struct random_migrate_state *rm_state)
+{
+	bool unused = false;
+	int i;
+	unsigned long now = jiffies;
+	long delay, min_delay = rm_state->period;
+	struct random_migrate_work_item *item;
+
+	for (i = 0; i < rm_state->nr_item; i++) {
+		item = rm_state->work_items + i;
+		if (!item->nr) {
+			unused = true;
+			continue;
+		}
+		delay = item->when - now;
+		min_delay = min(min_delay, delay);
+	}
+	if (min_delay < 0)
+		return true;
+
+	delay = rm_state->when_select - now;
+	if (delay > 0)
+		min_delay = min(min_delay, delay);
+	else if (unused)
+		return true;
+
+	if (!rm_state->period)
+		return false;
+
+	node_random_mod_delayed_work(pgdat->node_id, &rm_state->work, min_delay);
+
+	return false;
 }
 
 void node_random_promote_work(struct work_struct *work)
 {
+	int i;
+	unsigned long now;
 	struct pglist_data *pgdat = container_of(to_delayed_work(work),
 						 struct pglist_data,
 						 random_promote_state.work);
 	struct random_migrate_state *rp_state = &pgdat->random_promote_state;
-	int nid = next_promotion_node(pgdat->node_id);
+	struct random_migrate_work_item *item;
 
-	node_random_migrate_pages(pgdat, rp_state->nr_page, nid);
-	node_random_migrate_start(pgdat, rp_state);
+	random_migrate_init(pgdat, rp_state, 0);
+
+restart:
+	now = jiffies;
+	for (i = 0; i < rp_state->nr_item; i++) {
+		item = rp_state->work_items + i;
+		if (!item->nr || (long)(now - item->when) < 0)
+			continue;
+		node_random_promote_check(pgdat, rp_state, item);
+		item->nr = 0;
+	}
+
+	if (now >= rp_state->when_select)
+		node_random_promote_select(pgdat, rp_state);
+
+	if (node_random_schedule_work(pgdat, rp_state)) {
+		cond_resched();
+		goto restart;
+	}
 }
 
 void node_random_migrate_start(struct pglist_data *pgdat,
 			       struct random_migrate_state *rm_state)
 {
+	rm_state->when_select = jiffies + rm_state->period;
 	node_random_mod_delayed_work(pgdat->node_id, &rm_state->work,
 				     rm_state->period);
 }
@@ -330,6 +641,7 @@ void node_random_migrate_start(struct pglist_data *pgdat,
 void node_random_migrate_stop(struct random_migrate_state *rm_state)
 {
 	cancel_delayed_work_sync(&rm_state->work);
+	random_migrate_destroy(rm_state);
 }
 
 void node_random_demote_work(struct work_struct *work)
@@ -340,6 +652,7 @@ void node_random_demote_work(struct work_struct *work)
 	struct random_migrate_state *rd_state = &pgdat->random_demote_state;
 	int nid = next_migration_node(pgdat->node_id);
 
-	node_random_migrate_pages(pgdat, rd_state->nr_page, nid);
+	random_migrate_init(pgdat, rd_state, 0);
+	node_random_migrate_pages(pgdat, &pgdat->random_demote_state, nid);
 	node_random_migrate_start(pgdat, rd_state);
 }
