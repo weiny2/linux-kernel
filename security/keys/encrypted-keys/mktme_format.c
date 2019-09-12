@@ -11,6 +11,8 @@
 
 #include "mktme_format.h"
 
+static DEFINE_SPINLOCK(mktme_lock);
+
 /*
  * Maximum value of mktme_available_keyids is the total number
  * of MKTME keys supported by the platform hardare. This number
@@ -34,10 +36,35 @@ struct mktme_mapping {
 
 static struct mktme_mapping *mktme_map;
 
+int mktme_reserve_keyid(struct key *key)
+{
+	int i;
+
+	if (!mktme_available_keyids)
+		return 0;
+
+	for (i = 1; i <= mktme_nr_keyids(); i++) {
+		if (mktme_map[i].state == KEYID_AVAILABLE) {
+			mktme_map[i].state = KEYID_ASSIGNED;
+			mktme_map[i].key = key;
+			mktme_available_keyids--;
+			return i;
+		}
+	}
+	return 0;
+}
+
 int mktme_get_key(struct key *key, struct mktme_payload *payload)
 {
-	/* not implemented */
-	return -EINVAL;
+	unsigned long flags;
+	int keyid;
+
+	spin_lock_irqsave(&mktme_lock, flags);
+	keyid = mktme_reserve_keyid(key);
+	spin_unlock_irqrestore(&mktme_lock, flags);
+	if (!keyid)
+		return -ENOKEY;
+	return 0;
 }
 
 static void mktme_build_new_payload(struct mktme_payload *payload)
