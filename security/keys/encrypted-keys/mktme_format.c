@@ -6,6 +6,7 @@
 #include <linux/init.h>
 #include <linux/key.h>
 #include <linux/mm.h>
+#include <linux/percpu-refcount.h>
 #include <linux/random.h>
 #include <linux/slab.h>
 #include <asm/intel_pconfig.h>
@@ -75,6 +76,26 @@ int mktme_keyid_from_key(struct key *key)
 			return i;
 	}
 	return 0;
+}
+
+struct percpu_ref *encrypt_count;
+void mktme_percpu_ref_release(struct percpu_ref *ref)
+{
+	unsigned long flags;
+	int keyid;
+
+	for (keyid = 1; keyid <= mktme_nr_keyids(); keyid++) {
+		if (&encrypt_count[keyid] == ref)
+			break;
+	}
+	if (&encrypt_count[keyid] != ref) {
+		pr_debug("%s: invalid ref counter\n", __func__);
+		return;
+	}
+	percpu_ref_exit(ref);
+	spin_lock_irqsave(&mktme_lock, flags);
+	mktme_release_keyid(keyid);
+	spin_unlock_irqrestore(&mktme_lock, flags);
 }
 
 struct mktme_hw_program_info {
@@ -175,8 +196,10 @@ void mktme_remove_key(struct key *key)
 	if (!mktme_keytype_enabled)
 		return;
 	spin_lock_irqsave(&mktme_lock, flags);
-	mktme_release_keyid(keyid);
+	mktme_map[keyid].key = NULL;
+	mktme_map[keyid].state = KEYID_REF_KILLED;
 	spin_unlock_irqrestore(&mktme_lock, flags);
+	percpu_ref_kill(&encrypt_count[keyid]);
 }
 
 /* Copy the payload to the HW programming structure and program this KeyID */
@@ -211,10 +234,16 @@ int mktme_get_key(struct key *key, struct mktme_payload *payload)
 	if (!keyid)
 		return -ENOKEY;
 
+	if (percpu_ref_init(&encrypt_count[keyid], mktme_percpu_ref_release,
+			    0, GFP_KERNEL))
+		goto err_out;
+
 	ret = mktme_program_keyid(keyid, payload);
 	if (ret == MKTME_PROG_SUCCESS)
 		return ret;
 
+	percpu_ref_exit(&encrypt_count[keyid]);
+err_out:
 	spin_lock_irqsave(&mktme_lock, flags);
 	mktme_release_keyid(keyid);
 	spin_unlock_irqrestore(&mktme_lock, flags);
@@ -317,10 +346,19 @@ static int __init init_mktme(void)
 	/* Initialize first programming targets */
 	mktme_update_pconfig_targets();
 
+	/* Reference counters to protect in use KeyIDs */
+	encrypt_count = kvcalloc(mktme_nr_keyids() + 1,
+				 sizeof(encrypt_count[0]), GFP_KERNEL);
+	if (!encrypt_count)
+		goto free_targets;
+
 	pr_notice("Key type encrypted:mktme initialized\n");
 	mktme_keytype_enabled = true;
 	return 0;
 
+free_targets:
+	free_cpumask_var(mktme_leadcpus);
+	bitmap_free(mktme_target_map);
 free_cache:
 	kmem_cache_destroy(mktme_prog_cache);
 free_map:
