@@ -245,11 +245,11 @@ arm/late
 		ARM: dts: mmp2: specify reg-shift for the UARTs
 		ARM: dts: mmp2: rename the USB PHY node
 		ARM: dts: mmp2: add OLPC XO 1.75 machine
+	samsung/soc-2
+		git://git.kernel.org/pub/scm/linux/kernel/git/krzk/linux tags/samsung-soc-5.4-3
+		contains samsung/soc
+	aspeed/dt-3
+		Merge branch 'aspeed/dt-3' into arm/late
+		contains clk/aspeed
 
 arm/fixes
-	<no branch> (45f5d5a9e34d3fe4140a9a3b5f7ebe86c252440a)
-		git://git.kernel.org/pub/scm/linux/kernel/git/horms/renesas tags/renesas-fixes-for-v5.3
-	renesas/fixes-3
-		git://git.kernel.org/pub/scm/linux/kernel/git/horms/renesas tags/renesas-fixes2-for-v5.3
-	patch
-		soc: qcom: geni: Provide parameter error checking
