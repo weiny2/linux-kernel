@@ -34,7 +34,7 @@ static int default_enter_idle(struct cpuidle_device *dev,
 
 static struct cpuidle_driver haltpoll_driver = {
 	.name = "haltpoll",
-	.owner = THIS_MODULE,
+	.governor = "haltpoll",
 	.states = {
 		{ /* entry 0 is for polling */ },
 		{
@@ -97,8 +97,9 @@ static int __init haltpoll_init(void)
 
 	cpuidle_poll_state_init(drv);
 
-	if (!kvm_para_available())
-		return 0;
+	if (!kvm_para_available() ||
+		!kvm_para_has_hint(KVM_HINTS_REALTIME))
+		return -ENODEV;
 
 	ret = cpuidle_register_driver(drv);
 	if (ret < 0)
