@@ -144,14 +144,14 @@
                 }
             ],
             "description": "TPM code",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [],
             "jira": "NEXT-1504",
             "name": "tpm",
             "repourl": "git://git.infradead.org/users/jjs/linux-tpmdd.git",
             "sdl_contact": [],
             "status": "public",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "e8bd417aab0c72bfb54465596b16085702ba0405"
         },
         {
             "branch": "next",
