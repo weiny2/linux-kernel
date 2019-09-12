@@ -21,6 +21,7 @@ static unsigned int mktme_available_keyids;  /* Free Hardware KeyIDs */
 static struct kmem_cache *mktme_prog_cache;  /* Hardware programming cache */
 static unsigned long *mktme_target_map;      /* PCONFIG programming target */
 static cpumask_var_t mktme_leadcpus;         /* One CPU per PCONFIG target */
+static bool mktme_allow_keys;		     /* HW topology supports keys */
 
 /*
  * Maximum value of mktme_available_keyids is the total number
@@ -256,31 +257,53 @@ static void mktme_clear_hardware_keyid(struct work_struct *work)
 	kfree(clear_payload); /* nothing secret in here */
 }
 
+static void mktme_update_pconfig_targets(void);
+
 int mktme_get_key(struct key *key, struct mktme_payload *payload)
 {
 	unsigned long flags;
-	int keyid, ret;
+	int ret = -ENOKEY;
+	int keyid;
 
 	spin_lock_irqsave(&mktme_lock, flags);
+
+	/* Topology supports key creation */
+	if (mktme_allow_keys)
+		goto get_key;
+
+	/* Topology unknown, check it. */
+	if (!mktme_hmat_evaluate()) {
+		ret = -EINVAL;
+		goto out_unlock;
+	}
+	/* Keys are now allowed. Update the programming targets. */
+	mktme_update_pconfig_targets();
+	mktme_allow_keys = true;
+
+get_key:
 	keyid = mktme_reserve_keyid(key);
 	spin_unlock_irqrestore(&mktme_lock, flags);
 	if (!keyid)
-		return -ENOKEY;
+		goto out;
 
 	if (percpu_ref_init(&encrypt_count[keyid], mktme_percpu_ref_release,
 			    0, GFP_KERNEL))
-		goto err_out;
+		goto out_free_key;
 
 	ret = mktme_program_keyid(keyid, payload);
 	if (ret == MKTME_PROG_SUCCESS)
-		return ret;
+		goto out;
 
+	/* Key programming failed */
 	percpu_ref_exit(&encrypt_count[keyid]);
-err_out:
+
+out_free_key:
 	spin_lock_irqsave(&mktme_lock, flags);
 	mktme_release_keyid(keyid);
+out_unlock:
 	spin_unlock_irqrestore(&mktme_lock, flags);
-	return -ENOKEY;
+out:
+	return ret;
 }
 
 static void mktme_build_new_payload(struct mktme_payload *payload)
