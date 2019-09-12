@@ -136,8 +136,9 @@ static inline int register_one_node(int nid)
 
 extern int next_migration_node(int current_node);
 extern int next_promotion_node(int current_node);
-extern void node_random_migrate_pages(struct pglist_data *pgdat, int nr_page,
-				      int target_nid);
+extern int node_random_migrate_pages(struct pglist_data *pgdat,
+				     struct random_migrate_state *rm_state,
+				     int target_nid);
 extern void node_random_promote_work(struct work_struct *work);
 extern void node_random_migrate_start(struct pglist_data *pgdat,
 				      struct random_migrate_state *rm_state);
@@ -206,8 +207,12 @@ static inline int next_promotion_node(int current_node)
 	return -1;
 }
 
-static inline void node_random_migrate_pages(struct pglist_data *pgdat,
-					     int nr_page, int target_nid) {}
+static inline int node_random_migrate_pages(struct pglist_data *pgdat,
+					    struct random_migrate_state *rm_state,
+					    int target_nid)
+{
+	return 0;
+}
 
 static inline void node_random_promote_work(struct work_struct *work) {}
 
