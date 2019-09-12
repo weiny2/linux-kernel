@@ -5,7 +5,11 @@
 #include <linux/init.h>
 #include <linux/key.h>
 #include <linux/mm.h>
+#include <linux/random.h>
+#include <asm/intel_pconfig.h>
 #include <asm/mktme.h>
+
+#include "mktme_format.h"
 
 /*
  * Maximum value of mktme_available_keyids is the total number
@@ -29,6 +33,53 @@ struct mktme_mapping {
 };
 
 static struct mktme_mapping *mktme_map;
+
+int mktme_get_key(struct key *key, struct mktme_payload *payload)
+{
+	/* not implemented */
+	return -EINVAL;
+}
+
+static void mktme_build_new_payload(struct mktme_payload *payload)
+{
+	payload->keyid_ctrl = MKTME_KEYID_SET_KEY_DIRECT | MKTME_AES_XTS_128;
+	get_random_bytes(&payload->data_key, MKTME_AES_XTS_SIZE);
+	get_random_bytes(&payload->tweak_key, MKTME_AES_XTS_SIZE);
+}
+
+int mktme_verify_payload(struct mktme_payload *p)
+{
+	/* Verify the control field */
+	if (p->keyid_ctrl != (MKTME_KEYID_SET_KEY_DIRECT | MKTME_AES_XTS_128))
+		return -EINVAL;
+
+	/*
+	 * Check that the unused bits of data and tweak field are zero.
+	 * Cannot verify the data and tweak key data itself.
+	 */
+	return 0;
+}
+
+int mktme_request_key(struct key *key, struct mktme_payload *payload,
+		      int encrypted_key_cmd)
+{
+	enum { OPT_NEW, OPT_LOAD };     /* encrypted_key_cmd options */
+
+	if (!mktme_keytype_enabled)
+		return -EINVAL;
+
+	if (encrypted_key_cmd == OPT_NEW) {
+		mktme_build_new_payload(payload);
+		return mktme_get_key(key, payload);
+	}
+
+	if (encrypted_key_cmd == OPT_LOAD) {
+		if (!mktme_verify_payload(payload))
+			return mktme_get_key(key, payload);
+	}
+
+	return -EINVAL;
+}
 
 static int __init init_mktme(void)
 {
