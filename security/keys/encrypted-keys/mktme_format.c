@@ -7,6 +7,7 @@
 #include <linux/cpu.h>
 #include <linux/init.h>
 #include <linux/key.h>
+#include <linux/memory.h>
 #include <linux/mm.h>
 #include <linux/percpu-refcount.h>
 #include <linux/random.h>
@@ -413,6 +414,26 @@ out:
 	return ret;
 }
 
+static int mktme_memory_callback(struct notifier_block *nb,
+				 unsigned long action, void *arg)
+{
+	/*
+	 * Do not allow the hot add of memory until run time
+	 * support of the ACPI HMAT is available via an _HMA
+	 * method. Without it, the new memory cannot be
+	 * evaluated to determine an MTKME safe topology.
+	 */
+	if (action == MEM_GOING_ONLINE)
+		return NOTIFY_BAD;
+
+	return NOTIFY_OK;
+}
+
+static struct notifier_block mktme_memory_nb = {
+	.notifier_call = mktme_memory_callback,
+	.priority = 99,				/* priority ? */
+};
+
 static int __init init_mktme(void)
 {
 	int cpuhp;
@@ -461,10 +482,15 @@ static int __init init_mktme(void)
 	if (cpuhp < 0)
 		goto free_encrypt;
 
+	if (register_memory_notifier(&mktme_memory_nb))
+		goto remove_cpuhp;
+
 	pr_notice("Key type encrypted:mktme initialized\n");
 	mktme_keytype_enabled = true;
 	return 0;
 
+remove_cpuhp:
+	cpuhp_remove_state_nocalls(cpuhp);
 free_encrypt:
 	kvfree(encrypt_count);
 free_targets:
