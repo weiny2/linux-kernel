@@ -2329,6 +2329,7 @@ static void pci_init_capabilities(struct pci_dev *dev)
 	pci_enable_acs(dev);		/* Enable ACS P2P upstream forwarding */
 	pci_ptm_init(dev);		/* Precision Time Measurement */
 	pci_aer_init(dev);		/* Advanced Error Reporting */
+	pci_cxl_init(dev);		/* Compute eXpress Link */
 
 	pcie_report_downtraining(dev);
 
