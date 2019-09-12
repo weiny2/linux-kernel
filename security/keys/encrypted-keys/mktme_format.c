@@ -2,6 +2,7 @@
 
 /* Documentation/x86/mktme/ */
 
+#include <linux/acpi.h>
 #include <linux/cred.h>
 #include <linux/cpu.h>
 #include <linux/init.h>
@@ -361,6 +362,12 @@ static int __init init_mktme(void)
 		return 0;
 
 	mktme_available_keyids = mktme_nr_keyids();
+
+	/* Require an ACPI HMAT to identify MKTME safe topologies */
+	if (!acpi_hmat_present()) {
+		pr_warn("mktme: Initialization failed. No ACPI HMAT.\n");
+		return -EINVAL;
+	}
 
 	/* Mapping of Userspace Keys to Hardware KeyIDs */
 	mktme_map = kvzalloc((sizeof(*mktme_map) * (mktme_nr_keyids() + 1)),
