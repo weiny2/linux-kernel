@@ -2,6 +2,7 @@
 
 /* Documentation/x86/mktme/ */
 
+#include <linux/cred.h>
 #include <linux/cpu.h>
 #include <linux/init.h>
 #include <linux/key.h>
@@ -308,6 +309,8 @@ int mktme_request_key(struct key *key, struct mktme_payload *payload,
 
 	if (!mktme_keytype_enabled)
 		return -EINVAL;
+	if (!capable(CAP_SYS_RESOURCE) && !capable(CAP_SYS_ADMIN))
+		return -EACCES;
 
 	if (encrypted_key_cmd == OPT_NEW) {
 		mktme_build_new_payload(payload);
