@@ -644,15 +644,122 @@ void node_random_migrate_stop(struct random_migrate_state *rm_state)
 	random_migrate_destroy(rm_state);
 }
 
+static bool pgdat_free_space_enough(struct pglist_data *pgdat)
+{
+	int z;
+
+	for (z = pgdat->nr_zones - 1; z >= 0; z--) {
+		struct zone *zone = pgdat->node_zones + z;
+
+		if (!populated_zone(zone))
+			continue;
+
+		if (!zone_watermark_ok(zone, 0,
+				       2 * high_wmark_pages(zone),
+				       ZONE_MOVABLE, 0))
+			return false;
+	}
+	return true;
+}
+
+static void node_random_demote_select(struct pglist_data *pgdat,
+				      struct random_migrate_state *rd_state)
+{
+	unsigned long now;
+	struct random_migrate_work_item *item;
+
+	item = node_random_find_unused_item(rd_state);
+	if (!item)
+		return;
+
+	if (pgdat_free_space_enough(pgdat)) {
+		rd_state->when_select = jiffies + rd_state->period;
+		return;
+	}
+
+	item->nr = node_random_select_pages(
+			pgdat,
+			rd_state->nr_page * NODE_RANDOM_CANDIDATE_MULTIPLE,
+			&item->pages, true);
+
+	node_random_flush_tlb_node(pgdat->node_id);
+
+	now = jiffies;
+	item->threshold = rd_state->threshold;
+	item->when = now + item->threshold;
+
+	rd_state->when_select = now + rd_state->period;
+}
+
+static bool node_random_enabled(struct random_migrate_state *rm_state)
+{
+	return rm_state->nr_page && rm_state->period;
+}
+
+static void node_random_demote_check(struct pglist_data *pgdat,
+				     struct random_migrate_state *rd_state,
+				     struct random_migrate_work_item *item)
+{
+	int nrk, tnid, threshold, tpthreshold;
+	int target_nr = rd_state->nr_page;
+	bool tpenabled;
+	struct pglist_data *tpgdat;
+
+	if (!item->nr)
+		return;
+
+	nrk = node_random_keep_pages(&item->pages, item->nr, target_nr, true);
+
+	tnid = next_migration_node(pgdat->node_id);
+	if (tnid == -1)
+		return;
+	threshold = item->threshold;
+	if (nrk > target_nr * 11 / 10) {
+		threshold = max(threshold * 11 / 10, threshold + 1);
+		threshold = min(threshold, random_migrate_threshold_max(rd_state));
+	} else if (nrk < target_nr * 9 / 10) {
+		tpgdat = NODE_DATA(tnid);
+		tpenabled = node_random_enabled(&tpgdat->random_promote_state);
+		tpthreshold = tpgdat->random_promote_state.threshold;
+		threshold = min(threshold * 9 / 10, threshold - 1);
+		threshold = max(threshold, 1);
+		if (tpenabled) {
+			threshold = max(threshold, tpthreshold * 3 / 2);
+			threshold = max(threshold, tpthreshold + 1);
+		}
+	}
+	rd_state->threshold = threshold;
+
+	node_random_migrate(&item->pages, nrk, target_nr, tnid);
+}
+
 void node_random_demote_work(struct work_struct *work)
 {
+	int i;
+	unsigned long now;
 	struct pglist_data *pgdat = container_of(to_delayed_work(work),
 						 struct pglist_data,
 						 random_demote_state.work);
 	struct random_migrate_state *rd_state = &pgdat->random_demote_state;
-	int nid = next_migration_node(pgdat->node_id);
+	struct random_migrate_work_item *item;
 
 	random_migrate_init(pgdat, rd_state, 0);
-	node_random_migrate_pages(pgdat, &pgdat->random_demote_state, nid);
-	node_random_migrate_start(pgdat, rd_state);
+
+restart:
+	now = jiffies;
+	for (i = 0; i < rd_state->nr_item; i++) {
+		item = rd_state->work_items + i;
+		if (!item->nr || (long)(now - item->when) < 0)
+			continue;
+		node_random_demote_check(pgdat, rd_state, item);
+		item->nr = 0;
+	}
+
+	if (now >= rd_state->when_select)
+		node_random_demote_select(pgdat, rd_state);
+
+	if (node_random_schedule_work(pgdat, rd_state)) {
+		cond_resched();
+		goto restart;
+	}
 }
