@@ -845,6 +845,17 @@ static ssize_t random_demote_period_ms_store(struct device *dev,
 }
 static DEVICE_ATTR_WO(random_demote_period_ms);
 
+static ssize_t random_demote_threshold_max_ms_store(
+	struct device *dev, struct device_attribute *attr,
+	const char *buf, size_t count)
+{
+	struct pglist_data *pgdat = NODE_DATA(dev->id);
+
+	return random_migrate_threshold_max_ms_store(
+		pgdat, &pgdat->random_demote_state, buf, count);
+}
+static DEVICE_ATTR_WO(random_demote_threshold_max_ms);
+
 /**
  * next_migration_node() - Get the next node in the migration path
  * @current_node: The starting node to lookup the next node
@@ -885,6 +896,7 @@ static struct attribute *node_dev_attrs[] = {
 	&dev_attr_random_promote_threshold_max_ms.attr,
 	&dev_attr_random_demote_mb.attr,
 	&dev_attr_random_demote_period_ms.attr,
+	&dev_attr_random_demote_threshold_max_ms.attr,
 	NULL
 };
 ATTRIBUTE_GROUPS(node_dev);
