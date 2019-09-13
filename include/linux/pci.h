@@ -2391,6 +2391,10 @@ void pci_uevent_ers(struct pci_dev *pdev, enum  pci_ers_result err_type);
 #endif
 
 extern void pci_cxl_init(struct pci_dev *dev);
+extern int pci_cxl_mem_enable(struct pci_dev *dev);
+extern void pci_cxl_mem_disable(struct pci_dev *dev);
+extern int pci_cxl_cache_enable(struct pci_dev *dev);
+extern void pci_cxl_cache_disable(struct pci_dev *dev);
 
 /* Provide the legacy pci_dma_* API */
 #include <linux/pci-dma-compat.h>
