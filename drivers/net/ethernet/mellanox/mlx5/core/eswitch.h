@@ -35,6 +35,7 @@
 
 #include <linux/if_ether.h>
 #include <linux/if_link.h>
+#include <linux/atomic.h>
 #include <net/devlink.h>
 #include <linux/mlx5/device.h>
 #include <linux/mlx5/eswitch.h>
@@ -68,7 +69,7 @@ struct vport_ingress {
 	struct mlx5_flow_group *allow_spoofchk_only_grp;
 	struct mlx5_flow_group *allow_untagged_only_grp;
 	struct mlx5_flow_group *drop_grp;
-	int modify_metadata_id;
+	struct mlx5_modify_hdr   *modify_metadata;
 	struct mlx5_flow_handle  *modify_metadata_rule;
 	struct mlx5_flow_handle  *allow_rule;
 	struct mlx5_flow_handle  *drop_rule;
@@ -152,6 +153,7 @@ struct mlx5_eswitch_fdb {
 		} legacy;
 
 		struct offloads_fdb {
+			struct mlx5_flow_namespace *ns;
 			struct mlx5_flow_table *slow_fdb;
 			struct mlx5_flow_group *send_to_vport_grp;
 			struct mlx5_flow_group *peer_miss_grp;
@@ -180,13 +182,14 @@ struct mlx5_esw_offload {
 	struct mlx5_eswitch_rep *vport_reps;
 	struct list_head peer_flows;
 	struct mutex peer_mutex;
+	struct mutex encap_tbl_lock; /* protects encap_tbl */
 	DECLARE_HASHTABLE(encap_tbl, 8);
-	DECLARE_HASHTABLE(mod_hdr_tbl, 8);
+	struct mod_hdr_tbl mod_hdr;
 	DECLARE_HASHTABLE(termtbl_tbl, 8);
 	struct mutex termtbl_mutex; /* protects termtbl hash */
 	const struct mlx5_eswitch_rep_ops *rep_ops[NUM_REP_TYPES];
 	u8 inline_mode;
-	u64 num_flows;
+	atomic64_t num_flows;
 	enum devlink_eswitch_encap_mode encap;
 };
 
@@ -260,6 +263,8 @@ void esw_vport_disable_ingress_acl(struct mlx5_eswitch *esw,
 				   struct mlx5_vport *vport);
 void esw_vport_del_ingress_acl_modify_metadata(struct mlx5_eswitch *esw,
 					       struct mlx5_vport *vport);
+int mlx5_esw_modify_vport_rate(struct mlx5_eswitch *esw, u16 vport_num,
+			       u32 rate_mbps);
 
 /* E-Switch API */
 int mlx5_eswitch_init(struct mlx5_core_dev *dev);
@@ -381,11 +386,11 @@ struct mlx5_esw_flow_attr {
 	struct {
 		u32 flags;
 		struct mlx5_eswitch_rep *rep;
+		struct mlx5_pkt_reformat *pkt_reformat;
 		struct mlx5_core_dev *mdev;
-		u32 encap_id;
 		struct mlx5_termtbl_handle *termtbl;
 	} dests[MLX5_MAX_FLOW_FWD_VPORTS];
-	u32	mod_hdr_id;
+	struct  mlx5_modify_hdr *modify_hdr;
 	u8	inner_match_level;
 	u8	outer_match_level;
 	struct mlx5_fc *counter;
