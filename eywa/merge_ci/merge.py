@@ -120,11 +120,10 @@ def setup_linus_branch(manifest):
     rev = ""
 
     if main_branch["use_latest_tag"] == True:
-            latest_tag = run_git_cmd("git ls-remote --tags {} |tail -1".format(name)).split("\n")[0]
-           
-            rev,tag = latest_tag.split("\t")
-            tag = tag.split("/")[-1].split("^")[0]
+            latest_tag = run_git_cmd("git ls-remote --tags {} | awk '{{ print $2 }}' | awk -F\/ ' {{ print $3 }} ' | sort -Vr | head -1 ".format(name))
+            tag = latest_tag.split("^")[0]
             main_branch[u"tag"] = tag
+            rev = run_git_cmd("git rev-parse {}".format(tag))
 
     elif main_branch["stuck_at_ref"] != "" :
             rev = main_branch["stuck_at_ref"]
