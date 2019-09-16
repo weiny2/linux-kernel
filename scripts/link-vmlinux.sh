@@ -57,12 +57,16 @@ modpost_link()
 
 # Link of vmlinux
 # ${1} - output file
-# ${@:2} - optional extra .o files
+# ${2}, ${3}, ... - optional extra .o files
 vmlinux_link()
 {
 	info LD ${1}
 	local lds="${objtree}/${KBUILD_LDS}"
+	local output=${1}
 	local objects
+
+	# skip output file argument
+	shift
 
 	if [ "${SRCARCH}" != "um" ]; then
 		objects="--whole-archive			\
@@ -71,9 +75,10 @@ vmlinux_link()
 			--start-group				\
 			${KBUILD_VMLINUX_LIBS}			\
 			--end-group				\
-			${@:2}"
+			${@}"
 
-		${LD} ${KBUILD_LDFLAGS} ${LDFLAGS_vmlinux} -o ${1}	\
+		${LD} ${KBUILD_LDFLAGS} ${LDFLAGS_vmlinux}	\
+			-o ${output}				\
 			-T ${lds} ${objects}
 	else
 		objects="-Wl,--whole-archive			\
@@ -82,9 +87,10 @@ vmlinux_link()
 			-Wl,--start-group			\
 			${KBUILD_VMLINUX_LIBS}			\
 			-Wl,--end-group				\
-			${@:2}"
+			${@}"
 
-		${CC} ${CFLAGS_vmlinux} -o ${1}			\
+		${CC} ${CFLAGS_vmlinux}				\
+			-o ${output}				\
 			-Wl,-T,${lds}				\
 			${objects}				\
 			-lutil -lrt -lpthread
