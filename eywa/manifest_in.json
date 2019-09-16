@@ -2931,7 +2931,7 @@
                 }
             ],
             "description": "2 patches from Android GFX domain branch rebased for drm intel latest “for-intel-next” branch",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Sourab Gupta",
