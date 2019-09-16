@@ -806,7 +806,7 @@ EXPORT_SYMBOL(blk_queue_update_dma_alignment);
 void blk_set_queue_depth(struct request_queue *q, unsigned int depth)
 {
 	q->queue_depth = depth;
-	wbt_set_queue_depth(q, depth);
+	rq_qos_queue_depth_changed(q);
 }
 EXPORT_SYMBOL(blk_set_queue_depth);
 
@@ -854,6 +854,22 @@ bool blk_queue_can_use_dma_map_merging(struct request_queue *q,
 	return true;
 }
 EXPORT_SYMBOL_GPL(blk_queue_can_use_dma_map_merging);
+
+/**
+ * blk_queue_required_elevator_features - Set a queue required elevator features
+ * @q:		the request queue for the target device
+ * @features:	Required elevator features OR'ed together
+ *
+ * Tell the block layer that for the device controlled through @q, only the
+ * only elevators that can be used are those that implement at least the set of
+ * features specified by @features.
+ */
+void blk_queue_required_elevator_features(struct request_queue *q,
+					  unsigned int features)
+{
+	q->required_elevator_features = features;
+}
+EXPORT_SYMBOL_GPL(blk_queue_required_elevator_features);
 
 static int __init blk_settings_init(void)
 {
