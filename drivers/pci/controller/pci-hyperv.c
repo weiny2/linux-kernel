@@ -2863,6 +2863,7 @@ static int hv_pci_probe(struct hv_device *hdev,
 {
 	struct hv_pcibus_device *hbus;
 	u16 dom_req, dom;
+	char *name;
 	int ret;
 
 	/*
@@ -2946,7 +2947,14 @@ static int hv_pci_probe(struct hv_device *hdev,
 		goto free_config;
 	}
 
-	hbus->sysdata.fwnode = irq_domain_alloc_fwnode(hbus);
+	name = kasprintf(GFP_KERNEL, "%pUL", &hdev->dev_instance);
+	if (!name) {
+		ret = -ENOMEM;
+		goto unmap;
+	}
+
+	hbus->sysdata.fwnode = irq_domain_alloc_named_fwnode(name);
+	kfree(name);
 	if (!hbus->sysdata.fwnode) {
 		ret = -ENOMEM;
 		goto unmap;
