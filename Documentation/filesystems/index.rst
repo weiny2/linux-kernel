@@ -33,3 +33,13 @@ filesystem implementations.
    journalling
    fscrypt
    fsverity
+
+Filesystems
+===========
+
+Documentation for filesystem implementations.
+
+.. toctree::
+   :maxdepth: 2
+
+   virtiofs
