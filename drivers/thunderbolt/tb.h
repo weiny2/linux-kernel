@@ -733,6 +733,14 @@ static inline bool tb_switch_is_titan_ridge(const struct tb_switch *sw)
 	}
 }
 
+/* This is hack for TGL A step and should be removed */
+static bool tb_switch_is_tiger_lake_astep(const struct tb_switch *sw)
+{
+	return sw->config.thunderbolt_version != USB4_VERSION_1_0 &&
+	       (sw->config.device_id == PCI_DEVICE_ID_INTEL_TGL_NHI0 ||
+	        sw->config.device_id == PCI_DEVICE_ID_INTEL_TGL_NHI1);
+}
+
 /**
  * tb_switch_is_usb4() - Is the switch USB4 compliant
  * @sw: Switch to check
@@ -741,7 +749,8 @@ static inline bool tb_switch_is_titan_ridge(const struct tb_switch *sw)
  */
 static inline bool tb_switch_is_usb4(const struct tb_switch *sw)
 {
-	return sw->config.thunderbolt_version == USB4_VERSION_1_0;
+	return sw->config.thunderbolt_version == USB4_VERSION_1_0 ||
+	       tb_switch_is_tiger_lake_astep(sw);
 }
 
 /**
