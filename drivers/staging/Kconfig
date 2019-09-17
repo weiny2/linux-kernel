@@ -112,8 +112,6 @@ source "drivers/staging/gasket/Kconfig"
 
 source "drivers/staging/axis-fifo/Kconfig"
 
-source "drivers/staging/erofs/Kconfig"
-
 source "drivers/staging/fieldbus/Kconfig"
 
 source "drivers/staging/kpc2000/Kconfig"
@@ -124,5 +122,7 @@ source "drivers/staging/qlge/Kconfig"
 
 source "drivers/staging/wusbcore/Kconfig"
 source "drivers/staging/uwb/Kconfig"
+
+source "drivers/staging/exfat/Kconfig"
 
 endif # STAGING
