@@ -1,0 +1,255 @@
+arm/soc
+	patch
+		ARM: mach-nspire: Kill off CLCD auxdata
+		ARM: remove ks8695 platform
+		ARM: remove w90x900 platform
+		ARM: remove Intel iop33x and iop13xx support
+		dmaengine: iop-adma: include prefetch.h
+		dmaengine: iop-adma: use correct printk format strings
+		dma: iop-adma: allow building without platform headers
+		ARM: xscale: fix multi-cpu compilation
+		ARM: iop32x: make mach/uncompress.h independent of mach/hardware.h
+		ARM: iop32x: merge everything into mach-iop32x/
+	ux500/soc
+		git://git.kernel.org/pub/scm/linux/kernel/git/linusw/linux-stericsson tags/ux500-v5.4-1
+	patch
+		ARM: dove: clean up mach/*.h headers
+		ARM: orion/mvebu: unify debug-ll virtual addresses
+	lpc32xx/multiplatform
+		Merge branch 'lpc32xx/multiplatform' into arm/soc
+	vexpress/soc
+		git://git.kernel.org/pub/scm/linux/kernel/git/sudeep.holla/linux tags/vexpress-update-5.4
+	aspeed/soc
+		git://git.kernel.org/pub/scm/linux/kernel/git/joel/aspeed tags/aspeed-5.4-arch
+	imx/soc
+		git://git.kernel.org/pub/scm/linux/kernel/git/shawnguo/linux tags/imx-soc-5.4
+	at91/soc
+		git://git.kernel.org/pub/scm/linux/kernel/git/at91/linux tags/at91-5.4-soc
+	omap/soc
+		git://git.kernel.org/pub/scm/linux/kernel/git/tmlind/linux-omap tags/omap-for-v5.4/soc-signed
+	zynq/soc
+		https://github.com/Xilinx/linux-xlnx tags/zynq-soc-for-v5.4
+	renesas/soc
+		git://git.kernel.org/pub/scm/linux/kernel/git/geert/renesas-devel tags/renesas-arm-soc-for-v5.4-tag1
+	davinci/soc
+		git://git.kernel.org/pub/scm/linux/kernel/git/nsekhar/linux-davinci tags/davinci-for-v5.4/soc
+	samsung/soc
+		git://git.kernel.org/pub/scm/linux/kernel/git/krzk/linux tags/samsung-soc-5.4-2
+	patch
+		arm64: exynos: Enable exynos-chipid driver
+		ARM: davinci: support multiplatform build for ARM v5
+		ARM: multi_v5_defconfig: make DaVinci part of the ARM v5 multiplatform build
+
+arm/dt
+	patch
+		ARM: dts: nomadik: Set up the CS GPIO right
+		ARM: dts: Update the NSPIRE DTS files for DRM
+	ux500/dt
+		git://git.kernel.org/pub/scm/linux/kernel/git/linusw/linux-stericsson tags/ux500-dts-v5.4-1
+	renesas/dt
+		git://git.kernel.org/pub/scm/linux/kernel/git/geert/renesas-devel tags/renesas-dt-bindings-for-v5.4-tag1
+	stm32/dt
+		git://git.kernel.org/pub/scm/linux/kernel/git/atorgue/stm32 tags/stm32-dt-for-v5.4-1
+	gemini/dt
+		git://git.kernel.org/pub/scm/linux/kernel/git/linusw/linux-nomadik tags/gemini-dts-v5.4-1
+	renesas/dt64
+		git://git.kernel.org/pub/scm/linux/kernel/git/geert/renesas-devel tags/renesas-arm64-dt-for-v5.4-tag1
+	juno/update
+		git://git.kernel.org/pub/scm/linux/kernel/git/sudeep.holla/linux tags/juno-update-5.4
+	vexpress/dt
+		git://git.kernel.org/pub/scm/linux/kernel/git/sudeep.holla/linux tags/vexpress-dt-updates-5.4
+	samsung/dt
+		git://git.kernel.org/pub/scm/linux/kernel/git/krzk/linux tags/samsung-dt-5.4
+	rockchip/dt32-1
+		git://git.kernel.org/pub/scm/linux/kernel/git/mmind/linux-rockchip tags/v5.4-rockchip-dts32-1
+	rockchip/dt64-1
+		git://git.kernel.org/pub/scm/linux/kernel/git/mmind/linux-rockchip tags/v5.4-rockchip-dts64-1
+	socfpga/dt
+		git://git.kernel.org/pub/scm/linux/kernel/git/dinguyen/linux tags/socfpga_dts_updates_for_v5.4
+	amlogic/dt
+		git://git.kernel.org/pub/scm/linux/kernel/git/khilman/linux-amlogic tags/amlogic-dt
+	amlogic/dt64
+		git://git.kernel.org/pub/scm/linux/kernel/git/khilman/linux-amlogic tags/amlogic-dt64
+		contains amlogic/clk
+	renesas/dt-for-5.4
+		git://git.kernel.org/pub/scm/linux/kernel/git/geert/renesas-devel tags/renesas-arm-dt-for-v5.4-tag1
+	renesas/dt64-2
+		git://git.kernel.org/pub/scm/linux/kernel/git/geert/renesas-devel tags/renesas-arm64-dt-for-v5.4-tag2
+	renesas/dt-bindings-2
+		git://git.kernel.org/pub/scm/linux/kernel/git/geert/renesas-devel tags/renesas-dt-bindings-for-v5.4-tag2
+	sunxi/dt
+		git://git.kernel.org/pub/scm/linux/kernel/git/sunxi/linux tags/sunxi-dt-for-5.4-1
+	mediatek/dt
+		git://git.kernel.org/pub/scm/linux/kernel/git/matthias.bgg/linux tags/v5.3-next-dts32
+	mediatek/dt64
+		git://git.kernel.org/pub/scm/linux/kernel/git/matthias.bgg/linux tags/v5.3-next-dts64
+	omap/dt-2
+		git://git.kernel.org/pub/scm/linux/kernel/git/tmlind/linux-omap tags/omap-for-v5.4/dt-take2-signed
+	aspeed/dt
+		git://git.kernel.org/pub/scm/linux/kernel/git/joel/aspeed tags/aspeed-5.4-devicetree
+	imx/dt-bindings
+		git://git.kernel.org/pub/scm/linux/kernel/git/shawnguo/linux tags/imx-bindings-5.4
+	imx/dt+clocks
+		git://git.kernel.org/pub/scm/linux/kernel/git/shawnguo/linux tags/imx-dt-clkdep-5.4
+		contains imx/clk
+	imx/dt32
+		git://git.kernel.org/pub/scm/linux/kernel/git/shawnguo/linux tags/imx-dt-5.4
+	imx/dt64
+		git://git.kernel.org/pub/scm/linux/kernel/git/shawnguo/linux tags/imx-dt64-5.4
+	at91/dt
+		git://git.kernel.org/pub/scm/linux/kernel/git/at91/linux tags/at91-5.4-dt
+	mvebu/dt
+		git://git.infradead.org/linux-mvebu tags/mvebu-dt-5.4-1
+	mvebu/dt64
+		git://git.infradead.org/linux-mvebu tags/mvebu-dt64-5.4-1
+	ux500/dt-3
+		git://git.kernel.org/pub/scm/linux/kernel/git/linusw/linux-stericsson tags/ux500-dts-v5.4-3
+	amlogic/dt-2.1
+		git://git.kernel.org/pub/scm/linux/kernel/git/khilman/linux-amlogic tags/amlogic-dt64-2.1
+		contains amlogic/drivers
+		contains amlogic/drivers-2.1
+	bitmain/dt
+		git://git.kernel.org/pub/scm/linux/kernel/git/mani/linux-bitmain tags/bitmain-soc-5.4
+	davinci/dt
+		git://git.kernel.org/pub/scm/linux/kernel/git/nsekhar/linux-davinci tags/davinci-for-v5.4/dt
+	qcom/dt
+		git://git.kernel.org/pub/scm/linux/kernel/git/qcom/linux tags/qcom-arm64-for-5.4
+	brcm/dt
+		https://github.com/Broadcom/stblinux tags/arm-soc/for-5.4/devicetree
+	samsung/dt-2
+		git://git.kernel.org/pub/scm/linux/kernel/git/krzk/linux tags/samsung-dt-5.4-2
+	aspeed/dt-2
+		git://git.kernel.org/pub/scm/linux/kernel/git/joel/aspeed tags/aspeed-5.4-devicetree-2
+	rockchip/dt32-2
+		git://git.kernel.org/pub/scm/linux/kernel/git/mmind/linux-rockchip tags/v5.4-rockchip-dts32-2
+	rockchip/dt64-2
+		git://git.kernel.org/pub/scm/linux/kernel/git/mmind/linux-rockchip tags/v5.4-rockchip-dts64-2
+	patch
+		arm64: dts: qcom: Add Lenovo Yoga C630
+
+arm/drivers
+	fsl/soc-5.3-2
+		git://git.kernel.org/pub/scm/linux/kernel/git/leo/linux tags/soc-fsl-next-v5.3-2
+	drivers/reset
+		git://git.pengutronix.de/git/pza/linux tags/reset-for-v5.4
+	renesas/drivers
+		git://git.kernel.org/pub/scm/linux/kernel/git/geert/renesas-devel tags/renesas-drivers-for-v5.4-tag1
+	patch
+		bus: Add support for Moxtet bus
+		dt-bindings: bus: Document moxtet bus binding
+		bus: moxtet: Add sysfs and debugfs documentation
+		drivers: gpio: Add support for GPIOs over Moxtet bus
+		dt-bindings: gpio: Document GPIOs via Moxtet bus
+	drivers/scmi
+		git://git.kernel.org/pub/scm/linux/kernel/git/sudeep.holla/linux tags/scmi-updates-5.4
+	drivers/tee
+		git://git.linaro.org/people/jens.wiklander/linux-tee tags/tee-optee-for-5.4
+	samsung/chipid
+		git://git.kernel.org/pub/scm/linux/kernel/git/krzk/linux tags/samsung-drivers-5.4
+	renesas/drivers-2
+		git://git.kernel.org/pub/scm/linux/kernel/git/geert/renesas-devel tags/renesas-drivers-for-v5.4-tag2
+	fsl/dpaa
+		git://git.kernel.org/pub/scm/linux/kernel/git/leo/linux tags/soc-fsl-next-v5.4
+	patch
+		ARM: scoop: Use the right include
+	amlogic/drivers
+		git://git.kernel.org/pub/scm/linux/kernel/git/khilman/linux-amlogic tags/amlogic-drivers
+	sunxi/drivers
+		git://git.kernel.org/pub/scm/linux/kernel/git/sunxi/linux tags/sunxi-drivers-for-5.4-2
+	mediatek/drivers
+		git://git.kernel.org/pub/scm/linux/kernel/git/matthias.bgg/linux tags/v5.3-next-soc
+	amlogic/drivers-2.1
+		git://git.kernel.org/pub/scm/linux/kernel/git/khilman/linux-amlogic tags/amlogic-drivers-2.1
+	imx/drivers
+		git://git.kernel.org/pub/scm/linux/kernel/git/shawnguo/linux tags/imx-drivers-5.4
+	davinci/fbdev
+		git://git.kernel.org/pub/scm/linux/kernel/git/nsekhar/linux-davinci tags/davinci-for-v5.4/fbdev
+	patch
+		bus: moxtet: remove set but not used variable 'dummy'
+		bus: moxtet: fix unsigned comparison to less than zero
+		dt-bindings: firmware: Document cznic,turris-mox-rwtm binding
+		firmware: Add Turris Mox rWTM firmware driver
+		firmware: turris-mox-rwtm: Add sysfs documentation
+		net: remove ks8695 driver
+		net: remove w90p910-ether driver
+		spi: remove w90x900 driver
+		fbdev: remove w90x900/nuc900 platform drivers
+		bus: imx-weim: remove incorrect __init annotations
+		firmware: ti_sci: Allow for device shared and exclusive requests
+		dt-bindings: ti_sci_pm_domains: Add support for exclusive and shared access
+		soc: ti: ti_sci_pm_domains: Add support for exclusive and shared access
+	samsung/soc-driver
+		git://git.kernel.org/pub/scm/linux/kernel/git/krzk/linux tags/samsung-drivers-5.4-2
+	patch
+		bus: uniphier-system-bus: use devm_platform_ioremap_resource()
+
+arm/defconfig
+	patch
+		arm64: defconfig: Enable the PSCI CPUidle driver
+		ARM: imx_v6_v7_defconfig: Enable the PSCI CPUidle driver
+		ARM: multi_v7_defconfig: Enable SPI_STM32_QSPI support
+	stm32/defconfig
+		git://git.kernel.org/pub/scm/linux/kernel/git/atorgue/stm32 tags/stm32-defconfig-for-v5.4-1
+	hisi/defconfig
+		git://github.com/hisilicon/linux-hisi tags/hisi-arm64-defconfig-for-5.4
+	socfpga/defconfig
+		git://git.kernel.org/pub/scm/linux/kernel/git/dinguyen/linux tags/arm64_defconfig_watchdog_for_v5.4
+	sunxi/defconfig
+		git://git.kernel.org/pub/scm/linux/kernel/git/sunxi/linux tags/sunxi-config64-for-5.4-1
+	aspeed/defconfig
+		git://git.kernel.org/pub/scm/linux/kernel/git/joel/aspeed tags/aspeed-5.4-defconfig
+	imx/defconfig
+		git://git.kernel.org/pub/scm/linux/kernel/git/shawnguo/linux tags/imx-defconfig-5.4
+	brcm/defconfig
+		https://github.com/Broadcom/stblinux tags/arm-soc/for-5.4/defconfig
+	brcm/defconfig-64
+		https://github.com/Broadcom/stblinux tags/arm-soc/for-5.4/defconfig-arm64
+	qcom/defconfig
+		git://git.kernel.org/pub/scm/linux/kernel/git/qcom/linux tags/qcom-arm64-defconfig-for-5.4
+	qcom/defconfig-2
+		git://git.kernel.org/pub/scm/linux/kernel/git/qcom/linux tags/qcom-defconfig-for-5.4
+	qcom/drivers
+		git://git.kernel.org/pub/scm/linux/kernel/git/qcom/linux tags/qcom-drivers-for-5.4
+	patch
+		arm64: defconfig: Enable Qualcomm GENI based I2C controller
+		arm64: defconfig: Enable the EFI Framebuffer
+		arm64: defconfig: Enable Qualcomm QUSB2 PHY
+	samsung/defconfig
+		git://git.kernel.org/pub/scm/linux/kernel/git/krzk/linux tags/samsung-defconfig-5.4
+
+arm/newsoc
+
+arm/late
+	omap/sysc
+		git://git.kernel.org/pub/scm/linux/kernel/git/tmlind/linux-omap tags/omap-for-v5.4/ti-sysc-signed
+	omap/sysc-2
+		git://git.kernel.org/pub/scm/linux/kernel/git/tmlind/linux-omap tags/omap-for-v5.4/ti-sysc-part2-signed
+	omap/sysc-pdata
+		git://git.kernel.org/pub/scm/linux/kernel/git/tmlind/linux-omap tags/omap-for-v5.4/ti-sysc-drop-pdata-take2-signed
+	omap/sysc-sgx
+		git://git.kernel.org/pub/scm/linux/kernel/git/tmlind/linux-omap tags/omap-for-v5.4/ti-sysc-sgx-signed
+	ti/k3-dt
+		git://git.kernel.org/pub/scm/linux/kernel/git/kristo/linux tags/ti-k3-soc-for-v5.4
+	mvebu/dt-2
+		git://git.infradead.org/linux-mvebu tags/mvebu-dt64-5.4-2
+		contains drivers/reset
+		contains drivers/scmi
+		contains drivers/tee
+		contains fsl/soc-5.3-2
+		contains mvebu/dt64
+		contains renesas/drivers
+	patch
+		ARM: dts: mmp2: trivial whitespace fix
+		ARM: dts: mmp2: fix the SPI nodes
+		ARM: dts: mmp2: add camera interfaces
+		ARM: dts: mmp2: specify reg-shift for the UARTs
+		ARM: dts: mmp2: rename the USB PHY node
+		ARM: dts: mmp2: add OLPC XO 1.75 machine
+	samsung/soc-2
+		git://git.kernel.org/pub/scm/linux/kernel/git/krzk/linux tags/samsung-soc-5.4-3
+		contains samsung/soc
+	aspeed/dt-3
+		Merge branch 'aspeed/dt-3' into arm/late
+		contains clk/aspeed
+
+arm/fixes
