@@ -36,7 +36,6 @@ SOC_INTEL_IS_CPU(byt, INTEL_FAM6_ATOM_SILVERMONT);
 SOC_INTEL_IS_CPU(cht, INTEL_FAM6_ATOM_AIRMONT);
 SOC_INTEL_IS_CPU(apl, INTEL_FAM6_ATOM_GOLDMONT);
 SOC_INTEL_IS_CPU(glk, INTEL_FAM6_ATOM_GOLDMONT_PLUS);
-SOC_INTEL_IS_CPU(cml, INTEL_FAM6_KABYLAKE_MOBILE);
 
 static inline bool soc_intel_is_byt_cr(struct platform_device *pdev)
 {
@@ -111,10 +110,6 @@ static inline bool soc_intel_is_glk(void)
 	return false;
 }
 
-static inline bool soc_intel_is_cml(void)
-{
-	return false;
-}
 #endif
 
  #endif /* _SND_SOC_INTEL_QUIRKS_H */
