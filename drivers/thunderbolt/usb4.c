@@ -1500,12 +1500,31 @@ int usb4_usb3_port_allocated_bandwidth(struct tb_port *port, unsigned int *up_bw
 
 	if (up_bw) {
 		bw = val & ADP_USB3_CS_2_AUBW_MASK;
-		*up_bw = usb3_bw_to_mbps(bw, scale);
+		/*
+		 * TGL Ax has a bug that prevents reporting consumed
+		 * bandwidth so hardcode 10Gbps here.
+		 *
+		 * TODO: This as a separate patch that is not send
+		 *	 upstream.
+		 */
+		if (!bw)
+			*up_bw = 10 * 1000;
+		else
+			*up_bw = usb3_bw_to_mbps(bw, scale);
 	}
 
 	if (down_bw) {
 		bw = (val & ADP_USB3_CS_2_ADBW_MASK) >> ADP_USB3_CS_2_ADBW_SHIFT;
-		*down_bw = usb3_bw_to_mbps(bw, scale);
+		/*
+		 * See above comment for upstream.
+		 *
+		 * TODO: This as a separate patch that is not send
+		 *	 upstream.
+		 */
+		if (!bw)
+			*down_bw = 10 * 1000;
+		else
+			*down_bw = usb3_bw_to_mbps(bw, scale);
 	}
 
 	return 0;
@@ -1584,6 +1603,10 @@ int usb4_usb3_port_max_link_rate(struct tb_port *port)
 	if (ret)
 		return ret;
 
+	/* TGL Ax does not have this register implemented so hard-code 10G */
+	if (!val)
+		return 10000;
+
 	lr = (val & ADP_USB3_CS_4_MSLR_MASK) >> ADP_USB3_CS_4_MSLR_SHIFT;
 	return lr == ADP_USB3_CS_4_MSLR_20G ? 20000 : 10000;
 }
@@ -1608,6 +1631,10 @@ int usb4_usb3_port_actual_link_rate(struct tb_port *port)
 			   port->cap_adap + ADP_USB3_CS_4, 1);
 	if (ret)
 		return ret;
+
+	/* TGL Ax does not have this register implemented so hard-code 10G */
+	if (!val)
+		return 10000;
 
 	if (!(val & ADP_USB3_CS_4_ULV))
 		return -ENOTCONN;
