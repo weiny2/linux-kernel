@@ -1162,9 +1162,11 @@ int vfs_get_super(struct fs_context *fc,
 {
 	int (*test)(struct super_block *, struct fs_context *);
 	struct super_block *sb;
+	int err;
 
 	switch (keying) {
 	case vfs_get_single_super:
+	case vfs_get_single_reconf_super:
 		test = test_single_super;
 		break;
 	case vfs_get_keyed_super:
@@ -1182,18 +1184,29 @@ int vfs_get_super(struct fs_context *fc,
 		return PTR_ERR(sb);
 
 	if (!sb->s_root) {
-		int err = fill_super(sb, fc);
-		if (err) {
-			deactivate_locked_super(sb);
-			return err;
-		}
+		err = fill_super(sb, fc);
+		if (err)
+			goto error;
 
 		sb->s_flags |= SB_ACTIVE;
+		fc->root = dget(sb->s_root);
+	} else {
+		fc->root = dget(sb->s_root);
+		if (keying == vfs_get_single_reconf_super) {
+			err = reconfigure_super(fc);
+			if (err < 0) {
+				dput(fc->root);
+				fc->root = NULL;
+				goto error;
+			}
+		}
 	}
 
-	BUG_ON(fc->root);
-	fc->root = dget(sb->s_root);
 	return 0;
+
+error:
+	deactivate_locked_super(sb);
+	return err;
 }
 EXPORT_SYMBOL(vfs_get_super);
 
@@ -1212,6 +1225,14 @@ int get_tree_single(struct fs_context *fc,
 	return vfs_get_super(fc, vfs_get_single_super, fill_super);
 }
 EXPORT_SYMBOL(get_tree_single);
+
+int get_tree_single_reconf(struct fs_context *fc,
+		  int (*fill_super)(struct super_block *sb,
+				    struct fs_context *fc))
+{
+	return vfs_get_super(fc, vfs_get_single_reconf_super, fill_super);
+}
+EXPORT_SYMBOL(get_tree_single_reconf);
 
 int get_tree_keyed(struct fs_context *fc,
 		  int (*fill_super)(struct super_block *sb,
@@ -1441,61 +1462,6 @@ struct dentry *mount_nodev(struct file_system_type *fs_type,
 	return dget(s->s_root);
 }
 EXPORT_SYMBOL(mount_nodev);
-
-static int reconfigure_single(struct super_block *s,
-			      int flags, void *data)
-{
-	struct fs_context *fc;
-	int ret;
-
-	/* The caller really need to be passing fc down into mount_single(),
-	 * then a chunk of this can be removed.  [Bollocks -- AV]
-	 * Better yet, reconfiguration shouldn't happen, but rather the second
-	 * mount should be rejected if the parameters are not compatible.
-	 */
-	fc = fs_context_for_reconfigure(s->s_root, flags, MS_RMT_MASK);
-	if (IS_ERR(fc))
-		return PTR_ERR(fc);
-
-	ret = parse_monolithic_mount_data(fc, data);
-	if (ret < 0)
-		goto out;
-
-	ret = reconfigure_super(fc);
-out:
-	put_fs_context(fc);
-	return ret;
-}
-
-static int compare_single(struct super_block *s, void *p)
-{
-	return 1;
-}
-
-struct dentry *mount_single(struct file_system_type *fs_type,
-	int flags, void *data,
-	int (*fill_super)(struct super_block *, void *, int))
-{
-	struct super_block *s;
-	int error;
-
-	s = sget(fs_type, compare_single, set_anon_super, flags, NULL);
-	if (IS_ERR(s))
-		return ERR_CAST(s);
-	if (!s->s_root) {
-		error = fill_super(s, data, flags & SB_SILENT ? 1 : 0);
-		if (!error)
-			s->s_flags |= SB_ACTIVE;
-	} else {
-		error = reconfigure_single(s, flags, data);
-	}
-	if (unlikely(error)) {
-		deactivate_locked_super(s);
-		return ERR_PTR(error);
-	}
-	return dget(s->s_root);
-}
-EXPORT_SYMBOL(mount_single);
 
 /**
  * vfs_get_tree - Get the mountable root
