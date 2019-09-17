@@ -664,7 +664,7 @@ ALI1563 I2C DRIVER
 M:	Rudolf Marek <r.marek@assembler.cz>
 L:	linux-i2c@vger.kernel.org
 S:	Maintained
-F:	Documentation/i2c/busses/i2c-ali1563
+F:	Documentation/i2c/busses/i2c-ali1563.rst
 F:	drivers/i2c/busses/i2c-ali1563.c
 
 ALLEGRO DVT VIDEO IP CORE DRIVER
@@ -1579,8 +1579,8 @@ R:	Suzuki K Poulose <suzuki.poulose@arm.com>
 L:	linux-arm-kernel@lists.infradead.org (moderated for non-subscribers)
 S:	Maintained
 F:	drivers/hwtracing/coresight/*
-F:	Documentation/trace/coresight.txt
-F:	Documentation/trace/coresight-cpu-debug.txt
+F:	Documentation/trace/coresight.rst
+F:	Documentation/trace/coresight-cpu-debug.rst
 F:	Documentation/devicetree/bindings/arm/coresight.txt
 F:	Documentation/devicetree/bindings/arm/coresight-cpu-debug.txt
 F:	Documentation/ABI/testing/sysfs-bus-coresight-devices-*
@@ -4086,7 +4086,7 @@ L:	samba-technical@lists.samba.org (moderated for non-subscribers)
 W:	http://linux-cifs.samba.org/
 T:	git git://git.samba.org/sfrench/cifs-2.6.git
 S:	Supported
-F:	Documentation/filesystems/cifs/
+F:	Documentation/admin-guide/cifs/
 F:	fs/cifs/
 
 COMPACTPCI HOTPLUG CORE
@@ -4956,7 +4956,9 @@ M:	Jonathan Corbet <corbet@lwn.net>
 L:	linux-doc@vger.kernel.org
 S:	Maintained
 F:	Documentation/
+F:	scripts/documentation-file-ref-check
 F:	scripts/kernel-doc
+F:	scripts/sphinx-pre-install
 X:	Documentation/ABI/
 X:	Documentation/firmware-guide/acpi/
 X:	Documentation/devicetree/
@@ -4971,6 +4973,14 @@ M:	Federico Vaga <federico.vaga@vaga.pv.it>
 L:	linux-doc@vger.kernel.org
 S:	Maintained
 F:	Documentation/translations/it_IT
+
+DOCUMENTATION SCRIPTS
+M:	Mauro Carvalho Chehab <mchehab@kernel.org>
+L:	linux-doc@vger.kernel.org
+S:	Maintained
+F:	scripts/documentation-file-ref-check
+F:	scripts/sphinx-pre-install
+F:	Documentation/sphinx/parse-headers.pl
 
 DONGWOON DW9714 LENS VOICE COIL DRIVER
 M:	Sakari Ailus <sakari.ailus@linux.intel.com>
@@ -6340,7 +6350,7 @@ FLEXTIMER FTM-QUADDEC DRIVER
 M:	Patrick Havelange <patrick.havelange@essensium.com>
 L:	linux-iio@vger.kernel.org
 S:	Maintained
-F:	Documentation/ABI/testing/sysfs-bus-counter-ftm-quadddec
+F:	Documentation/ABI/testing/sysfs-bus-counter-ftm-quaddec
 F:	Documentation/devicetree/bindings/counter/ftm-quaddec.txt
 F:	drivers/counter/ftm-quaddec.c
 
@@ -6775,7 +6785,7 @@ L:	linux-i2c@vger.kernel.org
 S:	Supported
 F:	drivers/i2c/muxes/i2c-mux-gpio.c
 F:	include/linux/platform_data/i2c-mux-gpio.h
-F:	Documentation/i2c/muxes/i2c-mux-gpio
+F:	Documentation/i2c/muxes/i2c-mux-gpio.rst
 
 GENERIC HDLC (WAN) DRIVERS
 M:	Krzysztof Halasa <khc@pm.waw.pl>
@@ -7535,14 +7545,14 @@ I2C CONTROLLER DRIVER FOR NVIDIA GPU
 M:	Ajay Gupta <ajayg@nvidia.com>
 L:	linux-i2c@vger.kernel.org
 S:	Maintained
-F:	Documentation/i2c/busses/i2c-nvidia-gpu
+F:	Documentation/i2c/busses/i2c-nvidia-gpu.rst
 F:	drivers/i2c/busses/i2c-nvidia-gpu.c
 
 I2C MUXES
 M:	Peter Rosin <peda@axentia.se>
 L:	linux-i2c@vger.kernel.org
 S:	Maintained
-F:	Documentation/i2c/i2c-topology
+F:	Documentation/i2c/i2c-topology.rst
 F:	Documentation/i2c/muxes/
 F:	Documentation/devicetree/bindings/i2c/i2c-mux*
 F:	Documentation/devicetree/bindings/i2c/i2c-arb*
@@ -7562,8 +7572,8 @@ I2C OVER PARALLEL PORT
 M:	Jean Delvare <jdelvare@suse.com>
 L:	linux-i2c@vger.kernel.org
 S:	Maintained
-F:	Documentation/i2c/busses/i2c-parport
-F:	Documentation/i2c/busses/i2c-parport-light
+F:	Documentation/i2c/busses/i2c-parport.rst
+F:	Documentation/i2c/busses/i2c-parport-light.rst
 F:	drivers/i2c/busses/i2c-parport.c
 F:	drivers/i2c/busses/i2c-parport-light.c
 
@@ -7597,7 +7607,7 @@ I2C-TAOS-EVM DRIVER
 M:	Jean Delvare <jdelvare@suse.com>
 L:	linux-i2c@vger.kernel.org
 S:	Maintained
-F:	Documentation/i2c/busses/i2c-taos-evm
+F:	Documentation/i2c/busses/i2c-taos-evm.rst
 F:	drivers/i2c/busses/i2c-taos-evm.c
 
 I2C-TINY-USB DRIVER
@@ -7611,19 +7621,19 @@ I2C/SMBUS CONTROLLER DRIVERS FOR PC
 M:	Jean Delvare <jdelvare@suse.com>
 L:	linux-i2c@vger.kernel.org
 S:	Maintained
-F:	Documentation/i2c/busses/i2c-ali1535
-F:	Documentation/i2c/busses/i2c-ali1563
-F:	Documentation/i2c/busses/i2c-ali15x3
-F:	Documentation/i2c/busses/i2c-amd756
-F:	Documentation/i2c/busses/i2c-amd8111
-F:	Documentation/i2c/busses/i2c-i801
-F:	Documentation/i2c/busses/i2c-nforce2
-F:	Documentation/i2c/busses/i2c-piix4
-F:	Documentation/i2c/busses/i2c-sis5595
-F:	Documentation/i2c/busses/i2c-sis630
-F:	Documentation/i2c/busses/i2c-sis96x
-F:	Documentation/i2c/busses/i2c-via
-F:	Documentation/i2c/busses/i2c-viapro
+F:	Documentation/i2c/busses/i2c-ali1535.rst
+F:	Documentation/i2c/busses/i2c-ali1563.rst
+F:	Documentation/i2c/busses/i2c-ali15x3.rst
+F:	Documentation/i2c/busses/i2c-amd756.rst
+F:	Documentation/i2c/busses/i2c-amd8111.rst
+F:	Documentation/i2c/busses/i2c-i801.rst
+F:	Documentation/i2c/busses/i2c-nforce2.rst
+F:	Documentation/i2c/busses/i2c-piix4.rst
+F:	Documentation/i2c/busses/i2c-sis5595.rst
+F:	Documentation/i2c/busses/i2c-sis630.rst
+F:	Documentation/i2c/busses/i2c-sis96x.rst
+F:	Documentation/i2c/busses/i2c-via.rst
+F:	Documentation/i2c/busses/i2c-viapro.rst
 F:	drivers/i2c/busses/i2c-ali1535.c
 F:	drivers/i2c/busses/i2c-ali1563.c
 F:	drivers/i2c/busses/i2c-ali15x3.c
@@ -7652,7 +7662,7 @@ M:	Seth Heasley <seth.heasley@intel.com>
 M:	Neil Horman <nhorman@tuxdriver.com>
 L:	linux-i2c@vger.kernel.org
 F:	drivers/i2c/busses/i2c-ismt.c
-F:	Documentation/i2c/busses/i2c-ismt
+F:	Documentation/i2c/busses/i2c-ismt.rst
 
 I2C/SMBUS STUB DRIVER
 M:	Jean Delvare <jdelvare@suse.com>
@@ -8408,7 +8418,7 @@ M:	linux-wimax@intel.com
 L:	wimax@linuxwimax.org (subscribers-only)
 S:	Supported
 W:	http://linuxwimax.org
-F:	Documentation/wimax/README.i2400m
+F:	Documentation/admin-guide/wimax/i2400m.rst
 F:	drivers/net/wimax/i2400m/
 F:	include/uapi/linux/wimax/i2400m.h
 
@@ -8693,7 +8703,7 @@ L:	jfs-discussion@lists.sourceforge.net
 W:	http://jfs.sourceforge.net/
 T:	git git://github.com/kleikamp/linux-shaggy.git
 S:	Maintained
-F:	Documentation/filesystems/jfs.txt
+F:	Documentation/admin-guide/jfs.rst
 F:	fs/jfs/
 
 JME NETWORK DRIVER
@@ -9036,7 +9046,7 @@ F:	kernel/kprobes.c
 KS0108 LCD CONTROLLER DRIVER
 M:	Miguel Ojeda Sandonis <miguel.ojeda.sandonis@gmail.com>
 S:	Maintained
-F:	Documentation/auxdisplay/ks0108
+F:	Documentation/admin-guide/auxdisplay/ks0108.rst
 F:	drivers/auxdisplay/ks0108.c
 F:	include/linux/ks0108.h
 
@@ -9625,7 +9635,7 @@ F:	Documentation/networking/mac80211-injection.txt
 F:	include/net/mac80211.h
 F:	net/mac80211/
 F:	drivers/net/wireless/mac80211_hwsim.[ch]
-F:	Documentation/networking/mac80211_hwsim/README
+F:	Documentation/networking/mac80211_hwsim/mac80211_hwsim.rst
 
 MAILBOX API
 M:	Jassi Brar <jassisinghbrar@gmail.com>
@@ -10402,7 +10412,7 @@ L:	linux-i2c@vger.kernel.org
 S:	Supported
 F:	drivers/i2c/busses/i2c-mlxcpld.c
 F:	drivers/i2c/muxes/i2c-mux-mlxcpld.c
-F:	Documentation/i2c/busses/i2c-mlxcpld
+F:	Documentation/i2c/busses/i2c-mlxcpld.rst
 
 MELLANOX MLXCPLD LED DRIVER
 M:	Vadim Pasternak <vadimp@mellanox.com>
@@ -12014,7 +12024,7 @@ M:	Andrew Lunn <andrew@lunn.ch>
 L:	linux-i2c@vger.kernel.org
 S:	Maintained
 F:	Documentation/devicetree/bindings/i2c/i2c-ocores.txt
-F:	Documentation/i2c/busses/i2c-ocores
+F:	Documentation/i2c/busses/i2c-ocores.rst
 F:	drivers/i2c/busses/i2c-ocores.c
 F:	include/linux/platform_data/i2c-ocores.h
 
@@ -12137,7 +12147,7 @@ L:	netdev@vger.kernel.org
 S:	Supported
 F:	lib/packing.c
 F:	include/linux/packing.h
-F:	Documentation/packing.txt
+F:	Documentation/core-api/packing.rst
 
 PADATA PARALLEL EXECUTION MECHANISM
 M:	Steffen Klassert <steffen.klassert@secunet.com>
@@ -14342,7 +14352,7 @@ F:	net/sctp/
 SCx200 CPU SUPPORT
 M:	Jim Cromie <jim.cromie@gmail.com>
 S:	Odd Fixes
-F:	Documentation/i2c/busses/scx200_acb
+F:	Documentation/i2c/busses/scx200_acb.rst
 F:	arch/x86/platform/scx200/
 F:	drivers/watchdog/scx200_wdt.c
 F:	drivers/i2c/busses/scx200*
@@ -15981,7 +15991,7 @@ M:	Viresh Kumar <viresh.kumar@linaro.org>
 M:	Javi Merino <javi.merino@kernel.org>
 L:	linux-pm@vger.kernel.org
 S:	Supported
-F:	Documentation/thermal/cpu-cooling-api.rst
+F:	Documentation/driver-api/thermal/cpu-cooling-api.rst
 F:	drivers/thermal/cpu_cooling.c
 F:	include/linux/cpu_cooling.h
 
@@ -16504,7 +16514,7 @@ F:	drivers/hid/hid-udraw-ps3.c
 UFS FILESYSTEM
 M:	Evgeniy Dushistov <dushistov@mail.ru>
 S:	Maintained
-F:	Documentation/filesystems/ufs.txt
+F:	Documentation/admin-guide/ufs.rst
 F:	fs/ufs/
 
 UHID USERSPACE HID IO DRIVER:
@@ -17435,7 +17445,7 @@ M:	linux-wimax@intel.com
 L:	wimax@linuxwimax.org (subscribers-only)
 S:	Supported
 W:	http://linuxwimax.org
-F:	Documentation/wimax/README.wimax
+F:	Documentation/admin-guide/wimax/wimax.rst
 F:	include/linux/wimax/debug.h
 F:	include/net/wimax.h
 F:	include/uapi/linux/wimax.h
