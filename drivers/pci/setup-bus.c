@@ -1662,8 +1662,8 @@ static int iov_resources_unassigned(struct pci_dev *dev, void *data)
 	int i;
 	bool *unassigned = data;
 
-	for (i = PCI_IOV_RESOURCES; i <= PCI_IOV_RESOURCE_END; i++) {
-		struct resource *r = &dev->resource[i];
+	for (i = 0; i < PCI_SRIOV_NUM_BARS; i++) {
+		struct resource *r = &dev->resource[i + PCI_IOV_RESOURCES];
 		struct pci_bus_region region;
 
 		/* Not assigned or rejected by kernel? */
@@ -2066,6 +2066,8 @@ int pci_reassign_bridge_resources(struct pci_dev *bridge, unsigned long type)
 	unsigned int i;
 	int ret;
 
+	down_read(&pci_bus_sem);
+
 	/* Walk to the root hub, releasing bridge BARs when possible */
 	next = bridge;
 	do {
@@ -2122,6 +2124,7 @@ int pci_reassign_bridge_resources(struct pci_dev *bridge, unsigned long type)
 	}
 
 	free_list(&saved);
+	up_read(&pci_bus_sem);
 	return 0;
 
 cleanup:
@@ -2150,6 +2153,7 @@ cleanup:
 		pci_setup_bridge(bridge->subordinate);
 	}
 	free_list(&saved);
+	up_read(&pci_bus_sem);
 
 	return ret;
 }
