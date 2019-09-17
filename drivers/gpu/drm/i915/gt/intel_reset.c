@@ -792,6 +792,7 @@ static bool __intel_gt_unset_wedged(struct intel_gt *gt)
 {
 	struct intel_gt_timelines *timelines = &gt->timelines;
 	struct intel_timeline *tl;
+	unsigned long flags;
 
 	if (!test_bit(I915_WEDGED, &gt->reset.flags))
 		return true;
@@ -811,7 +812,7 @@ static bool __intel_gt_unset_wedged(struct intel_gt *gt)
 	 *
 	 * No more can be submitted until we reset the wedged bit.
 	 */
-	spin_lock(&timelines->lock);
+	spin_lock_irqsave(&timelines->lock, flags);
 	list_for_each_entry(tl, &timelines->active_list, link) {
 		struct i915_request *rq;
 
@@ -819,7 +820,7 @@ static bool __intel_gt_unset_wedged(struct intel_gt *gt)
 		if (!rq)
 			continue;
 
-		spin_unlock(&timelines->lock);
+		spin_unlock_irqrestore(&timelines->lock, flags);
 
 		/*
 		 * All internal dependencies (i915_requests) will have
@@ -832,10 +833,10 @@ static bool __intel_gt_unset_wedged(struct intel_gt *gt)
 		i915_request_put(rq);
 
 		/* Restart iteration after droping lock */
-		spin_lock(&timelines->lock);
+		spin_lock_irqsave(&timelines->lock, flags);
 		tl = list_entry(&timelines->active_list, typeof(*tl), link);
 	}
-	spin_unlock(&timelines->lock);
+	spin_unlock_irqrestore(&timelines->lock, flags);
 
 	intel_gt_sanitize(gt, false);
 
@@ -1213,10 +1214,8 @@ out:
 	intel_runtime_pm_put(&gt->i915->runtime_pm, wakeref);
 }
 
-int intel_gt_reset_trylock(struct intel_gt *gt)
+int intel_gt_reset_trylock(struct intel_gt *gt, int *srcu)
 {
-	int srcu;
-
 	might_lock(&gt->reset.backoff_srcu);
 	might_sleep();
 
@@ -1231,10 +1230,10 @@ int intel_gt_reset_trylock(struct intel_gt *gt)
 
 		rcu_read_lock();
 	}
-	srcu = srcu_read_lock(&gt->reset.backoff_srcu);
+	*srcu = srcu_read_lock(&gt->reset.backoff_srcu);
 	rcu_read_unlock();
 
-	return srcu;
+	return 0;
 }
 
 void intel_gt_reset_unlock(struct intel_gt *gt, int tag)
