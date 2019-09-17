@@ -56,10 +56,4 @@ void *cached_kernel_address(void *ptr)
 
 	return (void *)(addr & ~UNCACHED_SHADOW_MASK);
 }
-#else /* CONFIG_MMU */
-static int __init atomic_pool_init(void)
-{
-	return dma_atomic_pool_init(GFP_KERNEL, pgprot_noncached(PAGE_KERNEL));
-}
-postcore_initcall(atomic_pool_init);
 #endif /* CONFIG_MMU */
