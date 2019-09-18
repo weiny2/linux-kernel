@@ -784,6 +784,7 @@ typedef struct pglist_data {
 	unsigned long autonuma_threshold;
 #endif
 	struct random_migrate_state random_promote_state;
+	struct random_migrate_state random_demote_state;
 	/* Fields commonly accessed by the page reclaim scanner */
 	struct lruvec		lruvec;
 

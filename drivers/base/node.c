@@ -698,14 +698,12 @@ static DEVICE_ATTR_RO(promotion_path);
 
 DEFINE_MUTEX(random_migrate_mutex);
 
-static ssize_t random_promote_mb_store(struct device *dev,
-				       struct device_attribute *attr,
-				       const char *buf, size_t count)
+static ssize_t random_migrate_mb_store(
+	struct pglist_data *pgdat, struct random_migrate_state *rm_state,
+	const char *buf, size_t count, bool promote)
 {
-	int err, nid = dev->id, tnid;
+	int err, tnid;
 	long size_mb, nr_page;
-	struct pglist_data *pgdat = NODE_DATA(nid);
-	struct random_migrate_state *rp_state = &pgdat->random_promote_state;
 
 	err = kstrtol(buf, 0, &size_mb);
 	if (err)
@@ -716,31 +714,31 @@ static ssize_t random_promote_mb_store(struct device *dev,
 	if (nr_page < 0)
 		return -EINVAL;
 
-	tnid = next_promotion_node(nid);
+	if (promote)
+		tnid = next_promotion_node(pgdat->node_id);
+	else
+		tnid = next_migration_node(pgdat->node_id);
 	if (tnid == TERMINAL_NODE)
 		return -EINVAL;
 
 	mutex_lock(&random_migrate_mutex);
-	node_random_promote_stop(pgdat);
-	rp_state->nr_page = nr_page;
-	if (nr_page && !rp_state->period)
+	node_random_migrate_stop(rm_state);
+	rm_state->nr_page = nr_page;
+	if (nr_page && !rm_state->period)
 		node_random_migrate_pages(pgdat, nr_page, tnid);
 	else if (nr_page)
-		node_random_promote_start(pgdat);
+		node_random_migrate_start(pgdat, rm_state);
 	mutex_unlock(&random_migrate_mutex);
 
 	return count;
 }
-static DEVICE_ATTR_WO(random_promote_mb);
 
-static ssize_t random_promote_period_ms_store(struct device *dev,
-					      struct device_attribute *attr,
-					      const char *buf, size_t count)
+static ssize_t random_migrate_period_ms_store(
+	struct pglist_data *pgdat, struct random_migrate_state *rm_state,
+	const char *buf, size_t count, bool promote)
 {
-	int err, nid = dev->id;
+	int err, tnid;
 	long period;
-	struct pglist_data *pgdat = NODE_DATA(nid);
-	struct random_migrate_state *rp_state = &pgdat->random_promote_state;
 
 	err = kstrtol(buf, 0, &period);
 	if (err)
@@ -749,17 +747,42 @@ static ssize_t random_promote_period_ms_store(struct device *dev,
 	if (period < 0)
 		return -EINVAL;
 
-	if (next_promotion_node(nid) == TERMINAL_NODE)
+	if (promote)
+		tnid = next_promotion_node(pgdat->node_id);
+	else
+		tnid = next_migration_node(pgdat->node_id);
+	if (tnid == TERMINAL_NODE)
 		return -EINVAL;
 
 	mutex_lock(&random_migrate_mutex);
-	node_random_promote_stop(pgdat);
-	rp_state->period = msecs_to_jiffies(period);
-	if (period && rp_state->nr_page)
-		node_random_promote_start(pgdat);
+	node_random_migrate_stop(rm_state);
+	rm_state->period = msecs_to_jiffies(period);
+	if (period && rm_state->nr_page)
+		node_random_migrate_start(pgdat, rm_state);
 	mutex_unlock(&random_migrate_mutex);
 
 	return count;
+}
+
+static ssize_t random_promote_mb_store(struct device *dev,
+				       struct device_attribute *attr,
+				       const char *buf, size_t count)
+{
+	struct pglist_data *pgdat = NODE_DATA(dev->id);
+
+	return random_migrate_mb_store(pgdat, &pgdat->random_promote_state,
+				       buf, count, true);
+}
+static DEVICE_ATTR_WO(random_promote_mb);
+
+static ssize_t random_promote_period_ms_store(struct device *dev,
+					      struct device_attribute *attr,
+					      const char *buf, size_t count)
+{
+	struct pglist_data *pgdat = NODE_DATA(dev->id);
+
+	return random_migrate_period_ms_store(
+		pgdat, &pgdat->random_promote_state, buf, count, true);
 }
 static DEVICE_ATTR_WO(random_promote_period_ms);
 
@@ -767,31 +790,23 @@ static ssize_t random_demote_mb_store(struct device *dev,
 				      struct device_attribute *attr,
 				      const char *buf, size_t count)
 {
-	int err, nid = dev->id, tnid;
-	long size_mb, nr_page;
-	struct pglist_data *pgdat = NODE_DATA(nid);
+	struct pglist_data *pgdat = NODE_DATA(dev->id);
 
-	err = kstrtol(buf, 0, &size_mb);
-	if (err)
-		return -EINVAL;
-
-	/* MB to page */
-	nr_page = size_mb << (20 - PAGE_SHIFT);
-	if (nr_page < 0)
-		return -EINVAL;
-
-	if (nr_page < 0)
-		return -EINVAL;
-
-	tnid = next_migration_node(nid);
-	if (tnid == TERMINAL_NODE)
-		return -EINVAL;
-
-	node_random_migrate_pages(pgdat, nr_page, tnid);
-
-	return count;
+	return random_migrate_mb_store(pgdat, &pgdat->random_demote_state,
+				       buf, count, false);
 }
 static DEVICE_ATTR_WO(random_demote_mb);
+
+static ssize_t random_demote_period_ms_store(struct device *dev,
+					     struct device_attribute *attr,
+					     const char *buf, size_t count)
+{
+	struct pglist_data *pgdat = NODE_DATA(dev->id);
+
+	return random_migrate_period_ms_store(
+		pgdat, &pgdat->random_demote_state, buf, count, false);
+}
+static DEVICE_ATTR_WO(random_demote_period_ms);
 
 /**
  * next_migration_node() - Get the next node in the migration path
@@ -831,6 +846,7 @@ static struct attribute *node_dev_attrs[] = {
 	&dev_attr_random_promote_mb.attr,
 	&dev_attr_random_promote_period_ms.attr,
 	&dev_attr_random_demote_mb.attr,
+	&dev_attr_random_demote_period_ms.attr,
 	NULL
 };
 ATTRIBUTE_GROUPS(node_dev);

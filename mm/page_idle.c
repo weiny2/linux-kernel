@@ -313,21 +313,33 @@ void node_random_promote_work(struct work_struct *work)
 	struct pglist_data *pgdat = container_of(to_delayed_work(work),
 						 struct pglist_data,
 						 random_promote_state.work);
+	struct random_migrate_state *rp_state = &pgdat->random_promote_state;
 	int nid = next_promotion_node(pgdat->node_id);
 
-	node_random_migrate_pages(pgdat, pgdat->random_promote_state.nr_page,
-				  nid);
-	node_random_promote_start(pgdat);
+	node_random_migrate_pages(pgdat, rp_state->nr_page, nid);
+	node_random_migrate_start(pgdat, rp_state);
 }
 
-void node_random_promote_start(struct pglist_data *pgdat)
+void node_random_migrate_start(struct pglist_data *pgdat,
+			       struct random_migrate_state *rm_state)
 {
-	node_random_mod_delayed_work(pgdat->node_id,
-				     &pgdat->random_promote_state.work,
-				     pgdat->random_promote_state.period);
+	node_random_mod_delayed_work(pgdat->node_id, &rm_state->work,
+				     rm_state->period);
 }
 
-void node_random_promote_stop(struct pglist_data *pgdat)
+void node_random_migrate_stop(struct random_migrate_state *rm_state)
 {
-	cancel_delayed_work_sync(&pgdat->random_promote_state.work);
+	cancel_delayed_work_sync(&rm_state->work);
+}
+
+void node_random_demote_work(struct work_struct *work)
+{
+	struct pglist_data *pgdat = container_of(to_delayed_work(work),
+						 struct pglist_data,
+						 random_demote_state.work);
+	struct random_migrate_state *rd_state = &pgdat->random_demote_state;
+	int nid = next_migration_node(pgdat->node_id);
+
+	node_random_migrate_pages(pgdat, rd_state->nr_page, nid);
+	node_random_migrate_start(pgdat, rd_state);
 }
