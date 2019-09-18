@@ -6623,6 +6623,8 @@ static void pgdat_init_random_migrate(struct pglist_data *pgdat)
 {
 	INIT_DELAYED_WORK(&pgdat->random_promote_state.work,
 			  node_random_promote_work);
+	INIT_DELAYED_WORK(&pgdat->random_demote_state.work,
+			  node_random_demote_work);
 }
 
 static void __meminit pgdat_init_internals(struct pglist_data *pgdat)
