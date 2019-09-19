@@ -2720,7 +2720,7 @@
             "stuck_at_ref": ""
         },
         {
-            "branch": "sva-intel-next",
+            "branch": "vsva_for_intel_next",
             "branch_type": "expiring",
             "config_options": [],
             "contributor": [
@@ -2742,7 +2742,7 @@
                 }
             ],
             "description": "IOMMU vSVA changes",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Rupin H Vakharwala",
