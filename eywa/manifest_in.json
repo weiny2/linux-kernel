@@ -2413,7 +2413,7 @@
                 }
             ],
             "description": "PCIe VPU drivers for IOTG Keem Bay Xlink",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Seng Kai Tan",
