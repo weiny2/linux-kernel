@@ -2386,9 +2386,26 @@
             "stuck_at_ref": ""
         },
         {
-            "branch": "int/vpu-driver",
+            "branch": "dev/vpu-driver",
             "branch_type": "expiring",
-            "config_options": [],
+            "config_options": [
+                {
+                    "name": "CONFIG_XLINK_PCIE_LH_DRIVER",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_XLINK_PCIE_RH_DRIVER",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_USB_G_SERIAL_VPU_USB",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_VPU_USB_ACM",
+                    "value": "m"
+                }
+            ],
             "contributor": [
                 {
                     "name": "Jun Ann Lai",
@@ -2396,7 +2413,7 @@
                 }
             ],
             "description": "PCIe VPU drivers for IOTG Keem Bay Xlink",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Seng Kai Tan",
