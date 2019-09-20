@@ -7988,6 +7988,7 @@ static struct kvm_x86_ops vmx_x86_ops __ro_after_init = {
 	.nested_enable_evmcs = NULL,
 	.nested_get_evmcs_version = NULL,
 	.need_emulation_on_page_fault = vmx_need_emulation_on_page_fault,
+
 	.apic_init_signal_blocked = vmx_apic_init_signal_blocked,
 };
 

@@ -284,6 +284,13 @@ enum exit_fastpath_completion handle_fastpath_set_msr_irqoff(struct kvm_vcpu *vc
 				| XFEATURE_MASK_YMM | XFEATURE_MASK_BNDREGS \
 				| XFEATURE_MASK_BNDCSR | XFEATURE_MASK_AVX512 \
 				| XFEATURE_MASK_PKRU)
+
+/*
+ * In future, applicable XSS state bits can be added here
+ * to make them available to KVM and guest.
+ */
+#define KVM_SUPPORTED_XSS	0
+
 extern u64 host_xcr0;
 
 extern u64 kvm_supported_xcr0(void);

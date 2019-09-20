@@ -63,6 +63,17 @@ u64 kvm_supported_xcr0(void)
 }
 
 #define F feature_bit
+extern u64 host_xss;
+u64 kvm_supported_xss(void)
+{
+	u64 kvm_xss = KVM_SUPPORTED_XSS & host_xss;
+
+	if (!kvm_x86_ops->xsaves_supported())
+		return 0;
+
+	return kvm_xss;
+}
+EXPORT_SYMBOL_GPL(kvm_supported_xss);
 
 int kvm_update_cpuid(struct kvm_vcpu *vcpu)
 {
@@ -430,6 +441,58 @@ static inline void do_cpuid_7_mask(struct kvm_cpuid_entry2 *entry, int index)
 	}
 }
 
+static inline bool do_cpuid_0xd_mask(struct kvm_cpuid_entry2 *entry, int index)
+{
+	unsigned int f_xsaves = kvm_x86_ops->xsaves_supported() ? F(XSAVES) : 0;
+	/* cpuid 0xD.1.eax */
+	const u32 kvm_cpuid_D_1_eax_x86_features =
+		F(XSAVEOPT) | F(XSAVEC) | F(XGETBV1) | f_xsaves;
+	u64 u_supported = kvm_supported_xcr0();
+	u64 s_supported = kvm_supported_xss();
+	u64 supported;
+
+	switch (index) {
+	case 0:
+		entry->eax &= u_supported;
+		entry->ebx = xstate_required_size(u_supported, false);
+		entry->ecx = entry->ebx;
+		entry->edx &= u_supported >> 32;
+
+		if (!u_supported) {
+			entry->eax = 0;
+			entry->ebx = 0;
+			entry->ecx = 0;
+			entry->edx = 0;
+			return false;
+		}
+		break;
+	case 1:
+		supported = u_supported | s_supported;
+		entry->eax &= kvm_cpuid_D_1_eax_x86_features;
+		cpuid_mask(&entry->eax, CPUID_D_1_EAX);
+		entry->ebx = 0;
+		entry->edx &= s_supported >> 32;
+		entry->ecx &= s_supported;
+		if (entry->eax & (F(XSAVES) | F(XSAVEC)))
+			entry->ebx = xstate_required_size(supported, true);
+
+		break;
+	default:
+		supported = (entry->ecx & 0x1) ? s_supported : u_supported;
+		if (!(supported & (BIT_ULL(index)))) {
+			entry->eax = 0;
+			entry->ebx = 0;
+			entry->ecx = 0;
+			entry->edx = 0;
+			return false;
+		}
+		if (entry->ecx & 0x1)
+			entry->ebx = 0;
+		break;
+	}
+	return true;
+}
+
 static inline int __do_cpuid_func(struct kvm_cpuid_entry2 *entry, u32 function,
 				  int *nent, int maxnent)
 {
@@ -444,7 +507,6 @@ static inline int __do_cpuid_func(struct kvm_cpuid_entry2 *entry, u32 function,
 	unsigned f_lm = 0;
 #endif
 	unsigned f_rdtscp = kvm_x86_ops->rdtscp_supported() ? F(RDTSCP) : 0;
-	unsigned f_xsaves = kvm_x86_ops->xsaves_supported() ? F(XSAVES) : 0;
 	unsigned f_intel_pt = kvm_x86_ops->pt_supported() ? F(INTEL_PT) : 0;
 
 	/* cpuid 1.edx */
@@ -498,10 +560,6 @@ static inline int __do_cpuid_func(struct kvm_cpuid_entry2 *entry, u32 function,
 		F(XSTORE) | F(XSTORE_EN) | F(XCRYPT) | F(XCRYPT_EN) |
 		F(ACE2) | F(ACE2_EN) | F(PHE) | F(PHE_EN) |
 		F(PMM) | F(PMM_EN);
-
-	/* cpuid 0xD.1.eax */
-	const u32 kvm_cpuid_D_1_eax_x86_features =
-		F(XSAVEOPT) | F(XSAVEC) | F(XGETBV1) | f_xsaves;
 
 	/* all calls to cpuid_count() should be made on the same cpu */
 	get_cpu();
@@ -643,38 +701,21 @@ static inline int __do_cpuid_func(struct kvm_cpuid_entry2 *entry, u32 function,
 		break;
 	}
 	case 0xd: {
-		int idx, i;
-		u64 supported = kvm_supported_xcr0();
+		int i, idx;
 
-		entry->eax &= supported;
-		entry->ebx = xstate_required_size(supported, false);
-		entry->ecx = entry->ebx;
-		entry->edx &= supported >> 32;
-		if (!supported)
+		if (!do_cpuid_0xd_mask(&entry[0], 0))
 			break;
-
-		for (idx = 1, i = 1; idx < 64; ++idx) {
-			u64 mask = ((u64)1 << idx);
+		for (i = 1, idx = 1; idx < 64; ++idx) {
 			if (*nent >= maxnent)
 				goto out;
-
 			do_host_cpuid(&entry[i], function, idx);
-			if (idx == 1) {
-				entry[i].eax &= kvm_cpuid_D_1_eax_x86_features;
-				cpuid_mask(&entry[i].eax, CPUID_D_1_EAX);
-				entry[i].ebx = 0;
-				if (entry[i].eax & (F(XSAVES)|F(XSAVEC)))
-					entry[i].ebx =
-						xstate_required_size(supported,
-								     true);
-			} else {
-				if (entry[i].eax == 0 || !(supported & mask))
-					continue;
-				if (WARN_ON_ONCE(entry[i].ecx & 1))
-					continue;
-			}
-			entry[i].ecx = 0;
-			entry[i].edx = 0;
+			if (entry[i].eax == 0 && entry[i].ebx == 0 &&
+			    entry[i].ecx == 0 && entry[i].edx == 0)
+				continue;
+
+			if (!do_cpuid_0xd_mask(&entry[i], idx))
+				continue;
+
 			++*nent;
 			++i;
 		}
