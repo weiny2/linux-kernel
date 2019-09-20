@@ -2970,6 +2970,40 @@
             ],
             "status": "public",
             "stuck_at_ref": ""
+        },
+        {
+            "branch": "amx_for_intel_next",
+            "branch_type": "expiring",
+            "config_options": [],
+            "contributor": [
+                {
+                    "name": "Aubrey Li",
+                    "email": "aubrey.li@intel.com"
+                }
+            ],
+            "description": "AMX(TMUL) lonely scheduling for intel-next",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Valentine, Bob <bob.valentine@intel.com>",
+                    "email": "bob.valentine@intel.com"
+                }
+            ],
+            "jira": "NEXT-1589",
+            "name": "amx(tmul)",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/cli6/aubrey-linux.git",
+            "sdl_contact": [
+                {
+                    "name": "Aubrey Li",
+                    "email": "aubrey.li@intel.com"
+                },
+                {
+                    "name": "Tim C Chen",
+                    "email": "tim.c.chen@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": ""
         }
     ]
 }
