@@ -2742,7 +2742,7 @@
                 }
             ],
             "description": "IOMMU vSVA changes",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Rupin H Vakharwala",
