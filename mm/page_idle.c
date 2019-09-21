@@ -242,6 +242,7 @@ static int __init page_idle_init(void)
 subsys_initcall(page_idle_init);
 
 #define NODE_RANDOM_CANDIDATE_MULTIPLE		8
+#define NODE_RANDOM_PREFETCH_NUM		4
 
 struct random_migrate_work_item {
 	int nr;
@@ -320,21 +321,52 @@ static void node_random_xas_add(struct xa_state *xas, void *entry)
 	} while (xas_nomem(xas, GFP_KERNEL | __GFP_THISNODE));
 }
 
+static struct page *node_random_gen_random_page(struct pglist_data *pgdat)
+{
+	unsigned long pfn;
+	struct page *page;
+
+	do {
+		pfn = pgdat->node_start_pfn +
+			node_random_gen_random_max(pgdat->node_spanned_pages);
+	} while (!pfn_valid(pfn));
+	page = pfn_to_page(pfn);
+	prefetch(page);
+
+	return page;
+}
+
+static void node_random_gen_page_init(struct pglist_data *pgdat,
+				      struct page* pages[])
+{
+	int i;
+
+	for (i = 1; i < NODE_RANDOM_PREFETCH_NUM; i++)
+		pages[i] = node_random_gen_random_page(pgdat);
+}
+
+static struct page *node_random_gen_page(struct pglist_data *pgdat,
+					 struct page* pages[])
+{
+	memmove(pages, pages + 1,
+		sizeof(pages[0]) * (NODE_RANDOM_PREFETCH_NUM - 1));
+	pages[NODE_RANDOM_PREFETCH_NUM - 1] =
+		node_random_gen_random_page(pgdat);
+
+	return pages[0];
+}
+
 static int node_random_select_pages(struct pglist_data *pgdat, int nr_page,
 				    struct xarray *pages, bool put)
 {
 	int i, nr = 0;
-	unsigned long pfn;
-	struct page *page;
+	struct page *page, *pages_prefetch[NODE_RANDOM_PREFETCH_NUM];
 	XA_STATE(xas, pages, 0);
 
+	node_random_gen_page_init(pgdat, pages_prefetch);
 	/* Stop when selected target number of pages or tried enough times */
 	for (i = 0; i < nr_page * 8 && nr < nr_page; i++) {
-		pfn = pgdat->node_start_pfn +
-			node_random_gen_random_max(pgdat->node_spanned_pages);
-		if (!pfn_valid(pfn))
-			continue;
-		page = pfn_to_page(pfn);
+		page = node_random_gen_page(pgdat, pages_prefetch);
 		/* TODO: support huge page and THP */
 		if (PageTransCompound(page) || !PageLRU(page) ||
 		    PageHuge(page))
