@@ -492,6 +492,18 @@ static __init int setup_disable_pku(char *arg)
 __setup("nopku", setup_disable_pku);
 #endif /* CONFIG_X86_64 */
 
+#ifdef CONFIG_ARCH_HAS_SUPERVISOR_PKEYS
+static __always_inline void setup_pks(struct cpuinfo_x86 *c)
+{
+	if (!cpu_feature_enabled(X86_FEATURE_PKS))
+		return;
+
+	cr4_set_bits(X86_CR4_PKS);
+}
+#else
+static __always_inline void setup_pks(struct cpuinfo_x86 *c) { }
+#endif /* CONFIG_ARCH_HAS_SUPERVISOR_PKEYS */
+
 /*
  * Some CPU features depend on higher CPUID levels, which may not always
  * be available due to CPUID level capping or broken virtualization
@@ -1521,6 +1533,7 @@ static void identify_cpu(struct cpuinfo_x86 *c)
 
 	x86_init_rdrand(c);
 	setup_pku(c);
+	setup_pks(c);
 
 	/*
 	 * Clear/Set all flags overridden by options, need do it
