@@ -471,6 +471,14 @@ static __always_inline void setup_pku(struct cpuinfo_x86 *c)
 	set_cpu_cap(c, X86_FEATURE_OSPKE);
 }
 
+static __always_inline void setup_pks(struct cpuinfo_x86 *c)
+{
+	if (!cpu_feature_enabled(X86_FEATURE_PKS))
+		return;
+
+	cr4_set_bits(X86_CR4_PKS);
+}
+
 #ifdef CONFIG_X86_INTEL_MEMORY_PROTECTION_KEYS
 static __init int setup_disable_pku(char *arg)
 {
@@ -1521,6 +1529,7 @@ static void identify_cpu(struct cpuinfo_x86 *c)
 
 	x86_init_rdrand(c);
 	setup_pku(c);
+	setup_pks(c);
 
 	/*
 	 * Clear/Set all flags overridden by options, need do it
