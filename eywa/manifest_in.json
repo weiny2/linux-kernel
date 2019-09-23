@@ -3004,6 +3004,41 @@
             ],
             "status": "intel confidential",
             "stuck_at_ref": ""
+        },
+        {
+            "branch": "rar",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "CONFIG_X86_INTEL_RAR",
+                    "value": "y"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Yu-cheng Yu",
+                    "email": "yu-cheng.yu@intel.com"
+                }
+            ],
+            "description": "Intel RAR patches",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Ido  Ouziel",
+                    "email": "ido.ouziel@intel.com"
+                }
+            ],
+            "jira": "NEXT-1590",
+            "name": "rar",
+            "repourl": "ssh://git-amr-1.devtools.intel.com:29418/linux_yyu-rar",
+            "sdl_contact": [
+                {
+                    "name": "Yu-cheng Yu",
+                    "email": "yu-cheng.yu@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": ""
         }
     ]
 }
