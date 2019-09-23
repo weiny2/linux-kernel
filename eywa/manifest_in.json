@@ -2331,7 +2331,7 @@
                 }
             ],
             "description": "Intel Data Stream Accelerator enabling",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Rajesh Pamujula",
