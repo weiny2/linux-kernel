@@ -13,7 +13,7 @@
 /*
  * Defines x86 CPU feature bits
  */
-#define NCAPINTS			19	   /* N 32-bit words worth of info */
+#define NCAPINTS			20	   /* N 32-bit words worth of info */
 #define NBUGINTS			1	   /* N 32-bit bug flags */
 
 /*
@@ -378,19 +378,26 @@
 #define X86_FEATURE_SERIALIZE		(18*32+14) /* SERIALIZE instruction */
 #define X86_FEATURE_TSX_LDTRK		(18*32+16) /* TSX Suspend Load Address Tracking */
 #define X86_FEATURE_PCONFIG		(18*32+18) /* Intel PCONFIG */
-<<<<<<<
+#define X86_FEATURE_AVX512_FP16		(18*32+23) /* AVX-512 FP16 */
 #define X86_FEATURE_AMX_INT8		(18*32+22) /* Intel AMX INT8 Support */
 #define X86_FEATURE_AMX_TILE		(18*32+24) /* Intel AMX TILE (two dimensional registers) Support */
 #define X86_FEATURE_AMX_BF16		(18*32+25) /* Intel AMX BF16 Support */
-=======
-#define X86_FEATURE_AVX512_FP16		(18*32+23) /* AVX-512 FP16 */
->>>>>>>
 #define X86_FEATURE_SPEC_CTRL		(18*32+26) /* "" Speculation Control (IBRS + IBPB) */
 #define X86_FEATURE_INTEL_STIBP		(18*32+27) /* "" Single Thread Indirect Branch Predictors */
 #define X86_FEATURE_FLUSH_L1D		(18*32+28) /* Flush L1D cache */
 #define X86_FEATURE_ARCH_CAPABILITIES	(18*32+29) /* IA32_ARCH_CAPABILITIES MSR (Intel) */
+<<<<<<<
+#define X86_FEATURE_CORE_CAPABILITY	(18*32+30) /* "" IA32_CORE_CAPABILITY MSR (Intel) */
+=======
 #define X86_FEATURE_CORE_CAPABILITY	(18*32+30) /* "" IA32_CORE_CAPABILITY MSR */
+>>>>>>>
 #define X86_FEATURE_SPEC_CTRL_SSBD	(18*32+31) /* "" Speculative Store Bypass Disable */
+
+/*
+ * Extended auxiliary flags: Linux defined - For features scattered in various
+ * CPUID levels and sub-leaves like CPUID level 7 and sub-leaf 1, etc., word 19.
+ */
+#define X86_FEATURE_RAR			(19*32+ 1) /* Intel Remote Action Request */
 
 /*
  * BUG word(s)
