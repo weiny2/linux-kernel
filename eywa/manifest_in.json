@@ -2129,7 +2129,7 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "3be8f1f4a6f6f34f8bb37a876a1d73402468ccd7"
         },
         {
             "branch": "svos-next-pull-5.3",
