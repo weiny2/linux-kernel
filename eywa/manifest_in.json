@@ -144,7 +144,7 @@
                 }
             ],
             "description": "TPM code",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [],
             "jira": "NEXT-1504",
             "name": "tpm",
