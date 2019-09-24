@@ -3021,7 +3021,7 @@
                 }
             ],
             "description": "Intel RAR patches",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Ido  Ouziel",
