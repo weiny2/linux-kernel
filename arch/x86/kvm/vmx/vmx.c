@@ -6836,6 +6836,12 @@ static void vmx_vcpu_run(struct kvm_vcpu *vcpu)
 		vcpu->arch.apic->lapic_timer.timer_advance_ns)
 		kvm_wait_lapic_expire(vcpu);
 
+	if (cpu_has_vmx_pasid_trans()) {
+		rdmsrl(MSR_IA32_PASID, vmx->host_pasid);
+		if (vmx->host_pasid != vcpu->arch.ia32_pasid)
+			wrmsrl(MSR_IA32_PASID, vcpu->arch.ia32_pasid);
+	}
+
 	/*
 	 * If this vCPU has touched SPEC_CTRL, restore the guest's value if
 	 * it's non-zero. Since vmentry is serialising on affected CPUs, there
@@ -6857,6 +6863,12 @@ static void vmx_vcpu_run(struct kvm_vcpu *vcpu)
 				   vmx->loaded_vmcs->launched);
 
 	vcpu->arch.cr2 = read_cr2();
+
+	if (cpu_has_vmx_pasid_trans()) {
+		rdmsrl(MSR_IA32_PASID, vcpu->arch.ia32_pasid);
+		if (vcpu->arch.ia32_pasid != vmx->host_pasid)
+			wrmsrl(MSR_IA32_PASID, vmx->host_pasid);
+	}
 
 	/*
 	 * We do not use IBRS in the kernel. If this vCPU has used the
@@ -7027,6 +7039,8 @@ static int vmx_create_vcpu(struct kvm_vcpu *vcpu)
 		vmx_disable_intercept_for_msr(msr_bitmap, MSR_CORE_C6_RESIDENCY, MSR_TYPE_R);
 		vmx_disable_intercept_for_msr(msr_bitmap, MSR_CORE_C7_RESIDENCY, MSR_TYPE_R);
 	}
+	if (cpu_has_vmx_pasid_trans())
+		vmx_disable_intercept_for_msr(msr_bitmap, MSR_IA32_PASID, MSR_TYPE_RW);
 	vmx->msr_bitmap_mode = 0;
 
 	vmx->loaded_vmcs = &vmx->vmcs01;
