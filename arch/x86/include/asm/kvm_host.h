@@ -822,6 +822,8 @@ struct kvm_vcpu_arch {
 
 	/* AMD MSRC001_0015 Hardware Configuration */
 	u64 msr_hwcr;
+
+	u64 ia32_pasid;
 };
 
 struct kvm_lpage_info {

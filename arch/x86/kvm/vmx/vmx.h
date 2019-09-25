@@ -300,6 +300,8 @@ struct vcpu_vmx {
 	u64 ept_pointer;
 
 	struct pt_desc pt_desc;
+
+	u64 host_pasid;
 };
 
 enum ept_pointers_status {
