@@ -2807,7 +2807,7 @@ int kvm_set_msr_common(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 		 * RDMSR/WRMSR rather than XSAVES/XRSTORS to save/restore PT
 		 * MSRs.
 		 */
-		if (data != 0)
+		if (data & ~vcpu->arch.guest_supported_xss)
 			return 1;
 		vcpu->arch.ia32_xss = data;
 		break;
