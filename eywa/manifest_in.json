@@ -1,7 +1,7 @@
 {
     "metadata": {
-        "kernel_cycle": "v5.3",
-        "jira_epic": "NEXT-1493"
+        "kernel_cycle": "v5.4",
+        "jira_epic": "NEXT-1586"
     },
     "master_branch": {
         "branch": "master",
