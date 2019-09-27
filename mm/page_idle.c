@@ -242,7 +242,7 @@ static int __init page_idle_init(void)
 subsys_initcall(page_idle_init);
 
 #define NODE_RANDOM_CANDIDATE_MULTIPLE		8
-#define NODE_RANDOM_PREFETCH_NUM		4
+#define NODE_RANDOM_PREFETCH_NUM		8
 
 struct random_migrate_work_item {
 	int nr;
@@ -348,27 +348,38 @@ static void node_random_gen_page_init(struct pglist_data *pgdat,
 static struct page *node_random_gen_page(struct pglist_data *pgdat,
 					 struct page* pages[])
 {
+	struct page *page;
+
 	memmove(pages, pages + 1,
 		sizeof(pages[0]) * (NODE_RANDOM_PREFETCH_NUM - 1));
 	pages[NODE_RANDOM_PREFETCH_NUM - 1] =
 		node_random_gen_random_page(pgdat);
 
+	page = pages[NODE_RANDOM_PREFETCH_NUM/2];
+	if (!PagePoisoned(page) && PageCompound(page)) {
+		page = compound_head(page);
+		prefetch(page);
+		pages[NODE_RANDOM_PREFETCH_NUM/2] = page;
+	}
+
 	return pages[0];
 }
 
-static int node_random_select_pages(struct pglist_data *pgdat, int nr_page,
+static int node_random_select_pages(struct pglist_data *pgdat, int target_nr_page,
 				    struct xarray *pages, bool put)
 {
-	int i, nr = 0;
+	int i, nr = 0, nr_page = 0;
 	struct page *page, *pages_prefetch[NODE_RANDOM_PREFETCH_NUM];
 	XA_STATE(xas, pages, 0);
 
 	node_random_gen_page_init(pgdat, pages_prefetch);
 	/* Stop when selected target number of pages or tried enough times */
-	for (i = 0; i < nr_page * 8 && nr < nr_page; i++) {
+	for (i = 0;
+	     i < target_nr_page * 8 && nr_page < target_nr_page;
+	     i++) {
 		page = node_random_gen_page(pgdat, pages_prefetch);
-		/* TODO: support huge page and THP */
-		if (PageTransCompound(page) || !PageLRU(page) ||
+		/* TODO: Support hugetlbfs */
+		if (PagePoisoned(page) || !PageLRU(page) ||
 		    PageHuge(page))
 			continue;
 		/* Nodes PFN range may overlap */
@@ -381,8 +392,7 @@ static int node_random_select_pages(struct pglist_data *pgdat, int nr_page,
 		 * prevent compiler from reordering.
 		 */
 		barrier();
-		if (PageTransCompound(page) || !PageLRU(page) ||
-		    PageHuge(page)) {
+		if (!PageLRU(page) || PageHuge(page)) {
 			put_page(page);
 			continue;
 		}
@@ -392,6 +402,7 @@ static int node_random_select_pages(struct pglist_data *pgdat, int nr_page,
 
 		node_random_xas_add(&xas, page);
 		nr++;
+		nr_page += hpage_nr_pages(page);
 
 		if (put)
 			put_page(page);
@@ -439,24 +450,24 @@ static void node_random_promote_select(struct pglist_data *pgdat,
 	rp_state->when_select = now + rp_state->period;
 }
 
-static int node_random_keep_pages(struct xarray *pages, int nr, int target_nr,
+static int node_random_keep_pages(struct xarray *pages, int nr,
+				  int target_nr_page, int *nrk_page_out,
 				  bool idle)
 {
-	int i, nrk = 0;
+	int i, nrk = 0, nrk_page = 0;
 	struct page *page;
 	XA_STATE(xas, pages, 0);
 	XA_STATE(xask, pages, 0);
 
-	for (i = 0; i < nr && nrk < target_nr * 2; i++) {
+	for (i = 0; i < nr && nrk_page < target_nr_page * 2; i++) {
 		rcu_read_lock();
 		page = xas_load(&xas);
 		rcu_read_unlock();
-		if (PageTransCompound(page) || !PageLRU(page) ||
+		if (PagePoisoned(page) || !PageLRU(page) ||
 		    PageHuge(page) || !get_page_unless_zero(page))
 			goto next;
 		barrier();
-		if (PageTransCompound(page) || PageHuge(page) ||
-		    !PageLRU(page)) {
+		if (!PageLRU(page) || PageHuge(page)) {
 			put_page(page);
 			goto next;
 		}
@@ -468,26 +479,29 @@ static int node_random_keep_pages(struct xarray *pages, int nr, int target_nr,
 		}
 		node_random_xas_add(&xask, page);
 		nrk++;
+		nrk_page += hpage_nr_pages(page);
 next:
 		rcu_read_lock();
 		xas_next(&xas);
 		rcu_read_unlock();
 	}
 
+	*nrk_page_out = nrk_page;
 	return nrk;
 }
 
 static void node_random_migrate(struct xarray *pages, int nr, int limit,
 				int target_nid)
 {
-	int i;
+	int i, nr_page = 0;
 	struct page *page;
 	XA_STATE(xas, pages, 0);
 
 	rcu_read_lock();
-	for (i = 0; i < nr && i < limit; i++) {
+	for (i = 0; i < nr && nr_page < limit; i++) {
 		page = xas_load(&xas);
 		rcu_read_unlock();
+		nr_page += hpage_nr_pages(page);
 		migrate_misplaced_page(page, NULL, target_nid);
 		rcu_read_lock();
 		xas_next(&xas);
@@ -509,16 +523,17 @@ static void node_random_promote_check(struct pglist_data *pgdat,
 				      struct random_migrate_state *rp_state,
 				      struct random_migrate_work_item *item)
 {
-	int nrk, tnid, threshold;
-	int target_nr = rp_state->nr_page;
+	int nrk, nrk_page, tnid, threshold;
+	int target_nr_page = rp_state->nr_page;
 
-	nrk = node_random_keep_pages(&item->pages, item->nr, target_nr, false);
+	nrk = node_random_keep_pages(&item->pages, item->nr, target_nr_page,
+				     &nrk_page, false);
 
 	threshold = item->threshold;
-	if (nrk > target_nr * 11 / 10) {
+	if (nrk_page > target_nr_page * 11 / 10) {
 		threshold = min(threshold * 9 / 10, threshold - 1);
 		threshold = max(threshold, 1);
-	} else if (nrk < target_nr * 9 / 10) {
+	} else if (nrk_page < target_nr_page * 9 / 10) {
 		threshold = max(threshold * 11 / 10, threshold + 1);
 		threshold = min(threshold, random_migrate_threshold_max(rp_state));
 	}
@@ -527,7 +542,7 @@ static void node_random_promote_check(struct pglist_data *pgdat,
 	tnid = next_promotion_node(pgdat->node_id);
 	if (tnid == -1)
 		return;
-	node_random_migrate(&item->pages, nrk, target_nr, tnid);
+	node_random_migrate(&item->pages, nrk, target_nr_page, tnid);
 }
 
 static int random_migrate_init(struct pglist_data *pgdat,
@@ -589,7 +604,7 @@ int node_random_migrate_pages(struct pglist_data *pgdat,
 	item = rm_state->work_items;
 	nr = node_random_select_pages(pgdat, rm_state->nr_page,
 				      &item->pages, false);
-	node_random_migrate(&item->pages, nr, nr, target_nid);
+	node_random_migrate(&item->pages, nr, rm_state->nr_page, target_nid);
 
 	random_migrate_destroy(rm_state);
 
@@ -732,24 +747,25 @@ static void node_random_demote_check(struct pglist_data *pgdat,
 				     struct random_migrate_state *rd_state,
 				     struct random_migrate_work_item *item)
 {
-	int nrk, tnid, threshold, tpthreshold;
-	int target_nr = rd_state->nr_page;
+	int nrk, nrk_page, tnid, threshold, tpthreshold;
+	int target_nr_page = rd_state->nr_page;
 	bool tpenabled;
 	struct pglist_data *tpgdat;
 
 	if (!item->nr)
 		return;
 
-	nrk = node_random_keep_pages(&item->pages, item->nr, target_nr, true);
+	nrk = node_random_keep_pages(&item->pages, item->nr, target_nr_page,
+				     &nrk_page, true);
 
 	tnid = next_migration_node(pgdat->node_id);
 	if (tnid == -1)
 		return;
 	threshold = item->threshold;
-	if (nrk > target_nr * 11 / 10) {
+	if (nrk_page > target_nr_page * 11 / 10) {
 		threshold = max(threshold * 11 / 10, threshold + 1);
 		threshold = min(threshold, random_migrate_threshold_max(rd_state));
-	} else if (nrk < target_nr * 9 / 10) {
+	} else if (nrk_page < target_nr_page * 9 / 10) {
 		tpgdat = NODE_DATA(tnid);
 		tpenabled = node_random_enabled(&tpgdat->random_promote_state);
 		tpthreshold = tpgdat->random_promote_state.threshold;
@@ -762,7 +778,7 @@ static void node_random_demote_check(struct pglist_data *pgdat,
 	}
 	rd_state->threshold = threshold;
 
-	node_random_migrate(&item->pages, nrk, target_nr, tnid);
+	node_random_migrate(&item->pages, nrk, target_nr_page, tnid);
 }
 
 void node_random_demote_work(struct work_struct *work)

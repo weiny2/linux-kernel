@@ -1978,16 +1978,24 @@ static bool migrate_balanced_pgdat(struct pglist_data *pgdat,
 }
 
 static struct page *alloc_misplaced_dst_page(struct page *page,
-					   unsigned long data)
+					     unsigned long nid)
 {
-	int nid = (int) data;
 	struct page *newpage;
 
-	newpage = __alloc_pages_node(nid,
-					 (GFP_HIGHUSER_MOVABLE |
-					  __GFP_THISNODE | __GFP_NOMEMALLOC |
-					  __GFP_NORETRY | __GFP_NOWARN) &
-					 ~__GFP_RECLAIM, 0);
+	if (PageTransHuge(page)) {
+		newpage = alloc_pages_node(
+			nid,
+			(GFP_TRANSHUGE | __GFP_THISNODE | __GFP_NOMEMALLOC |
+			 __GFP_NORETRY | __GFP_NOWARN) & ~__GFP_RECLAIM,
+			HPAGE_PMD_ORDER);
+		if (newpage)
+			prep_transhuge_page(newpage);
+	} else
+		newpage = __alloc_pages_node(
+			nid,
+			(GFP_HIGHUSER_MOVABLE | __GFP_THISNODE |
+			 __GFP_NOMEMALLOC | __GFP_NORETRY | __GFP_NOWARN) &
+			~__GFP_RECLAIM, 0);
 
 	return newpage;
 }
