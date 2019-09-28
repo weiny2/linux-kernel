@@ -185,6 +185,11 @@ void *memremap_pages(struct dev_pagemap *pgmap, int nid)
 	int error, is_ram;
 	bool need_devmap_managed = true;
 
+	error = check_hotplug_memory_addressable(res->start,
+						 resource_size(res));
+	if (error)
+		return ERR_PTR(error);
+
 	switch (pgmap->type) {
 	case MEMORY_DEVICE_PRIVATE:
 		if (!IS_ENABLED(CONFIG_DEVICE_PRIVATE)) {
