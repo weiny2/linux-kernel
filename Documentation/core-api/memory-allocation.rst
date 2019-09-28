@@ -99,8 +99,8 @@ configuration, but it is a good practice to use `kmalloc` for objects
 smaller than page size.
 
 The address of a chunk allocated with `kmalloc` is aligned to at least
-ARCH_KMALLOC_MINALIGN bytes. For sizes of power of two bytes, the
-alignment is also guaranteed to be at least to the respective size.
+ARCH_KMALLOC_MINALIGN bytes.  For sizes which are a power of two, the
+alignment is also guaranteed to be at least the respective size.
 
 For large allocations you can use :c:func:`vmalloc` and
 :c:func:`vzalloc`, or directly request pages from the page
