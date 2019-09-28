@@ -1023,6 +1023,17 @@ int try_online_node(int nid)
 	return ret;
 }
 
+int check_hotplug_memory_addressable(u64 start, u64 size)
+{
+#ifdef MAX_PHYSMEM_BITS
+	if ((start + size - 1) >> MAX_PHYSMEM_BITS)
+		return -E2BIG;
+#endif
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(check_hotplug_memory_addressable);
+
 static int check_hotplug_memory_range(u64 start, u64 size)
 {
 	/* memory range must be block size aligned */
@@ -1033,7 +1044,7 @@ static int check_hotplug_memory_range(u64 start, u64 size)
 		return -EINVAL;
 	}
 
-	return 0;
+	return check_hotplug_memory_addressable(start, size);
 }
 
 static int online_memory_block(struct memory_block *mem, void *arg)
