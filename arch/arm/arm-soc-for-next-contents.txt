@@ -1,0 +1,19 @@
+arm/soc
+
+arm/dt
+
+arm/drivers
+
+arm/defconfig
+
+arm/late
+
+arm/fixes
+	patch
+		ARM: aspeed: ast2500 is ARMv6K
+	<no branch> (61423712dbb86e02af4aa5de65b9041493c92cac)
+		git://git.kernel.org/pub/scm/linux/kernel/git/sudeep.holla/linux tags/scmi-fixes-5.4
+		contains drivers/scmi
+	<no branch> (a4c8723a162e6244fb01944fbf446750575dba59)
+		git://git.kernel.org/pub/scm/linux/kernel/git/tmlind/linux-omap tags/fixes-5.4-merge-window
+
