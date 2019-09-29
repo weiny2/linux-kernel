@@ -551,8 +551,10 @@ void inc_hmem_state(enum migrate_hmem_reason hr, struct page *src, struct page *
 		return;
 	if (hr == MR_HMEM_UNKNOWN)
 		return;
-	inc_zone_page_state(src, zone_stat_src);
-	inc_zone_page_state(dst, zone_stat_dst);
+	mod_zone_page_state(page_zone(src), zone_stat_src,
+			    hpage_nr_pages(src));
+	mod_zone_page_state(page_zone(dst), zone_stat_dst,
+			    hpage_nr_pages(dst));
 }
 EXPORT_SYMBOL(inc_hmem_state);
 
