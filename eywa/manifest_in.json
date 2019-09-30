@@ -72,7 +72,7 @@
             "description": "Len Brown's patches",
             "enabled": true,
             "ip_owner": [],
-            "jira": "NEXT-1497",
+            "jira": "NEXT-1596",
             "name": "len-x86",
             "repourl": "git://linux-os.sc.intel.com/~lenb/linux",
             "sdl_contact": [
@@ -97,7 +97,7 @@
             "description": "NEXT PM tree",
             "enabled": true,
             "ip_owner": [],
-            "jira": "NEXT-1503",
+            "jira": "NEXT-1602",
             "name": "pm-testing",
             "repourl": "git://git.kernel.org/pub/scm/linux/kernel/git/rafael/linux-pm.git",
             "sdl_contact": [],
@@ -144,9 +144,9 @@
                 }
             ],
             "description": "TPM code",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [],
-            "jira": "NEXT-1504",
+            "jira": "NEXT-1603",
             "name": "tpm",
             "repourl": "git://git.infradead.org/users/jjs/linux-tpmdd.git",
             "sdl_contact": [],
@@ -175,7 +175,7 @@
             "description": "SGX code",
             "enabled": true,
             "ip_owner": [],
-            "jira": "NEXT-1502",
+            "jira": "NEXT-1601",
             "name": "SGX",
             "repourl": "git://github.com/jsakkine-intel/linux-sgx.git",
             "sdl_contact": [],
@@ -213,7 +213,7 @@
                     "email": "rodrigo.vivi@intel.com"
                 }
             ],
-            "jira": "NEXT-1495",
+            "jira": "NEXT-1594",
             "name": "drm",
             "repourl": "ssh://git-amr-1.devtools.intel.com:29418/otc_gen_graphics-drm-intel.git",
             "sdl_contact": [
@@ -227,7 +227,7 @@
         },
         {
             "branch": "split_lock",
-            "branch_type": "expiring",
+            "branch_type": "internal nonexpiring",
             "config_options": [],
             "contributor": [
                 {
@@ -243,7 +243,7 @@
                     "email": "ravi.v.shankar@intel.com"
                 }
             ],
-            "jira": "NEXT-1574",
+            "jira": "NEXT-1595",
             "name": "split_lock",
             "repourl": "ssh://git-amr-4.devtools.intel.com:29418/enabling_cldemote_in_linux_kerne-linux_git",
             "sdl_contact": [
@@ -273,7 +273,7 @@
                     "email": "jason.b.akers@intel.com"
                 }
             ],
-            "jira": "NEXT-1494",
+            "jira": "NEXT-1593",
             "name": "nvme",
             "repourl": "ssh://git-gar-1.devtools.intel.com:29418/otc_nvme_linux-kernel",
             "sdl_contact": [],
@@ -352,7 +352,7 @@
                 }
             ],
             "description": "MMC Subsystem and SCS (eMMC/SD card/SDIO/UFS) driver enabling",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Rajesh Bhaskar",
@@ -415,7 +415,7 @@
                 }
             ],
             "description": "ICX NTB intel_ntb_hw driver",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Rajesh Pamujula",
@@ -502,7 +502,7 @@
                 }
             ],
             "description": "CSE/CSME MEI driver and MEI client drivers",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "William A. Stevens",
@@ -549,7 +549,7 @@
                 }
             ],
             "description": "Intel Integrated Sensor Hub enabling",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Guangyu Ren",
@@ -583,7 +583,7 @@
                 }
             ],
             "description": "intel_idle and turbostat enabling for Ice Lake and Cannon Lake",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Cecilia Yao",
@@ -646,7 +646,7 @@
                 }
             ],
             "description": "USB host support and fixes",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Abdul Rahman Ismail",
@@ -793,7 +793,7 @@
                 }
             ],
             "description": "LPSS/SMBus/GPIO/SPI-NOR/PCI/Thunderbolt driver enabling",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Rajesh Bhaskar",
@@ -839,7 +839,7 @@
                 }
             ],
             "description": "Linux perf PMU support for Cannonlake, Icelake, Tigerlake and Tremont",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Beeman Strong",
@@ -877,7 +877,7 @@
                 }
             ],
             "description": "Enable out of tree powertop",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Nivedita Swaminathan",
@@ -912,7 +912,7 @@
                 }
             ],
             "description": "Support for AES key hiding from memory during encryption and decryption process",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Shanbhogue Vedvyas",
@@ -999,7 +999,7 @@
                 }
             ],
             "description": "otc_usb gadget - USB/ADC/TGPIO/PWM/QEP/MCAN",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Abdul Rahman Ismail",
@@ -1114,7 +1114,7 @@
                 }
             ],
             "description": "RPMB (CSE) support and SPD (storage proxy driver)",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "William Stevens",
@@ -1157,7 +1157,7 @@
                 }
             ],
             "description": "Linux EDAC support for Icelake-SP/Icelake-D server",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Luc Thuy",
@@ -1191,7 +1191,7 @@
                 }
             ],
             "description": "TGL, EHL PMC core driver changes and new AVX512 cpuid support",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Mark Charney",
@@ -1226,7 +1226,7 @@
                 }
             ],
             "description": "Enable Ethernet TSN driver for SNPS QOS",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Kasichainula, Kishore",
@@ -1305,7 +1305,7 @@
                 }
             ],
             "description": "Contains support for Ice Lake and Tiger Lake and MIPI SyS-T protocol support",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Marcus Winston",
@@ -1407,7 +1407,7 @@
                 }
             ],
             "description": "IOMMU scalable mode",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Baolu Lu",
@@ -1481,7 +1481,7 @@
                 }
             ],
             "description": "Type-C Support",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Vijay Kadgi",
@@ -1516,7 +1516,7 @@
                 }
             ],
             "description": "intel_rapl support for Icelake server, Cannonlake desktop Icelake desktop, ElkhartLake and Tigerlake mobile",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Evelyn Fields",
@@ -1551,7 +1551,7 @@
                 }
             ],
             "description": "Cache Pseudo-Locking in Intel Cache Allocation Technology (CAT)",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Kuo-Lang Tseng",
@@ -1682,7 +1682,7 @@
                 }
             ],
             "description": "IPU driver 19WW29 release to intel-next",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Cao Bingbu",
@@ -1753,7 +1753,7 @@
                 }
             ],
             "description": "SoCWatch and SEP drivers for both native and ACRN hypervisor",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Gautam Upadhyaya",
@@ -1830,7 +1830,7 @@
                 }
             ],
             "description": "Audio solution on KeemBay Platform",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Jee Heng Sia",
@@ -1865,7 +1865,7 @@
                 }
             ],
             "description": "Interrupt Message Store",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Megha Dey",
@@ -1904,7 +1904,7 @@
                 }
             ],
             "description": "Intel Gaussian & Neural Accelerator driver",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Rafal Krolikowski",
@@ -1939,7 +1939,7 @@
                 }
             ],
             "description": "CBC (Carrier Board Communication) line discipline kernel module enablement",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Ryan Tabrah",
@@ -1978,7 +1978,7 @@
                 }
             ],
             "description": "Intel PCI driver related fixes",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Ashok Raj",
@@ -2008,7 +2008,7 @@
                 }
             ],
             "description": "GFX patch to load DMC firmware",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Matthew Attwood",
@@ -2047,7 +2047,7 @@
                 }
             ],
             "description": "Custom intel-next logo on bootup",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Kyle Pelton",
@@ -2130,7 +2130,7 @@
                 }
             ],
             "description": "Add Audio SOF drivers, included embargoed TGL and JSL support",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Michal Grodzicki",
@@ -2160,7 +2160,7 @@
                 }
             ],
             "description": "Handle PASID in svm binding/unbinding and #GP",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Ravi V. Shankar",
@@ -2199,7 +2199,7 @@
                 }
             ],
             "description": "SVOS Kernel/Driver",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Thomas Edward Stonecypher",
@@ -2234,7 +2234,7 @@
                 }
             ],
             "description": "Intel Thermal",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Jim Hermerding",
@@ -2269,7 +2269,7 @@
                 }
             ],
             "description": "Speed Select Technologies (SST)",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Stanley Chen",
@@ -2320,7 +2320,7 @@
                 }
             ],
             "description": "Trusty driver is responsible for IPC communication between normal world OS(Linux) and Trusty OS",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Kai Wang",
@@ -2379,7 +2379,7 @@
                 }
             ],
             "description": "Intel Data Stream Accelerator enabling",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Rajesh Pamujula",
@@ -2414,7 +2414,7 @@
                 }
             ],
             "description": "Keystore driver enabling",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Kai Wang",
@@ -2461,7 +2461,7 @@
                 }
             ],
             "description": "PCIe VPU drivers for IOTG Keem Bay Xlink",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Seng Kai Tan",
@@ -2491,7 +2491,7 @@
                 }
             ],
             "description": "Add kernel module into intel-Next for Keembay SOC project",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Yu Xu",
@@ -2521,7 +2521,7 @@
                 }
             ],
             "description": "dvanced Matrix Extension",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Bob Valentine",
@@ -2551,7 +2551,7 @@
                 }
             ],
             "description": "Fix up branch for DSA and CoE audio branch Makefiles",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Kyle Pelton",
@@ -2590,7 +2590,7 @@
                 }
             ],
             "description": "Telemetry Support",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Ramamurthy Krithivas",
@@ -2620,7 +2620,7 @@
                 }
             ],
             "description": "Scalable Mode fault information",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Ashok Raj",
@@ -2675,7 +2675,7 @@
                 }
             ],
             "description": "hantro driver",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [],
             "jira": "NEXT-1568",
             "name": "hantro",
@@ -2748,7 +2748,7 @@
                 }
             ],
             "description": "This pull request introduces the boot/ota/dnt support for Android project.",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Tian  Baofeng",
@@ -2790,7 +2790,7 @@
                 }
             ],
             "description": "IOMMU vSVA changes",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Rupin H Vakharwala",
@@ -2877,7 +2877,7 @@
                 }
             ],
             "description": "ACRN/GVT-g Hypervisor to intel-next kernel",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Jason CJ Chenn",
@@ -2931,7 +2931,7 @@
                 }
             ],
             "description": "Add Custom clear linux patches required to boot clear linux",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Kyle Pelton",
@@ -2961,7 +2961,7 @@
                 }
             ],
             "description": "Updates to perf tools for Intel PT",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Beeman Strong",
@@ -3030,7 +3030,7 @@
                 }
             ],
             "description": "AMX(TMUL) lonely scheduling for intel-next",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Valentine, Bob <bob.valentine@intel.com>",
