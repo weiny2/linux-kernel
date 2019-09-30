@@ -2067,12 +2067,60 @@
             "stuck_at_ref": ""
         },
         {
-            "branch": "sof-for-next-5.3-rc6",
+            "branch": "sof-for-next-5.3",
             "branch_type": "expiring",
             "config_options": [
                 {
                     "name": "CONFIG_SND_SOC_SOF_TOPLEVEL",
-                    "value": "n"
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_SND_SOC_SOF_PCI",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_SND_SOC_SOF_ACPI",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_SND_SOC_SOF_HDA_LINK",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_SND_SOC_SOF_DEBUG",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_SND_SOC_SOF_DEBUG_VERBOSE_IPC",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_SND_SOC_SOF_DEBUG_ENABLE_DEBUGFS_CACHE",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_SND_SOC_SOF_DEBUG_ENABLE_FIRMWARE_TRACE",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_SND_SOC_SOF_INTEL_TOPLEVEL",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_SND_SOC_SOF_TIGERLAKE_SUPPORT",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_SND_SOC_SOF_ELKHARLAKE_SUPPORT",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_SND_SOC_SOF_JASPERLAKE_SUPPORT",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_SND_SOC_INTEL_TGL_RT1308_MACH",
+                    "value": "m"
                 }
             ],
             "contributor": [
@@ -2082,7 +2130,7 @@
                 }
             ],
             "description": "Add Audio SOF drivers, included embargoed TGL and JSL support",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Michal Grodzicki",
