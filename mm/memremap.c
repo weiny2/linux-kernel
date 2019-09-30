@@ -13,8 +13,6 @@
 #include <linux/xarray.h>
 
 static DEFINE_XARRAY(pgmap_array);
-#define SECTION_MASK ~((1UL << PA_SECTION_SHIFT) - 1)
-#define SECTION_SIZE (1UL << PA_SECTION_SHIFT)
 
 #ifdef CONFIG_DEV_PAGEMAP_OPS
 DEFINE_STATIC_KEY_FALSE(devmap_managed_key);
@@ -73,6 +71,26 @@ static unsigned long pfn_next(unsigned long pfn)
 	if (pfn % 1024 == 0)
 		cond_resched();
 	return pfn + 1;
+}
+
+/*
+ * This returns true if the page is reserved by ZONE_DEVICE driver.
+ */
+bool pfn_zone_device_reserved(unsigned long pfn)
+{
+	struct dev_pagemap *pgmap;
+	struct vmem_altmap *altmap;
+	bool ret = false;
+
+	pgmap = get_dev_pagemap(pfn, NULL);
+	if (!pgmap)
+		return ret;
+	altmap = pgmap_altmap(pgmap);
+	if (altmap && pfn < (altmap->base_pfn + altmap->reserve))
+		ret = true;
+	put_dev_pagemap(pgmap);
+
+	return ret;
 }
 
 #define for_each_device_pfn(pfn, map) \
@@ -166,6 +184,11 @@ void *memremap_pages(struct dev_pagemap *pgmap, int nid)
 	pgprot_t pgprot = PAGE_KERNEL;
 	int error, is_ram;
 	bool need_devmap_managed = true;
+
+	error = check_hotplug_memory_addressable(res->start,
+						 resource_size(res));
+	if (error)
+		return ERR_PTR(error);
 
 	switch (pgmap->type) {
 	case MEMORY_DEVICE_PRIVATE:

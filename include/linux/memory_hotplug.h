@@ -110,6 +110,7 @@ extern void __online_page_increment_counters(struct page *page);
 extern void __online_page_free(struct page *page);
 
 extern int try_online_node(int nid);
+int check_hotplug_memory_addressable(u64 start, u64 size);
 
 extern int arch_add_memory(int nid, u64 start, u64 size,
 			struct mhp_restrictions *restrictions);
