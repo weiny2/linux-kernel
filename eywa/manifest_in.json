@@ -2713,7 +2713,7 @@
                 }
             ],
             "description": "Control-flow Enforcement Technology (CET) provides protection againstreturn/jump-oriented programming (ROP) attacks.",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Vedvyas Shanbhogue",
