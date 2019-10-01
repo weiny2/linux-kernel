@@ -2939,14 +2939,14 @@
                 }
             ],
             "description": "Add Custom clear linux patches required to boot clear linux",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Kyle Pelton",
                     "email": "kyle.d.pelton@intel.com"
                 }
             ],
-            "jira": "NEXT-1578",
+            "jira": "NEXT-1617",
             "name": "clear_patches",
             "repourl": "ssh://git-amr-4.devtools.intel.com:29418/otc_power-kernel.git",
             "sdl_contact": [
