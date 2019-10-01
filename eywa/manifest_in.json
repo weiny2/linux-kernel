@@ -1873,14 +1873,14 @@
                 }
             ],
             "description": "Interrupt Message Store",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Megha Dey",
                     "email": "megha.dey@intel.com"
                 }
             ],
-            "jira": "NEXT-1513",
+            "jira": "NEXT-1613",
             "name": "ims",
             "repourl": "ssh://git-amr-4.devtools.intel.com:29418/otc_core_linux-linux.git",
             "sdl_contact": [
