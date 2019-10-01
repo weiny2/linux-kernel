@@ -95,7 +95,7 @@
                 }
             ],
             "description": "NEXT PM tree",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [],
             "jira": "NEXT-1602",
             "name": "pm-testing",
@@ -144,7 +144,7 @@
                 }
             ],
             "description": "TPM code",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [],
             "jira": "NEXT-1603",
             "name": "tpm",
@@ -236,7 +236,7 @@
                 }
             ],
             "description": "Enable split lock detection",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Ravi Shankar",
@@ -266,7 +266,7 @@
                 }
             ],
             "description": "Enables the NVMe driver for the Tiger Lake/ KSL-R platforms",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Jason Akers",
@@ -583,7 +583,7 @@
                 }
             ],
             "description": "intel_idle and turbostat enabling for Ice Lake and Cannon Lake",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Cecilia Yao",
@@ -877,7 +877,7 @@
                 }
             ],
             "description": "Enable out of tree powertop",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Nivedita Swaminathan",
@@ -2008,7 +2008,7 @@
                 }
             ],
             "description": "GFX patch to load DMC firmware",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Matthew Attwood",
@@ -2047,7 +2047,7 @@
                 }
             ],
             "description": "Custom intel-next logo on bootup",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Kyle Pelton",
@@ -2160,7 +2160,7 @@
                 }
             ],
             "description": "Handle PASID in svm binding/unbinding and #GP",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Ravi V. Shankar",
@@ -2931,7 +2931,7 @@
                 }
             ],
             "description": "Add Custom clear linux patches required to boot clear linux",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Kyle Pelton",
