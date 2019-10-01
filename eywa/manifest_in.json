@@ -877,14 +877,14 @@
                 }
             ],
             "description": "Enable out of tree powertop",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Nivedita Swaminathan",
                     "email": "Nivedita.Swaminathan@intel.com"
                 }
             ],
-            "jira": "NEXT-1507",
+            "jira": "NEXT-1615",
             "name": "powertop",
             "repourl": "ssh://git-amr-4.devtools.intel.com:29418/otc_power-kernel.git",
             "sdl_contact": [
@@ -2016,14 +2016,14 @@
                 }
             ],
             "description": "GFX patch to load DMC firmware",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Matthew Attwood",
                     "email": "matthew.s.atwood@intel.com"
                 }
             ],
-            "jira": "NEXT-1506",
+            "jira": "NEXT-1614",
             "name": "chrome-dmc",
             "repourl": "ssh://git-amr-4.devtools.intel.com:29418/otc_power-kernel.git",
             "sdl_contact": [
