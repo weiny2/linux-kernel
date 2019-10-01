@@ -1472,6 +1472,14 @@
                 {
                     "name": "CONFIG_USB_ROLES_INTEL_XHCI",
                     "value": "m"
+                },
+                {
+                    "name": "CONFIG_INTEL_CHT_INT33FE",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_TYPEC_CCG_HPI",
+                    "value": "m"
                 }
             ],
             "contributor": [
@@ -1481,14 +1489,14 @@
                 }
             ],
             "description": "Type-C Support",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Vijay Kadgi",
                     "email": "vijaykumar.b.kadgi@intel.com"
                 }
             ],
-            "jira": "NEXT-1553",
+            "jira": "NEXT-1610",
             "name": "usb-typec",
             "repourl": "ssh://git-amr-4.devtools.intel.com:29418/otc_usb-typec.git",
             "sdl_contact": [
