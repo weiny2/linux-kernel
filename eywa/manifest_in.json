@@ -877,7 +877,7 @@
                 }
             ],
             "description": "Enable out of tree powertop",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Nivedita Swaminathan",
@@ -2008,7 +2008,7 @@
                 }
             ],
             "description": "GFX patch to load DMC firmware",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Matthew Attwood",
@@ -2047,7 +2047,7 @@
                 }
             ],
             "description": "Custom intel-next logo on bootup",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Kyle Pelton",
@@ -2931,7 +2931,7 @@
                 }
             ],
             "description": "Add Custom clear linux patches required to boot clear linux",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Kyle Pelton",
