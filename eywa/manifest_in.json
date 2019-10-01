@@ -435,7 +435,7 @@
             "stuck_at_ref": ""
         },
         {
-            "branch": "cse-5.3",
+            "branch": "cse-5.4",
             "branch_type": "expiring",
             "config_options": [
                 {
@@ -502,14 +502,14 @@
                 }
             ],
             "description": "CSE/CSME MEI driver and MEI client drivers",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "William A. Stevens",
                     "email": "William.a.stevens@intel.com"
                 }
             ],
-            "jira": "NEXT-1520",
+            "jira": "NEXT-1618",
             "name": "mei",
             "repourl": "ssh://git-ger-8.devtools.intel.com:29418/sfip_linux-linux-mei.git",
             "sdl_contact": [
