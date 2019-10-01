@@ -241,6 +241,18 @@ static struct extra_reg intel_skl_extra_regs[] __read_mostly = {
 	EVENT_EXTRA_END
 };
 
+static struct extra_reg intel_cnl_extra_regs[] __read_mostly = {
+	INTEL_UEVENT_EXTRA_REG(0x01b7, MSR_OFFCORE_RSP_0, 0x3fffff9fffull, RSP_0),
+	INTEL_UEVENT_EXTRA_REG(0x01bb, MSR_OFFCORE_RSP_1, 0x3fffff9fffull, RSP_1),
+	INTEL_UEVENT_PEBS_LDLAT_EXTRA_REG(0x01cd),
+	/*
+	 * Note the low 8 bits eventsel code is not a continuous field, containing
+	 * some #GPing bits. These are masked out.
+	 */
+	INTEL_UEVENT_EXTRA_REG(0x01c6, MSR_PEBS_FRONTEND, 0x7fff17, FE),
+	EVENT_EXTRA_END
+};
+
 static struct event_constraint intel_icl_event_constraints[] = {
 	FIXED_EVENT_CONSTRAINT(0x00c0, 0),	/* INST_RETIRED.ANY */
 	INTEL_UEVENT_CONSTRAINT(0x1c0, 0),	/* INST_RETIRED.PREC_DIST */
@@ -4307,6 +4319,21 @@ static struct attribute *hsw_tsx_events_attrs[] = {
 	NULL
 };
 
+/* INT_MISC.ALL_RECOVERY_CYCLES */
+EVENT_ATTR_STR(topdown-recovery-bubbles, td_recovery_bubbles_cnl, "event=0xd,umask=0x3,cmask=1");
+EVENT_ATTR_STR(topdown-recovery-bubbles.scale, td_recovery_bubbles_scale_cnl, "4");
+
+static struct attribute *cnl_events_attrs[] = {
+	EVENT_PTR(td_slots_issued),
+	EVENT_PTR(td_slots_retired),
+	EVENT_PTR(td_fetch_bubbles),
+	EVENT_PTR(td_total_slots),
+	EVENT_PTR(td_total_slots_scale),
+	EVENT_PTR(td_recovery_bubbles_cnl),
+	EVENT_PTR(td_recovery_bubbles_scale_cnl),
+	NULL
+};
+
 EVENT_ATTR_STR(tx-capacity-read,  tx_capacity_read,  "event=0x54,umask=0x80");
 EVENT_ATTR_STR(tx-capacity-write, tx_capacity_write, "event=0x54,umask=0x2");
 EVENT_ATTR_STR(el-capacity-read,  el_capacity_read,  "event=0x54,umask=0x80");
@@ -5065,6 +5092,34 @@ __init int intel_pmu_init(void)
 		pr_cont("Skylake events, ");
 		name = "skylake";
 		break;
+
+	case INTEL_FAM6_CANNONLAKE_L:
+		x86_pmu.late_ack = true;
+		memcpy(hw_cache_event_ids, skl_hw_cache_event_ids, sizeof(hw_cache_event_ids));
+		memcpy(hw_cache_extra_regs, skl_hw_cache_extra_regs, sizeof(hw_cache_extra_regs));
+		hw_cache_event_ids[C(ITLB)][C(OP_READ)][C(RESULT_ACCESS)] = -1;
+		intel_pmu_lbr_init_skl();
+
+		x86_pmu.event_constraints = intel_skl_event_constraints;
+		x86_pmu.pebs_constraints = intel_cnl_pebs_event_constraints;
+		x86_pmu.extra_regs = intel_cnl_extra_regs;
+		x86_pmu.pebs_aliases = intel_pebs_aliases_skl;
+		x86_pmu.pebs_prec_dist = true;
+		/* all extra regs are per-cpu when HT is on */
+		x86_pmu.flags |= PMU_FL_HAS_RSP_1;
+		x86_pmu.flags |= PMU_FL_NO_HT_SHARING;
+
+		x86_pmu.hw_config = hsw_hw_config;
+		x86_pmu.get_event_constraints = hsw_get_event_constraints;
+		extra_skl_attr = skl_format_attr;
+		WARN_ON(!x86_pmu.format_attrs);
+		td_attr  = cnl_events_attrs;
+		mem_attr = hsw_mem_events_attrs;
+		tsx_attr = hsw_tsx_events_attrs;
+		pr_cont("Cannonlake events, ");
+		name = "cannonlake";
+		break;
+
 
 	case INTEL_FAM6_ICELAKE_X:
 	case INTEL_FAM6_ICELAKE_D:
