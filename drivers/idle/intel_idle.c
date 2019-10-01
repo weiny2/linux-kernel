@@ -1200,6 +1200,7 @@ static const struct x86_cpu_id intel_idle_ids[] __initconst = {
 	X86_MATCH_INTEL_FAM6_MODEL(ATOM_GOLDMONT_D,	&idle_cpu_dnv),
 	X86_MATCH_INTEL_FAM6_MODEL(ATOM_TREMONT_D,	&idle_cpu_dnv),
 	X86_MATCH_INTEL_FAM6_MODEL(ATOM_TREMONT,	&idle_cpu_ehl),
+	X86_MATCH_INTEL_FAM6_MODEL(ATOM_TREMONT_L,	&idle_cpu_ehl),
 	{}
 };
 
