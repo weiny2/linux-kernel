@@ -1512,6 +1512,8 @@ static const struct x86_cpu_id intel_uncore_match[] __initconst = {
 	X86_UNCORE_MODEL_MATCH(INTEL_FAM6_SKYLAKE_X,      skx_uncore_init),
 	X86_UNCORE_MODEL_MATCH(INTEL_FAM6_KABYLAKE_L,	  skl_uncore_init),
 	X86_UNCORE_MODEL_MATCH(INTEL_FAM6_KABYLAKE,	  skl_uncore_init),
+	X86_UNCORE_MODEL_MATCH(INTEL_FAM6_COMETLAKE_L,    skl_uncore_init),
+	X86_UNCORE_MODEL_MATCH(INTEL_FAM6_COMETLAKE,      skl_uncore_init),
 	X86_UNCORE_MODEL_MATCH(INTEL_FAM6_CANNONLAKE_L,   icl_uncore_init),
 	X86_UNCORE_MODEL_MATCH(INTEL_FAM6_ICELAKE_L,	  icl_uncore_init),
 	X86_UNCORE_MODEL_MATCH(INTEL_FAM6_ICELAKE_NNPI,	  icl_uncore_init),
