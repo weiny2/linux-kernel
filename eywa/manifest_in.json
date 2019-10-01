@@ -578,12 +578,12 @@
             ],
             "contributor": [
                 {
-                    "name": "Srinivas Pandruvada",
-                    "email": "srinivas.pandruvada@intel.com"
+                    "name": "Kyle Pelton",
+                    "email": "kyle.d.pelton@intel.com"
                 }
             ],
             "description": "intel_idle and turbostat enabling for Ice Lake and Cannon Lake",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Cecilia Yao",
