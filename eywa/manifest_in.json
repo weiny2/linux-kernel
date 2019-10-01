@@ -583,7 +583,7 @@
                 }
             ],
             "description": "intel_idle and turbostat enabling for Ice Lake and Cannon Lake",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Cecilia Yao",
@@ -594,7 +594,7 @@
                     "email": "kelan.silvester@intel.com"
                 }
             ],
-            "jira": "NEXT-1508",
+            "jira": "NEXT-1608",
             "name": "intel_idle",
             "repourl": "ssh://git-amr-4.devtools.intel.com:29418/otc_power-kernel.git",
             "sdl_contact": [
