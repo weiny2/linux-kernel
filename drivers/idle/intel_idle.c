@@ -1201,6 +1201,12 @@ static const struct idle_cpu idle_cpu_bxt = {
 	.disable_promotion_to_c1e = true,
 };
 
+static const struct idle_cpu idle_cpu_ehl = {
+	.state_table = bxt_cstates,
+	.disable_promotion_to_c1e = true,
+	.use_acpi = true,
+};
+
 static const struct idle_cpu idle_cpu_dnv = {
 	.state_table = dnv_cstates,
 	.disable_promotion_to_c1e = true,
@@ -1252,6 +1258,7 @@ static const struct x86_cpu_id intel_idle_ids[] __initconst = {
 	INTEL_CPU_FAM6(ATOM_GOLDMONT_PLUS,	idle_cpu_bxt),
 	INTEL_CPU_FAM6(ATOM_GOLDMONT_D,		idle_cpu_dnv),
 	INTEL_CPU_FAM6(ATOM_TREMONT_D,		idle_cpu_dnv),
+	INTEL_CPU_FAM6(ATOM_TREMONT,		idle_cpu_ehl),
 	{}
 };
 
