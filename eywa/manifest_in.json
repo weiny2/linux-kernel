@@ -839,7 +839,7 @@
                 }
             ],
             "description": "Linux perf PMU support for Cannonlake, Icelake, Tigerlake and Tremont",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Beeman Strong",
@@ -854,7 +854,7 @@
                     "email": "jeremiah.d.williamson@intel.com"
                 }
             ],
-            "jira": "NEXT-1517",
+            "jira": "NEXT-1612",
             "name": "perf",
             "repourl": "ssh://git-amr-2.devtools.intel.com:29418/kan_lkp-perf-intel-next.git",
             "sdl_contact": [
