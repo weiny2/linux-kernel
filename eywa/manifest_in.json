@@ -2277,14 +2277,14 @@
                 }
             ],
             "description": "Speed Select Technologies (SST)",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Stanley Chen",
                     "email": "stanley.chen@intel.com"
                 }
             ],
-            "jira": "NEXT-1526",
+            "jira": "NEXT-1620",
             "name": "sst",
             "repourl": "ssh://git-amr-4.devtools.intel.com:29418/otc_linux_spandruv-internal.git",
             "sdl_contact": [
