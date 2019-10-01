@@ -793,7 +793,7 @@
                 }
             ],
             "description": "LPSS/SMBus/GPIO/SPI-NOR/PCI/Thunderbolt driver enabling",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Rajesh Bhaskar",
@@ -816,7 +816,7 @@
                     "email": "reuven.rozic@intel.com"
                 }
             ],
-            "jira": "NEXT-1544",
+            "jira": "NEXT-1609",
             "name": "lpss",
             "repourl": "ssh://git-amr-4.devtools.intel.com:29418/mwesterb-linux.git",
             "sdl_contact": [
