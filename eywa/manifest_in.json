@@ -549,7 +549,7 @@
                 }
             ],
             "description": "Intel Integrated Sensor Hub enabling",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Guangyu Ren",
@@ -560,7 +560,7 @@
                     "email": "guangyu.ren@intel.com"
                 }
             ],
-            "jira": "NEXT-1525",
+            "jira": "NEXT-1621",
             "name": "ish",
             "repourl": "ssh://git-amr-4.devtools.intel.com:29418/otc_linux_spandruv-internal.git",
             "sdl_contact": [],
