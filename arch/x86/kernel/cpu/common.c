@@ -452,6 +452,9 @@ static __always_inline void setup_keylocker(struct cpuinfo_x86 *c)
 			goto disable_keylocker;
 	}
 
+	pr_info_once("x86/cpu: Activated Key Locker feature\n");
+	return;
+
 disable_keylocker:
 	clear_cpu_cap(c, X86_FEATURE_KEYLOCKER);
 	pr_info_once("x86/cpu: Deactivated Key Locker feature\n");
