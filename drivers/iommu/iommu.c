@@ -1039,6 +1039,7 @@ int iommu_register_device_fault_handler(struct device *dev,
 					void *data)
 {
 	struct dev_iommu *param = dev->iommu;
+	struct iommu_fault_handler_data *hdata;
 	int ret = 0;
 
 	if (!param)
@@ -1058,8 +1059,23 @@ int iommu_register_device_fault_handler(struct device *dev,
 		ret = -ENOMEM;
 		goto done_unlock;
 	}
+
 	param->fault_param->handler = handler;
-	param->fault_param->data = data;
+
+	hdata = kzalloc(sizeof(struct iommu_fault_handler_data), GFP_KERNEL);
+	if (!hdata) {
+		kfree(param->fault_param);
+		put_device(dev);
+		ret = -ENOMEM;
+		goto done_unlock;
+	}
+
+	INIT_LIST_HEAD(&param->fault_param->data);
+	/* Default handler data uses reserved vector 0 */
+	hdata->data = data;
+	dev_dbg(dev, "Add IOMMU default handler data %llx\n", (u64)data);
+	list_add(&hdata->list, &param->fault_param->data);
+
 	mutex_init(&param->fault_param->lock);
 	INIT_LIST_HEAD(&param->fault_param->faults);
 
@@ -1072,6 +1088,111 @@ done_unlock:
 	return ret;
 }
 EXPORT_SYMBOL_GPL(iommu_register_device_fault_handler);
+
+
+/**
+ * iommu_add_device_fault_data() - add handler specific data
+ *
+ * For devices with partitioned resources, we may need to have multiple
+ * handler data that can be identified by IOMMU driver. This function
+ * allows device drivers to add handler specific data associated with
+ * a vector. When IOMMU detects device fault and its vector, handlers
+ * can be invoked with the matching data.
+ * For page request service related to DMA request with PASID, the vector
+ * is the PASID and the data is PASID associated data such as a mediated
+ * device. Vector 0 is researved for default handler data when no per vector
+ * data is added to device handler data list.
+ *
+ * @dev: the device
+ * @vector: identifies fault reporting data
+ * @data: opaque device handler data associated with the fault
+ */
+int iommu_add_device_fault_data(struct device *dev,
+				int vector, void *data)
+{
+	struct dev_iommu *param = dev->iommu;
+	struct iommu_fault_handler_data *hdata;
+	int ret = 0;
+
+	dev_dbg(dev, "%s: vector: %d data: %llx\n", __func__, vector, (u64)data);
+	/*
+	 * Fault handler must have been registered before adding handler data.
+	 * Vector 0 is reserved for default data associated with handler.
+	 */
+	if (!param || !param->fault_param || !vector)
+		return -EINVAL;
+
+	mutex_lock(&param->lock);
+
+	/* vector must be unique, check if we have the same vector already */
+	list_for_each_entry(hdata, &param->fault_param->data, list) {
+		if (hdata->vector == vector) {
+			dev_err(dev, "IOMMU fault handler data exists for vector %d\n", vector);
+			ret = -EINVAL;
+			goto unlock;
+		}
+	}
+
+	hdata = kzalloc(sizeof(struct iommu_fault_handler_data), GFP_KERNEL);
+	if (!hdata) {
+		ret = -ENOMEM;
+		goto unlock;
+	}
+	hdata->vector = vector;
+	hdata->data = data;
+	dev_dbg(dev, "Added IOMMU fault handler data %llx for vector %d\n",
+		(u64)data, vector);
+	list_add_tail(&hdata->list, &param->fault_param->data);
+
+unlock:
+	mutex_unlock(&param->lock);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(iommu_add_device_fault_data);
+
+/**
+ * iommu_delete_device_fault_data() - delete handler specific data
+ *
+ * For devices with partitioned resources, we may need to have multiple
+ * handler data that can be identified by IOMMU driver. This function
+ * allows device drivers to add handler specific data associated with
+ * a vector. When IOMMU detects device fault and its vector, handlers
+ * can be invoked with the matching data.
+ * For page request service related to DMA request with PASID, the vector
+ * is the PASID and the data is PASID associated data such as a mediated
+ * device.
+ * @dev: the device
+ * @vector: identifies fault reporting data to be removed
+ */
+void iommu_delete_device_fault_data(struct device *dev, int vector)
+{
+	struct dev_iommu *param = dev->iommu;
+	struct iommu_fault_handler_data *hdata, *tmp;
+
+	dev_dbg(dev, "%s: vector:%d\n", __func__, vector);
+	/*
+	 * Fault handler must have been registered before adding handler data.
+	 * Vector 0 is reserved for default data associated with handler.
+	 */
+	if (!param || !param->fault_param || !vector)
+		return;
+
+	mutex_lock(&param->lock);
+
+	list_for_each_entry_safe(hdata, tmp, &param->fault_param->data, list) {
+		if (hdata->vector == vector) {
+			list_del(&hdata->list);
+			kfree(hdata);
+			dev_dbg(dev, "Deleted IOMMU fault handler data for vector %d\n", vector);
+			goto unlock;
+		}
+	}
+	dev_err(dev, "Failed to find handler data for vector %d\n", vector);
+
+unlock:
+	mutex_unlock(&param->lock);
+}
+EXPORT_SYMBOL_GPL(iommu_delete_device_fault_data);
 
 /**
  * iommu_unregister_device_fault_handler() - Unregister the device fault handler
@@ -1086,6 +1207,7 @@ int iommu_unregister_device_fault_handler(struct device *dev)
 {
 	struct dev_iommu *param = dev->iommu;
 	int ret = 0;
+	struct iommu_fault_handler_data *hdata, *tmp;
 
 	if (!param)
 		return -EINVAL;
@@ -1099,6 +1221,14 @@ int iommu_unregister_device_fault_handler(struct device *dev)
 	if (!list_empty(&param->fault_param->faults)) {
 		ret = -EBUSY;
 		goto unlock;
+
+	}
+	/* TODO: Free handler data if any */
+	list_for_each_entry_safe(hdata, tmp, &param->fault_param->data, list) {
+		dev_dbg(dev, "%s: free handler data %llx vector %d\n", __func__,
+			(u64)hdata->data, hdata->vector);
+		list_del(&hdata->list);
+		kfree(hdata);
 	}
 
 	kfree(param->fault_param);
@@ -1126,8 +1256,10 @@ int iommu_report_device_fault(struct device *dev, struct iommu_fault_event *evt)
 {
 	struct dev_iommu *param = dev->iommu;
 	struct iommu_fault_event *evt_pending = NULL;
+	struct iommu_fault_handler_data *hdata;
 	struct iommu_fault_param *fparam;
 	struct timer_list *tmr;
+	void *handler_data = NULL;
 	int ret = 0;
 	u64 exp;
 
@@ -1156,7 +1288,7 @@ int iommu_report_device_fault(struct device *dev, struct iommu_fault_event *evt)
 		mutex_lock(&fparam->lock);
 		if (list_empty(&fparam->faults)) {
 			/* First pending event, start timer */
-			tmr = &dev->iommu_param->fault_param->timer;
+			tmr = &dev->iommu->fault_param->timer;
 			WARN_ON(timer_pending(tmr));
 			mod_timer(tmr, exp);
 		}
@@ -1165,7 +1297,38 @@ int iommu_report_device_fault(struct device *dev, struct iommu_fault_event *evt)
 		mutex_unlock(&fparam->lock);
 	}
 
-	ret = fparam->handler(&evt->fault, fparam->data);
+	if (!evt->vector) {
+		hdata = list_first_entry(&fparam->data,
+					struct iommu_fault_handler_data, list);
+		handler_data = hdata->data;
+		dev_dbg(dev, "%s:default handler data %llx\n",
+			__func__, (u64)handler_data);
+	} else {
+		/* Find data for matching vector */
+		list_for_each_entry(hdata, &param->fault_param->data, list) {
+			dev_dbg(dev, "Searching handler data vector %d to match %llu\n",
+					hdata->vector, evt->vector);
+
+			if (hdata->vector == evt->vector) {
+				handler_data = hdata->data;
+				dev_dbg(dev, "IOMMU report data %llx on fault vector %llu\n",
+					(u64)handler_data, evt->vector);
+				break;
+			}
+		}
+	}
+	if (!handler_data) {
+		dev_err(dev, "No valid handler data for vector %llu\n", evt->vector);
+		if (evt_pending)
+			list_del(&evt_pending->list);
+		ret = -ENODEV;
+		goto done_unlock;
+	}
+	dev_dbg(dev, "%s: calling handler with data %llx\n",
+		__func__, (u64)handler_data);
+
+	ret = fparam->handler(&evt->fault, handler_data);
+	trace_dev_fault(dev, &evt->fault);
 	if (ret && evt_pending) {
 		mutex_lock(&fparam->lock);
 		list_del(&evt_pending->list);

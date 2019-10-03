@@ -351,19 +351,26 @@ struct iommu_fault_event {
 	struct iommu_fault fault;
 	struct list_head list;
 	u64 expire;
+	u64 vector;
+};
+
+struct iommu_fault_handler_data {
+	u32 vector;
+	void *data;
+	struct list_head list;
 };
 
 /**
  * struct iommu_fault_param - per-device IOMMU fault data
  * @handler: Callback function to handle IOMMU faults at device level
- * @data: handler private data
- * @faults: holds the pending faults which needs response
+ * @data: handler private data list
+ * @faults: holds the pending faults which needs response, e.g. page response.
  * @lock: protect pending faults list
  * @timer: track page request pending time limit
  */
 struct iommu_fault_param {
 	iommu_dev_fault_handler_t handler;
-	void *data;
+	struct list_head data;
 	struct list_head faults;
 	struct timer_list timer;
 	struct mutex lock;
@@ -516,6 +523,9 @@ extern int iommu_unregister_device_fault_handler(struct device *dev);
 
 extern int iommu_report_device_fault(struct device *dev,
 				     struct iommu_fault_event *evt);
+extern int iommu_add_device_fault_data(struct device *dev,
+				int vector, void *data);
+extern void iommu_delete_device_fault_data(struct device *dev, int vector);
 extern int iommu_page_response(struct device *dev,
 			       struct iommu_page_response *msg);
 extern int iommu_uapi_get_data_size(int type, int version);
@@ -910,6 +920,17 @@ static inline
 int iommu_report_device_fault(struct device *dev, struct iommu_fault_event *evt)
 {
 	return -ENODEV;
+}
+
+static inline
+int iommu_add_device_fault_data(struct device *dev, int vector, void *data)
+{
+	return -ENODEV;
+}
+
+static inline
+void iommu_delete_device_fault_data(struct device *dev, int vector)
+{
 }
 
 static inline int iommu_page_response(struct device *dev,
