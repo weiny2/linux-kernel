@@ -1524,14 +1524,14 @@
                 }
             ],
             "description": "intel_rapl support for Icelake server, Cannonlake desktop Icelake desktop, ElkhartLake and Tigerlake mobile",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Evelyn Fields",
                     "email": "evelyn.fields@intel.com"
                 }
             ],
-            "jira": "NEXT-1537",
+            "jira": "NEXT-1626",
             "name": "rapl",
             "repourl": "ssh://git-ccr-1.devtools.intel.com:29418/otc_linux_rui-rapl",
             "sdl_contact": [
