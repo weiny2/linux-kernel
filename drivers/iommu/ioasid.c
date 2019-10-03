@@ -142,6 +142,7 @@ int ioasid_register_allocator(struct ioasid_allocator_ops *ops)
 	struct ioasid_allocator_data *pallocator;
 	int ret = 0;
 
+	pr_debug("%s: ops %llx\n", __func__, (u64)ops);
 	spin_lock(&ioasid_allocator_lock);
 
 	ia_data = ioasid_alloc_allocator(ops);
@@ -159,6 +160,7 @@ int ioasid_register_allocator(struct ioasid_allocator_ops *ops)
 		WARN_ON(active_allocator != &default_allocator);
 		/* Use this new allocator if default is not active */
 		if (xa_empty(&active_allocator->xa)) {
+			pr_debug("%s: Use this new allocator %llx\n", __func__, (u64)ia_data);
 			rcu_assign_pointer(active_allocator, ia_data);
 			list_add_tail(&ia_data->list, &allocators_list);
 			goto out_unlock;
@@ -271,6 +273,7 @@ int ioasid_set_data(ioasid_t ioasid, void *data)
 	struct ioasid_data *ioasid_data;
 	int ret = 0;
 
+	pr_debug("%s: ops %llx\n", __func__, (u64)data);
 	spin_lock(&ioasid_allocator_lock);
 	ioasid_data = xa_load(&active_allocator->xa, ioasid);
 	if (ioasid_data)
@@ -309,6 +312,7 @@ ioasid_t ioasid_alloc(struct ioasid_set *set, ioasid_t min, ioasid_t max,
 	void *adata;
 	ioasid_t id;
 
+	pr_debug("%s: %d - %d\n", __func__, min, max);
 	data = kzalloc(sizeof(*data), GFP_ATOMIC);
 	if (!data)
 		return INVALID_IOASID;
@@ -337,12 +341,14 @@ ioasid_t ioasid_alloc(struct ioasid_set *set, ioasid_t min, ioasid_t max,
 		goto exit_free;
 	}
 	data->id = id;
+	pr_debug("%s: Got IOASID %d\n", __func__, id);
 
 	spin_unlock(&ioasid_allocator_lock);
 	return id;
 exit_free:
 	spin_unlock(&ioasid_allocator_lock);
 	kfree(data);
+	pr_debug("%s: Invalid IOASID\n", __func__);
 	return INVALID_IOASID;
 }
 EXPORT_SYMBOL_GPL(ioasid_alloc);
@@ -355,6 +361,7 @@ void ioasid_free(ioasid_t ioasid)
 {
 	struct ioasid_data *ioasid_data;
 
+	pr_debug("%s: IOASID %d\n", __func__, ioasid);
 	spin_lock(&ioasid_allocator_lock);
 	ioasid_data = xa_load(&active_allocator->xa, ioasid);
 	if (!ioasid_data) {
@@ -414,6 +421,7 @@ void *ioasid_find(struct ioasid_set *set, ioasid_t ioasid,
 	priv = rcu_dereference(ioasid_data->private);
 	if (getter && !getter(priv))
 		priv = NULL;
+	pr_debug("%s: Found IOASID %d data %llx\n", __func__, ioasid, (u64)priv);
 unlock:
 	rcu_read_unlock();
 
