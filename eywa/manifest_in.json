@@ -3106,7 +3106,7 @@
                     "email": "yu-cheng.yu@intel.com"
                 }
             ],
-            "description": "",
+            "description": "XSAVES Supervisor states",
             "enabled": true,
             "ip_owner": [
                 {
@@ -3115,7 +3115,7 @@
                 }
             ],
             "jira": "NEXT-1623",
-            "name": "XSAVES Supervisor states",
+            "name": "XSAVES",
             "repourl": "git://github.com/yyu168/linux_super",
             "sdl_contact": [
                 {
