@@ -2760,7 +2760,7 @@
             ],
             "jira": "NEXT-1606",
             "name": "cet",
-            "repourl": "git://github.com/yyu168/linux_cet",
+            "repourl": "ssh://git-amr-4.devtools.intel.com:29418/enabling_cldemote_in_linux_kerne-linux_git",
             "sdl_contact": [
                 {
                     "name": "Yu-cheng Yu",
