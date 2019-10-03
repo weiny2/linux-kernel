@@ -352,7 +352,7 @@
                 }
             ],
             "description": "MMC Subsystem and SCS (eMMC/SD card/SDIO/UFS) driver enabling",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Rajesh Bhaskar",
@@ -363,7 +363,7 @@
                     "email": "eric.thian.aun.tan@intel.com"
                 }
             ],
-            "jira": "NEXT-1510",
+            "jira": "NEXT-1625",
             "name": "mmc",
             "repourl": "ssh://git-amr-3.devtools.intel.com:29418/otc_mmc-linux",
             "sdl_contact": [
