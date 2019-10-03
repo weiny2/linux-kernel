@@ -3125,6 +3125,41 @@
             ],
             "status": "intel confidential",
             "stuck_at_ref": ""
+        },
+        {
+            "branch": "v5.4-for-tgl",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "CONFIG_VMD",
+                    "value": "y"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Jonathan Derrick ",
+                    "email": "jonathan.derrick@intel.com"
+                }
+            ],
+            "description": "VMD support for Tigerlake for 5.4",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Jonathan Derrick",
+                    "email": "jonathan.derrick@intel.com"
+                }
+            ],
+            "jira": "NEXT-1624",
+            "name": "vmd",
+            "repourl": "ssh://git-amr-10.devtools.intel.com:29418/nsgsw-for-intel-next.git",
+            "sdl_contact": [
+                {
+                    "name": "Revanth Rajashekar",
+                    "email": "revanth.rajashekar@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": ""
         }
     ]
 }
