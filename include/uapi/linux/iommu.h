@@ -178,7 +178,7 @@ struct iommu_fault {
 enum iommu_page_response_code {
 	IOMMU_PAGE_RESP_SUCCESS = 0,
 	IOMMU_PAGE_RESP_INVALID,
-	IOMMU_PAGE_RESP_FAILURE,
+	IOMMU_PAGE_RESP_FAILURE = 0xf,
 };
 
 /**
