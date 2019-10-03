@@ -354,7 +354,9 @@ int vfio_pci_iommu_dev_fault_handler(struct iommu_fault *fault, void *data)
 	int head, tail, size, ext_irq_index;
 	int ret = 0;
 
-	if (fault->type != IOMMU_FAULT_DMA_UNRECOV)
+	/* We need to send page request and relavent unrecoverable fault to userspace */
+	if (fault->type != IOMMU_FAULT_DMA_UNRECOV ||
+	    fault->type != IOMMU_FAULT_PAGE_REQ)
 		return -ENOENT;
 
 	mutex_lock(&vdev->fault_queue_lock);
