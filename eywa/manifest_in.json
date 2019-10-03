@@ -2668,6 +2668,66 @@
             "stuck_at_ref": ""
         },
         {
+            "branch": "supervisor",
+            "branch_type": "expiring",
+            "config_options": [],
+            "contributor": [
+                {
+                    "name": "Yu-cheng Yu",
+                    "email": "yu-cheng.yu@intel.com"
+                }
+            ],
+            "description": "XSAVES Supervisor states",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Yu-cheng Yu",
+                    "email": "yu-cheng.yu@intel.com"
+                }
+            ],
+            "jira": "NEXT-1623",
+            "name": "XSAVES",
+            "repourl": "git://github.com/yyu168/linux_super",
+            "sdl_contact": [
+                {
+                    "name": "Yu-cheng Yu",
+                    "email": "yu-cheng.yu@intel.com"
+                }
+            ],
+            "status": "public",
+            "stuck_at_ref": ""
+        },
+        {
+            "branch": "pasid",
+            "branch_type": "expiring",
+            "config_options": [],
+            "contributor": [
+                {
+                    "name": "Fenghua Yu",
+                    "email": "fenghua.yu@intel.com"
+                }
+            ],
+            "description": "Handle PASID in svm binding/unbinding and #GP",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Ravi V. Shankar",
+                    "email": "ravi.v.shankar@intel.com"
+                }
+            ],
+            "jira": "NEXT-1605",
+            "name": "pasid",
+            "repourl": "ssh://git-amr-4.devtools.intel.com:29418/enabling_cldemote_in_linux_kerne-linux_git.git",
+            "sdl_contact": [
+                {
+                    "name": "Ashok Raj",
+                    "email": "ashok.raj@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": ""
+        },
+        {
             "branch": "cet",
             "branch_type": "expiring",
             "config_options": [
@@ -2708,36 +2768,6 @@
                 }
             ],
             "status": "public",
-            "stuck_at_ref": ""
-        },
-        {
-            "branch": "pasid",
-            "branch_type": "expiring",
-            "config_options": [],
-            "contributor": [
-                {
-                    "name": "Fenghua Yu",
-                    "email": "fenghua.yu@intel.com"
-                }
-            ],
-            "description": "Handle PASID in svm binding/unbinding and #GP",
-            "enabled": true,
-            "ip_owner": [
-                {
-                    "name": "Ravi V. Shankar",
-                    "email": "ravi.v.shankar@intel.com"
-                }
-            ],
-            "jira": "NEXT-1605",
-            "name": "pasid",
-            "repourl": "ssh://git-amr-4.devtools.intel.com:29418/enabling_cldemote_in_linux_kerne-linux_git.git",
-            "sdl_contact": [
-                {
-                    "name": "Ashok Raj",
-                    "email": "ashok.raj@intel.com"
-                }
-            ],
-            "status": "intel confidential",
             "stuck_at_ref": ""
         },
         {
@@ -3094,36 +3124,6 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": ""
-        },
-        {
-            "branch": "supervisor",
-            "branch_type": "expiring",
-            "config_options": [],
-            "contributor": [
-                {
-                    "name": "Yu-cheng Yu",
-                    "email": "yu-cheng.yu@intel.com"
-                }
-            ],
-            "description": "XSAVES Supervisor states",
-            "enabled": true,
-            "ip_owner": [
-                {
-                    "name": "Yu-cheng Yu",
-                    "email": "yu-cheng.yu@intel.com"
-                }
-            ],
-            "jira": "NEXT-1623",
-            "name": "XSAVES",
-            "repourl": "git://github.com/yyu168/linux_super",
-            "sdl_contact": [
-                {
-                    "name": "Yu-cheng Yu",
-                    "email": "yu-cheng.yu@intel.com"
-                }
-            ],
-            "status": "public",
             "stuck_at_ref": ""
         }
     ]
