@@ -714,9 +714,16 @@ struct dmar_domain *find_domain(struct device *dev);
 extern void intel_svm_check(struct intel_iommu *iommu);
 extern int intel_svm_enable_prq(struct intel_iommu *iommu);
 extern int intel_svm_finish_prq(struct intel_iommu *iommu);
+
+extern struct intel_iommu *intel_svm_device_to_iommu(struct device *dev);
+extern struct intel_iommu *device_to_iommu(struct device *dev,
+					u8 *bus, u8 *devfn);
 extern int intel_svm_bind_gpasid(struct iommu_domain *domain,
 		struct device *dev, struct iommu_gpasid_bind_data *data);
 extern int intel_svm_unbind_gpasid(struct device *dev, int pasid);
+extern int intel_iommu_page_response(struct device *dev,
+				struct iommu_fault_event *evt,
+				struct iommu_page_response *msg);
 struct svm_dev_ops;
 
 struct intel_svm_dev {
