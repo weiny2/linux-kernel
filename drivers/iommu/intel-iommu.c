@@ -5488,28 +5488,31 @@ is_aux_domain(struct device *dev, struct iommu_domain *domain)
 }
 
 static void auxiliary_link_device(struct dmar_domain *domain,
-				  struct device *dev)
+				  struct device *dev,
+				  struct device_domain_info *info)
 {
-	struct device_domain_info *info = dev->archdata.iommu;
+	struct device_domain_info *info2 = dev->archdata.iommu;
 
 	assert_spin_locked(&device_domain_lock);
-	if (WARN_ON(!info))
+	if (WARN_ON((!info) | (!info2)))
 		return;
 
 	domain->auxd_refcnt++;
-	list_add(&domain->auxd, &info->auxiliary_domains);
+	list_add(&domain->auxd, &info2->auxiliary_domains);
+	list_add(&info->link, &domain->devices);
 }
 
 static void auxiliary_unlink_device(struct dmar_domain *domain,
-				    struct device *dev)
+				    struct device *dev,
+				    struct device_domain_info *info)
 {
-	struct device_domain_info *info = dev->archdata.iommu;
-
+	struct device_domain_info *info2 = dev->archdata.iommu;
 	assert_spin_locked(&device_domain_lock);
-	if (WARN_ON(!info))
+	if (WARN_ON((!info) | (!info2)))
 		return;
 
 	list_del(&domain->auxd);
+	list_del(&info->link);
 	domain->auxd_refcnt--;
 
 	if (!domain->auxd_refcnt && domain->default_pasid > 0)
@@ -5521,26 +5524,54 @@ static int aux_domain_add_dev(struct dmar_domain *domain,
 {
 	int ret;
 	u8 bus, devfn;
+	struct device_domain_info *info, *info2;
 	unsigned long flags;
 	struct intel_iommu *iommu;
 
 	iommu = device_to_iommu(dev, &bus, &devfn);
 	if (!iommu)
 		return -ENODEV;
+	info = dev->archdata.iommu;
+	if (!info)
+		return -ENODEV;
 
 	if (domain->default_pasid <= 0) {
 		int pasid;
 
-		/* No private data needed for the default pasid */
+		/*
+		 * Yi: FIXME: Private data needed for the default pasid
+		 * when moving IOVA over FLPT as default pasid will be
+		 * used in sva_bind_gpasid(). I've no idea why domain is
+		 * added to ioasid. It's added in a rebase patch.
+		 */
 		pasid = ioasid_alloc(NULL, PASID_MIN,
 				     pci_max_pasids(to_pci_dev(dev)) - 1,
-				     NULL);
+				     domain);
 		if (pasid == INVALID_IOASID) {
 			pr_err("Can't allocate default pasid\n");
 			return -ENODEV;
 		}
 		domain->default_pasid = pasid;
 	}
+
+	info2 = alloc_devinfo_mem();
+	if (!info2)
+		return -ENODEV;
+	info2->bus = bus;
+	info2->devfn = devfn;
+	info2->ats_supported = info->ats_supported;
+	info2->pasid_supported = info->pasid_supported;
+	info2->pri_supported = info->pri_supported;
+	info2->ats_enabled = info->ats_enabled;
+	info2->pasid_enabled = info->pasid_enabled;
+	info2->pri_enabled = info->pri_enabled;
+	info2->ats_qdep = 0;
+	info2->dev = dev;
+	info2->domain = domain;
+	info2->iommu = iommu;
+	info2->pasid_table = info->pasid_table;
+	info2->auxd_enabled = info->auxd_enabled;
+	INIT_LIST_HEAD(&info2->auxiliary_domains);
 
 	spin_lock_irqsave(&device_domain_lock, flags);
 	/*
@@ -5563,7 +5594,7 @@ static int aux_domain_add_dev(struct dmar_domain *domain,
 		goto table_failed;
 	spin_unlock(&iommu->lock);
 
-	auxiliary_link_device(domain, dev);
+	auxiliary_link_device(domain, dev, info2);
 
 	spin_unlock_irqrestore(&device_domain_lock, flags);
 
@@ -5586,15 +5617,25 @@ static void aux_domain_remove_dev(struct dmar_domain *domain,
 	struct device_domain_info *info;
 	struct intel_iommu *iommu;
 	unsigned long flags;
+	u8 bus, devfn;
 
 	if (!is_aux_domain(dev, &domain->domain))
 		return;
 
 	spin_lock_irqsave(&device_domain_lock, flags);
-	info = dev->archdata.iommu;
-	iommu = info->iommu;
 
-	auxiliary_unlink_device(domain, dev);
+	iommu = device_to_iommu(dev, &bus, &devfn);
+	if (!iommu) {
+		pr_warn("BUG: %s, no iommu found for dev: %s\n", __func__, dev_name(dev));
+		return;
+	}
+
+	info = iommu_support_dev_iotlb(domain, iommu, bus, devfn);
+	if (!info) {
+		pr_warn("BUG: %s, no info found for dev: %s\n", __func__, dev_name(dev));
+		return;
+	}
+	auxiliary_unlink_device(domain, dev, info);
 
 	spin_lock(&iommu->lock);
 	intel_pasid_tear_down_entry(iommu, dev, domain->default_pasid);
