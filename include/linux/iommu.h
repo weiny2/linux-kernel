@@ -251,6 +251,8 @@ struct iommu_iotlb_gather {
  * @sva_unbind_gpasid: unbind guest pasid and mm
  * @pgsize_bitmap: bitmap of all possible supported page sizes
  * @owner: Driver module providing these ops
+ * @sva_suspend_pasid: stop activities related to a pasid but maintain the bond
+ * @sva_resume_pasid: start activities related to a pasid
  */
 struct iommu_ops {
 	bool (*capable)(enum iommu_cap);
@@ -318,6 +320,11 @@ struct iommu_ops {
 			struct device *dev, struct iommu_gpasid_bind_data *data);
 
 	int (*sva_unbind_gpasid)(struct device *dev, int pasid);
+
+	void (*sva_suspend_pasid)(struct device *dev, int pasid);
+
+	void (*sva_resume_pasid)(struct device *dev, int pasid);
+
 
 	unsigned long pgsize_bitmap;
 	struct module *owner;
@@ -1103,6 +1110,14 @@ static inline int iommu_sva_unbind_gpasid(struct iommu_domain *domain,
 					   struct device *dev, int pasid)
 {
 	return -ENODEV;
+}
+
+static inline void sva_suspend_pasid(struct device *dev, int pasid)
+{
+}
+
+static inline void (*sva_resume_pasid)(struct device *dev, int pasid)
+{
 }
 
 #endif /* CONFIG_IOMMU_API */
