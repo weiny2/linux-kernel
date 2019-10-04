@@ -333,6 +333,8 @@ enum {
 
 #define QI_IWD_STATUS_DATA(d)	(((u64)d) << 32)
 #define QI_IWD_STATUS_WRITE	(((u64)1) << 5)
+#define QI_IWD_FENCE		(((u64)1) << 6)
+#define QI_IWD_PRQ_DRAIN	(((u64)1) << 7)
 
 #define QI_IOTLB_DID(did) 	(((u64)did) << 16)
 #define QI_IOTLB_DR(dr) 	(((u64)dr) << 7)
@@ -689,6 +691,16 @@ extern int qi_submit_sync(struct qi_desc *desc, struct intel_iommu *iommu);
 
 extern int dmar_ir_support(void);
 
+/* Option flags used to submit QI invalidation descriptors */
+#define QI_OPT_WAIT_DRAIN BIT(0) /* Wait for PRQ drain completion */
+#define QI_OPT_NO_UPDATE BIT(1) /* Queue descriptor but don't update
+				 * the tail pointer, will be used to
+				 * reduce vmexit or mmio writes for
+				 * non-critical descriptors such as
+				 * page responses.
+				 */
+extern int __qi_submit_sync(struct qi_desc *desc, struct intel_iommu *iommu,
+			int count, unsigned long options);
 void *alloc_pgtable_page(int node);
 void free_pgtable_page(void *vaddr);
 struct intel_iommu *domain_get_iommu(struct dmar_domain *domain);
