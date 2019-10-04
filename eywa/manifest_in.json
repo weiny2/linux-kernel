@@ -3107,14 +3107,14 @@
                 }
             ],
             "description": "Intel RAR patches",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Ido  Ouziel",
                     "email": "ido.ouziel@intel.com"
                 }
             ],
-            "jira": "NEXT-1590",
+            "jira": "NEXT-1627",
             "name": "rar",
             "repourl": "ssh://git-amr-1.devtools.intel.com:29418/linux_yyu-rar",
             "sdl_contact": [
