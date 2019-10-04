@@ -6032,7 +6032,8 @@ static inline bool scalable_mode_support(void)
 		}
 	}
 	rcu_read_unlock();
-
+	pr_alert("Fake SM enabled on all IOMMUs, testing only\n");
+	ret = true;
 	return ret;
 }
 
@@ -6050,6 +6051,8 @@ static inline bool iommu_pasid_support(void)
 		}
 	}
 	rcu_read_unlock();
+	pr_alert("Fake PASID enabled on all IOMMUs, testing only\n");
+	ret = true;
 
 	return ret;
 }
