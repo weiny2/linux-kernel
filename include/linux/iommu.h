@@ -526,7 +526,7 @@ extern int iommu_report_device_fault(struct device *dev,
 extern int iommu_add_device_fault_data(struct device *dev,
 				int vector, void *data);
 extern void iommu_delete_device_fault_data(struct device *dev, int vector);
-extern int iommu_page_response(struct device *dev,
+extern int iommu_page_response(struct device *dev, struct iommu_domain *domain,
 			       struct iommu_page_response *msg);
 extern int iommu_uapi_get_data_size(int type, int version);
 
@@ -933,7 +933,7 @@ void iommu_delete_device_fault_data(struct device *dev, int vector)
 {
 }
 
-static inline int iommu_page_response(struct device *dev,
+static inline int iommu_page_response(struct device *dev, struct iommu_domain *domain,
 				      struct iommu_page_response *msg)
 {
 	return -ENODEV;

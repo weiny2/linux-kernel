@@ -1342,7 +1342,7 @@ done_unlock:
 }
 EXPORT_SYMBOL_GPL(iommu_report_device_fault);
 
-int iommu_page_response(struct device *dev,
+int iommu_page_response(struct device *dev, struct iommu_domain *domain,
 			struct iommu_page_response *msg)
 {
 	bool pasid_valid;
@@ -1350,7 +1350,6 @@ int iommu_page_response(struct device *dev,
 	struct iommu_fault_event *evt;
 	struct iommu_fault_page_request *prm;
 	struct dev_iommu *param = dev->iommu;
-	struct iommu_domain *domain = iommu_get_domain_for_dev(dev);
 
 	if (!domain || !domain->ops->page_response)
 		return -ENODEV;
@@ -1360,9 +1359,11 @@ int iommu_page_response(struct device *dev,
 
 	/* Support current or older UAPI versions */
 	if (msg->version > IOMMU_UAPI_VERSION ||
-	    msg->flags & ~IOMMU_PAGE_RESP_PASID_VALID)
+		!(msg->flags & IOMMU_PAGE_RESP_PASID_VALID)) {
+		dev_dbg(dev, "%s:Invalid ver %x: flags %x\n",
+			__func__, msg->version, msg->flags);
 		return -EINVAL;
-
+	}
 	/* Only send response if there is a fault report pending */
 	mutex_lock(&param->fault_param->lock);
 	if (list_empty(&param->fault_param->faults)) {
