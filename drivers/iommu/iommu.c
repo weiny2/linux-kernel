@@ -1207,6 +1207,7 @@ int iommu_unregister_device_fault_handler(struct device *dev)
 {
 	struct dev_iommu *param = dev->iommu;
 	int ret = 0;
+	struct iommu_fault_event *evt, *next;
 	struct iommu_fault_handler_data *hdata, *tmp;
 
 	if (!param)
@@ -1219,9 +1220,25 @@ int iommu_unregister_device_fault_handler(struct device *dev)
 
 	/* we cannot unregister handler if there are pending faults */
 	if (!list_empty(&param->fault_param->faults)) {
+		/*
+		 * REVISIT: We should not run into pending faults if we do unbind first.
+		 * the proper termination flow will ensure no pending faults as follows:
+		 * 1. pasid disable and tlb flush
+		 * 2. unbind, free, flush and drain
+		 * 3. unregister fault handler.
+		 */
+		printk("%s, there is pending faults on dev: %s, here we force to free the fault events and unregister the fault handler, but this changes should be reverted when page response path is ready\n", __func__, dev_name(dev));
+		mutex_lock(&param->fault_param->lock);
+		list_for_each_entry_safe(evt, next, &param->fault_param->faults, list) {
+			dev_dbg(dev, "%s, free fault event: 0x%lx\n", __func__, (unsigned long) evt);
+			list_del(&evt->list);
+			kfree(evt);
+		}
+		mutex_unlock(&param->fault_param->lock);
+/*
 		ret = -EBUSY;
 		goto unlock;
-
+*/
 	}
 	/* TODO: Free handler data if any */
 	list_for_each_entry_safe(hdata, tmp, &param->fault_param->data, list) {
@@ -1971,6 +1988,52 @@ EXPORT_SYMBOL_GPL(iommu_sva_bind_gpasid);
 int iommu_sva_unbind_gpasid(struct iommu_domain *domain, struct device *dev,
 			     ioasid_t pasid)
 {
+	pr_warn("%s: FIXME need to clear all pending faults!\n", __func__);
+#if 0
+	struct iommu_param *param = dev->iommu_param;
+	/* FIXME: clear all pending page requests */
+	struct iommu_page_response msg;
+	int ret = -EINVAL;
+	struct iommu_fault_event *evt, *tmp;
+
+	if (!domain || !domain->ops->page_response)
+		return -ENODEV;
+
+	/*
+	 * Device iommu_param should have been allocated when device is
+	 * added to its iommu_group.
+	 */
+	if (!param || !param->fault_param)
+		return -EINVAL;
+
+	/* Only send response if there is a fault report pending */
+	mutex_lock(&param->fault_param->lock);
+	if (list_empty(&param->fault_param->faults)) {
+		pr_warn("no pending PRQ, drop response\n");
+		goto done_unlock;
+	}
+
+	/* Clear all pending page requests and return response code INVALID */
+	list_for_each_entry_safe(evt, tmp, &param->fault_param->faults, list) {
+		if (evt->fault.prm.pasid == pasid) {
+			memcpy(&msg.private_data, &evt->private_data, sizeof(evt->private_data));
+			msg.pasid = pasid;
+			msg.flags |= IOMMU_PAGE_RESP_PASID_VALID;
+			msg.priv_data_present = 1;
+			msg.grpid = evt->fault.prm.grpid;
+			msg.code = IOMMU_PAGE_RESP_INVALID;
+			trace_dev_page_response(dev, &msg);
+			dev_dbg(dev, "Clear pending PRQ for PASID %d grp %d resp code IR\n",
+				pasid, msg.grpid);
+			ret = domain->ops->page_response(dev, &msg, evt);
+			list_del(&evt->list);
+			kfree(evt);
+		}
+	}
+
+done_unlock:
+	mutex_unlock(&param->fault_param->lock);
+#endif
 	if (unlikely(!domain->ops->sva_unbind_gpasid))
 		return -ENODEV;
 
