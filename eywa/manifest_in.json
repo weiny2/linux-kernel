@@ -3160,6 +3160,41 @@
             ],
             "status": "intel confidential",
             "stuck_at_ref": ""
+        },
+        {
+            "branch": "release-mainline-tracking-v5.4-rc2",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "CONFIG_KEEMBAY_IPC",
+                    "value": "y"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Daniele Alessandrelli ",
+                    "email": "daniele.alessandrelli@intel.com"
+                }
+            ],
+            "description": "IPC support for Keem Bay and Thunder Bay\nHarbor",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Farrell, David T",
+                    "email": "david.t.farrell@intel.com"
+                }
+            ],
+            "jira": "NEXT-1631",
+            "name": "ipc",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/mvds-linux-dev/thunder-bay-linux/tbh-linux.git",
+            "sdl_contact": [
+                {
+                    "name": "Walsh, Liz",
+                    "email": "liz.walsh@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": ""
         }
     ]
 }
