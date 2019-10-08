@@ -17,6 +17,8 @@
 #ifndef __KEEMBAY_IPC_H
 #define __KEEMBAY_IPC_H
 
+#include <linux/types.h>
+
 /* The possible node IDs. */
 enum {
 	KMB_IPC_NODE_ARM_CSS = 0,
