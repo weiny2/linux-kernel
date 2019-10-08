@@ -3177,7 +3177,7 @@
                 }
             ],
             "description": "IPC support for Keem Bay and Thunder Bay\nHarbor",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Farrell, David T",
