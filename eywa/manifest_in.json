@@ -3176,8 +3176,8 @@
                     "email": "daniele.alessandrelli@intel.com"
                 }
             ],
-            "description": "IPC support for Keem Bay and Thunder Bay\nHarbor",
-            "enabled": false,
+            "description": "IPC support for Keem Bay and TBH",
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Farrell, David T",
