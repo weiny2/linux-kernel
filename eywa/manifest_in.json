@@ -2786,14 +2786,14 @@
                 }
             ],
             "description": "This pull request introduces the boot/ota/dnt support for Android project.",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Tian  Baofeng",
                     "email": "baofeng.tian@intel.com"
                 }
             ],
-            "jira": "NEXT-1575",
+            "jira": "NEXT-1630",
             "name": "android",
             "repourl": "ssh://git-amr-4.devtools.intel.com:29418/otc_android_dnt_domain-boot_dnt_kernel_domain",
             "sdl_contact": [
