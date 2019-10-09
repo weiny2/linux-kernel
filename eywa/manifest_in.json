@@ -1901,7 +1901,7 @@
             "stuck_at_ref": ""
         },
         {
-            "branch": "for-intel-next-v5.3-rc1",
+            "branch": "eywa-v5.4-rc",
             "branch_type": "expiring",
             "config_options": [
                 {
@@ -1915,19 +1915,19 @@
             ],
             "contributor": [
                 {
-                    "name": "Zalewsk Mariusz",
-                    "email": "mariusz.zalewski@intel.com"
+                    "name": "Tomasz Jankowski",
+                    "email": "tomasz1.jankowski@intel.com"
                 }
             ],
             "description": "Intel Gaussian & Neural Accelerator driver",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Rafal Krolikowski",
                     "email": "rafal.krolikowski@intel.com"
                 }
             ],
-            "jira": "NEXT-1534",
+            "jira": "NEXT-1633",
             "name": "gna",
             "repourl": "ssh://git-gar-1.devtools.intel.com:29418/itsg_ml_integ-gna_driver_v_2_x.git",
             "sdl_contact": [
