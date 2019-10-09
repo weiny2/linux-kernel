@@ -3212,6 +3212,45 @@
             ],
             "status": "intel confidential",
             "stuck_at_ref": ""
+        },
+        {
+            "branch": "iommu-workarounds",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "CONFIG_INTEL_IOMMU_M2IOSF_WORKAROUND",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_IRQ_ICX_PI_WORKAROUND",
+                    "value": "y"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Sohil Mehta ",
+                    "email": "sohil.mehta@intel.com"
+                }
+            ],
+            "description": "IOMMU workarounds/fixes for upcoming affected platforms.",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Ashok Raj",
+                    "email": "ashok.raj@intel.com"
+                }
+            ],
+            "jira": "NEXT-1635",
+            "name": "iommu-workarounds",
+            "repourl": "ssh://git-amr-4.devtools.intel.com:29418/linux_iommu-iommu.git",
+            "sdl_contact": [
+                {
+                    "name": "Ashok Raj",
+                    "email": "ashok.raj@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": ""
         }
     ]
 }
