@@ -1148,6 +1148,10 @@
                 {
                     "name": "CONFIG_EDAC_IGEN6",
                     "value": "m"
+                },
+                {
+                    "name": "CONFIG_EDAC_I10NM",
+                    "value": "m"
                 }
             ],
             "contributor": [
@@ -1157,18 +1161,22 @@
                 }
             ],
             "description": "Linux EDAC support for Icelake-SP/Icelake-D server",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
-                {
-                    "name": "Luc Thuy",
-                    "email": "thuy.d.luc@intel.com"
-                },
                 {
                     "name": "Puneet Wadhawan",
                     "email": "puneet.wadhawan@intel.com"
+                },
+                {
+                    "name": "Bezbroz, Henrietta",
+                    "email": "henrietta.bezbroz@intel.com"
+                },
+                {
+                    "name": "Ahmad, Annie",
+                    "email": "quarat-ul-ann.ahmad@intel.com"
                 }
             ],
-            "jira": "NEXT-1530",
+            "jira": "NEXT-1632",
             "name": "edac",
             "repourl": "ssh://git-ccr-1.devtools.intel.com:29418/otc_edac_driver-linux.git",
             "sdl_contact": [
