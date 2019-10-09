@@ -1216,14 +1216,18 @@ xfs_inode_mount_is_dax(
 }
 
 /* Figure out if this file actually supports DAX. */
-static bool
+bool
 xfs_inode_supports_dax(
 	struct xfs_inode	*ip)
 {
 	struct xfs_mount	*mp = ip->i_mount;
 
 	/* Only supported on non-reflinked files. */
-	if (!S_ISREG(VFS_I(ip)->i_mode) || xfs_is_reflink_inode(ip))
+	if (xfs_is_reflink_inode(ip))
+		return false;
+
+	/* Only supported on regular files and directories. */
+	if (!(S_ISREG(VFS_I(ip)->i_mode) || S_ISDIR(VFS_I(ip)->i_mode)))
 		return false;
 
 	/* Block size must match page size */
