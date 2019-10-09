@@ -1191,7 +1191,12 @@
         {
             "branch": "avx512_cpuids",
             "branch_type": "expiring",
-            "config_options": [],
+            "config_options": [
+                {
+                    "name": "INTEL_PMC_CORE",
+                    "value": "y"
+                }
+            ],
             "contributor": [
                 {
                     "name": "Gayatri Kammela",
@@ -1199,20 +1204,24 @@
                 }
             ],
             "description": "TGL, EHL PMC core driver changes and new AVX512 cpuid support",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Mark Charney",
                     "email": "mark.charney@intel.com"
+                },
+                {
+                    "name": "Christopher Lake",
+                    "email": "christopher.j.lake@intel.com"
                 }
             ],
-            "jira": "NEXT-1515",
+            "jira": "NEXT-1634",
             "name": "avx512",
             "repourl": "ssh://git-ger-6.devtools.intel.com:29418/secure_git_internal_repo-my_internal_repo.git",
             "sdl_contact": [
                 {
-                    "name": "Charles D Prestopine",
-                    "email": "charles.d.prestopine@intel.com"
+                    "name": "David Box",
+                    "email": "david.e.box@intel.com"
                 }
             ],
             "status": "intel confidential",
