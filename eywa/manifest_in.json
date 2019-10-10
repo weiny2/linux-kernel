@@ -2092,7 +2092,7 @@
             "stuck_at_ref": ""
         },
         {
-            "branch": "sof-for-next-5.3",
+            "branch": "sof-for-next-5.4-rc2",
             "branch_type": "expiring",
             "config_options": [
                 {
@@ -2154,15 +2154,15 @@
                     "email": "xiuli.pan@linux.intel.com"
                 }
             ],
-            "description": "Add Audio SOF drivers, included embargoed TGL and JSL support",
-            "enabled": false,
+            "description": "Add Audio SOF drivers for TGL support",
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Michal Grodzicki",
                     "email": "michal.grodzicki@intel.com"
                 }
             ],
-            "jira": "NEXT-1518",
+            "jira": "NEXT-1637",
             "name": "sof audio",
             "repourl": "ssh://git-amr-4.devtools.intel.com:29418/otc_audio-linux.git",
             "sdl_contact": [
