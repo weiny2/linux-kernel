@@ -1157,10 +1157,10 @@
             "contributor": [
                 {
                     "name": "Qiuxu Zhu",
-                    "email": "qiuxu.zhuo@intel.com"
+                    "email": "qiuxu.zhu@intel.com"
                 }
             ],
-            "description": "Linux EDAC support for Icelake-SP/Icelake-D server",
+            "description": "Linux EDAC support for Sapphire Rapids, Elkhart\nLake and Ice Lake-NNPI",
             "enabled": true,
             "ip_owner": [
                 {
