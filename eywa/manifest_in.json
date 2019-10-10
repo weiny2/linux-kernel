@@ -173,7 +173,7 @@
                 }
             ],
             "description": "SGX code",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [],
             "jira": "NEXT-1601",
             "name": "SGX",
