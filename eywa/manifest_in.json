@@ -1160,7 +1160,7 @@
                     "email": "qiuxu.zhu@intel.com"
                 }
             ],
-            "description": "Linux EDAC support for Sapphire Rapids, Elkhart\nLake and Ice Lake-NNPI",
+            "description": "Linux EDAC support for SPR, EHL and ICL NNPI",
             "enabled": true,
             "ip_owner": [
                 {
