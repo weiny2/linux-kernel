@@ -640,6 +640,8 @@ struct sdw_link_ops;
  * @bus: Bus handle
  * @link_ops: link-specific ops, initialized with sdw_master_device_add()
  * @link_id: link index as defined by MIPI DisCo specification
+ * @pm_runtime_suspended: flag set with the value of pm_runtime_suspended()
+ * during system suspend and checked during system resume.
  * @pdata: private data typically provided with sdw_master_device_add()
  *
  * link_ops can be NULL when link-level initializations and power-management
@@ -650,6 +652,7 @@ struct sdw_master_device {
 	struct sdw_bus *bus;
 	struct sdw_link_ops *link_ops;
 	int link_id;
+	bool pm_runtime_suspended;
 	void *pdata;
 };
 
