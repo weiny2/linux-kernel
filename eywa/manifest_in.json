@@ -2516,16 +2516,16 @@
                 }
             ],
             "description": "dvanced Matrix Extension",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Bob Valentine",
                     "email": "bob.valentine@intel.com"
                 }
             ],
-            "jira": "NEXT-1562",
+            "jira": "NEXT-1640",
             "name": "amx",
-            "repourl": "ssh://git-amr-4.devtools.intel.com:29418/linux_cbae1_share-kl.git",
+            "repourl": "ssh://git-amr-4.devtools.intel.com:29418/enabling_cldemote_in_linux_kerne-linux_git.git",
             "sdl_contact": [
                 {
                     "name": "Israel Hirsh",
