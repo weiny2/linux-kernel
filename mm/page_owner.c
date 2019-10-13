@@ -24,16 +24,11 @@ struct page_owner {
 	short last_migrate_reason;
 	gfp_t gfp_mask;
 	depot_stack_handle_t handle;
-};
-
-struct page_owner_free {
 	depot_stack_handle_t free_handle;
 };
 
 static bool page_owner_enabled = false;
-static bool page_owner_free_enabled = false;
 DEFINE_STATIC_KEY_FALSE(page_owner_inited);
-static DEFINE_STATIC_KEY_FALSE(page_owner_free_stack);
 
 static depot_stack_handle_t dummy_handle;
 static depot_stack_handle_t failure_handle;
@@ -56,29 +51,6 @@ early_param("page_owner", early_page_owner_param);
 static bool need_page_owner(void)
 {
 	return page_owner_enabled;
-}
-
-static int __init early_page_owner_free_param(char *buf)
-{
-	if (!buf)
-		return -EINVAL;
-
-	if (strcmp(buf, "on") == 0)
-		page_owner_free_enabled = true;
-
-	return 0;
-}
-early_param("page_owner_free", early_page_owner_free_param);
-
-static bool need_page_owner_free(void) {
-
-	if (!page_owner_enabled)
-		return false;
-
-	if (IS_ENABLED(CONFIG_KASAN) || debug_pagealloc_enabled())
-		page_owner_free_enabled = true;
-
-	return page_owner_free_enabled;
 }
 
 static __always_inline depot_stack_handle_t create_dummy_stack(void)
@@ -117,34 +89,15 @@ static void init_page_owner(void)
 	init_early_allocated_pages();
 }
 
-static void init_page_owner_free(void)
-{
-	if (!page_owner_enabled || !page_owner_free_enabled)
-		return;
-
-	static_branch_enable(&page_owner_free_stack);
-}
-
 struct page_ext_operations page_owner_ops = {
 	.size = sizeof(struct page_owner),
 	.need = need_page_owner,
 	.init = init_page_owner,
 };
 
-struct page_ext_operations page_owner_free_ops = {
-	.size = sizeof(struct page_owner_free),
-	.need = need_page_owner_free,
-	.init = init_page_owner_free,
-};
-
 static inline struct page_owner *get_page_owner(struct page_ext *page_ext)
 {
 	return (void *)page_ext + page_owner_ops.offset;
-}
-
-static inline struct page_owner_free *get_page_owner_free(struct page_ext *page_ext)
-{
-	return (void *)page_ext + page_owner_free_ops.offset;
 }
 
 static inline bool check_recursive_alloc(unsigned long *entries,
@@ -191,20 +144,17 @@ void __reset_page_owner(struct page *page, unsigned int order)
 	int i;
 	struct page_ext *page_ext;
 	depot_stack_handle_t handle = 0;
-	struct page_owner_free *page_owner_free;
+	struct page_owner *page_owner;
 
-	if (static_branch_unlikely(&page_owner_free_stack))
-		handle = save_stack(GFP_NOWAIT | __GFP_NOWARN);
+	handle = save_stack(GFP_NOWAIT | __GFP_NOWARN);
 
 	page_ext = lookup_page_ext(page);
 	if (unlikely(!page_ext))
 		return;
 	for (i = 0; i < (1 << order); i++) {
 		__clear_bit(PAGE_EXT_OWNER_ACTIVE, &page_ext->flags);
-		if (static_branch_unlikely(&page_owner_free_stack)) {
-			page_owner_free = get_page_owner_free(page_ext);
-			page_owner_free->free_handle = handle;
-		}
+		page_owner = get_page_owner(page_ext);
+		page_owner->free_handle = handle;
 		page_ext = page_ext_next(page_ext);
 	}
 }
@@ -452,7 +402,6 @@ void __dump_page_owner(struct page *page)
 {
 	struct page_ext *page_ext = lookup_page_ext(page);
 	struct page_owner *page_owner;
-	struct page_owner_free *page_owner_free;
 	depot_stack_handle_t handle;
 	unsigned long *entries;
 	unsigned int nr_entries;
@@ -489,16 +438,13 @@ void __dump_page_owner(struct page *page)
 		stack_trace_print(entries, nr_entries, 0);
 	}
 
-	if (static_branch_unlikely(&page_owner_free_stack)) {
-		page_owner_free = get_page_owner_free(page_ext);
-		handle = READ_ONCE(page_owner_free->free_handle);
-		if (!handle) {
-			pr_alert("page_owner free stack trace missing\n");
-		} else {
-			nr_entries = stack_depot_fetch(handle, &entries);
-			pr_alert("page last free stack trace:\n");
-			stack_trace_print(entries, nr_entries, 0);
-		}
+	handle = READ_ONCE(page_owner->free_handle);
+	if (!handle) {
+		pr_alert("page_owner free stack trace missing\n");
+	} else {
+		nr_entries = stack_depot_fetch(handle, &entries);
+		pr_alert("page last free stack trace:\n");
+		stack_trace_print(entries, nr_entries, 0);
 	}
 
 	if (page_owner->last_migrate_reason != -1)
