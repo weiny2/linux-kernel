@@ -3246,6 +3246,14 @@
 			we can turn it on.
 			on: enable the feature
 
+	page_owner_free=
+			[KNL] When enabled together with page_owner, store also
+			the stack of who frees a page, for error page dump
+			purposes. This is also implicitly enabled by
+			debug_pagealloc=on or KASAN, so only page_owner=on is
+			sufficient in those cases.
+			on: enable the feature
+
 	page_poison=	[KNL] Boot-time parameter changing the state of
 			poisoning on the buddy allocator, available with
 			CONFIG_PAGE_POISONING=y.
