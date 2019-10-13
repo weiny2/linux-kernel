@@ -4851,6 +4851,10 @@ static ssize_t show_slab_objects(struct kmem_cache *s,
 	 * already held which will conflict with an existing lock order:
 	 *
 	 * mem_hotplug_lock->slab_mutex->kernfs_mutex
+	 *
+	 * We don't really need mem_hotplug_lock (to hold off
+	 * slab_mem_going_offline_callback) here because slab's memory hot
+	 * unplug code doesn't destroy the kmem_cache->node[] data.
 	 */
 
 #ifdef CONFIG_SLUB_DEBUG
