@@ -2335,7 +2335,7 @@
             "stuck_at_ref": ""
         },
         {
-            "branch": "dsa-gitlab/intel-next",
+            "branch": "intel-next",
             "branch_type": "expiring",
             "config_options": [
                 {
