@@ -2335,7 +2335,7 @@
             "stuck_at_ref": ""
         },
         {
-            "branch": "intel-next",
+            "branch": "dsa-gitlab/intel-next",
             "branch_type": "expiring",
             "config_options": [
                 {
@@ -2351,7 +2351,7 @@
                     "value": "y"
                 },
                 {
-                    "name": "CONFIG_INTEL_DSA",
+                    "name": "CONFIG_INTEL_IADX",
                     "value": "m"
                 },
                 {
@@ -2365,6 +2365,10 @@
                 {
                     "name": "CONFIG_VFIO_MDEV_DEVICE",
                     "value": "m"
+                },
+                {
+                    "name": "CONFIG_MSI_IMS",
+                    "value": "y"
                 }
             ],
             "contributor": [
@@ -2373,16 +2377,16 @@
                     "email": "dave.jiang@intel.com"
                 }
             ],
-            "description": "Intel Data Stream Accelerator enabling",
-            "enabled": false,
+            "description": "Intel combined Accelerator driver (DSA & IAX)",
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Rajesh Pamujula",
                     "email": "rajesh.s.pamujula@intel.com"
                 }
             ],
-            "jira": "NEXT-1523",
-            "name": "dsa",
+            "jira": "NEXT-1648",
+            "name": "iadx",
             "repourl": "ssh://git@gitlab.devtools.intel.com:29418/otc-clk-server/linux-dsa/kernel.git",
             "sdl_contact": [
                 {
