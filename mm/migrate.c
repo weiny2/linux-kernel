@@ -2200,6 +2200,8 @@ int migrate_misplaced_transhuge_page(struct mm_struct *mm,
 	get_page(new_page);
 	putback_lru_page(new_page);
 
+	inc_hmem_state(MR_HMEM_AUTONUMA_PROMOTE, page, new_page);
+
 	unlock_page(new_page);
 	unlock_page(page);
 	put_page(page);			/* Drop the rmap reference */
