@@ -27,6 +27,7 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
+#include <linux/of_device.h>
 #include <linux/of_irq.h>
 #include <linux/of_reserved_mem.h>
 #include <linux/platform_device.h>
@@ -270,8 +271,10 @@ static int init_ipc_rsvd_mem(struct device *dev, struct ipc_buf_mem *mem,
 	device_initialize(mem_dev);
 	dev_set_name(mem_dev, "%s:%s", dev_name(dev), mem_name);
 	mem_dev->parent = dev;
-	mem_dev->coherent_dma_mask = dev->coherent_dma_mask;
 	mem_dev->dma_mask = dev->dma_mask;
+	mem_dev->coherent_dma_mask = dev->coherent_dma_mask;
+	/* Set up DMA configuration using information from parent's DT node. */
+	rc = of_dma_configure(mem_dev, dev->of_node, true);
 	mem_dev->release = of_reserved_mem_device_release;
 
 	rc = device_add(mem_dev);
@@ -308,6 +311,20 @@ static int init_ipc_rsvd_mem(struct device *dev, struct ipc_buf_mem *mem,
 		rc = -ENOMEM;
 		goto err;
 	}
+	/*
+	 * Fix up DMA handle value.
+	 *
+	 * dma_alloc_coherent() does not take into account the address
+	 * translation described by the dma-ranges properties in the device
+	 * tree; this seems to be a bug of the Linux kernel:
+	 * https://lists.linuxfoundation.org/pipermail/iommu/2019-October/039417.html
+	 *
+	 * As a workaround, we fix the DMA handle manually, by subtracting the
+	 * device DMA offset.
+	 *
+	 * TODO: remove this once/if the DMA kernel code is fixed.
+	 */
+	dma_handle -= dev->dma_pfn_offset << PAGE_SHIFT;
 
 	mem->dev = mem_dev;
 	mem->vaddr = vaddr;
