@@ -2284,7 +2284,7 @@
             "stuck_at_ref": ""
         },
         {
-            "branch": "trusty-5.3",
+            "branch": "trusty-5.4",
             "branch_type": "expiring",
             "config_options": [
                 {
@@ -2315,14 +2315,14 @@
                 }
             ],
             "description": "Trusty driver is responsible for IPC communication between normal world OS(Linux) and Trusty OS",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Kai Wang",
                     "email": "kai.z.wang@intel.com"
                 }
             ],
-            "jira": "NEXT-1541",
+            "jira": "NEXT-1645",
             "name": "trusty",
             "repourl": "ssh://git-amr-7.devtools.intel.com:29418/trusty_for_intel_next-intel-next.git",
             "sdl_contact": [
