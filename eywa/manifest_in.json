@@ -3263,7 +3263,7 @@
                 }
             ],
             "description": "TGL device id for e1000e driver",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Kishore Kasichainula",
