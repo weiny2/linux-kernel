@@ -1,17 +1,8 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * keembay-ipc-common.h - KeemBay IPC common definitions.
+ * KeemBay IPC common definitions.
  *
  * Copyright (C) 2018-2019 Intel Corporation
- *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU General Public License as published by the Free
- * Software Foundation; version 2.
- *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
- * more details.
  */
 
 #ifndef __KEEMBAY_IPC_COMMON_H
@@ -36,14 +27,23 @@ enum {
 	KMB_IPC_BUF_ALLOCATED,
 };
 
-/* IPC buffer. */
+/**
+ * struct kmb_ipc_buf - The IPC buffer structure.
+ * @data_addr:	The address where the IPC payload is located; NOTE: this is a
+ *		VPU address (not a CPU one).
+ * @data_size:	The size of the payload.
+ * @channel:	The channel used.
+ * @src_node:	The Node ID of the sender.
+ * @dst_node:	The Node ID of the intended receiver.
+ * @status:	Either free or allocated.
+ */
 struct kmb_ipc_buf {
-	uint32_t data_paddr; /* Physical address where payload is located. */
-	uint32_t data_size;  /* Size of payload. */
-	uint16_t channel;    /* The channel used. */
-	uint8_t src_node;    /* The Node ID of the sender. */
-	uint8_t dst_node;    /* The Node ID of the intended receiver. */
-	uint8_t status;	     /* Either free or allocated. */
+	uint32_t data_addr;
+	uint32_t data_size;
+	uint16_t channel;
+	uint8_t src_node;
+	uint8_t dst_node;
+	uint8_t status;
 } __packed __aligned(KMB_IPC_ALIGNMENT);
 
 #endif /* __KEEMBAY_IPC_COMMON_H */
