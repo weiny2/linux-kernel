@@ -2845,7 +2845,7 @@
                 }
             ],
             "description": "IOMMU vSVA changes",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Rupin H Vakharwala",
@@ -2856,7 +2856,7 @@
                     "email": "ashok.raj@intel.com"
                 }
             ],
-            "jira": "NEXT-1552",
+            "jira": "NEXT-1646",
             "name": "iommu-sva",
             "repourl": "ssh://git-amr-4.devtools.intel.com:29418/linux_iommu-iommu.git",
             "sdl_contact": [
