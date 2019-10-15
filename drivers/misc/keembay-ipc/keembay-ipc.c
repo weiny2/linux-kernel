@@ -662,7 +662,8 @@ static int ipc_hw_init(struct platform_device *pdev,
 		dev_err(&pdev->dev, "Failed to iomap local FIFO registries\n");
 		return PTR_ERR(reg);
 	}
-	dev_info(&pdev->dev, "Local FIFO register base: 0x%px\n", reg);
+	dev_info(&pdev->dev, "Local FIFO register base: vaddr %p paddr: %pa\n",
+		 reg, &res->start);
 	ipc_dev->local_fifo_reg = reg;
 
 	/* Get Remote FIFO Register. */
@@ -676,7 +677,8 @@ static int ipc_hw_init(struct platform_device *pdev,
 		dev_err(&pdev->dev, "Failed to iomap remote FIFO registries\n");
 		return PTR_ERR(reg);
 	}
-	dev_info(&pdev->dev, "Remote FIFO register base: 0x%px\n", reg);
+	dev_info(&pdev->dev, "Remote FIFO register base: vaddr %p paddr: %pa\n",
+		 reg, &res->start);
 	ipc_dev->remote_fifo_reg = reg;
 
 	/*
