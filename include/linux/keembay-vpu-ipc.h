@@ -8,6 +8,8 @@
 #ifndef __KEEMBAY_VPU_IPC_H
 #define __KEEMBAY_VPU_IPC_H
 
+#include "linux/types.h"
+
 /* The possible node IDs. */
 enum {
 	KMB_VPU_IPC_NODE_ARM_CSS = 0,
