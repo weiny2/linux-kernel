@@ -2520,7 +2520,7 @@
                 }
             ],
             "description": "dvanced Matrix Extension",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Bob Valentine",
