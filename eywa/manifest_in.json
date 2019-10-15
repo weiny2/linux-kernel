@@ -2229,7 +2229,7 @@
                 }
             ],
             "description": "Intel Thermal",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Jim Hermerding",
