@@ -5584,7 +5584,7 @@ static void __init cgroup_init_subsys(struct cgroup_subsys *ss, bool early)
 	 * Root csses are never destroyed and we can't initialize
 	 * percpu_ref during early init.  Disable refcnting.
 	 */
-	css->flags |= CSS_NO_REF;
+	css_set_ref(css);
 
 	if (early) {
 		/* allocation can't be done safely during early init */
@@ -5629,7 +5629,7 @@ int __init cgroup_init_early(void)
 
 	ctx.root = &cgrp_dfl_root;
 	init_cgroup_root(&ctx);
-	cgrp_dfl_root.cgrp.self.flags |= CSS_NO_REF;
+	css_set_ref(&cgrp_dfl_root.cgrp.self);
 
 	RCU_INIT_POINTER(init_task.cgroups, &init_css_set);
 
