@@ -2378,7 +2378,7 @@
                 }
             ],
             "description": "Intel combined Accelerator driver (DSA & IAX)",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Rajesh Pamujula",
@@ -2849,7 +2849,7 @@
                 }
             ],
             "description": "IOMMU vSVA changes",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Rupin H Vakharwala",
