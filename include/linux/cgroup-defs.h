@@ -162,6 +162,8 @@ struct cgroup_subsys_state {
 	 * used to allow interrupting and resuming iterations.
 	 */
 	u64 serial_nr;
+	bool	no_ref		____cacheline_aligned;
+	u64	dummy		____cacheline_aligned;
 
 	/*
 	 * Incremented by online self and children.  Used to guarantee that
