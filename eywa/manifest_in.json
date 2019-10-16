@@ -1321,15 +1321,15 @@
                     "email": "alexander.shishkin@linux.intel.com"
                 }
             ],
-            "description": "Contains support for Ice Lake and Tiger Lake and MIPI SyS-T protocol support",
-            "enabled": false,
+            "description": "Contains support for Ice Lake, Tiger\nLake,\\nElkhart Lake, Comet Lake",
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Marcus Winston",
                     "email": "marcus.winston@intel.com"
                 }
             ],
-            "jira": "NEXT-1547",
+            "jira": "NEXT-1650",
             "name": "tracehub",
             "repourl": "ssh://git-amr-4.devtools.intel.com:29418/ash-pullme.git",
             "sdl_contact": [
