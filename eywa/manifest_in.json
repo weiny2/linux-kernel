@@ -1321,7 +1321,7 @@
                     "email": "alexander.shishkin@linux.intel.com"
                 }
             ],
-            "description": "Contains support for Ice Lake, Tiger\nLake,\\nElkhart Lake, Comet Lake",
+            "description": "Contains support for Ice Lake, Tiger\nLake,Elkhart Lake, Comet Lake",
             "enabled": true,
             "ip_owner": [
                 {
