@@ -2520,7 +2520,7 @@
                 }
             ],
             "description": "dvanced Matrix Extension",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Bob Valentine",
@@ -2729,7 +2729,7 @@
                 }
             ],
             "description": "Handle PASID in svm binding/unbinding and #GP",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Ravi V. Shankar",
@@ -2772,7 +2772,7 @@
                 }
             ],
             "description": "Control-flow Enforcement Technology (CET) provides protection againstreturn/jump-oriented programming (ROP) attacks.",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Vedvyas Shanbhogue",
