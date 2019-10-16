@@ -2003,14 +2003,14 @@
                 }
             ],
             "description": "Intel PCI driver related fixes",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Ashok Raj",
                     "email": "ashok.raj@intel.com"
                 }
             ],
-            "jira": "NEXT-1514",
+            "jira": "NEXT-1651",
             "name": "pci",
             "repourl": "ssh://git@gitlab.devtools.intel.com:29418/skuppusw/linux.git",
             "sdl_contact": [
@@ -2378,7 +2378,7 @@
                 }
             ],
             "description": "Intel combined Accelerator driver (DSA & IAX)",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Rajesh Pamujula",
@@ -2849,7 +2849,7 @@
                 }
             ],
             "description": "IOMMU vSVA changes",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Rupin H Vakharwala",
