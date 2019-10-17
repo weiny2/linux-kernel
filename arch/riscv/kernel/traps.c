@@ -19,6 +19,8 @@
 #include <asm/ptrace.h>
 #include <asm/csr.h>
 
+#include "entry.h"
+
 int show_unhandled_signals = 1;
 
 extern asmlinkage void handle_exception(void);

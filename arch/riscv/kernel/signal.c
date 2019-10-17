@@ -17,6 +17,8 @@
 #include <asm/switch_to.h>
 #include <asm/csr.h>
 
+#include "entry.h"
+
 #define DEBUG_SIG 0
 
 struct rt_sigframe {
