@@ -3285,6 +3285,57 @@
             ],
             "status": "intel confidential",
             "stuck_at_ref": ""
+        },
+        {
+            "branch": "cta_arch",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "CONFIG_MFD_INTEL_CTA",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_INTEL_CTA_TELEM",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_INTEL_CTA_WATCHER",
+                    "value": "y"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "David E Box ",
+                    "email": "david.e.box@intel.com"
+                }
+            ],
+            "description": "Intel Converged Telemetry Architecture support for TGL",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Van De Groenendaal, Johan",
+                    "email": "johan.van.de.groenendaal@intel.com"
+                },
+                {
+                    "name": "Ayinala, Manohar",
+                    "email": "manohar.ayinala@intel.com"
+                },
+                {
+                    "name": "Krithivas, Ramamurthy",
+                    "email": "ramamurthy.krithivas@intel.com"
+                }
+            ],
+            "jira": "NEXT-1654",
+            "name": "cta",
+            "repourl": "ssh://git-amr-3.devtools.intel.com:29418/otc_linux_debox1-dev.git",
+            "sdl_contact": [
+                {
+                    "name": "Prestopine, Charles D",
+                    "email": "charles.d.prestopine@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": ""
         }
     ]
 }
