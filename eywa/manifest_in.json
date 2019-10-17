@@ -1959,19 +1959,19 @@
             ],
             "contributor": [
                 {
-                    "name": "Edapalapati Padmarao",
-                    "email": "padmarao.edapalapati@intel.com"
+                    "name": "Venkata Ramana Nayana",
+                    "email": "venkata.ramana.nayana@intel.com"
                 }
             ],
             "description": "CBC (Carrier Board Communication) line discipline kernel module enablement",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Ryan Tabrah",
                     "email": "ryan.tabrah@intel.com"
                 }
             ],
-            "jira": "NEXT-1532",
+            "jira": "NEXT-1653",
             "name": "cbc-ldisc",
             "repourl": "ssh://git-gar-1.devtools.intel.com:29418/cbc_ldisc-cbc-ldisc.git",
             "sdl_contact": [
