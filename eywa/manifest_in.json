@@ -999,7 +999,7 @@
                 }
             ],
             "description": "otc_usb gadget - USB/ADC/TGPIO/PWM/QEP/MCAN",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Abdul Rahman Ismail",
@@ -1014,7 +1014,7 @@
                     "email": "raymond.tan@intel.com"
                 }
             ],
-            "jira": "NEXT-1556",
+            "jira": "NEXT-1652",
             "name": "usb-gadget",
             "repourl": "ssh://git-amr-4.devtools.intel.com:29418/otc_usb-gadget.git",
             "sdl_contact": [
