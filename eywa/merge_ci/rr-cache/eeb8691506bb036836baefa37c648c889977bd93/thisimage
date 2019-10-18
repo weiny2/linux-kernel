@@ -1039,10 +1039,10 @@ static void init_rar(struct cpuinfo_x86 *c)
 {
 	u64 msr;
 
-	if (!cpu_has(c, X86_FEATURE_CORE_CAPABILITY))
+	if (!cpu_has(c, X86_FEATURE_CORE_CAPABILITIES))
 		return;
 
-	rdmsrl(MSR_IA32_CORE_CAPABILITY, msr);
+	rdmsrl(MSR_IA32_CORE_CAPABILITIES, msr);
 
 	if (msr & CORE_CAP_RAR)
 		set_cpu_cap(c, X86_FEATURE_RAR);
