@@ -1605,7 +1605,7 @@
             "stuck_at_ref": ""
         },
         {
-            "branch": "intel-next-release-embargoed",
+            "branch": "intel-next-release",
             "branch_type": "expiring",
             "config_options": [
                 {
@@ -1716,14 +1716,14 @@
                 }
             ],
             "description": "IPU driver 19WW29 release to intel-next",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Cao Bingbu",
                     "email": "bingbu.cao@intel.com"
                 }
             ],
-            "jira": "NEXT-1544",
+            "jira": "NEXT-1657",
             "name": "camera",
             "repourl": "ssh://git-ccr-1.devtools.intel.com:29418/icg_camera-kernel",
             "sdl_contact": [
