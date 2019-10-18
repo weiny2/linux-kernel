@@ -258,7 +258,16 @@
         {
             "branch": "for-intel-next",
             "branch_type": "internal nonexpiring",
-            "config_options": [],
+            "config_options": [
+                {
+                    "name": "CONFIG_NVME_CORE",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_BLK_DEV_NVME",
+                    "value": "m"
+                }
+            ],
             "contributor": [
                 {
                     "name": "Shyjumon",
