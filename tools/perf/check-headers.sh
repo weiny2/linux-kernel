@@ -28,6 +28,7 @@ arch/x86/include/asm/disabled-features.h
 arch/x86/include/asm/required-features.h
 arch/x86/include/asm/cpufeatures.h
 arch/x86/include/asm/inat_types.h
+arch/x86/include/asm/irq_vectors.h
 <<<<<<< HEAD
 arch/x86/include/asm/emulate_prefix.h
 =======
