@@ -2491,7 +2491,12 @@
         {
             "branch": "for-intel-next",
             "branch_type": "expiring",
-            "config_options": [],
+            "config_options": [
+                {
+                    "name": "CONFIG_VPUSMM",
+                    "value": "y"
+                }
+            ],
             "contributor": [
                 {
                     "name": "Tingqian Li",
@@ -2499,14 +2504,14 @@
                 }
             ],
             "description": "Add kernel module into intel-Next for Keembay SOC project",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Yu Xu",
                     "email": "yu.xu@intel.com"
                 }
             ],
-            "jira": "NEXT-1533",
+            "jira": "NEXT-1660",
             "name": "vpusmm",
             "repourl": "ssh://git@gitlab.devtools.intel.com:29418/kmb_integration/vpusmm_driver.git",
             "sdl_contact": [
