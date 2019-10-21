@@ -3345,6 +3345,41 @@
             ],
             "status": "intel confidential",
             "stuck_at_ref": ""
+        },
+        {
+            "branch": "master",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "CONFIG_INTEL_ISHTP_ECLITE",
+                    "value": "m"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Sumesh K Naduvalath",
+                    "email": "sumesh.k.naduvalath@intel.com"
+                }
+            ],
+            "description": "EClite opregion glue driver for Elkhartlake",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "K Naduvalath, Sumesh",
+                    "email": "sumesh.k.naduvalath@intel.com"
+                }
+            ],
+            "jira": "NEXT-1659",
+            "name": "ECLite",
+            "repourl": "ssh://git-ger-3.devtools.intel.com:29418/ose-ehl_linux_intel.git",
+            "sdl_contact": [
+                {
+                    "name": "Tan, Seng Kai",
+                    "email": "seng.kai.tan@intel.com"
+                }
+            ],
+            "status": "public",
+            "stuck_at_ref": ""
         }
     ]
 }
