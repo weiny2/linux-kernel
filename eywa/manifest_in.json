@@ -2564,7 +2564,7 @@
                 }
             ],
             "description": "Fix up branch for DSA and CoE audio branch Makefiles",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Kyle Pelton",
