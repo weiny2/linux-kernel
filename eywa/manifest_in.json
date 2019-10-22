@@ -3034,7 +3034,7 @@
                 }
             ],
             "description": "Updates to perf tools for Intel PT",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Beeman Strong",
