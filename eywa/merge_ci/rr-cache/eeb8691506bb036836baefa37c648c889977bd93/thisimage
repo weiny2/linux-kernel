@@ -75,6 +75,9 @@ cpumask_var_t cpu_callin_mask;
 /* representing cpus for which sibling maps can be computed */
 cpumask_var_t cpu_sibling_setup_mask;
 
+/* try to run tasks using AMX only on these CPUs */
+cpumask_var_t cpu_amx_mask;
+
 /* Number of siblings per CPU package */
 int smp_num_siblings = 1;
 EXPORT_SYMBOL(smp_num_siblings);
@@ -89,6 +92,11 @@ void __init setup_cpu_local_masks(void)
 	alloc_bootmem_cpumask_var(&cpu_callin_mask);
 	alloc_bootmem_cpumask_var(&cpu_callout_mask);
 	alloc_bootmem_cpumask_var(&cpu_sibling_setup_mask);
+
+	if (boot_cpu_has(X86_FEATURE_AMX_INT8) ||
+	    boot_cpu_has(X86_FEATURE_AMX_TILE) ||
+	    boot_cpu_has(X86_FEATURE_AMX_BF16))
+		alloc_bootmem_cpumask_var(&cpu_amx_mask);
 }
 
 static void default_init(struct cpuinfo_x86 *c)
