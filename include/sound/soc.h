@@ -741,8 +741,6 @@ snd_soc_rtdcom_lookup(struct snd_soc_pcm_runtime *rtd,
 		       const char *driver_name);
 #define for_each_rtdcom(rtd, rtdcom) \
 	list_for_each_entry(rtdcom, &(rtd)->component_list, list)
-#define for_each_rtdcom_safe(rtd, rtdcom1, rtdcom2) \
-	list_for_each_entry_safe(rtdcom1, rtdcom2, &(rtd)->component_list, list)
 
 struct snd_soc_dai_link_component {
 	const char *name;
@@ -1148,7 +1146,6 @@ struct snd_soc_pcm_runtime {
 	struct list_head component_list; /* list of connected components */
 
 	/* bit field */
-	unsigned int dev_registered:1;
 	unsigned int pop_wait:1;
 	unsigned int fe_compr:1; /* for Dynamic PCM */
 };
@@ -1390,6 +1387,11 @@ static inline void snd_soc_dapm_mutex_unlock(struct snd_soc_dapm_context *dapm)
 {
 	mutex_unlock(&dapm->card->dapm_mutex);
 }
+
+/* bypass */
+int snd_soc_pcm_lib_ioctl(struct snd_soc_component *component,
+			  struct snd_pcm_substream *substream,
+			  unsigned int cmd, void *arg);
 
 #include <sound/soc-component.h>
 
