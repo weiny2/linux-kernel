@@ -25,10 +25,12 @@ static void list_test_list_init(struct kunit *test)
 
 	INIT_LIST_HEAD(&list2);
 
-	list4 = kzalloc(sizeof(*list4), 0);
+	list4 = kzalloc(sizeof(*list4), GFP_KERNEL);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, list4);
 	INIT_LIST_HEAD(list4);
 
-	list5 = kmalloc(sizeof(*list5), 0);
+	list5 = kmalloc(sizeof(*list5), GFP_KERNEL);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, list5);
 	memset(list5, 0xFF, sizeof(*list5));
 	INIT_LIST_HEAD(list5);
 
@@ -665,7 +667,7 @@ static void list_test_list_for_each_entry(struct kunit *test)
 		KUNIT_EXPECT_EQ(test, cur->data, i);
 		i++;
 	}
-	
+
 	KUNIT_EXPECT_EQ(test, i, 5);
 }
 
@@ -686,7 +688,7 @@ static void list_test_list_for_each_entry_reverse(struct kunit *test)
 		KUNIT_EXPECT_EQ(test, cur->data, i);
 		i--;
 	}
-	
+
 	KUNIT_EXPECT_EQ(test, i, -1);
 }
 
