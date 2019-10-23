@@ -25,6 +25,7 @@
 #include <asm/cpu.h>
 #include <asm/mmu_context.h>
 #include <asm/cpu_device_id.h>
+#include <asm/keylocker.h>
 
 #ifdef CONFIG_X86_32
 __visible unsigned long saved_context_ebx;
@@ -55,6 +56,41 @@ static void msr_restore_context(struct saved_context *ctxt)
 			wrmsrl(msr->info.msr_no, msr->info.reg.q);
 		msr++;
 	}
+}
+
+/* Restore the internal wrapping key for Intel Key Locker */
+static void restore_keylocker(void)
+{
+	int ret;
+
+	if (!boot_cpu_has(X86_FEATURE_KEYLOCKER))
+		goto out;
+
+	ret = x86_check_iwkey_backup(0);
+	if (ret)
+		goto disable_keylocker;
+
+	ret = x86_copy_iwkey(1);
+	if (ret)
+		goto disable_keylocker;
+
+	return;
+
+disable_keylocker:
+	/*
+	 * The hardware is unlikely malfunctioning; this situation
+	 * is most likely due to malicious beahvior. So, it is ideal to
+	 * stop the system, but the error message can't be correctly
+	 * recorded at this point if abruptly shutting down the system.
+	 * Disable the feature at the moment, but if we really need to
+	 * shut down for system compromise, the suspend infrastructure
+	 * needs to be restructured to propagate the error message.
+	 */
+	pr_info_once("x86/pm: Disable Key Locker "
+		     "due to invalid internal wrapping key\n");
+	setup_clear_cpu_cap(X86_FEATURE_KEYLOCKER);
+out:
+	cr4_clear_bits(X86_CR4_KEYLOCKER);
 }
 
 /**
@@ -263,6 +299,7 @@ static void notrace __restore_processor_state(struct saved_context *ctxt)
 	mtrr_bp_restore();
 	perf_restore_debug_store();
 	msr_restore_context(ctxt);
+	restore_keylocker();
 }
 
 /* Needed by apm.c */
