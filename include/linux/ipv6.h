@@ -26,7 +26,7 @@ struct ipv6_devconf {
 	__s32		mldv2_unsolicited_report_interval;
 	__s32		use_tempaddr;
 	__s32		temp_valid_lft;
-	__s32		temp_prefered_lft;
+	__s32		temp_preferred_lft;
 	__s32		regen_max_retry;
 	__s32		max_desync_factor;
 	__s32		max_addresses;

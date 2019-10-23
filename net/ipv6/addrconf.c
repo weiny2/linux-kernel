@@ -201,7 +201,7 @@ static struct ipv6_devconf ipv6_devconf __read_mostly = {
 	.rtr_solicit_delay	= MAX_RTR_SOLICITATION_DELAY,
 	.use_tempaddr		= 0,
 	.temp_valid_lft		= TEMP_VALID_LIFETIME,
-	.temp_prefered_lft	= TEMP_PREFERRED_LIFETIME,
+	.temp_preferred_lft	= TEMP_PREFERRED_LIFETIME,
 	.regen_max_retry	= REGEN_MAX_RETRY,
 	.max_desync_factor	= MAX_DESYNC_FACTOR,
 	.max_addresses		= IPV6_MAX_ADDRESSES,
@@ -255,7 +255,7 @@ static struct ipv6_devconf ipv6_devconf_dflt __read_mostly = {
 	.rtr_solicit_delay	= MAX_RTR_SOLICITATION_DELAY,
 	.use_tempaddr		= 0,
 	.temp_valid_lft		= TEMP_VALID_LIFETIME,
-	.temp_prefered_lft	= TEMP_PREFERRED_LIFETIME,
+	.temp_preferred_lft	= TEMP_PREFERRED_LIFETIME,
 	.regen_max_retry	= REGEN_MAX_RETRY,
 	.max_desync_factor	= MAX_DESYNC_FACTOR,
 	.max_addresses		= IPV6_MAX_ADDRESSES,
@@ -1112,7 +1112,7 @@ ipv6_add_addr(struct inet6_dev *idev, struct ifa6_config *cfg,
 	if (!(cfg->ifa_flags & IFA_F_NODAD))
 		ifa->flags |= IFA_F_TENTATIVE;
 	ifa->valid_lft = cfg->valid_lft;
-	ifa->prefered_lft = cfg->preferred_lft;
+	ifa->preferred_lft = cfg->preferred_lft;
 	ifa->cstamp = ifa->tstamp = jiffies;
 	ifa->tokenized = false;
 
@@ -1358,7 +1358,7 @@ retry:
 	/* recalculate max_desync_factor each time and update
 	 * idev->desync_factor if it's larger
 	 */
-	cnf_temp_preferred_lft = READ_ONCE(idev->cnf.temp_prefered_lft);
+	cnf_temp_preferred_lft = READ_ONCE(idev->cnf.temp_preferred_lft);
 	max_desync_factor = min_t(__u32,
 				  idev->cnf.max_desync_factor,
 				  cnf_temp_preferred_lft - regen_advance);
@@ -1377,7 +1377,7 @@ retry:
 	cfg.valid_lft = min_t(__u32, ifp->valid_lft,
 			      idev->cnf.temp_valid_lft + age);
 	cfg.preferred_lft = cnf_temp_preferred_lft + age - idev->desync_factor;
-	cfg.preferred_lft = min_t(__u32, ifp->prefered_lft, cfg.preferred_lft);
+	cfg.preferred_lft = min_t(__u32, ifp->preferred_lft, cfg.preferred_lft);
 
 	cfg.plen = ifp->prefix_len;
 	tmp_tstamp = ifp->tstamp;
@@ -2087,7 +2087,7 @@ void addrconf_dad_failure(struct sk_buff *skb, struct inet6_ifaddr *ifp)
 			.plen = ifp->prefix_len,
 			.ifa_flags = ifp->flags,
 			.valid_lft = ifp->valid_lft,
-			.preferred_lft = ifp->prefered_lft,
+			.preferred_lft = ifp->preferred_lft,
 			.scope = ifp->scope,
 		};
 
@@ -2481,7 +2481,7 @@ static struct inet6_dev *addrconf_add_dev(struct net_device *dev)
 
 static void manage_tempaddrs(struct inet6_dev *idev,
 			     struct inet6_ifaddr *ifp,
-			     __u32 valid_lft, __u32 prefered_lft,
+			     __u32 valid_lft, __u32 preferred_lft,
 			     bool create, unsigned long now)
 {
 	u32 flags;
@@ -2490,7 +2490,7 @@ static void manage_tempaddrs(struct inet6_dev *idev,
 	read_lock_bh(&idev->lock);
 	/* update all temporary addresses in the list */
 	list_for_each_entry(ift, &idev->tempaddr_list, tmp_list) {
-		int age, max_valid, max_prefered;
+		int age, max_valid, max_preferred;
 
 		if (ifp != ift->ifpub)
 			continue;
@@ -2508,23 +2508,23 @@ static void manage_tempaddrs(struct inet6_dev *idev,
 		if (max_valid < 0)
 			max_valid = 0;
 
-		max_prefered = idev->cnf.temp_prefered_lft -
-			       idev->desync_factor - age;
-		if (max_prefered < 0)
-			max_prefered = 0;
+		max_preferred = idev->cnf.temp_preferred_lft -
+				idev->desync_factor - age;
+		if (max_preferred < 0)
+			max_preferred = 0;
 
 		if (valid_lft > max_valid)
 			valid_lft = max_valid;
 
-		if (prefered_lft > max_prefered)
-			prefered_lft = max_prefered;
+		if (preferred_lft > max_preferred)
+			preferred_lft = max_preferred;
 
 		spin_lock(&ift->lock);
 		flags = ift->flags;
 		ift->valid_lft = valid_lft;
-		ift->prefered_lft = prefered_lft;
+		ift->preferred_lft = preferred_lft;
 		ift->tstamp = now;
-		if (prefered_lft > 0)
+		if (preferred_lft > 0)
 			ift->flags &= ~IFA_F_DEPRECATED;
 
 		spin_unlock(&ift->lock);
@@ -2557,7 +2557,7 @@ int addrconf_prefix_rcv_add_addr(struct net *net, struct net_device *dev,
 				 struct inet6_dev *in6_dev,
 				 const struct in6_addr *addr, int addr_type,
 				 u32 addr_flags, bool sllao, bool tokenized,
-				 __u32 valid_lft, u32 prefered_lft)
+				 __u32 valid_lft, u32 preferred_lft)
 {
 	struct inet6_ifaddr *ifp = ipv6_get_ifaddr(net, addr, dev, 1);
 	int create = 0, update_lft = 0;
@@ -2569,7 +2569,7 @@ int addrconf_prefix_rcv_add_addr(struct net *net, struct net_device *dev,
 			.plen = pinfo->prefix_len,
 			.ifa_flags = addr_flags,
 			.valid_lft = valid_lft,
-			.preferred_lft = prefered_lft,
+			.preferred_lft = preferred_lft,
 			.scope = addr_type & IPV6_ADDR_SCOPE_MASK,
 		};
 
@@ -2624,14 +2624,14 @@ int addrconf_prefix_rcv_add_addr(struct net *net, struct net_device *dev,
 			 *  whether the valid lifetime is also reset or
 			 *  ignored."
 			 *
-			 * So we should always update prefered_lft here.
+			 * So we should always update preferred_lft here.
 			 */
 			update_lft = 1;
 		}
 
 		if (update_lft) {
 			ifp->valid_lft = valid_lft;
-			ifp->prefered_lft = prefered_lft;
+			ifp->preferred_lft = preferred_lft;
 			ifp->tstamp = now;
 			flags = ifp->flags;
 			ifp->flags &= ~IFA_F_DEPRECATED;
@@ -2642,7 +2642,7 @@ int addrconf_prefix_rcv_add_addr(struct net *net, struct net_device *dev,
 		} else
 			spin_unlock_bh(&ifp->lock);
 
-		manage_tempaddrs(in6_dev, ifp, valid_lft, prefered_lft,
+		manage_tempaddrs(in6_dev, ifp, valid_lft, preferred_lft,
 				 create, now);
 
 		in6_ifa_put(ifp);
@@ -2657,7 +2657,7 @@ void addrconf_prefix_rcv(struct net_device *dev, u8 *opt, int len, bool sllao)
 {
 	struct prefix_info *pinfo;
 	__u32 valid_lft;
-	__u32 prefered_lft;
+	__u32 preferred_lft;
 	int addr_type, err;
 	u32 addr_flags = 0;
 	struct inet6_dev *in6_dev;
@@ -2680,9 +2680,9 @@ void addrconf_prefix_rcv(struct net_device *dev, u8 *opt, int len, bool sllao)
 		return;
 
 	valid_lft = ntohl(pinfo->valid);
-	prefered_lft = ntohl(pinfo->prefered);
+	preferred_lft = ntohl(pinfo->preferred);
 
-	if (prefered_lft > valid_lft) {
+	if (preferred_lft > valid_lft) {
 		net_warn_ratelimited("addrconf: prefix option has invalid lifetime\n");
 		return;
 	}
@@ -2787,7 +2787,7 @@ ok:
 						   &addr, addr_type,
 						   addr_flags, sllao,
 						   tokenized, valid_lft,
-						   prefered_lft);
+						   preferred_lft);
 		if (err)
 			goto put;
 
@@ -2797,7 +2797,7 @@ ok:
 		ndisc_ops_prefix_rcv_add_addr(net, dev, pinfo, in6_dev, &addr,
 					      addr_type, addr_flags, sllao,
 					      tokenized, valid_lft,
-					      prefered_lft,
+					      preferred_lft,
 					      dev_addr_generated);
 	}
 	inet6_prefix_notify(RTM_NEWPREFIX, in6_dev, pinfo);
@@ -4422,7 +4422,7 @@ restart:
 			 * IFA_F_PERMANENT has a non-infinity life time.
 			 */
 			if ((ifp->flags & IFA_F_PERMANENT) &&
-			    (ifp->prefered_lft == INFINITY_LIFE_TIME))
+			    (ifp->preferred_lft == INFINITY_LIFE_TIME))
 				continue;
 
 			spin_lock(&ifp->lock);
@@ -4435,11 +4435,13 @@ restart:
 				in6_ifa_hold(ifp);
 				ipv6_del_addr(ifp);
 				goto restart;
-			} else if (ifp->prefered_lft == INFINITY_LIFE_TIME) {
+			} else if (ifp->preferred_lft == INFINITY_LIFE_TIME) {
 				spin_unlock(&ifp->lock);
 				continue;
-			} else if (age >= ifp->prefered_lft) {
-				/* jiffies - ifp->tstamp > age >= ifp->prefered_lft */
+			} else if (age >= ifp->preferred_lft) {
+				/* jiffies - ifp->tstamp > age >=
+				 *	ifp->preferred_lft
+				 */
 				int deprecate = 0;
 
 				if (!(ifp->flags&IFA_F_DEPRECATED)) {
@@ -4466,10 +4468,13 @@ restart:
 					ifp->idev->cnf.dad_transmits *
 					NEIGH_VAR(ifp->idev->nd_parms, RETRANS_TIME) / HZ;
 
-				if (age >= ifp->prefered_lft - regen_advance) {
+				if (age >= ifp->preferred_lft - regen_advance) {
 					struct inet6_ifaddr *ifpub = ifp->ifpub;
-					if (time_before(ifp->tstamp + ifp->prefered_lft * HZ, next))
-						next = ifp->tstamp + ifp->prefered_lft * HZ;
+					if (time_before(ifp->tstamp +
+							ifp->preferred_lft * HZ,
+							next))
+						next = ifp->tstamp +
+						       ifp->preferred_lft * HZ;
 					if (!ifp->regen_count && ifpub) {
 						ifp->regen_count++;
 						in6_ifa_hold(ifp);
@@ -4486,13 +4491,20 @@ restart:
 						rcu_read_lock_bh();
 						goto restart;
 					}
-				} else if (time_before(ifp->tstamp + ifp->prefered_lft * HZ - regen_advance * HZ, next))
-					next = ifp->tstamp + ifp->prefered_lft * HZ - regen_advance * HZ;
+				} else if (time_before(ifp->tstamp +
+						       ifp->preferred_lft * HZ -
+						       regen_advance * HZ,
+						       next))
+					next = ifp->tstamp +
+					       ifp->preferred_lft * HZ -
+					       regen_advance * HZ;
 				spin_unlock(&ifp->lock);
 			} else {
-				/* ifp->prefered_lft <= ifp->valid_lft */
-				if (time_before(ifp->tstamp + ifp->prefered_lft * HZ, next))
-					next = ifp->tstamp + ifp->prefered_lft * HZ;
+				/* ifp->preferred_lft <= ifp->valid_lft */
+				if (time_before(ifp->tstamp +
+						ifp->preferred_lft * HZ, next))
+					next = ifp->tstamp +
+					       ifp->preferred_lft * HZ;
 				spin_unlock(&ifp->lock);
 			}
 		}
@@ -4665,7 +4677,7 @@ static int inet6_addr_modify(struct inet6_ifaddr *ifp, struct ifa6_config *cfg)
 	ifp->flags |= cfg->ifa_flags;
 	ifp->tstamp = jiffies;
 	ifp->valid_lft = cfg->valid_lft;
-	ifp->prefered_lft = cfg->preferred_lft;
+	ifp->preferred_lft = cfg->preferred_lft;
 
 	if (cfg->rt_priority && cfg->rt_priority != ifp->rt_priority)
 		ifp->rt_priority = cfg->rt_priority;
@@ -4755,7 +4767,7 @@ inet6_rtm_newaddr(struct sk_buff *skb, struct nlmsghdr *nlh,
 
 		ci = nla_data(tb[IFA_CACHEINFO]);
 		cfg.valid_lft = ci->ifa_valid;
-		cfg.preferred_lft = ci->ifa_prefered;
+		cfg.preferred_lft = ci->ifa_preferred;
 	}
 
 	dev =  __dev_get_by_index(net, ifm->ifa_index);
@@ -4825,7 +4837,7 @@ static int put_cacheinfo(struct sk_buff *skb, unsigned long cstamp,
 
 	ci.cstamp = cstamp_delta(cstamp);
 	ci.tstamp = cstamp_delta(tstamp);
-	ci.ifa_prefered = preferred;
+	ci.ifa_preferred = preferred;
 	ci.ifa_valid = valid;
 
 	return nla_put(skb, IFA_CACHEINFO, sizeof(ci), &ci);
@@ -4888,8 +4900,8 @@ static int inet6_fill_ifaddr(struct sk_buff *skb, struct inet6_ifaddr *ifa,
 		goto error;
 
 	if (!((ifa->flags&IFA_F_PERMANENT) &&
-	      (ifa->prefered_lft == INFINITY_LIFE_TIME))) {
-		preferred = ifa->prefered_lft;
+	      (ifa->preferred_lft == INFINITY_LIFE_TIME))) {
+		preferred = ifa->preferred_lft;
 		valid = ifa->valid_lft;
 		if (preferred != INFINITY_LIFE_TIME) {
 			long tval = (jiffies - ifa->tstamp)/HZ;
@@ -5394,7 +5406,7 @@ static inline void ipv6_store_devconf(struct ipv6_devconf *cnf,
 		jiffies_to_msecs(cnf->mldv2_unsolicited_report_interval);
 	array[DEVCONF_USE_TEMPADDR] = cnf->use_tempaddr;
 	array[DEVCONF_TEMP_VALID_LFT] = cnf->temp_valid_lft;
-	array[DEVCONF_TEMP_PREFERED_LFT] = cnf->temp_prefered_lft;
+	array[DEVCONF_TEMP_PREFERRED_LFT] = cnf->temp_preferred_lft;
 	array[DEVCONF_REGEN_MAX_RETRY] = cnf->regen_max_retry;
 	array[DEVCONF_MAX_DESYNC_FACTOR] = cnf->max_desync_factor;
 	array[DEVCONF_MAX_ADDRESSES] = cnf->max_addresses;
@@ -5643,7 +5655,7 @@ update_lft:
 		spin_lock(&ifp->lock);
 		if (ifp->tokenized) {
 			ifp->valid_lft = 0;
-			ifp->prefered_lft = 0;
+			ifp->preferred_lft = 0;
 		}
 		spin_unlock(&ifp->lock);
 	}
@@ -5914,7 +5926,7 @@ static int inet6_fill_prefix(struct sk_buff *skb, struct inet6_dev *idev,
 
 	if (nla_put(skb, PREFIX_ADDRESS, sizeof(pinfo->prefix), &pinfo->prefix))
 		goto nla_put_failure;
-	ci.preferred_time = ntohl(pinfo->prefered);
+	ci.preferred_time = ntohl(pinfo->preferred);
 	ci.valid_time = ntohl(pinfo->valid);
 	if (nla_put(skb, PREFIX_CACHEINFO, sizeof(ci), &ci))
 		goto nla_put_failure;
@@ -6560,8 +6572,15 @@ static const struct ctl_table addrconf_sysctl[] = {
 		.proc_handler	= proc_dointvec,
 	},
 	{
+		.procname	= "temp_preferred_lft",
+		.data		= &ipv6_devconf.temp_preferred_lft,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec,
+	},
+	{ /* DEPRECATED */
 		.procname	= "temp_prefered_lft",
-		.data		= &ipv6_devconf.temp_prefered_lft,
+		.data		= &ipv6_devconf.temp_preferred_lft,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec,

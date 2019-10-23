@@ -717,7 +717,7 @@ efi_status_t efi_relocate_kernel(efi_system_table_t *sys_table_arg,
 	 * The EFI firmware loader could have placed the kernel image
 	 * anywhere in memory, but the kernel has restrictions on the
 	 * max physical address it can run at.  Some architectures
-	 * also have a prefered address, so first try to relocate
+	 * also have a preferred address, so first try to relocate
 	 * to the preferred address.  If that fails, allocate as low
 	 * as possible while respecting the required alignment.
 	 */

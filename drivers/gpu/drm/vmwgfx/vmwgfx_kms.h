@@ -355,7 +355,7 @@ struct vmw_display_unit {
 	unsigned unit;
 
 	/*
-	 * Prefered mode tracking.
+	 * Preferred mode tracking.
 	 */
 	unsigned pref_width;
 	unsigned pref_height;

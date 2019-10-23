@@ -513,7 +513,8 @@ static const struct bin_table bin_net_ipv6_conf_var_table[] = {
 	{ CTL_INT,	NET_IPV6_RTR_SOLICIT_DELAY,		"router_solicitation_delay" },
 	{ CTL_INT,	NET_IPV6_USE_TEMPADDR,			"use_tempaddr" },
 	{ CTL_INT,	NET_IPV6_TEMP_VALID_LFT,		"temp_valid_lft" },
-	{ CTL_INT,	NET_IPV6_TEMP_PREFERED_LFT,		"temp_prefered_lft" },
+	{ CTL_INT,	NET_IPV6_TEMP_PREFERRED_LFT,		"temp_preferred_lft" },
+	{ CTL_INT,	NET_IPV6_TEMP_PREFERRED_LFT,		"temp_prefered_lft" }, /* NOTYPO */
 	{ CTL_INT,	NET_IPV6_REGEN_MAX_RETRY,		"regen_max_retry" },
 	{ CTL_INT,	NET_IPV6_MAX_DESYNC_FACTOR,		"max_desync_factor" },
 	{ CTL_INT,	NET_IPV6_MAX_ADDRESSES,			"max_addresses" },
