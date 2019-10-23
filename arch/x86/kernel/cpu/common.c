@@ -55,6 +55,8 @@
 #include <asm/microcode_intel.h>
 #include <asm/intel-family.h>
 #include <asm/cpu_device_id.h>
+#include <asm/keylocker.h>
+
 #include <asm/uv/uv.h>
 
 #include "cpu.h"
@@ -416,6 +418,46 @@ static void __init setup_cr_pinning(void)
 	mask = (X86_CR4_SMEP | X86_CR4_SMAP | X86_CR4_UMIP);
 	cr4_pinned_bits = this_cpu_read(cpu_tlbstate.cr4) & mask;
 	static_key_enable(&cr_pinning.key);
+}
+
+static __always_inline void setup_keylocker(struct cpuinfo_x86 *c)
+{
+	int ret;
+
+	if (!cpu_has(c, X86_FEATURE_KEYLOCKER))
+		goto out;
+
+	cr4_set_bits(X86_CR4_KEYLOCKER);
+
+	if (c == &boot_cpu_data) {
+		ret = x86_load_iwkey();
+		if (ret)
+			goto disable_keylocker;
+
+		x86_backup_iwkey();
+	} else {
+		/*
+		 * The boot CPU requested the backup process already
+		 * The process takes less than 100 milliseconds
+		 * conservatively. However, it may be unfinished at
+		 * time of booting other CPUs, so waiting a bit more
+		 * in the case.
+		 */
+		ret = x86_check_iwkey_backup(100000);
+		if (ret)
+			goto disable_keylocker;
+
+		ret = x86_copy_iwkey(1);
+		if (ret)
+			goto disable_keylocker;
+	}
+
+disable_keylocker:
+	clear_cpu_cap(c, X86_FEATURE_KEYLOCKER);
+	pr_info_once("x86/cpu: Deactivated Key Locker feature\n");
+out:
+	/* Make sure the feature disabled for kexec-reboot. */
+	cr4_clear_bits(X86_CR4_KEYLOCKER);
 }
 
 /*
@@ -1471,10 +1513,11 @@ static void identify_cpu(struct cpuinfo_x86 *c)
 	/* Disable the PN if appropriate */
 	squash_the_stupid_serial_number(c);
 
-	/* Set up SMEP/SMAP/UMIP */
+	/* Set up SMEP/SMAP/UMIP/KeyLocker */
 	setup_smep(c);
 	setup_smap(c);
 	setup_umip(c);
+	setup_keylocker(c);
 
 	/*
 	 * The vendor-specific functions might have changed features.
