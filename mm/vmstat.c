@@ -1374,23 +1374,54 @@ static void pagetypeinfo_showfree_print(struct seq_file *m,
 					pg_data_t *pgdat, struct zone *zone)
 {
 	int order, mtype;
+	unsigned long nfree[MAX_ORDER][MIGRATE_TYPES];
+
+	lockdep_assert_held(&zone->lock);
+	lockdep_assert_irqs_disabled();
+
+	/*
+	 * MIGRATE_MOVABLE is usually the largest one in large memory
+	 * systems. We skip iterating that list. Instead, we compute it by
+	 * subtracting the total of the rests from free_area->nr_free.
+	 */
+	for (order = 0; order < MAX_ORDER; ++order) {
+		unsigned long nr_total = 0;
+		struct free_area *area = &(zone->free_area[order]);
+
+		for (mtype = 0; mtype < MIGRATE_TYPES; mtype++) {
+			unsigned long freecount = 0;
+			struct list_head *curr;
+
+			if (mtype == MIGRATE_MOVABLE)
+				continue;
+			list_for_each(curr, &area->free_list[mtype])
+				freecount++;
+			nfree[order][mtype] = freecount;
+			nr_total += freecount;
+		}
+		nfree[order][MIGRATE_MOVABLE] = area->nr_free - nr_total;
+
+		/*
+		 * If we have already iterated more than 64k of list
+		 * entries, we might have hold the zone lock for too long.
+		 * Temporarily release the lock and reschedule before
+		 * continuing so that other lock waiters have a chance
+		 * to run.
+		 */
+		if (nr_total > (1 << 16)) {
+			spin_unlock_irq(&zone->lock);
+			cond_resched();
+			spin_lock_irq(&zone->lock);
+		}
+	}
 
 	for (mtype = 0; mtype < MIGRATE_TYPES; mtype++) {
 		seq_printf(m, "Node %4d, zone %8s, type %12s ",
 					pgdat->node_id,
 					zone->name,
 					migratetype_names[mtype]);
-		for (order = 0; order < MAX_ORDER; ++order) {
-			unsigned long freecount = 0;
-			struct free_area *area;
-			struct list_head *curr;
-
-			area = &(zone->free_area[order]);
-
-			list_for_each(curr, &area->free_list[mtype])
-				freecount++;
-			seq_printf(m, "%6lu ", freecount);
-		}
+		for (order = 0; order < MAX_ORDER; ++order)
+			seq_printf(m, "%6lu ", nfree[order][mtype]);
 		seq_putc(m, '\n');
 	}
 }
