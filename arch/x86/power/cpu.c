@@ -25,6 +25,7 @@
 #include <asm/cpu.h>
 #include <asm/mmu_context.h>
 #include <asm/cpu_device_id.h>
+#include <asm/keylocker.h>
 
 #ifdef CONFIG_X86_32
 __visible unsigned long saved_context_ebx;
@@ -55,6 +56,62 @@ static void msr_restore_context(struct saved_context *ctxt)
 			wrmsrl(msr->info.msr_no, msr->info.reg.q);
 		msr++;
 	}
+}
+
+/*
+ * Restore the CPU-internal key. The boot CPU executes this procedure,
+ * while other CPUs restore it through the setup routine executed at
+ * boot-time, setup_keylocker().
+ */
+static void restore_keylocker(void)
+{
+	bool valid;
+
+	if (!boot_cpu_has(X86_FEATURE_KEYLOCKER))
+		goto out;
+
+	valid = x86_check_saved_internal_key(0);
+	if (!valid) {
+		u64 status;
+
+		/*
+		 * Read the status MSR directly. Decode the error info and
+		 * print the error message accordingly.
+		 */
+		pr_err("x86/pm: CPU-internal key restore failed with");
+		rdmsrl(MSR_IA32_IWKEY_BACKUP_STATUS, status);
+		if (status & BIT(1))
+			pr_err(" integrity check error\n");
+		else if (status & BIT(2))
+			pr_err(" read err\n");
+		else
+			pr_err(" invalid backup status\n");
+		WARN_ON(1);
+
+		/*
+		 * The reason for the invalid status for the saved internal
+		 * key varies. In particular, the integrity check failure
+		 * could be due to either hardware malfunction or system
+		 * compromise. Latter is a much alarming situation
+		 * because the saved internal key is logically in the chain
+		 * of trust as resuming KeyLocker support. Nonetheless, the
+		 * information at the moment is just insufficient to
+		 * determine system-wide measures such as raising panic().
+		 */
+		goto disable_keylocker;
+	}
+
+	valid = x86_restore_internal_key();
+	if (!valid)
+		goto disable_keylocker;
+
+	return;
+
+disable_keylocker:
+	pr_info_once("x86/pm: Disable KeyLocker for invalid status\n");
+	setup_clear_cpu_cap(X86_FEATURE_KEYLOCKER);
+out:
+	cr4_clear_bits(X86_CR4_KEYLOCKER);
 }
 
 /**
@@ -263,6 +320,7 @@ static void notrace __restore_processor_state(struct saved_context *ctxt)
 	mtrr_bp_restore();
 	perf_restore_debug_store();
 	msr_restore_context(ctxt);
+	restore_keylocker();
 }
 
 /* Needed by apm.c */

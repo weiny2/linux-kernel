@@ -454,10 +454,10 @@ static __always_inline void setup_keylocker(struct cpuinfo_x86 *c)
 	} else {
 		/*
 		 * Non-boot CPUs follow the boot CPU's enabling status. If
-		 * there is any issue with randomizing and saving the
-		 * internal key from the boot CPU, it implies insufficient
-		 * hardware capability. Thus, disable the feature in the
-		 * following CPUs.
+		 * there is any issue with randomizing, saving, and
+		 * restoring the internal key from the boot CPU, it implies
+		 * insufficient hardware capability. Thus, disable the
+		 * feature in the following CPUs.
 		 */
 		if (!boot_cpu_has(X86_FEATURE_KEYLOCKER))
 			goto disable_keylocker;
