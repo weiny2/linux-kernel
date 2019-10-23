@@ -610,27 +610,6 @@ static inline int PageTransCompound(struct page *page)
 }
 
 /*
- * PageTransCompoundMap is the same as PageTransCompound, but it also
- * guarantees the primary MMU has the entire compound page mapped
- * through pmd_trans_huge, which in turn guarantees the secondary MMUs
- * can also map the entire compound page. This allows the secondary
- * MMUs to call get_user_pages() only once for each compound page and
- * to immediately map the entire compound page with a single secondary
- * MMU fault. If there will be a pmd split later, the secondary MMUs
- * will get an update through the MMU notifier invalidation through
- * split_huge_pmd().
- *
- * Unlike PageTransCompound, this is safe to be called only while
- * split_huge_pmd() cannot run from under us, like if protected by the
- * MMU notifier, otherwise it may result in page->_mapcount < 0 false
- * positives.
- */
-static inline int PageTransCompoundMap(struct page *page)
-{
-	return PageTransCompound(page) && atomic_read(&page->_mapcount) < 0;
-}
-
-/*
  * PageTransTail returns true for both transparent huge pages
  * and hugetlbfs pages, so it should only be called when it's known
  * that hugetlbfs pages aren't involved.
@@ -681,6 +660,39 @@ static inline int TestClearPageDoubleMap(struct page *page)
 	return test_and_clear_bit(PG_double_map, &page[1].flags);
 }
 
+/*
+ * PageTransCompoundMap is the same as PageTransCompound, but it also
+ * guarantees the primary MMU has the entire compound page mapped
+ * through pmd_trans_huge, which in turn guarantees the secondary MMUs
+ * can also map the entire compound page. This allows the secondary
+ * MMUs to call get_user_pages() only once for each compound page and
+ * to immediately map the entire compound page with a single secondary
+ * MMU fault. If there will be a pmd split later, the secondary MMUs
+ * will get an update through the MMU notifier invalidation through
+ * split_huge_pmd().
+ *
+ * Unlike PageTransCompound, this is safe to be called only while
+ * split_huge_pmd() cannot run from under us, like if protected by the
+ * MMU notifier, otherwise it may result in page->_mapcount check false
+ * positives.
+ *
+ * We have to treat page cache THP differently since every subpage of it
+ * would get _mapcount inc'ed once it is PMD mapped.  But, it may be PTE
+ * mapped in the current process so checking PageDoubleMap flag to rule
+ * this out.
+ */
+static inline int PageTransCompoundMap(struct page *page)
+{
+	bool pmd_mapped;
+
+	if (PageAnon(page))
+		pmd_mapped = atomic_read(&page->_mapcount) < 0;
+	else
+		pmd_mapped = atomic_read(&page->_mapcount) >= 0 &&
+			     !PageDoubleMap(compound_head(page));
+
+	return PageTransCompound(page) && pmd_mapped;
+}
 #else
 TESTPAGEFLAG_FALSE(TransHuge)
 TESTPAGEFLAG_FALSE(TransCompound)
