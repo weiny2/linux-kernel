@@ -1601,17 +1601,6 @@ static void collapse_file(struct mm_struct *mm,
 					result = SCAN_FAIL;
 					goto xa_unlocked;
 				}
-			} else if (!PageUptodate(page)) {
-				xas_unlock_irq(&xas);
-				wait_on_page_locked(page);
-				if (!trylock_page(page)) {
-					result = SCAN_PAGE_LOCK;
-					goto xa_unlocked;
-				}
-				get_page(page);
-			} else if (PageDirty(page)) {
-				result = SCAN_FAIL;
-				goto xa_locked;
 			} else if (trylock_page(page)) {
 				get_page(page);
 				xas_unlock_irq(&xas);
@@ -1626,7 +1615,12 @@ static void collapse_file(struct mm_struct *mm,
 		 * without racing with truncate.
 		 */
 		VM_BUG_ON_PAGE(!PageLocked(page), page);
-		VM_BUG_ON_PAGE(!PageUptodate(page), page);
+
+		/* double check the page is up to date */
+		if (unlikely(!PageUptodate(page))) {
+			result = SCAN_FAIL;
+			goto out_unlock;
+		}
 
 		/*
 		 * If file was truncated then extended, or hole-punched, before
@@ -1639,6 +1633,24 @@ static void collapse_file(struct mm_struct *mm,
 
 		if (page_mapping(page) != mapping) {
 			result = SCAN_TRUNCATED;
+			goto out_unlock;
+		}
+
+		if (!is_shmem && PageDirty(page)) {
+			/*
+			 * khugepaged only works on read-only fd, so this
+			 * page is dirty because it hasn't been flushed
+			 * since first write. There won't be new dirty
+			 * pages.
+			 *
+			 * Trigger async flush here and hope the writeback
+			 * is done when khugepaged revisits this page.
+			 *
+			 * This is a one-off situation. We are not forcing
+			 * writeback in loop.
+			 */
+			filemap_flush(mapping);
+			result = SCAN_FAIL;
 			goto out_unlock;
 		}
 

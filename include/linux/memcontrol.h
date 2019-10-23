@@ -58,7 +58,6 @@ enum mem_cgroup_protection {
 
 struct mem_cgroup_reclaim_cookie {
 	pg_data_t *pgdat;
-	int priority;
 	unsigned int generation;
 };
 
@@ -112,7 +111,7 @@ struct memcg_shrinker_map {
 };
 
 /*
- * per-zone information in memory controller.
+ * per-node information in memory controller.
  */
 struct mem_cgroup_per_node {
 	struct lruvec		lruvec;
@@ -126,7 +125,7 @@ struct mem_cgroup_per_node {
 
 	unsigned long		lru_zone_size[MAX_NR_ZONES][NR_LRU_LISTS];
 
-	struct mem_cgroup_reclaim_iter	iter[DEF_PRIORITY + 1];
+	struct mem_cgroup_reclaim_iter	iter;
 
 	struct memcg_shrinker_map __rcu	*shrinker_map;
 
@@ -399,8 +398,7 @@ mem_cgroup_nodeinfo(struct mem_cgroup *memcg, int nid)
  * @memcg: memcg of the wanted lruvec
  *
  * Returns the lru list vector holding pages for a given @node or a given
- * @memcg and @zone. This can be the node lruvec, if the memory controller
- * is disabled.
+ * @memcg. This can be the node lruvec, if the memory controller is disabled.
  */
 static inline struct lruvec *mem_cgroup_lruvec(struct pglist_data *pgdat,
 				struct mem_cgroup *memcg)
