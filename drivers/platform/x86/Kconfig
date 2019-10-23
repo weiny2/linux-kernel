@@ -1368,6 +1368,16 @@ config INTEL_TELEMETRY
 	  directly via debugfs files. Various tools may use
 	  this interface for SoC state monitoring.
 
+config INTEL_PMT_TELEM
+	tristate "Intel PMT telemetry driver"
+	help
+	 The Intel Platform Monitory Technology (PMT) Telemetry driver provides
+	 access to hardware telemetry metrics on devices that support the
+	 feature.
+
+	 For more information, see
+	 <file:Documentation/ABI/testing/sysfs-class-intel_pmt_telem>
+
 endif # X86_PLATFORM_DEVICES
 
 config PMC_ATOM

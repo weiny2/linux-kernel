@@ -146,3 +146,4 @@ obj-$(CONFIG_INTEL_TELEMETRY)		+= intel_telemetry_core.o \
 					   intel_telemetry_pltdrv.o \
 					   intel_telemetry_debugfs.o
 obj-$(CONFIG_PMC_ATOM)			+= pmc_atom.o
+obj-$(CONFIG_INTEL_PMT_TELEM)		+= intel_pmt_telem.o
