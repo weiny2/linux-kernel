@@ -41,9 +41,24 @@
 #define TELEM_XA_MAX		INT_MAX
 #define TELEM_XA_LIMIT		XA_LIMIT(TELEM_XA_START, TELEM_XA_MAX)
 
+#define NUM_BYTES_DWORD(v)		((v) << 2)
+#define NUM_BYTES_QWORD(v)		((v) << 3)
+
 static DEFINE_XARRAY_ALLOC(telem_array);
+static DEFINE_MUTEX(list_lock);
+static BLOCKING_NOTIFIER_HEAD(telem_notifier);
+
+struct telem_endpoint {
+	struct pci_dev			*parent;
+	struct telem_header		header;
+	void __iomem			*base;
+	struct resource			res;
+	bool				present;
+	struct kref			kref;
+};
 
 struct pmt_telem_priv {
+	struct telem_endpoint		*ep;
 	struct device			*dev;
 	struct intel_dvsec_header	*dvsec;
 	struct telem_header		header;
@@ -175,6 +190,163 @@ struct class pmt_telem_class = {
 	.dev_groups = pmt_telem_groups,
 };
 
+/* Called when all users unregister and the device is removed */
+static void pmt_telem_ep_release(struct kref *kref)
+{
+	struct telem_endpoint *ep;
+
+	ep = container_of(kref, struct telem_endpoint, kref);
+	iounmap(ep->base);
+	release_mem_region(ep->res.start, resource_size(&ep->res));
+	kfree(ep);
+}
+
+/*
+ * driver api
+ */
+int pmt_telem_get_next_endpoint(int start)
+{
+	struct telem_endpoint *ep;
+	unsigned long found_idx;
+
+	mutex_lock(&list_lock);
+	xa_for_each_start(&telem_array, found_idx, ep, start) {
+		/*
+		 * Return first found index after start.
+		 * 0 is not valid id.
+		 */
+		if (found_idx > start)
+			break;
+	}
+	mutex_unlock(&list_lock);
+
+	return found_idx == start ? 0 : found_idx;
+}
+EXPORT_SYMBOL_GPL(pmt_telem_get_next_endpoint);
+
+struct telem_endpoint *pmt_telem_register_endpoint(int devid)
+{
+	struct telem_endpoint *ep;
+	unsigned long index = devid;
+
+	mutex_lock(&list_lock);
+	ep = xa_find(&telem_array, &index, index, XA_PRESENT);
+	if (!ep) {
+		mutex_unlock(&list_lock);
+		return ERR_PTR(-ENXIO);
+	}
+
+	kref_get(&ep->kref);
+
+	mutex_unlock(&list_lock);
+
+	return ep;
+}
+EXPORT_SYMBOL_GPL(pmt_telem_register_endpoint);
+
+void pmt_telem_unregister_endpoint(struct telem_endpoint *ep)
+{
+	kref_put(&ep->kref, pmt_telem_ep_release);
+}
+EXPORT_SYMBOL(pmt_telem_unregister_endpoint);
+
+int pmt_telem_get_endpoint_info(int devid,
+				struct telem_endpoint_info *info)
+{
+	struct telem_endpoint *ep;
+	unsigned long index = devid;
+	int err = 0;
+
+	if (!info)
+		return -EINVAL;
+
+	mutex_lock(&list_lock);
+	ep = xa_find(&telem_array, &index, index, XA_PRESENT);
+	if (!ep) {
+		err = -ENXIO;
+		goto unlock;
+	}
+
+	info->pdev = ep->parent;
+	info->header = ep->header;
+
+unlock:
+	mutex_unlock(&list_lock);
+	return err;
+
+}
+EXPORT_SYMBOL_GPL(pmt_telem_get_endpoint_info);
+
+int
+pmt_telem_read32(struct telem_endpoint *ep, u32 offset, u32 *data, u32 count)
+{
+	void __iomem *base;
+	u32 size;
+
+	if (!ep->present)
+		return -ENODEV;
+
+	/*
+	 * offset is relative to the BAR base address, not the counter
+	 * base address.
+	 */
+	if (offset < ep->header.base_offset)
+		return -EINVAL;
+
+	offset -= ep->header.base_offset;
+	base = ep->base;
+	size = ep->header.size;
+
+	if ((offset + NUM_BYTES_DWORD(count)) > size)
+		return -EINVAL;
+
+	memcpy_fromio(data, base + offset, NUM_BYTES_DWORD(count));
+
+	return ep->present ? 0 : -EPIPE;
+}
+EXPORT_SYMBOL_GPL(pmt_telem_read32);
+
+int
+pmt_telem_read64(struct telem_endpoint *ep, u32 offset, u64 *data, u32 count)
+{
+	void __iomem *base;
+	u32 size;
+
+	if (!ep->present)
+		return -ENODEV;
+
+	/*
+	 * offset is relative to the BAR base address, not the counter
+	 * base address.
+	 */
+	if (offset < ep->header.base_offset)
+		return -EINVAL;
+
+	offset -= ep->header.base_offset;
+	base = ep->base;
+	size = ep->header.size;
+
+	if ((offset + NUM_BYTES_QWORD(count)) > size)
+		return -EINVAL;
+
+	memcpy_fromio(data, base + offset, NUM_BYTES_QWORD(count));
+
+	return ep->present ? 0 : -EPIPE;
+}
+EXPORT_SYMBOL_GPL(pmt_telem_read64);
+
+int pmt_telem_register_notifier(struct notifier_block *nb)
+{
+	return blocking_notifier_chain_register(&telem_notifier, nb);
+}
+EXPORT_SYMBOL(pmt_telem_register_notifier);
+
+int pmt_telem_unregister_notifier(struct notifier_block *nb)
+{
+	return blocking_notifier_chain_unregister(&telem_notifier, nb);
+}
+EXPORT_SYMBOL(pmt_telem_unregister_notifier);
+
 /*
  * driver initialization
  */
@@ -198,6 +370,58 @@ static int pmt_telem_create_dev(struct pmt_telem_priv *priv)
 	}
 
 	return PTR_ERR_OR_ZERO(dev);
+}
+
+static int pmt_telem_add_endpoint(struct pmt_telem_priv *priv)
+{
+	struct telem_endpoint *ep;
+	struct resource *req, *res;
+	int err;
+
+	/*
+	 * Endpoint lifetimes are managed by kref, not devres.
+	 */
+	priv->ep = kzalloc(sizeof(*(priv->ep)), GFP_KERNEL);
+	if (!priv->ep)
+		return -ENOMEM;
+
+	ep = priv->ep;
+	ep->header = priv->header;
+	ep->parent = to_pci_dev(priv->dev->parent);
+
+	res = &ep->res;
+	res->start = priv->base_addr;
+	res->end = res->start + (priv->header.size) - 1;
+
+	req = request_mem_region(res->start, resource_size(res),
+				 dev_name(priv->dev));
+	if (!req) {
+		dev_err(priv->dev, "Failed to claim memory for region %pR\n",
+			res);
+		err = -EIO;
+		goto fail_request_mem_region;
+	}
+
+	ep->base = ioremap(res->start, resource_size(res));
+	if (!ep->base) {
+		dev_err(priv->dev, "Failed to ioremap device region\n");
+		err = -EIO;
+		goto fail_ioremap;
+	}
+
+	ep->present = true;
+
+	kref_init(&ep->kref);
+
+	return 0;
+
+fail_ioremap:
+	release_mem_region(res->start,
+			   resource_size(res));
+fail_request_mem_region:
+	kfree(ep);
+
+	return err;
 }
 
 static void pmt_telem_populate_header(void __iomem *disc_offset,
@@ -266,15 +490,20 @@ static int pmt_telem_probe(struct platform_device *pdev)
 
 	priv->base_addr = pci_resource_start(parent, priv->header.tbir) +
 			  priv->header.base_offset;
+	dev_dbg(&pdev->dev, "base address is 0x%lx\n", priv->base_addr);
+
+	err = pmt_telem_add_endpoint(priv);
+	if (err)
+		return err;
 
 	err = alloc_chrdev_region(&priv->devt, 0, 1, TELEM_DRV_NAME);
 	if (err < 0) {
 		dev_err(&pdev->dev,
 			"PMT telemetry chrdev_region err: %d\n", err);
-		return err;
+		goto fail_alloc_chrdev;
 	}
 
-	err = xa_alloc(&telem_array, &priv->devid, priv, TELEM_XA_LIMIT,
+	err = xa_alloc(&telem_array, &priv->devid, priv->ep, TELEM_XA_LIMIT,
 		       GFP_KERNEL);
 	if (err < 0)
 		goto fail_xa_alloc;
@@ -283,12 +512,17 @@ static int pmt_telem_probe(struct platform_device *pdev)
 	if (err < 0)
 		goto fail_create_dev;
 
+	blocking_notifier_call_chain(&telem_notifier, PMT_TELEM_NOTIFY_ADD,
+				     &priv->devid);
+
 	return 0;
 
 fail_create_dev:
 	xa_erase(&telem_array, priv->devid);
 fail_xa_alloc:
 	unregister_chrdev_region(priv->devt, 1);
+fail_alloc_chrdev:
+	kref_put(&priv->ep->kref, pmt_telem_ep_release);
 
 	return err;
 }
@@ -297,11 +531,18 @@ static int pmt_telem_remove(struct platform_device *pdev)
 {
 	struct pmt_telem_priv *priv = platform_get_drvdata(pdev);
 
+	blocking_notifier_call_chain(&telem_notifier, PMT_TELEM_NOTIFY_REMOVE,
+				     &priv->devid);
+
+	priv->ep->present = false;
+
 	device_destroy(&pmt_telem_class, priv->devt);
 	cdev_del(&priv->cdev);
 
 	xa_erase(&telem_array, priv->devid);
 	unregister_chrdev_region(priv->devt, 1);
+
+	kref_put(&priv->ep->kref, pmt_telem_ep_release);
 
 	return 0;
 }
