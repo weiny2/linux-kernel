@@ -3385,6 +3385,57 @@
             ],
             "status": "public",
             "stuck_at_ref": ""
+        },
+        {
+            "branch": "thb_0905_v5.4-rc4",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "CONFIG_DRM",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_DRM_KMS_HELPER",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_DRM_PANEL_ORIENTATION_QUIRKS",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_DRM_HANTRO",
+                    "value": "m"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Alan Chin Loon Tan",
+                    "email": "alan.chin.loon.tan@intel.com"
+                }
+            ],
+            "description": "media codec driver\nmodule for THB ARM Media",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Tan, Alan Chin Loon",
+                    "email": "alan.chin.loon.tan@intel.com"
+                }
+            ],
+            "jira": "NEXT-1663",
+            "name": "THB ARM Media",
+            "repourl": "ssh://git-amr-1.devtools.intel.com:29418/iotg_keembay-hantrodriver.git",
+            "sdl_contact": [
+                {
+                    "name": "Tan, Alan Chin Loon",
+                    "email": "alan.chin.loon.tan@intel.com"
+                },
+                {
+                    "name": "",
+                    "email": ""
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": ""
         }
     ]
 }
