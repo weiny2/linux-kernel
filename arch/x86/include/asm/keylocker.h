@@ -15,6 +15,8 @@
 #include <asm/processor.h>
 
 #define KEYLOCKER_CPUID			0x019
+#define KEYLOCKER_CPUID_EBX_BACKUP	BIT(4)
+#define KEYLOCKER_CPUID_ECX_RAND	BIT(1)
 
 /* The CPU-internal key related definitions */
 
