@@ -2584,45 +2584,6 @@
             "stuck_at_ref": ""
         },
         {
-            "branch": "cta_arch",
-            "branch_type": "expiring",
-            "config_options": [
-                {
-                    "name": "CONFIG_MFD_INTEL_CTA",
-                    "value": "m"
-                },
-                {
-                    "name": "CONFIG_INTEL_CTA_TELEM",
-                    "value": "m"
-                }
-            ],
-            "contributor": [
-                {
-                    "name": "David Box",
-                    "email": "david.e.box@intel.com"
-                }
-            ],
-            "description": "Telemetry Support",
-            "enabled": false,
-            "ip_owner": [
-                {
-                    "name": "Ramamurthy Krithivas",
-                    "email": "ramamurthy.krithivas@intel.com"
-                }
-            ],
-            "jira": "NEXT-1565",
-            "name": "telemetry",
-            "repourl": "ssh://git-amr-3.devtools.intel.com:29418/otc_linux_debox1-dev.git",
-            "sdl_contact": [
-                {
-                    "name": "David E. Box",
-                    "email": "david.e.box@intel.com"
-                }
-            ],
-            "status": "intel confidential",
-            "stuck_at_ref": ""
-        },
-        {
             "branch": "master",
             "branch_type": "expiring",
             "config_options": [],
