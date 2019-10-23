@@ -276,13 +276,13 @@ static int uvc_get_video_ctrl(struct uvc_streaming *stream,
 	if (size >= 34) {
 		ctrl->dwClockFrequency = get_unaligned_le32(&data[26]);
 		ctrl->bmFramingInfo = data[30];
-		ctrl->bPreferedVersion = data[31];
+		ctrl->bPreferredVersion = data[31];
 		ctrl->bMinVersion = data[32];
 		ctrl->bMaxVersion = data[33];
 	} else {
 		ctrl->dwClockFrequency = stream->dev->clock_frequency;
 		ctrl->bmFramingInfo = 0;
-		ctrl->bPreferedVersion = 0;
+		ctrl->bPreferredVersion = 0;
 		ctrl->bMinVersion = 0;
 		ctrl->bMaxVersion = 0;
 	}
@@ -325,7 +325,7 @@ static int uvc_set_video_ctrl(struct uvc_streaming *stream,
 	if (size >= 34) {
 		put_unaligned_le32(ctrl->dwClockFrequency, &data[26]);
 		data[30] = ctrl->bmFramingInfo;
-		data[31] = ctrl->bPreferedVersion;
+		data[31] = ctrl->bPreferredVersion;
 		data[32] = ctrl->bMinVersion;
 		data[33] = ctrl->bMaxVersion;
 	}

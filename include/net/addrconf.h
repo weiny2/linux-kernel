@@ -43,7 +43,7 @@ struct prefix_info {
 #error "Please fix <asm/byteorder.h>"
 #endif
 	__be32			valid;
-	__be32			prefered;
+	__be32			preferred;
 	__be32			reserved2;
 
 	struct in6_addr		prefix;
@@ -121,7 +121,7 @@ int addrconf_prefix_rcv_add_addr(struct net *net, struct net_device *dev,
 				 struct inet6_dev *in6_dev,
 				 const struct in6_addr *addr, int addr_type,
 				 u32 addr_flags, bool sllao, bool tokenized,
-				 __u32 valid_lft, u32 prefered_lft);
+				 __u32 valid_lft, u32 preferred_lft);
 
 static inline void addrconf_addr_eui48_base(u8 *eui, const char *const addr)
 {

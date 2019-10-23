@@ -1792,7 +1792,7 @@ temp_valid_lft - INTEGER
 	valid lifetime (in seconds) for temporary addresses.
 	Default: 604800 (7 days)
 
-temp_prefered_lft - INTEGER
+temp_preferred_lft - INTEGER
 	Preferred lifetime (in seconds) for temporary addresses.
 	Default: 86400 (1 day)
 

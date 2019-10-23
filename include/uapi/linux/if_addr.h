@@ -57,7 +57,10 @@ enum {
 #define IFA_F_STABLE_PRIVACY	0x800
 
 struct ifa_cacheinfo {
-	__u32	ifa_prefered;
+	union {
+		__u32	ifa_preferred;
+		__u32	ifa_prefered __attribute__((deprecated)); /* NOTYPO */
+	} __attribute__((packed));
 	__u32	ifa_valid;
 	__u32	cstamp; /* created timestamp, hundredths of seconds */
 	__u32	tstamp; /* updated timestamp, hundredths of seconds */

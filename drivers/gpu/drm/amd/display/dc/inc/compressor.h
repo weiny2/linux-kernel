@@ -126,9 +126,9 @@ struct fbc_requested_compressed_size {
 	unsigned int   min_size_alignment;
 	union {
 		struct {
-			/* Above preferedSize must be allocated in FB pool */
+			/* Above preferred_size must be allocated in FB pool */
 			unsigned int preferred_must_be_framebuffer_pool : 1;
-			/* Above minSize must be allocated in FB pool */
+			/* Above min_size must be allocated in FB pool */
 			unsigned int min_must_be_framebuffer_pool : 1;
 		} bits;
 		unsigned int flags;

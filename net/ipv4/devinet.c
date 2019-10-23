@@ -790,7 +790,7 @@ static void check_lifetime(struct work_struct *work)
 }
 
 static void set_ifa_lifetime(struct in_ifaddr *ifa, __u32 valid_lft,
-			     __u32 prefered_lft)
+			     __u32 preferred_lft)
 {
 	unsigned long timeout;
 
@@ -802,7 +802,7 @@ static void set_ifa_lifetime(struct in_ifaddr *ifa, __u32 valid_lft,
 	else
 		ifa->ifa_flags |= IFA_F_PERMANENT;
 
-	timeout = addrconf_timeout_fixup(prefered_lft, HZ);
+	timeout = addrconf_timeout_fixup(preferred_lft, HZ);
 	if (addrconf_finite_timeout(timeout)) {
 		if (timeout == 0)
 			ifa->ifa_flags |= IFA_F_DEPRECATED;
@@ -814,7 +814,7 @@ static void set_ifa_lifetime(struct in_ifaddr *ifa, __u32 valid_lft,
 }
 
 static struct in_ifaddr *rtm_to_ifaddr(struct net *net, struct nlmsghdr *nlh,
-				       __u32 *pvalid_lft, __u32 *pprefered_lft,
+				       __u32 *pvalid_lft, __u32 *ppreferred_lft,
 				       struct netlink_ext_ack *extack)
 {
 	struct nlattr *tb[IFA_MAX+1];
@@ -885,12 +885,12 @@ static struct in_ifaddr *rtm_to_ifaddr(struct net *net, struct nlmsghdr *nlh,
 		struct ifa_cacheinfo *ci;
 
 		ci = nla_data(tb[IFA_CACHEINFO]);
-		if (!ci->ifa_valid || ci->ifa_prefered > ci->ifa_valid) {
+		if (!ci->ifa_valid || ci->ifa_preferred > ci->ifa_valid) {
 			err = -EINVAL;
 			goto errout_free;
 		}
 		*pvalid_lft = ci->ifa_valid;
-		*pprefered_lft = ci->ifa_prefered;
+		*ppreferred_lft = ci->ifa_preferred;
 	}
 
 	return ifa;
@@ -925,11 +925,11 @@ static int inet_rtm_newaddr(struct sk_buff *skb, struct nlmsghdr *nlh,
 	struct in_ifaddr *ifa;
 	struct in_ifaddr *ifa_existing;
 	__u32 valid_lft = INFINITY_LIFE_TIME;
-	__u32 prefered_lft = INFINITY_LIFE_TIME;
+	__u32 preferred_lft = INFINITY_LIFE_TIME;
 
 	ASSERT_RTNL();
 
-	ifa = rtm_to_ifaddr(net, nlh, &valid_lft, &prefered_lft, extack);
+	ifa = rtm_to_ifaddr(net, nlh, &valid_lft, &preferred_lft, extack);
 	if (IS_ERR(ifa))
 		return PTR_ERR(ifa);
 
@@ -938,7 +938,7 @@ static int inet_rtm_newaddr(struct sk_buff *skb, struct nlmsghdr *nlh,
 		/* It would be best to check for !NLM_F_CREATE here but
 		 * userspace already relies on not having to provide this.
 		 */
-		set_ifa_lifetime(ifa, valid_lft, prefered_lft);
+		set_ifa_lifetime(ifa, valid_lft, preferred_lft);
 		if (ifa->ifa_flags & IFA_F_MCAUTOJOIN) {
 			int ret = ip_mc_config(net->ipv4.mc_autojoin_sk,
 					       true, ifa);
@@ -965,7 +965,7 @@ static int inet_rtm_newaddr(struct sk_buff *skb, struct nlmsghdr *nlh,
 			ifa->ifa_rt_priority = new_metric;
 		}
 
-		set_ifa_lifetime(ifa, valid_lft, prefered_lft);
+		set_ifa_lifetime(ifa, valid_lft, preferred_lft);
 		cancel_delayed_work(&check_lifetime_work);
 		queue_delayed_work(system_power_efficient_wq,
 				&check_lifetime_work, 0);
@@ -1639,7 +1639,7 @@ static int put_cacheinfo(struct sk_buff *skb, unsigned long cstamp,
 
 	ci.cstamp = cstamp_delta(cstamp);
 	ci.tstamp = cstamp_delta(tstamp);
-	ci.ifa_prefered = preferred;
+	ci.ifa_preferred = preferred;
 	ci.ifa_valid = valid;
 
 	return nla_put(skb, IFA_CACHEINFO, sizeof(ci), &ci);

@@ -448,7 +448,10 @@ struct uvc_streaming_control {
 	__u32 dwMaxPayloadTransferSize;
 	__u32 dwClockFrequency;
 	__u8  bmFramingInfo;
-	__u8  bPreferedVersion;
+	union {
+		__u8 bPreferredVersion;
+		__u8 bPreferedVersion __attribute__((deprecated)); /* NOTYPO */
+	} __attribute__((__packed__));
 	__u8  bMinVersion;
 	__u8  bMaxVersion;
 } __attribute__((__packed__));

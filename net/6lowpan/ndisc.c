@@ -201,7 +201,7 @@ static void lowpan_ndisc_prefix_rcv_add_addr(struct net *net,
 					     int addr_type, u32 addr_flags,
 					     bool sllao, bool tokenized,
 					     __u32 valid_lft,
-					     u32 prefered_lft,
+					     u32 preferred_lft,
 					     bool dev_addr_generated)
 {
 	int err;
@@ -212,7 +212,7 @@ static void lowpan_ndisc_prefix_rcv_add_addr(struct net *net,
 		err = addrconf_prefix_rcv_add_addr(net, dev, pinfo, in6_dev,
 						   addr, addr_type, addr_flags,
 						   sllao, tokenized, valid_lft,
-						   prefered_lft);
+						   preferred_lft);
 		if (err)
 			ND_PRINTK(2, warn,
 				  "RA: could not add a short address based address for prefix: %pI6c\n",
