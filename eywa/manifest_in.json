@@ -2622,48 +2622,6 @@
             "stuck_at_ref": ""
         },
         {
-            "branch": "thb_0629_v5.3-rc5",
-            "branch_type": "expiring",
-            "config_options": [
-                {
-                    "name": "CONFIG_DRM_HANTRO_THB",
-                    "value": "m"
-                },
-                {
-                    "name": "CONFIG_DRM",
-                    "value": "y"
-                },
-                {
-                    "name": "CONFIG_DRM_KMS_HELPER",
-                    "value": "y"
-                },
-                {
-                    "name": "CONFIG_DRM_PANEL_ORIENTATION_QUIRKS",
-                    "value": "y"
-                }
-            ],
-            "contributor": [
-                {
-                    "name": "Hari Chand",
-                    "email": "hari.chand.balasubramaniam@intel.com"
-                }
-            ],
-            "description": "hantro driver",
-            "enabled": false,
-            "ip_owner": [],
-            "jira": "NEXT-1568",
-            "name": "hantro",
-            "repourl": "ssh://git-amr-1.devtools.intel.com:29418/iotg_keembay-hantrodriver",
-            "sdl_contact": [
-                {
-                    "name": "Hari Chand balasubramaniam",
-                    "email": "hari.chand.balasubramaniam@intel.com"
-                }
-            ],
-            "status": "public",
-            "stuck_at_ref": ""
-        },
-        {
             "branch": "supervisor",
             "branch_type": "expiring",
             "config_options": [],
@@ -3383,7 +3341,7 @@
                 }
             ],
             "jira": "NEXT-1663",
-            "name": "THB ARM Media",
+            "name": "THB ARM Media hantro",
             "repourl": "ssh://git-amr-1.devtools.intel.com:29418/iotg_keembay-hantrodriver.git",
             "sdl_contact": [
                 {
