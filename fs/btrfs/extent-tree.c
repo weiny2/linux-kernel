@@ -75,8 +75,8 @@ void btrfs_free_excluded_extents(struct btrfs_block_group_cache *cache)
 	struct btrfs_fs_info *fs_info = cache->fs_info;
 	u64 start, end;
 
-	start = cache->key.objectid;
-	end = start + cache->key.offset - 1;
+	start = cache->start;
+	end = start + cache->length - 1;
 
 	clear_extent_bits(&fs_info->freed_extents[0],
 			  start, end, EXTENT_UPTODATE);
@@ -2560,7 +2560,7 @@ static u64 first_logical_byte(struct btrfs_fs_info *fs_info, u64 search_start)
 	if (!cache)
 		return 0;
 
-	bytenr = cache->key.objectid;
+	bytenr = cache->start;
 	btrfs_put_block_group(cache);
 
 	return bytenr;
@@ -2590,13 +2590,12 @@ static int pin_down_extent(struct btrfs_block_group_cache *cache,
 	return 0;
 }
 
-/*
- * this function must be called within transaction
- */
 int btrfs_pin_extent(struct btrfs_fs_info *fs_info,
 		     u64 bytenr, u64 num_bytes, int reserved)
 {
 	struct btrfs_block_group_cache *cache;
+
+	ASSERT(fs_info->running_transaction);
 
 	cache = btrfs_lookup_block_group(fs_info, bytenr);
 	BUG_ON(!cache); /* Logic error */
@@ -2797,7 +2796,7 @@ static int unpin_extent_range(struct btrfs_fs_info *fs_info,
 	while (start <= end) {
 		readonly = false;
 		if (!cache ||
-		    start >= cache->key.objectid + cache->key.offset) {
+		    start >= cache->start + cache->length) {
 			if (cache)
 				btrfs_put_block_group(cache);
 			total_unpinned = 0;
@@ -2810,7 +2809,7 @@ static int unpin_extent_range(struct btrfs_fs_info *fs_info,
 			empty_cluster <<= 1;
 		}
 
-		len = cache->key.objectid + cache->key.offset - start;
+		len = cache->start + cache->length - start;
 		len = min(len, end + 1 - start);
 
 		if (start < cache->last_byte_to_unpin) {
@@ -2926,8 +2925,8 @@ int btrfs_finish_extent_commit(struct btrfs_trans_handle *trans)
 		ret = -EROFS;
 		if (!trans->aborted)
 			ret = btrfs_discard_extent(fs_info,
-						   block_group->key.objectid,
-						   block_group->key.offset,
+						   block_group->start,
+						   block_group->length,
 						   &trimmed);
 
 		list_del_init(&block_group->bg_list);
@@ -3493,7 +3492,7 @@ static int find_free_extent_clustered(struct btrfs_block_group_cache *bg,
 		goto release_cluster;
 
 	offset = btrfs_alloc_from_cluster(cluster_bg, last_ptr,
-			ffe_ctl->num_bytes, cluster_bg->key.objectid,
+			ffe_ctl->num_bytes, cluster_bg->start,
 			&ffe_ctl->max_extent_size);
 	if (offset) {
 		/* We have a block, we're done */
@@ -3904,7 +3903,7 @@ search:
 			continue;
 
 		btrfs_grab_block_group(block_group, delalloc);
-		ffe_ctl.search_start = block_group->key.objectid;
+		ffe_ctl.search_start = block_group->start;
 
 		/*
 		 * this can happen if we end up cycling through all the
@@ -3984,7 +3983,7 @@ checks:
 
 		/* move on to the next group */
 		if (ffe_ctl.search_start + num_bytes >
-		    block_group->key.objectid + block_group->key.offset) {
+		    block_group->start + block_group->length) {
 			btrfs_add_free_space(block_group, ffe_ctl.found_offset,
 					     num_bytes);
 			goto loop;
@@ -5436,7 +5435,7 @@ int btrfs_drop_subtree(struct btrfs_trans_handle *trans,
 
 	btrfs_assert_tree_locked(parent);
 	parent_level = btrfs_header_level(parent);
-	extent_buffer_get(parent);
+	atomic_inc(&parent->refs);
 	path->nodes[parent_level] = parent;
 	path->slots[parent_level] = btrfs_header_nritems(parent);
 
@@ -5498,9 +5497,8 @@ u64 btrfs_account_ro_block_groups_free_space(struct btrfs_space_info *sinfo)
 		}
 
 		factor = btrfs_bg_type_to_factor(block_group->flags);
-		free_bytes += (block_group->key.offset -
-			       btrfs_block_group_used(&block_group->item)) *
-			       factor;
+		free_bytes += (block_group->length -
+			       block_group->used) * factor;
 
 		spin_unlock(&block_group->lock);
 	}
@@ -5647,13 +5645,13 @@ int btrfs_trim_fs(struct btrfs_fs_info *fs_info, struct fstrim_range *range)
 
 	cache = btrfs_lookup_first_block_group(fs_info, range->start);
 	for (; cache; cache = btrfs_next_block_group(cache)) {
-		if (cache->key.objectid >= range_end) {
+		if (cache->start >= range_end) {
 			btrfs_put_block_group(cache);
 			break;
 		}
 
-		start = max(range->start, cache->key.objectid);
-		end = min(range_end, cache->key.objectid + cache->key.offset);
+		start = max(range->start, cache->start);
+		end = min(range_end, cache->start + cache->length);
 
 		if (end - start >= range->minlen) {
 			if (!btrfs_block_group_cache_done(cache)) {
