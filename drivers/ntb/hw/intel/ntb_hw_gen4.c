@@ -177,8 +177,15 @@ static int gen4_init_ntb(struct intel_ntb_dev *ndev)
 
 	ndev->mw_count = XEON_MW_COUNT;
 	ndev->spad_count = GEN4_SPAD_COUNT;
-	ndev->db_count = GEN4_DB_COUNT;
-	ndev->db_link_mask = GEN4_DB_LINK_BIT;
+	if (ndev->hwerr_flags & NTB_HWERR_MSIX_VECTOR0_BAD) {
+		ndev->db_link_mask = GEN4_DB_LINK_BIT | BIT(0);
+		ndev->db_count = GEN4_DB_COUNT - 1;
+		ndev->db_valid_mask = 0xFFFFFFFE;
+	} else {
+		ndev->db_link_mask = GEN4_DB_LINK_BIT;
+		ndev->db_count = GEN4_DB_COUNT;
+		ndev->db_valid_mask = BIT_ULL(ndev->db_count) - 1;
+	}
 
 	ndev->self_reg = &gen4_pri_reg;
 	ndev->xlat_reg = &gen4_sec_xlat;
@@ -192,8 +199,6 @@ static int gen4_init_ntb(struct intel_ntb_dev *ndev)
 				&xeon_b2b_dsd_addr);
 	if (rc)
 		return rc;
-
-	ndev->db_valid_mask = BIT_ULL(ndev->db_count) - 1;
 
 	ndev->reg->db_iowrite(ndev->db_valid_mask,
 			      ndev->self_mmio +
@@ -229,6 +234,9 @@ int gen4_init_dev(struct intel_ntb_dev *ndev)
 		ntb_topo_string(ndev->ntb.topo));
 	if (ndev->ntb.topo == NTB_TOPO_NONE)
 		return -EINVAL;
+
+	if (pdev->device == PCI_DEVICE_ID_INTEL_NTB_B2B_ICX)
+		ndev->hwerr_flags |= NTB_HWERR_MSIX_VECTOR0_BAD;
 
 	rc = gen4_init_ntb(ndev);
 	if (rc)
