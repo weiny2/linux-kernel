@@ -2636,7 +2636,7 @@
                 }
             ],
             "description": "XSAVES Supervisor states",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Yu-cheng Yu",
