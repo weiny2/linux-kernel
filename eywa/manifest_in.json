@@ -2105,7 +2105,7 @@
             "stuck_at_ref": ""
         },
         {
-            "branch": "sof-for-next-5.4-rc2",
+            "branch": "sof-for-next-5.4-rc5",
             "branch_type": "expiring",
             "config_options": [
                 {
@@ -2159,6 +2159,10 @@
                 {
                     "name": "CONFIG_SND_SOC_INTEL_TGL_RT1308_MACH",
                     "value": "m"
+                },
+                {
+                    "name": "CONFIG_SND_SOC_INTEL_EHL_RT5660_MACH",
+                    "value": "m"
                 }
             ],
             "contributor": [
@@ -2168,7 +2172,7 @@
                 }
             ],
             "description": "Add Audio SOF drivers for TGL support",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Michal Grodzicki",
