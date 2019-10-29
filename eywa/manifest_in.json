@@ -3030,7 +3030,7 @@
                 }
             ],
             "description": "AMX(TMUL) lonely scheduling for intel-next",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Valentine, Bob <bob.valentine@intel.com>",
