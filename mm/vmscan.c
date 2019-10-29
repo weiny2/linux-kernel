@@ -3889,8 +3889,23 @@ static void kswapd_try_to_sleep(pg_data_t *pgdat, int alloc_order, int reclaim_o
 		 */
 		set_pgdat_percpu_threshold(pgdat, calculate_normal_threshold);
 
-		if (!kthread_should_stop())
-			schedule();
+		if (!kthread_should_stop()) {
+			/*
+			 * In memory tiering mode, try harder to
+			 * recover from kswapd failures, because
+			 * direct reclaiming may be not triggered.
+			 */
+			if (sysctl_numa_balancing_mode & NUMA_BALANCING_MEMORY_TIERING &&
+			    next_migration_node(pgdat->node_id) != -1 &&
+			    pgdat->kswapd_failures >= MAX_RECLAIM_RETRIES) {
+				remaining = schedule_timeout(10 * HZ);
+				if (!remaining) {
+					pgdat->kswapd_classzone_idx = ZONE_MOVABLE;
+					pgdat->kswapd_order = 0;
+				}
+			} else
+				schedule();
+		}
 
 		set_pgdat_percpu_threshold(pgdat, calculate_pressure_threshold);
 	} else {
