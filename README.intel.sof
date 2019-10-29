@@ -1,0 +1,48 @@
+IP Block: Sound Open Firmware driver
+Platform Affect: BYT, BDW, APL, GLK, CNL, CFL, ICL, CML, TGL, JSL, EHL, ADL
+BugFix: None
+
+Sound Open Firmware (SOF) is a host and DSP architecture agnostic
+audio DSP firmware. SOF is not tied to any specific host architecture
+or any specific physical IO communication type (it will work with on
+SoC DSPs, or DSP connected via SPI/I2C).
+
+SOF is also not coupled to any particular DSP architecture and has
+abstraction similar to Linux to allow porting to other DSP
+architectures.
+
+This branch include the support for ADL-S RVP in HDA and SDW mode,
+support for ADL to the legacy snd-hda-intel driver, and a backport
+of latest soundwire stack from upstream sound and drivers/soundwire
+subsystems.
+
+Code base and other platform support is in Linux 5.7-rc4
+
+The follow defconfig must be enabled for driver to compile
+
+# Generic SOF selections
+CONFIG_SND_SOC_SOF_TOPLEVEL=y
+CONFIG_SND_SOC_SOF_PCI=m
+CONFIG_SND_SOC_SOF_ACPI=m
+CONFIG_SND_SOC_SOF_HDA_LINK=y
+CONFIG_SND_SOC_SOF_HDA_AUDIO_CODEC=y
+
+# debug options
+CONFIG_SND_SOC_SOF_DEBUG=y
+CONFIG_SND_SOC_SOF_DEBUG_VERBOSE_IPC=y
+CONFIG_SND_SOC_SOF_DEBUG_ENABLE_DEBUGFS_CACHE=y
+CONFIG_SND_SOC_SOF_DEBUG_ENABLE_FIRMWARE_TRACE=y
+
+# SOF Intel platform drivers
+CONFIG_SND_SOC_SOF_INTEL_TOPLEVEL=y
+CONFIG_SND_SOC_SOF_TIGERLAKE_SUPPORT=y
+CONFIG_SND_SOC_SOF_JASPERLAKE_SUPPORT=y
+CONFIG_SND_SOC_SOF_ELKHARTLAKE_SUPPORT=y
+CONFIG_SND_SOC_SOF_ALDERLAKE_SUPPORT=y
+
+# Disable HDAudio legacy
+# CONFIG_SND_HDA_INTEL is not set
+
+# Intel machine drivers
+CONFIG_SND_SOC_INTEL_TGL_RT1308_MACH=m
+CONFIG_SND_SOC_SOF_ELKHARTLAKE_SUPPORT=y
