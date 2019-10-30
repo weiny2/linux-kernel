@@ -1013,7 +1013,7 @@ static int __unmap_and_move(new_page_t get_new_page,
 	int rc = -EAGAIN;
 	int page_was_mapped = 0;
 	struct anon_vma *anon_vma = NULL;
-	bool is_lru = !__PageMovable(page);
+	bool is_lru = !__PageMovable(page), is_discard = false;
 	struct page *newpage;
 
 	/*
@@ -1080,6 +1080,13 @@ static int __unmap_and_move(new_page_t get_new_page,
 		try_to_unmap(page,
 			TTU_MIGRATION|TTU_IGNORE_MLOCK|TTU_IGNORE_ACCESS);
 		page_was_mapped = 1;
+		/* Clean MADV_FREE page, discard instead of migrate */
+		if (PageAnon(page) && !PageSwapBacked(page) &&
+		    !PageDirty(page)) {
+			rc = MIGRATEPAGE_SUCCESS;
+			is_discard = true;
+			goto out_unlock;
+		}
 	}
 
 	if (!page_mapped(page))
@@ -1100,7 +1107,7 @@ out_put:
 	 * and possibly modified by its owner - don't rely on the page
 	 * state.
 	 */
-	if (rc == MIGRATEPAGE_SUCCESS) {
+	if (rc == MIGRATEPAGE_SUCCESS && !is_discard) {
 		set_page_owner_migrate_reason(newpage, m_detail->reason);
 		if (unlikely(!is_lru))
 			put_page(newpage);

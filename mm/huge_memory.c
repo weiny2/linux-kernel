@@ -3071,11 +3071,21 @@ void set_pmd_migration_entry(struct page_vma_mapped_walk *pvmw,
 	pmdp_invalidate(vma, address, pvmw->pmd);
 	if (pmd_dirty(pmdval))
 		set_page_dirty(page);
-	entry = make_migration_entry(page, pmd_write(pmdval));
-	pmdswp = swp_entry_to_pmd(entry);
-	if (pmd_soft_dirty(pmdval))
-		pmdswp = pmd_swp_mksoft_dirty(pmdswp);
-	set_pmd_at(mm, address, pvmw->pmd, pmdswp);
+	/* Clean MADV_FREE page, discard instead of migrate */
+	if (PageAnon(page) && !PageSwapBacked(page) && !PageDirty(page)) {
+		pmd_clear(pvmw->pmd);
+		zap_deposited_table(mm, pvmw->pmd);
+		/* Invalidate as we cleared the pmd */
+		mmu_notifier_invalidate_range(mm, address,
+					      address + HPAGE_PMD_SIZE);
+		add_mm_counter(mm, MM_ANONPAGES, -HPAGE_PMD_NR);
+	} else {
+		entry = make_migration_entry(page, pmd_write(pmdval));
+		pmdswp = swp_entry_to_pmd(entry);
+		if (pmd_soft_dirty(pmdval))
+			pmdswp = pmd_swp_mksoft_dirty(pmdswp);
+		set_pmd_at(mm, address, pvmw->pmd, pmdswp);
+	}
 	page_remove_rmap(page, true);
 	put_page(page);
 }

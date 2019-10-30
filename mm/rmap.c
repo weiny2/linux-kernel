@@ -1586,6 +1586,16 @@ static bool try_to_unmap_one(struct page *page, struct vm_area_struct *vma,
 				break;
 			}
 
+			/* Clean MADV_FREE page, discard instead of migrate */
+			if (PageAnon(page) && !PageSwapBacked(page) &&
+			    !PageDirty(page) && !(flags & TTU_SPLIT_FREEZE)) {
+				/* Invalidate as we cleared the pte */
+				mmu_notifier_invalidate_range(mm,
+						address, address + PAGE_SIZE);
+				dec_mm_counter(mm, MM_ANONPAGES);
+				goto discard;
+			}
+
 			/*
 			 * Store the pfn of the page in a special migration
 			 * pte. do_swap_page() will wait until the migration
