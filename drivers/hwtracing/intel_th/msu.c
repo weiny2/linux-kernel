@@ -939,6 +939,9 @@ static int msc_buffer_contig_alloc(struct msc *msc, unsigned long size)
 	msc->nr_pages = nr_pages;
 	msc->base = page_address(page);
 	msc->base_addr = sg_dma_address(msc->single_sgt.sgl);
+#ifdef CONFIG_X86
+	set_memory_uc((unsigned long)msc->base, nr_pages);
+#endif /* X86 */
 
 	return 0;
 
@@ -960,6 +963,9 @@ static void msc_buffer_contig_free(struct msc *msc)
 {
 	unsigned long off;
 
+#ifdef CONFIG_X86
+	set_memory_wb((unsigned long)msc->base, msc->nr_pages);
+#endif /* X86 */
 	dma_unmap_sg(msc_dev(msc)->parent->parent, msc->single_sgt.sgl,
 		     1, DMA_FROM_DEVICE);
 	sg_free_table(&msc->single_sgt);
