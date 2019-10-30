@@ -783,6 +783,7 @@ static int msc_configure(struct msc *msc)
 	if (msc->mode == MSC_MODE_SINGLE) {
 		reg = msc->nr_pages;
 		iowrite32(reg, msc->reg_base + REG_MSU_MSC0SIZE);
+		iowrite32(0, msc->reg_base + REG_MSU_MSC0MWP);
 	}
 
 	reg = ioread32(msc->reg_base + REG_MSU_MSC0CTL);
