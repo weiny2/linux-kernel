@@ -1681,7 +1681,7 @@ cifs_setlk(struct file *file, struct file_lock *flock, __u32 type,
 		rc = server->ops->mand_unlock_range(cfile, flock, xid);
 
 out:
-	if (flock->fl_flags & FL_POSIX) {
+	if ((flock->fl_flags & FL_POSIX) || (flock->fl_flags & FL_FLOCK)) {
 		/*
 		 * If this is a request to remove all locks because we
 		 * are closing the file, it doesn't matter if the
@@ -1696,6 +1696,52 @@ out:
 		rc = locks_lock_file_wait(file, flock);
 	}
 	return rc;
+}
+
+int cifs_flock(struct file *file, int cmd, struct file_lock *fl)
+{
+	int rc, xid;
+	int lock = 0, unlock = 0;
+	bool wait_flag = false;
+	bool posix_lck = false;
+	struct cifs_sb_info *cifs_sb;
+	struct cifs_tcon *tcon;
+	struct cifsFileInfo *cfile;
+	__u32 type;
+
+	rc = -EACCES;
+	xid = get_xid();
+
+	if (!(fl->fl_flags & FL_FLOCK))
+		return -ENOLCK;
+
+	cfile = (struct cifsFileInfo *)file->private_data;
+	tcon = tlink_tcon(cfile->tlink);
+
+	cifs_read_flock(fl, &type, &lock, &unlock, &wait_flag,
+			tcon->ses->server);
+	cifs_sb = CIFS_FILE_SB(file);
+
+	if (cap_unix(tcon->ses) &&
+	    (CIFS_UNIX_FCNTL_CAP & le64_to_cpu(tcon->fsUnixInfo.Capability)) &&
+	    ((cifs_sb->mnt_cifs_flags & CIFS_MOUNT_NOPOSIXBRL) == 0))
+		posix_lck = true;
+
+	if (!lock && !unlock) {
+		/*
+		 * if no lock or unlock then nothing to do since we do not
+		 * know what it is
+		 */
+		free_xid(xid);
+		return -EOPNOTSUPP;
+	}
+
+	rc = cifs_setlk(file, fl, type, wait_flag, posix_lck, lock, unlock,
+			xid);
+	free_xid(xid);
+	return rc;
+
+
 }
 
 int cifs_lock(struct file *file, int cmd, struct file_lock *flock)
@@ -2757,9 +2803,17 @@ cifs_resend_wdata(struct cifs_writedata *wdata, struct list_head *wdata_list,
 		if (!rc) {
 			if (wdata->cfile->invalidHandle)
 				rc = -EAGAIN;
-			else
+			else {
+#ifdef CONFIG_CIFS_SMB_DIRECT
+				if (wdata->mr) {
+					wdata->mr->need_invalidate = true;
+					smbd_deregister_mr(wdata->mr);
+					wdata->mr = NULL;
+				}
+#endif
 				rc = server->ops->async_writev(wdata,
 					cifs_uncached_writedata_release);
+			}
 		}
 
 		/* If the write was successfully sent, we are done */
@@ -3482,8 +3536,16 @@ static int cifs_resend_rdata(struct cifs_readdata *rdata,
 		if (!rc) {
 			if (rdata->cfile->invalidHandle)
 				rc = -EAGAIN;
-			else
+			else {
+#ifdef CONFIG_CIFS_SMB_DIRECT
+				if (rdata->mr) {
+					rdata->mr->need_invalidate = true;
+					smbd_deregister_mr(rdata->mr);
+					rdata->mr = NULL;
+				}
+#endif
 				rc = server->ops->async_readv(rdata);
+			}
 		}
 
 		/* If the read was successfully sent, we are done */
