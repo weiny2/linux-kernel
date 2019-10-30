@@ -40,7 +40,6 @@
 #include <linux/parser.h>
 
 static const struct super_operations xfs_super_operations;
-struct bio_set xfs_ioend_bioset;
 
 static struct kset *xfs_kset;		/* top-level xfs sysfs dir */
 #ifdef DEBUG
@@ -51,7 +50,7 @@ static struct xfs_kobj xfs_dbg_kobj;	/* global debug sysfs attrs */
  * Table driven mount option parser.
  */
 enum {
-	Opt_logbufs, Opt_logbsize, Opt_logdev, Opt_rtdev, Opt_biosize,
+	Opt_logbufs, Opt_logbsize, Opt_logdev, Opt_rtdev,
 	Opt_wsync, Opt_noalign, Opt_swalloc, Opt_sunit, Opt_swidth, Opt_nouuid,
 	Opt_grpid, Opt_nogrpid, Opt_bsdgroups, Opt_sysvgroups,
 	Opt_allocsize, Opt_norecovery, Opt_inode64, Opt_inode32, Opt_ikeep,
@@ -67,7 +66,6 @@ static const match_table_t tokens = {
 	{Opt_logbsize,	"logbsize=%s"},	/* size of XFS log buffers */
 	{Opt_logdev,	"logdev=%s"},	/* log device */
 	{Opt_rtdev,	"rtdev=%s"},	/* realtime I/O device */
-	{Opt_biosize,	"biosize=%u"},	/* log2 of preferred buffered io size */
 	{Opt_wsync,	"wsync"},	/* safe-mode nfs compatible mount */
 	{Opt_noalign,	"noalign"},	/* turn off stripe alignment */
 	{Opt_swalloc,	"swalloc"},	/* turn on stripe width allocation */
@@ -161,10 +159,7 @@ xfs_parseargs(
 	const struct super_block *sb = mp->m_super;
 	char			*p;
 	substring_t		args[MAX_OPT_ARGS];
-	int			dsunit = 0;
-	int			dswidth = 0;
-	int			iosize = 0;
-	uint8_t			iosizelog = 0;
+	int			size = 0;
 
 	/*
 	 * set up the mount name first so all the errors will refer to the
@@ -186,16 +181,11 @@ xfs_parseargs(
 		mp->m_flags |= XFS_MOUNT_WSYNC;
 
 	/*
-	 * Set some default flags that could be cleared by the mount option
-	 * parsing.
-	 */
-	mp->m_flags |= XFS_MOUNT_COMPAT_IOSIZE;
-
-	/*
 	 * These can be overridden by the mount option parsing.
 	 */
 	mp->m_logbufs = -1;
 	mp->m_logbsize = -1;
+	mp->m_allocsize_log = 16; /* 64k */
 
 	if (!options)
 		goto done;
@@ -229,10 +219,10 @@ xfs_parseargs(
 				return -ENOMEM;
 			break;
 		case Opt_allocsize:
-		case Opt_biosize:
-			if (suffix_kstrtoint(args, 10, &iosize))
+			if (suffix_kstrtoint(args, 10, &size))
 				return -EINVAL;
-			iosizelog = ffs(iosize) - 1;
+			mp->m_allocsize_log = ffs(size) - 1;
+			mp->m_flags |= XFS_MOUNT_ALLOCSIZE;
 			break;
 		case Opt_grpid:
 		case Opt_bsdgroups:
@@ -255,11 +245,11 @@ xfs_parseargs(
 			mp->m_flags |= XFS_MOUNT_SWALLOC;
 			break;
 		case Opt_sunit:
-			if (match_int(args, &dsunit))
+			if (match_int(args, &mp->m_dalign))
 				return -EINVAL;
 			break;
 		case Opt_swidth:
-			if (match_int(args, &dswidth))
+			if (match_int(args, &mp->m_swidth))
 				return -EINVAL;
 			break;
 		case Opt_inode32:
@@ -278,10 +268,10 @@ xfs_parseargs(
 			mp->m_flags &= ~XFS_MOUNT_IKEEP;
 			break;
 		case Opt_largeio:
-			mp->m_flags &= ~XFS_MOUNT_COMPAT_IOSIZE;
+			mp->m_flags |= XFS_MOUNT_LARGEIO;
 			break;
 		case Opt_nolargeio:
-			mp->m_flags |= XFS_MOUNT_COMPAT_IOSIZE;
+			mp->m_flags &= ~XFS_MOUNT_LARGEIO;
 			break;
 		case Opt_attr2:
 			mp->m_flags |= XFS_MOUNT_ATTR2;
@@ -353,7 +343,8 @@ xfs_parseargs(
 		return -EINVAL;
 	}
 
-	if ((mp->m_flags & XFS_MOUNT_NOALIGN) && (dsunit || dswidth)) {
+	if ((mp->m_flags & XFS_MOUNT_NOALIGN) &&
+	    (mp->m_dalign || mp->m_swidth)) {
 		xfs_warn(mp,
 	"sunit and swidth options incompatible with the noalign option");
 		return -EINVAL;
@@ -366,30 +357,20 @@ xfs_parseargs(
 	}
 #endif
 
-	if ((dsunit && !dswidth) || (!dsunit && dswidth)) {
+	if ((mp->m_dalign && !mp->m_swidth) ||
+	    (!mp->m_dalign && mp->m_swidth)) {
 		xfs_warn(mp, "sunit and swidth must be specified together");
 		return -EINVAL;
 	}
 
-	if (dsunit && (dswidth % dsunit != 0)) {
+	if (mp->m_dalign && (mp->m_swidth % mp->m_dalign != 0)) {
 		xfs_warn(mp,
 	"stripe width (%d) must be a multiple of the stripe unit (%d)",
-			dswidth, dsunit);
+			mp->m_swidth, mp->m_dalign);
 		return -EINVAL;
 	}
 
 done:
-	if (dsunit && !(mp->m_flags & XFS_MOUNT_NOALIGN)) {
-		/*
-		 * At this point the superblock has not been read
-		 * in, therefore we do not know the block size.
-		 * Before the mount call ends we will convert
-		 * these to FSBs.
-		 */
-		mp->m_dalign = dsunit;
-		mp->m_swidth = dswidth;
-	}
-
 	if (mp->m_logbufs != -1 &&
 	    mp->m_logbufs != 0 &&
 	    (mp->m_logbufs < XLOG_MIN_ICLOGS ||
@@ -409,18 +390,12 @@ done:
 		return -EINVAL;
 	}
 
-	if (iosizelog) {
-		if (iosizelog > XFS_MAX_IO_LOG ||
-		    iosizelog < XFS_MIN_IO_LOG) {
-			xfs_warn(mp, "invalid log iosize: %d [not %d-%d]",
-				iosizelog, XFS_MIN_IO_LOG,
-				XFS_MAX_IO_LOG);
-			return -EINVAL;
-		}
-
-		mp->m_flags |= XFS_MOUNT_DFLT_IOSIZE;
-		mp->m_readio_log = iosizelog;
-		mp->m_writeio_log = iosizelog;
+	if ((mp->m_flags & XFS_MOUNT_ALLOCSIZE) &&
+	    (mp->m_allocsize_log > XFS_MAX_IO_LOG ||
+	     mp->m_allocsize_log < XFS_MIN_IO_LOG)) {
+		xfs_warn(mp, "invalid log iosize: %d [not %d-%d]",
+			mp->m_allocsize_log, XFS_MIN_IO_LOG, XFS_MAX_IO_LOG);
+		return -EINVAL;
 	}
 
 	return 0;
@@ -431,10 +406,10 @@ struct proc_xfs_info {
 	char		*str;
 };
 
-STATIC void
-xfs_showargs(
-	struct xfs_mount	*mp,
-	struct seq_file		*m)
+static int
+xfs_fs_show_options(
+	struct seq_file		*m,
+	struct dentry		*root)
 {
 	static struct proc_xfs_info xfs_info_set[] = {
 		/* the few simple ones we can get from the mount struct */
@@ -448,30 +423,24 @@ xfs_showargs(
 		{ XFS_MOUNT_FILESTREAMS,	",filestreams" },
 		{ XFS_MOUNT_GRPID,		",grpid" },
 		{ XFS_MOUNT_DISCARD,		",discard" },
-		{ XFS_MOUNT_SMALL_INUMS,	",inode32" },
+		{ XFS_MOUNT_LARGEIO,		",largeio" },
 		{ XFS_MOUNT_DAX,		",dax" },
 		{ 0, NULL }
 	};
-	static struct proc_xfs_info xfs_info_unset[] = {
-		/* the few simple ones we can get from the mount struct */
-		{ XFS_MOUNT_COMPAT_IOSIZE,	",largeio" },
-		{ XFS_MOUNT_SMALL_INUMS,	",inode64" },
-		{ 0, NULL }
-	};
+	struct xfs_mount	*mp = XFS_M(root->d_sb);
 	struct proc_xfs_info	*xfs_infop;
 
 	for (xfs_infop = xfs_info_set; xfs_infop->flag; xfs_infop++) {
 		if (mp->m_flags & xfs_infop->flag)
 			seq_puts(m, xfs_infop->str);
 	}
-	for (xfs_infop = xfs_info_unset; xfs_infop->flag; xfs_infop++) {
-		if (!(mp->m_flags & xfs_infop->flag))
-			seq_puts(m, xfs_infop->str);
-	}
 
-	if (mp->m_flags & XFS_MOUNT_DFLT_IOSIZE)
+	seq_printf(m, ",inode%d",
+		(mp->m_flags & XFS_MOUNT_SMALL_INUMS) ? 32 : 64);
+
+	if (mp->m_flags & XFS_MOUNT_ALLOCSIZE)
 		seq_printf(m, ",allocsize=%dk",
-				(int)(1 << mp->m_writeio_log) >> 10);
+			   (1 << mp->m_allocsize_log) >> 10);
 
 	if (mp->m_logbufs > 0)
 		seq_printf(m, ",logbufs=%d", mp->m_logbufs);
@@ -510,6 +479,8 @@ xfs_showargs(
 
 	if (!(mp->m_qflags & XFS_ALL_QUOTA_ACCT))
 		seq_puts(m, ",noquota");
+
+	return 0;
 }
 
 static uint64_t
@@ -1410,15 +1381,6 @@ xfs_fs_unfreeze(
 	return 0;
 }
 
-STATIC int
-xfs_fs_show_options(
-	struct seq_file		*m,
-	struct dentry		*root)
-{
-	xfs_showargs(XFS_M(root->d_sb), m);
-	return 0;
-}
-
 /*
  * This function fills in xfs_mount_t fields based on mount args.
  * Note: the superblock _has_ now been read in.
@@ -1853,15 +1815,10 @@ MODULE_ALIAS_FS("xfs");
 STATIC int __init
 xfs_init_zones(void)
 {
-	if (bioset_init(&xfs_ioend_bioset, 4 * (PAGE_SIZE / SECTOR_SIZE),
-			offsetof(struct xfs_ioend, io_inline_bio),
-			BIOSET_NEED_BVECS))
-		goto out;
-
 	xfs_log_ticket_zone = kmem_zone_init(sizeof(xlog_ticket_t),
 						"xfs_log_ticket");
 	if (!xfs_log_ticket_zone)
-		goto out_free_ioend_bioset;
+		goto out;
 
 	xfs_bmap_free_item_zone = kmem_zone_init(
 			sizeof(struct xfs_extent_free_item),
@@ -1996,8 +1953,6 @@ xfs_init_zones(void)
 	kmem_zone_destroy(xfs_bmap_free_item_zone);
  out_destroy_log_ticket_zone:
 	kmem_zone_destroy(xfs_log_ticket_zone);
- out_free_ioend_bioset:
-	bioset_exit(&xfs_ioend_bioset);
  out:
 	return -ENOMEM;
 }
@@ -2028,7 +1983,6 @@ xfs_destroy_zones(void)
 	kmem_zone_destroy(xfs_btree_cur_zone);
 	kmem_zone_destroy(xfs_bmap_free_item_zone);
 	kmem_zone_destroy(xfs_log_ticket_zone);
-	bioset_exit(&xfs_ioend_bioset);
 }
 
 STATIC int __init
