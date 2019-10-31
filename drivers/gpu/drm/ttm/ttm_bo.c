@@ -676,7 +676,7 @@ static void ttm_bo_release(struct kref *kref)
 	if (bo->bdev->driver->release_notify)
 		bo->bdev->driver->release_notify(bo);
 
-	drm_vma_offset_remove(&bdev->vma_manager, &bo->base.vma_node);
+	drm_vma_offset_remove(bdev->vma_manager, &bo->base.vma_node);
 	ttm_mem_io_lock(man, false);
 	ttm_mem_io_free_vm(bo);
 	ttm_mem_io_unlock(man);
@@ -926,7 +926,8 @@ EXPORT_SYMBOL(ttm_bo_mem_put);
  */
 static int ttm_bo_add_move_fence(struct ttm_buffer_object *bo,
 				 struct ttm_mem_type_manager *man,
-				 struct ttm_mem_reg *mem)
+				 struct ttm_mem_reg *mem,
+				 bool no_wait_gpu)
 {
 	struct dma_fence *fence;
 	int ret;
@@ -935,19 +936,22 @@ static int ttm_bo_add_move_fence(struct ttm_buffer_object *bo,
 	fence = dma_fence_get(man->move);
 	spin_unlock(&man->move_lock);
 
-	if (fence) {
-		dma_resv_add_shared_fence(bo->base.resv, fence);
+	if (!fence)
+		return 0;
 
-		ret = dma_resv_reserve_shared(bo->base.resv, 1);
-		if (unlikely(ret)) {
-			dma_fence_put(fence);
-			return ret;
-		}
+	if (no_wait_gpu)
+		return -EBUSY;
 
-		dma_fence_put(bo->moving);
-		bo->moving = fence;
+	dma_resv_add_shared_fence(bo->base.resv, fence);
+
+	ret = dma_resv_reserve_shared(bo->base.resv, 1);
+	if (unlikely(ret)) {
+		dma_fence_put(fence);
+		return ret;
 	}
 
+	dma_fence_put(bo->moving);
+	bo->moving = fence;
 	return 0;
 }
 
@@ -978,7 +982,7 @@ static int ttm_bo_mem_force_space(struct ttm_buffer_object *bo,
 			return ret;
 	} while (1);
 
-	return ttm_bo_add_move_fence(bo, man, mem);
+	return ttm_bo_add_move_fence(bo, man, mem, ctx->no_wait_gpu);
 }
 
 static uint32_t ttm_bo_select_caching(struct ttm_mem_type_manager *man,
@@ -1120,14 +1124,18 @@ int ttm_bo_mem_space(struct ttm_buffer_object *bo,
 		if (unlikely(ret))
 			goto error;
 
-		if (mem->mm_node) {
-			ret = ttm_bo_add_move_fence(bo, man, mem);
-			if (unlikely(ret)) {
-				(*man->func->put_node)(man, mem);
-				goto error;
-			}
-			return 0;
+		if (!mem->mm_node)
+			continue;
+
+		ret = ttm_bo_add_move_fence(bo, man, mem, ctx->no_wait_gpu);
+		if (unlikely(ret)) {
+			(*man->func->put_node)(man, mem);
+			if (ret == -EBUSY)
+				continue;
+
+			goto error;
 		}
+		return 0;
 	}
 
 	for (i = 0; i < placement->num_busy_placement; ++i) {
@@ -1357,7 +1365,7 @@ int ttm_bo_init_reserved(struct ttm_bo_device *bdev,
 	 */
 	if (bo->type == ttm_bo_type_device ||
 	    bo->type == ttm_bo_type_sg)
-		ret = drm_vma_offset_add(&bdev->vma_manager, &bo->base.vma_node,
+		ret = drm_vma_offset_add(bdev->vma_manager, &bo->base.vma_node,
 					 bo->mem.num_pages);
 
 	/* passed reservation objects should already be locked,
@@ -1708,8 +1716,6 @@ int ttm_bo_device_release(struct ttm_bo_device *bdev)
 			pr_debug("Swap list %d was clean\n", i);
 	spin_unlock(&glob->lru_lock);
 
-	drm_vma_offset_manager_destroy(&bdev->vma_manager);
-
 	if (!ret)
 		ttm_bo_global_release();
 
@@ -1720,10 +1726,14 @@ EXPORT_SYMBOL(ttm_bo_device_release);
 int ttm_bo_device_init(struct ttm_bo_device *bdev,
 		       struct ttm_bo_driver *driver,
 		       struct address_space *mapping,
+		       struct drm_vma_offset_manager *vma_manager,
 		       bool need_dma32)
 {
 	struct ttm_bo_global *glob = &ttm_bo_glob;
 	int ret;
+
+	if (WARN_ON(vma_manager == NULL))
+		return -EINVAL;
 
 	ret = ttm_bo_global_init();
 	if (ret)
@@ -1741,9 +1751,7 @@ int ttm_bo_device_init(struct ttm_bo_device *bdev,
 	if (unlikely(ret != 0))
 		goto out_no_sys;
 
-	drm_vma_offset_manager_init(&bdev->vma_manager,
-				    DRM_FILE_PAGE_OFFSET_START,
-				    DRM_FILE_PAGE_OFFSET_SIZE);
+	bdev->vma_manager = vma_manager;
 	INIT_DELAYED_WORK(&bdev->wq, ttm_bo_delayed_workqueue);
 	INIT_LIST_HEAD(&bdev->ddestroy);
 	bdev->dev_mapping = mapping;

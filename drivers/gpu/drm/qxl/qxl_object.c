@@ -54,8 +54,13 @@ bool qxl_ttm_bo_is_qxl_bo(struct ttm_buffer_object *bo)
 void qxl_ttm_placement_from_domain(struct qxl_bo *qbo, u32 domain, bool pinned)
 {
 	u32 c = 0;
-	u32 pflag = pinned ? TTM_PL_FLAG_NO_EVICT : 0;
+	u32 pflag = 0;
 	unsigned int i;
+
+	if (pinned)
+		pflag |= TTM_PL_FLAG_NO_EVICT;
+	if (qbo->tbo.base.size <= PAGE_SIZE)
+		pflag |= TTM_PL_FLAG_TOPDOWN;
 
 	qbo->placement.placement = qbo->placements;
 	qbo->placement.busy_placement = qbo->placements;
@@ -76,6 +81,19 @@ void qxl_ttm_placement_from_domain(struct qxl_bo *qbo, u32 domain, bool pinned)
 		qbo->placements[i].lpfn = 0;
 	}
 }
+
+static const struct drm_gem_object_funcs qxl_object_funcs = {
+	.free = qxl_gem_object_free,
+	.open = qxl_gem_object_open,
+	.close = qxl_gem_object_close,
+	.pin = qxl_gem_prime_pin,
+	.unpin = qxl_gem_prime_unpin,
+	.get_sg_table = qxl_gem_prime_get_sg_table,
+	.vmap = qxl_gem_prime_vmap,
+	.vunmap = qxl_gem_prime_vunmap,
+	.mmap = drm_gem_ttm_mmap,
+	.print_info = drm_gem_ttm_print_info,
+};
 
 int qxl_bo_create(struct qxl_device *qdev,
 		  unsigned long size, bool kernel, bool pinned, u32 domain,
@@ -100,6 +118,7 @@ int qxl_bo_create(struct qxl_device *qdev,
 		kfree(bo);
 		return r;
 	}
+	bo->tbo.base.funcs = &qxl_object_funcs;
 	bo->type = domain;
 	bo->pin_count = pinned ? 1 : 0;
 	bo->surface_id = 0;
