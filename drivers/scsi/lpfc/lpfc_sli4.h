@@ -199,6 +199,7 @@ struct lpfc_queue {
 	uint8_t q_flag;
 #define HBA_NVMET_WQFULL	0x1 /* We hit WQ Full condition for NVMET */
 #define HBA_NVMET_CQ_NOTIFY	0x1 /* LPFC_NVMET_CQ_NOTIFY CQEs this EQE */
+#define HBA_EQ_DELAY_CHK	0x2 /* EQ is a candidate for coalescing */
 #define LPFC_NVMET_CQ_NOTIFY	4
 	void __iomem *db_regaddr;
 	uint16_t dpp_enable;
@@ -513,6 +514,7 @@ struct lpfc_pc_sli4_params {
 	uint8_t cqav;
 	uint8_t wqsize;
 	uint8_t bv1s;
+	uint8_t pls;
 #define LPFC_WQ_SZ64_SUPPORT	1
 #define LPFC_WQ_SZ128_SUPPORT	2
 	uint8_t wqpcnt;

@@ -1235,10 +1235,9 @@ lpfc_hb_eq_delay_work(struct work_struct *work)
 					     struct lpfc_hba, eq_delay_work);
 	struct lpfc_eq_intr_info *eqi, *eqi_new;
 	struct lpfc_queue *eq, *eq_next;
-	unsigned char *eqcnt = NULL;
+	unsigned char *ena_delay = NULL;
 	uint32_t usdelay;
 	int i;
-	bool update = false;
 
 	if (!phba->cfg_auto_imax || phba->pport->load_flag & FC_UNLOADING)
 		return;
@@ -1247,44 +1246,36 @@ lpfc_hb_eq_delay_work(struct work_struct *work)
 	    phba->pport->fc_flag & FC_OFFLINE_MODE)
 		goto requeue;
 
-	eqcnt = kcalloc(num_possible_cpus(), sizeof(unsigned char),
-			GFP_KERNEL);
-	if (!eqcnt)
+	ena_delay = kcalloc(phba->sli4_hba.num_possible_cpu, sizeof(*ena_delay),
+			    GFP_KERNEL);
+	if (!ena_delay)
 		goto requeue;
 
-	if (phba->cfg_irq_chann > 1) {
-		/* Loop thru all IRQ vectors */
-		for (i = 0; i < phba->cfg_irq_chann; i++) {
-			/* Get the EQ corresponding to the IRQ vector */
-			eq = phba->sli4_hba.hba_eq_hdl[i].eq;
-			if (!eq)
-				continue;
-			if (eq->q_mode) {
-				update = true;
-				break;
-			}
-			if (eqcnt[eq->last_cpu] < 2)
-				eqcnt[eq->last_cpu]++;
+	for (i = 0; i < phba->cfg_irq_chann; i++) {
+		/* Get the EQ corresponding to the IRQ vector */
+		eq = phba->sli4_hba.hba_eq_hdl[i].eq;
+		if (!eq)
+			continue;
+		if (eq->q_mode || eq->q_flag & HBA_EQ_DELAY_CHK) {
+			eq->q_flag &= ~HBA_EQ_DELAY_CHK;
+			ena_delay[eq->last_cpu] = 1;
 		}
-	} else
-		update = true;
+	}
 
 	for_each_present_cpu(i) {
 		eqi = per_cpu_ptr(phba->sli4_hba.eq_info, i);
-		if (!update && eqcnt[i] < 2) {
-			eqi->icnt = 0;
-			continue;
+		if (ena_delay[i]) {
+			usdelay = (eqi->icnt >> 10) * LPFC_EQ_DELAY_STEP;
+			if (usdelay > LPFC_MAX_AUTO_EQ_DELAY)
+				usdelay = LPFC_MAX_AUTO_EQ_DELAY;
+		} else {
+			usdelay = 0;
 		}
-
-		usdelay = (eqi->icnt / LPFC_IMAX_THRESHOLD) *
-			   LPFC_EQ_DELAY_STEP;
-		if (usdelay > LPFC_MAX_AUTO_EQ_DELAY)
-			usdelay = LPFC_MAX_AUTO_EQ_DELAY;
 
 		eqi->icnt = 0;
 
 		list_for_each_entry_safe(eq, eq_next, &eqi->list, cpu_list) {
-			if (eq->last_cpu != i) {
+			if (unlikely(eq->last_cpu != i)) {
 				eqi_new = per_cpu_ptr(phba->sli4_hba.eq_info,
 						      eq->last_cpu);
 				list_move_tail(&eq->cpu_list, &eqi_new->list);
@@ -1296,7 +1287,7 @@ lpfc_hb_eq_delay_work(struct work_struct *work)
 		}
 	}
 
-	kfree(eqcnt);
+	kfree(ena_delay);
 
 requeue:
 	queue_delayed_work(phba->wq, &phba->eq_delay_work,
@@ -3053,11 +3044,12 @@ lpfc_sli4_node_prep(struct lpfc_hba *phba)
 				continue;
 			}
 			ndlp->nlp_rpi = rpi;
-			lpfc_printf_vlog(ndlp->vport, KERN_INFO, LOG_NODE,
-					 "0009 rpi:%x DID:%x "
-					 "flg:%x map:%x x%px\n", ndlp->nlp_rpi,
-					 ndlp->nlp_DID, ndlp->nlp_flag,
-					 ndlp->nlp_usg_map, ndlp);
+			lpfc_printf_vlog(ndlp->vport, KERN_INFO,
+					 LOG_NODE | LOG_DISCOVERY,
+					 "0009 Assign RPI x%x to ndlp x%px "
+					 "DID:x%06x flg:x%x map:x%x\n",
+					 ndlp->nlp_rpi, ndlp, ndlp->nlp_DID,
+					 ndlp->nlp_flag, ndlp->nlp_usg_map);
 		}
 	}
 	lpfc_destroy_vport_work_array(phba, vports);
@@ -3453,10 +3445,15 @@ lpfc_offline_prep(struct lpfc_hba *phba, int mbx_action)
 			list_for_each_entry_safe(ndlp, next_ndlp,
 						 &vports[i]->fc_nodes,
 						 nlp_listp) {
-				if (!NLP_CHK_NODE_ACT(ndlp))
+				if ((!NLP_CHK_NODE_ACT(ndlp)) ||
+				    ndlp->nlp_state == NLP_STE_UNUSED_NODE) {
+					/* Driver must assume RPI is invalid for
+					 * any unused or inactive node.
+					 */
+					ndlp->nlp_rpi = LPFC_RPI_ALLOC_ERROR;
 					continue;
-				if (ndlp->nlp_state == NLP_STE_UNUSED_NODE)
-					continue;
+				}
+
 				if (ndlp->nlp_type & NLP_FABRIC) {
 					lpfc_disc_state_machine(vports[i], ndlp,
 						NULL, NLP_EVT_DEVICE_RECOVERY);
@@ -3472,16 +3469,16 @@ lpfc_offline_prep(struct lpfc_hba *phba, int mbx_action)
 				 * comes back online.
 				 */
 				if (phba->sli_rev == LPFC_SLI_REV4) {
-					lpfc_printf_vlog(ndlp->vport,
-							 KERN_INFO, LOG_NODE,
-							 "0011 lpfc_offline: "
-							 "ndlp:x%px did %x "
-							 "usgmap:x%x rpi:%x\n",
-							 ndlp, ndlp->nlp_DID,
-							 ndlp->nlp_usg_map,
-							 ndlp->nlp_rpi);
-
+					lpfc_printf_vlog(ndlp->vport, KERN_INFO,
+						 LOG_NODE | LOG_DISCOVERY,
+						 "0011 Free RPI x%x on "
+						 "ndlp:x%px did x%x "
+						 "usgmap:x%x\n",
+						 ndlp->nlp_rpi, ndlp,
+						 ndlp->nlp_DID,
+						 ndlp->nlp_usg_map);
 					lpfc_sli4_free_rpi(phba, ndlp->nlp_rpi);
+					ndlp->nlp_rpi = LPFC_RPI_ALLOC_ERROR;
 				}
 				lpfc_unreg_rpi(vports[i], ndlp);
 			}
@@ -5283,10 +5280,10 @@ lpfc_sli4_async_sli_evt(struct lpfc_hba *phba, struct lpfc_acqe_sli *acqe_sli)
 	evt_type = bf_get(lpfc_trailer_type, acqe_sli);
 
 	lpfc_printf_log(phba, KERN_INFO, LOG_SLI,
-			"2901 Async SLI event - Event Data1:x%08x Event Data2:"
-			"x%08x SLI Event Type:%d\n",
+			"2901 Async SLI event - Type:%d, Event Data: x%08x "
+			"x%08x x%08x x%08x\n", evt_type,
 			acqe_sli->event_data1, acqe_sli->event_data2,
-			evt_type);
+			acqe_sli->reserved, acqe_sli->trailer);
 
 	port_name = phba->Port[0];
 	if (port_name == 0x00)
@@ -5433,11 +5430,26 @@ lpfc_sli4_async_sli_evt(struct lpfc_hba *phba, struct lpfc_acqe_sli *acqe_sli)
 				"Event Data1:x%08x Event Data2: x%08x\n",
 				acqe_sli->event_data1, acqe_sli->event_data2);
 		break;
+	case LPFC_SLI_EVENT_TYPE_MISCONF_FAWWN:
+		/* Misconfigured WWN. Reports that the SLI Port is configured
+		 * to use FA-WWN, but the attached device doesn’t support it.
+		 * No driver action is required.
+		 * Event Data1 - N.A, Event Data2 - N.A
+		 */
+		lpfc_log_msg(phba, KERN_WARNING, LOG_SLI,
+			     "2699 Misconfigured FA-WWN - Attached device does "
+			     "not support FA-WWN\n");
+		break;
+	case LPFC_SLI_EVENT_TYPE_EEPROM_FAILURE:
+		/* EEPROM failure. No driver action is required */
+		lpfc_printf_log(phba, KERN_WARNING, LOG_SLI,
+			     "2518 EEPROM failure - "
+			     "Event Data1: x%08x Event Data2: x%08x\n",
+			     acqe_sli->event_data1, acqe_sli->event_data2);
+		break;
 	default:
 		lpfc_printf_log(phba, KERN_INFO, LOG_SLI,
-				"3193 Async SLI event - Event Data1:x%08x Event Data2:"
-				"x%08x SLI Event Type:%d\n",
-				acqe_sli->event_data1, acqe_sli->event_data2,
+				"3193 Unrecognized SLI event, type: 0x%x",
 				evt_type);
 		break;
 	}
@@ -7126,7 +7138,7 @@ lpfc_init_iocb_list(struct lpfc_hba *phba, int iocb_count)
 		if (iocbq_entry == NULL) {
 			printk(KERN_ERR "%s: only allocated %d iocbs of "
 				"expected %d count. Unloading driver.\n",
-				__func__, i, LPFC_IOCB_LIST_CNT);
+				__func__, i, iocb_count);
 			goto out_free_iocbq;
 		}
 
@@ -7545,18 +7557,10 @@ lpfc_create_shost(struct lpfc_hba *phba)
 
 	if (phba->nvmet_support) {
 		/* Only 1 vport (pport) will support NVME target */
-		if (phba->txrdy_payload_pool == NULL) {
-			phba->txrdy_payload_pool = dma_pool_create(
-				"txrdy_pool", &phba->pcidev->dev,
-				TXRDY_PAYLOAD_LEN, 16, 0);
-			if (phba->txrdy_payload_pool) {
-				phba->targetport = NULL;
-				phba->cfg_enable_fc4_type = LPFC_ENABLE_NVME;
-				lpfc_printf_log(phba, KERN_INFO,
-						LOG_INIT | LOG_NVME_DISC,
-						"6076 NVME Target Found\n");
-			}
-		}
+		phba->targetport = NULL;
+		phba->cfg_enable_fc4_type = LPFC_ENABLE_NVME;
+		lpfc_printf_log(phba, KERN_INFO, LOG_INIT | LOG_NVME_DISC,
+				"6076 NVME Target Found\n");
 	}
 
 	lpfc_debugfs_initialize(vport);
@@ -8235,6 +8239,94 @@ lpfc_destroy_bootstrap_mbox(struct lpfc_hba *phba)
 	memset(&phba->sli4_hba.bmbx, 0, sizeof(struct lpfc_bmbx));
 }
 
+static const char * const lpfc_topo_to_str[] = {
+	"Loop then P2P",
+	"Loopback",
+	"P2P Only",
+	"Unsupported",
+	"Loop Only",
+	"Unsupported",
+	"P2P then Loop",
+};
+
+/**
+ * lpfc_map_topology - Map the topology read from READ_CONFIG
+ * @phba: pointer to lpfc hba data structure.
+ * @rdconf: pointer to read config data
+ *
+ * This routine is invoked to map the topology values as read
+ * from the read config mailbox command. If the persistent
+ * topology feature is supported, the firmware will provide the
+ * saved topology information to be used in INIT_LINK
+ *
+ **/
+#define	LINK_FLAGS_DEF	0x0
+#define	LINK_FLAGS_P2P	0x1
+#define	LINK_FLAGS_LOOP	0x2
+static void
+lpfc_map_topology(struct lpfc_hba *phba, struct lpfc_mbx_read_config *rd_config)
+{
+	u8 ptv, tf, pt;
+
+	ptv = bf_get(lpfc_mbx_rd_conf_ptv, rd_config);
+	tf = bf_get(lpfc_mbx_rd_conf_tf, rd_config);
+	pt = bf_get(lpfc_mbx_rd_conf_pt, rd_config);
+
+	lpfc_printf_log(phba, KERN_INFO, LOG_SLI,
+			"2027 Read Config Data : ptv:0x%x, tf:0x%x pt:0x%x",
+			 ptv, tf, pt);
+	if (!ptv) {
+		lpfc_printf_log(phba, KERN_WARNING, LOG_SLI,
+				"2019 FW does not support persistent topology "
+				"Using driver parameter defined value [%s]",
+				lpfc_topo_to_str[phba->cfg_topology]);
+		return;
+	}
+	/* FW supports persistent topology - override module parameter value */
+	phba->hba_flag |= HBA_PERSISTENT_TOPO;
+	switch (phba->pcidev->device) {
+	case PCI_DEVICE_ID_LANCER_G7_FC:
+		if (tf || (pt == LINK_FLAGS_LOOP)) {
+			/* Invalid values from FW - use driver params */
+			phba->hba_flag &= ~HBA_PERSISTENT_TOPO;
+		} else {
+			/* Prism only supports PT2PT topology */
+			phba->cfg_topology = FLAGS_TOPOLOGY_MODE_PT_PT;
+		}
+		break;
+	case PCI_DEVICE_ID_LANCER_G6_FC:
+		if (!tf) {
+			phba->cfg_topology = ((pt == LINK_FLAGS_LOOP)
+					? FLAGS_TOPOLOGY_MODE_LOOP
+					: FLAGS_TOPOLOGY_MODE_PT_PT);
+		} else {
+			phba->hba_flag &= ~HBA_PERSISTENT_TOPO;
+		}
+		break;
+	default:	/* G5 */
+		if (tf) {
+			/* If topology failover set - pt is '0' or '1' */
+			phba->cfg_topology = (pt ? FLAGS_TOPOLOGY_MODE_PT_LOOP :
+					      FLAGS_TOPOLOGY_MODE_LOOP_PT);
+		} else {
+			phba->cfg_topology = ((pt == LINK_FLAGS_P2P)
+					? FLAGS_TOPOLOGY_MODE_PT_PT
+					: FLAGS_TOPOLOGY_MODE_LOOP);
+		}
+		break;
+	}
+	if (phba->hba_flag & HBA_PERSISTENT_TOPO) {
+		lpfc_printf_log(phba, KERN_INFO, LOG_SLI,
+				"2020 Using persistent topology value [%s]",
+				lpfc_topo_to_str[phba->cfg_topology]);
+	} else {
+		lpfc_printf_log(phba, KERN_WARNING, LOG_SLI,
+				"2021 Invalid topology values from FW "
+				"Using driver parameter defined value [%s]",
+				lpfc_topo_to_str[phba->cfg_topology]);
+	}
+}
+
 /**
  * lpfc_sli4_read_config - Get the config parameters.
  * @phba: pointer to lpfc hba data structure.
@@ -8346,6 +8438,7 @@ lpfc_sli4_read_config(struct lpfc_hba *phba)
 		phba->max_vpi = (phba->sli4_hba.max_cfg_param.max_vpi > 0) ?
 				(phba->sli4_hba.max_cfg_param.max_vpi - 1) : 0;
 		phba->max_vports = phba->max_vpi;
+		lpfc_map_topology(phba, rd_config);
 		lpfc_printf_log(phba, KERN_INFO, LOG_SLI,
 				"2003 cfg params Extents? %d "
 				"XRI(B:%d M:%d), "
@@ -8619,8 +8712,8 @@ lpfc_sli4_queue_verify(struct lpfc_hba *phba)
 	 */
 
 	if (phba->nvmet_support) {
-		if (phba->cfg_irq_chann < phba->cfg_nvmet_mrq)
-			phba->cfg_nvmet_mrq = phba->cfg_irq_chann;
+		if (phba->cfg_hdw_queue < phba->cfg_nvmet_mrq)
+			phba->cfg_nvmet_mrq = phba->cfg_hdw_queue;
 		if (phba->cfg_nvmet_mrq > LPFC_NVMET_MRQ_MAX)
 			phba->cfg_nvmet_mrq = LPFC_NVMET_MRQ_MAX;
 	}
@@ -11020,8 +11113,6 @@ lpfc_sli4_enable_msix(struct lpfc_hba *phba)
 				phba->cfg_irq_chann, vectors);
 		if (phba->cfg_irq_chann > vectors)
 			phba->cfg_irq_chann = vectors;
-		if (phba->nvmet_support && (phba->cfg_nvmet_mrq > vectors))
-			phba->cfg_nvmet_mrq = vectors;
 	}
 
 	return rc;
@@ -11538,6 +11629,7 @@ lpfc_get_sli4_parameters(struct lpfc_hba *phba, LPFC_MBOXQ_t *mboxq)
 	sli4_params->cqav = bf_get(cfg_cqav, mbx_sli4_parameters);
 	sli4_params->wqsize = bf_get(cfg_wqsize, mbx_sli4_parameters);
 	sli4_params->bv1s = bf_get(cfg_bv1s, mbx_sli4_parameters);
+	sli4_params->pls = bf_get(cfg_pvl, mbx_sli4_parameters);
 	sli4_params->sgl_pages_max = bf_get(cfg_sgl_page_cnt,
 					    mbx_sli4_parameters);
 	sli4_params->wqpcnt = bf_get(cfg_wqpcnt, mbx_sli4_parameters);
@@ -11589,13 +11681,10 @@ fcponly:
 	}
 
 	/* If the NVME FC4 type is enabled, scale the sg_seg_cnt to
-	 * accommodate 512K and 1M IOs in a single nvme buf and supply
-	 * enough NVME LS iocb buffers for larger connectivity counts.
+	 * accommodate 512K and 1M IOs in a single nvme buf.
 	 */
-	if (phba->cfg_enable_fc4_type & LPFC_ENABLE_NVME) {
+	if (phba->cfg_enable_fc4_type & LPFC_ENABLE_NVME)
 		phba->cfg_sg_seg_cnt = LPFC_MAX_NVME_SEG_CNT;
-		phba->cfg_iocb_cnt = 5;
-	}
 
 	/* Only embed PBDE for if_type 6, PBDE support requires xib be set */
 	if ((bf_get(lpfc_sli_intf_if_type, &phba->sli4_hba.sli_intf) !=
@@ -12312,35 +12401,57 @@ lpfc_sli4_get_iocb_cnt(struct lpfc_hba *phba)
 }
 
 
-static void
+static int
 lpfc_log_write_firmware_error(struct lpfc_hba *phba, uint32_t offset,
 	uint32_t magic_number, uint32_t ftype, uint32_t fid, uint32_t fsize,
 	const struct firmware *fw)
 {
-	if ((offset == ADD_STATUS_FW_NOT_SUPPORTED) ||
-	    (phba->pcidev->device == PCI_DEVICE_ID_LANCER_G6_FC &&
-	     magic_number != MAGIC_NUMER_G6) ||
-	    (phba->pcidev->device == PCI_DEVICE_ID_LANCER_G7_FC &&
-	     magic_number != MAGIC_NUMER_G7))
-		lpfc_printf_log(phba, KERN_ERR, LOG_INIT,
-			"3030 This firmware version is not supported on "
-			"this HBA model. Device:%x Magic:%x Type:%x "
-			"ID:%x Size %d %zd\n",
-			phba->pcidev->device, magic_number, ftype, fid,
-			fsize, fw->size);
-	else
-		lpfc_printf_log(phba, KERN_ERR, LOG_INIT,
-			"3022 FW Download failed. Device:%x Magic:%x Type:%x "
-			"ID:%x Size %d %zd\n",
-			phba->pcidev->device, magic_number, ftype, fid,
-			fsize, fw->size);
-}
+	int rc;
 
+	/* Three cases:  (1) FW was not supported on the detected adapter.
+	 * (2) FW update has been locked out administratively.
+	 * (3) Some other error during FW update.
+	 * In each case, an unmaskable message is written to the console
+	 * for admin diagnosis.
+	 */
+	if (offset == ADD_STATUS_FW_NOT_SUPPORTED ||
+	    (phba->pcidev->device == PCI_DEVICE_ID_LANCER_G6_FC &&
+	     magic_number != MAGIC_NUMBER_G6) ||
+	    (phba->pcidev->device == PCI_DEVICE_ID_LANCER_G7_FC &&
+	     magic_number != MAGIC_NUMBER_G7)) {
+		lpfc_printf_log(phba, KERN_ERR, LOG_INIT,
+				"3030 This firmware version is not supported on"
+				" this HBA model. Device:%x Magic:%x Type:%x "
+				"ID:%x Size %d %zd\n",
+				phba->pcidev->device, magic_number, ftype, fid,
+				fsize, fw->size);
+		rc = -EINVAL;
+	} else if (offset == ADD_STATUS_FW_DOWNLOAD_HW_DISABLED) {
+		lpfc_printf_log(phba, KERN_ERR, LOG_INIT,
+				"3021 Firmware downloads have been prohibited "
+				"by a system configuration setting on "
+				"Device:%x Magic:%x Type:%x ID:%x Size %d "
+				"%zd\n",
+				phba->pcidev->device, magic_number, ftype, fid,
+				fsize, fw->size);
+		rc = -EACCES;
+	} else {
+		lpfc_printf_log(phba, KERN_ERR, LOG_INIT,
+				"3022 FW Download failed. Add Status x%x "
+				"Device:%x Magic:%x Type:%x ID:%x Size %d "
+				"%zd\n",
+				offset, phba->pcidev->device, magic_number,
+				ftype, fid, fsize, fw->size);
+		rc = -EIO;
+	}
+	return rc;
+}
 
 /**
  * lpfc_write_firmware - attempt to write a firmware image to the port
  * @fw: pointer to firmware image returned from request_firmware.
- * @phba: pointer to lpfc hba data structure.
+ * @context: pointer to firmware image returned from request_firmware.
+ * @ret: return value this routine provides to the caller.
  *
  **/
 static void
@@ -12409,8 +12520,12 @@ lpfc_write_firmware(const struct firmware *fw, void *context)
 			rc = lpfc_wr_object(phba, &dma_buffer_list,
 				    (fw->size - offset), &offset);
 			if (rc) {
-				lpfc_log_write_firmware_error(phba, offset,
-					magic_number, ftype, fid, fsize, fw);
+				rc = lpfc_log_write_firmware_error(phba, offset,
+								   magic_number,
+								   ftype,
+								   fid,
+								   fsize,
+								   fw);
 				goto release_out;
 			}
 		}
@@ -12430,9 +12545,12 @@ release_out:
 	}
 	release_firmware(fw);
 out:
-	lpfc_printf_log(phba, KERN_ERR, LOG_INIT,
-			"3024 Firmware update done: %d.\n", rc);
-	return;
+	if (rc < 0)
+		lpfc_printf_log(phba, KERN_ERR, LOG_INIT,
+				"3062 Firmware update error, status %d.\n", rc);
+	else
+		lpfc_printf_log(phba, KERN_ERR, LOG_INIT,
+				"3024 Firmware update success: size %d.\n", rc);
 }
 
 /**
@@ -13344,8 +13462,7 @@ lpfc_sli4_oas_verify(struct lpfc_hba *phba)
 		phba->cfg_fof = 1;
 	} else {
 		phba->cfg_fof = 0;
-		if (phba->device_data_mem_pool)
-			mempool_destroy(phba->device_data_mem_pool);
+		mempool_destroy(phba->device_data_mem_pool);
 		phba->device_data_mem_pool = NULL;
 	}
 

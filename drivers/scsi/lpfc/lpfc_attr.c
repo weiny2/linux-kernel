@@ -1475,8 +1475,9 @@ lpfc_sli4_pdev_status_reg_wait(struct lpfc_hba *phba)
 	int i;
 
 	msleep(100);
-	lpfc_readl(phba->sli4_hba.u.if_type2.STATUSregaddr,
-		   &portstat_reg.word0);
+	if (lpfc_readl(phba->sli4_hba.u.if_type2.STATUSregaddr,
+		       &portstat_reg.word0))
+		return -EIO;
 
 	/* verify if privileged for the request operation */
 	if (!bf_get(lpfc_sliport_status_rn, &portstat_reg) &&
@@ -1486,8 +1487,9 @@ lpfc_sli4_pdev_status_reg_wait(struct lpfc_hba *phba)
 	/* wait for the SLI port firmware ready after firmware reset */
 	for (i = 0; i < LPFC_FW_RESET_MAXIMUM_WAIT_10MS_CNT; i++) {
 		msleep(10);
-		lpfc_readl(phba->sli4_hba.u.if_type2.STATUSregaddr,
-			   &portstat_reg.word0);
+		if (lpfc_readl(phba->sli4_hba.u.if_type2.STATUSregaddr,
+			       &portstat_reg.word0))
+			continue;
 		if (!bf_get(lpfc_sliport_status_err, &portstat_reg))
 			continue;
 		if (!bf_get(lpfc_sliport_status_rn, &portstat_reg))
@@ -1642,7 +1644,7 @@ lpfc_set_trunking(struct lpfc_hba *phba, char *buff_out)
 {
 	LPFC_MBOXQ_t *mbox = NULL;
 	unsigned long val = 0;
-	char *pval = 0;
+	char *pval = NULL;
 	int rc = 0;
 
 	if (!strncmp("enable", buff_out,
@@ -3533,6 +3535,31 @@ LPFC_ATTR_R(enable_rrq, 2, 0, 2,
 LPFC_ATTR_R(suppress_link_up, LPFC_INITIALIZE_LINK, LPFC_INITIALIZE_LINK,
 		LPFC_DELAY_INIT_LINK_INDEFINITELY,
 		"Suppress Link Up at initialization");
+
+static ssize_t
+lpfc_pls_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct Scsi_Host  *shost = class_to_shost(dev);
+	struct lpfc_hba   *phba = ((struct lpfc_vport *)shost->hostdata)->phba;
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n",
+			 phba->sli4_hba.pc_sli4_params.pls);
+}
+static DEVICE_ATTR(pls, 0444,
+			 lpfc_pls_show, NULL);
+
+static ssize_t
+lpfc_pt_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct Scsi_Host  *shost = class_to_shost(dev);
+	struct lpfc_hba   *phba = ((struct lpfc_vport *)shost->hostdata)->phba;
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n",
+			 (phba->hba_flag & HBA_PERSISTENT_TOPO) ? 1 : 0);
+}
+static DEVICE_ATTR(pt, 0444,
+			 lpfc_pt_show, NULL);
+
 /*
 # lpfc_cnt: Number of IOCBs allocated for ELS, CT, and ABTS
 #       1 - (1024)
@@ -3579,9 +3606,6 @@ lpfc_txcmplq_hw_show(struct device *dev, struct device_attribute *attr,
 
 static DEVICE_ATTR(txcmplq_hw, S_IRUGO,
 			 lpfc_txcmplq_hw_show, NULL);
-
-LPFC_ATTR_R(iocb_cnt, 2, 1, 5,
-	"Number of IOCBs alloc for ELS, CT, and ABTS: 1k to 5k IOCBs");
 
 /*
 # lpfc_nodev_tmo: If set, it will hold all I/O errors on devices that disappear
@@ -4096,7 +4120,16 @@ lpfc_topology_store(struct device *dev, struct device_attribute *attr,
 				val);
 			return -EINVAL;
 		}
-		if ((phba->pcidev->device == PCI_DEVICE_ID_LANCER_G6_FC ||
+		/*
+		 * The 'topology' is not a configurable parameter if :
+		 *   - persistent topology enabled
+		 *   - G7 adapters
+		 *   - G6 with no private loop support
+		 */
+
+		if (((phba->hba_flag & HBA_PERSISTENT_TOPO) ||
+		     (!phba->sli4_hba.pc_sli4_params.pls &&
+		     phba->pcidev->device == PCI_DEVICE_ID_LANCER_G6_FC) ||
 		     phba->pcidev->device == PCI_DEVICE_ID_LANCER_G7_FC) &&
 		    val == 4) {
 			lpfc_printf_vlog(vport, KERN_ERR, LOG_INIT,
@@ -5933,7 +5966,53 @@ LPFC_ATTR_RW(enable_mds_diags, 0, 0, 1, "Enable MDS Diagnostics");
  *	[1-4] = Multiple of 1/4th Mb of host memory for FW logging
  * Value range [0..4]. Default value is 0
  */
-LPFC_ATTR_RW(ras_fwlog_buffsize, 0, 0, 4, "Host memory for FW logging");
+LPFC_ATTR(ras_fwlog_buffsize, 0, 0, 4, "Host memory for FW logging");
+lpfc_param_show(ras_fwlog_buffsize);
+
+static ssize_t
+lpfc_ras_fwlog_buffsize_set(struct lpfc_hba  *phba, uint val)
+{
+	int ret = 0;
+	enum ras_state state;
+
+	if (!lpfc_rangecheck(val, 0, 4))
+		return -EINVAL;
+
+	if (phba->cfg_ras_fwlog_buffsize == val)
+		return 0;
+
+	if (phba->cfg_ras_fwlog_func == PCI_FUNC(phba->pcidev->devfn))
+		return -EINVAL;
+
+	spin_lock_irq(&phba->hbalock);
+	state = phba->ras_fwlog.state;
+	spin_unlock_irq(&phba->hbalock);
+
+	if (state == REG_INPROGRESS) {
+		lpfc_printf_log(phba, KERN_ERR, LOG_SLI, "6147 RAS Logging "
+				"registration is in progress\n");
+		return -EBUSY;
+	}
+
+	/* For disable logging: stop the logs and free the DMA.
+	 * For ras_fwlog_buffsize size change we still need to free and
+	 * reallocate the DMA in lpfc_sli4_ras_fwlog_init.
+	 */
+	phba->cfg_ras_fwlog_buffsize = val;
+	if (state == ACTIVE) {
+		lpfc_ras_stop_fwlog(phba);
+		lpfc_sli4_ras_dma_free(phba);
+	}
+
+	lpfc_sli4_ras_init(phba);
+	if (phba->ras_fwlog.ras_enabled)
+		ret = lpfc_sli4_ras_fwlog_init(phba, phba->cfg_ras_fwlog_level,
+					       LPFC_RAS_ENABLE_LOGGING);
+	return ret;
+}
+
+lpfc_param_store(ras_fwlog_buffsize);
+static DEVICE_ATTR_RW(lpfc_ras_fwlog_buffsize);
 
 /*
  * lpfc_ras_fwlog_level: Firmware logging verbosity level
@@ -6071,8 +6150,9 @@ struct device_attribute *lpfc_hba_attrs[] = {
 	&dev_attr_lpfc_sriov_nr_virtfn,
 	&dev_attr_lpfc_req_fw_upgrade,
 	&dev_attr_lpfc_suppress_link_up,
-	&dev_attr_lpfc_iocb_cnt,
 	&dev_attr_iocb_hw,
+	&dev_attr_pls,
+	&dev_attr_pt,
 	&dev_attr_txq_hw,
 	&dev_attr_txcmplq_hw,
 	&dev_attr_lpfc_fips_level,
@@ -7085,11 +7165,22 @@ struct fc_function_template lpfc_vport_transport_functions = {
 static void
 lpfc_get_hba_function_mode(struct lpfc_hba *phba)
 {
-	/* If it's a SkyHawk FCoE adapter */
-	if (phba->pcidev->device == PCI_DEVICE_ID_SKYHAWK)
+	/* If the adapter supports FCoE mode */
+	switch (phba->pcidev->device) {
+	case PCI_DEVICE_ID_SKYHAWK:
+	case PCI_DEVICE_ID_SKYHAWK_VF:
+	case PCI_DEVICE_ID_LANCER_FCOE:
+	case PCI_DEVICE_ID_LANCER_FCOE_VF:
+	case PCI_DEVICE_ID_ZEPHYR_DCSP:
+	case PCI_DEVICE_ID_HORNET:
+	case PCI_DEVICE_ID_TIGERSHARK:
+	case PCI_DEVICE_ID_TOMCAT:
 		phba->hba_flag |= HBA_FCOE_MODE;
-	else
+		break;
+	default:
+	/* for others, clear the flag */
 		phba->hba_flag &= ~HBA_FCOE_MODE;
+	}
 }
 
 /**
@@ -7210,7 +7301,6 @@ lpfc_get_cfgparam(struct lpfc_hba *phba)
 	lpfc_sriov_nr_virtfn_init(phba, lpfc_sriov_nr_virtfn);
 	lpfc_request_firmware_upgrade_init(phba, lpfc_req_fw_upgrade);
 	lpfc_suppress_link_up_init(phba, lpfc_suppress_link_up);
-	lpfc_iocb_cnt_init(phba, lpfc_iocb_cnt);
 	lpfc_delay_discovery_init(phba, lpfc_delay_discovery);
 	lpfc_sli_mode_init(phba, lpfc_sli_mode);
 	phba->cfg_enable_dss = 1;
@@ -7256,11 +7346,11 @@ lpfc_nvme_mod_param_dep(struct lpfc_hba *phba)
 		}
 
 		if (!phba->cfg_nvmet_mrq)
-			phba->cfg_nvmet_mrq = phba->cfg_irq_chann;
+			phba->cfg_nvmet_mrq = phba->cfg_hdw_queue;
 
 		/* Adjust lpfc_nvmet_mrq to avoid running out of WQE slots */
-		if (phba->cfg_nvmet_mrq > phba->cfg_irq_chann) {
-			phba->cfg_nvmet_mrq = phba->cfg_irq_chann;
+		if (phba->cfg_nvmet_mrq > phba->cfg_hdw_queue) {
+			phba->cfg_nvmet_mrq = phba->cfg_hdw_queue;
 			lpfc_printf_log(phba, KERN_ERR, LOG_NVME_DISC,
 					"6018 Adjust lpfc_nvmet_mrq to %d\n",
 					phba->cfg_nvmet_mrq);

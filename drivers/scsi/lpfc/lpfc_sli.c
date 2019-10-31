@@ -87,6 +87,10 @@ static void lpfc_sli4_hba_handle_eqe(struct lpfc_hba *phba,
 				     struct lpfc_eqe *eqe);
 static bool lpfc_sli4_mbox_completions_pending(struct lpfc_hba *phba);
 static bool lpfc_sli4_process_missed_mbox_completions(struct lpfc_hba *phba);
+static struct lpfc_cqe *lpfc_sli4_cq_get(struct lpfc_queue *q);
+static void __lpfc_sli4_consume_cqe(struct lpfc_hba *phba,
+				    struct lpfc_queue *cq,
+				    struct lpfc_cqe *cqe);
 
 static IOCB_t *
 lpfc_get_iocb_from_iocbq(struct lpfc_iocbq *iocbq)
@@ -467,21 +471,47 @@ __lpfc_sli4_consume_eqe(struct lpfc_hba *phba, struct lpfc_queue *eq,
 }
 
 static void
-lpfc_sli4_eq_flush(struct lpfc_hba *phba, struct lpfc_queue *eq)
+lpfc_sli4_eqcq_flush(struct lpfc_hba *phba, struct lpfc_queue *eq)
 {
-	struct lpfc_eqe *eqe;
-	uint32_t count = 0;
+	struct lpfc_eqe *eqe = NULL;
+	u32 eq_count = 0, cq_count = 0;
+	struct lpfc_cqe *cqe = NULL;
+	struct lpfc_queue *cq = NULL, *childq = NULL;
+	int cqid = 0;
 
 	/* walk all the EQ entries and drop on the floor */
 	eqe = lpfc_sli4_eq_get(eq);
 	while (eqe) {
+		/* Get the reference to the corresponding CQ */
+		cqid = bf_get_le32(lpfc_eqe_resource_id, eqe);
+		cq = NULL;
+
+		list_for_each_entry(childq, &eq->child_list, list) {
+			if (childq->queue_id == cqid) {
+				cq = childq;
+				break;
+			}
+		}
+		/* If CQ is valid, iterate through it and drop all the CQEs */
+		if (cq) {
+			cqe = lpfc_sli4_cq_get(cq);
+			while (cqe) {
+				__lpfc_sli4_consume_cqe(phba, cq, cqe);
+				cq_count++;
+				cqe = lpfc_sli4_cq_get(cq);
+			}
+			/* Clear and re-arm the CQ */
+			phba->sli4_hba.sli4_write_cq_db(phba, cq, cq_count,
+			    LPFC_QUEUE_REARM);
+			cq_count = 0;
+		}
 		__lpfc_sli4_consume_eqe(phba, eq, eqe);
-		count++;
+		eq_count++;
 		eqe = lpfc_sli4_eq_get(eq);
 	}
 
 	/* Clear and re-arm the EQ */
-	phba->sli4_hba.sli4_write_eq_db(phba, eq, count, LPFC_QUEUE_REARM);
+	phba->sli4_hba.sli4_write_eq_db(phba, eq, eq_count, LPFC_QUEUE_REARM);
 }
 
 static int
@@ -2526,6 +2556,8 @@ lpfc_sli_def_mbox_cmpl(struct lpfc_hba *phba, LPFC_MBOXQ_t *pmb)
 			} else {
 				__lpfc_sli_rpi_release(vport, ndlp);
 			}
+			if (vport->load_flag & FC_UNLOADING)
+				lpfc_nlp_put(ndlp);
 			pmb->ctx_ndlp = NULL;
 		}
 	}
@@ -2672,7 +2704,8 @@ lpfc_sli_handle_mb_event(struct lpfc_hba *phba)
 			lpfc_printf_log(phba, KERN_ERR, LOG_MBOX | LOG_SLI,
 					"(%d):0323 Unknown Mailbox command "
 					"x%x (x%x/x%x) Cmpl\n",
-					pmb->vport ? pmb->vport->vpi : 0,
+					pmb->vport ? pmb->vport->vpi :
+					LPFC_VPORT_UNKNOWN,
 					pmbox->mbxCommand,
 					lpfc_sli_config_mbox_subsys_get(phba,
 									pmb),
@@ -2693,7 +2726,8 @@ lpfc_sli_handle_mb_event(struct lpfc_hba *phba)
 					"(%d):0305 Mbox cmd cmpl "
 					"error - RETRYing Data: x%x "
 					"(x%x/x%x) x%x x%x x%x\n",
-					pmb->vport ? pmb->vport->vpi : 0,
+					pmb->vport ? pmb->vport->vpi :
+					LPFC_VPORT_UNKNOWN,
 					pmbox->mbxCommand,
 					lpfc_sli_config_mbox_subsys_get(phba,
 									pmb),
@@ -2701,7 +2735,8 @@ lpfc_sli_handle_mb_event(struct lpfc_hba *phba)
 									pmb),
 					pmbox->mbxStatus,
 					pmbox->un.varWords[0],
-					pmb->vport->port_state);
+					pmb->vport ? pmb->vport->port_state :
+					LPFC_VPORT_UNKNOWN);
 				pmbox->mbxStatus = 0;
 				pmbox->mbxOwner = OWN_HOST;
 				rc = lpfc_sli_issue_mbox(phba, pmb, MBX_NOWAIT);
@@ -6184,11 +6219,16 @@ lpfc_ras_stop_fwlog(struct lpfc_hba *phba)
 {
 	struct lpfc_ras_fwlog *ras_fwlog = &phba->ras_fwlog;
 
-	ras_fwlog->ras_active = false;
+	spin_lock_irq(&phba->hbalock);
+	ras_fwlog->state = INACTIVE;
+	spin_unlock_irq(&phba->hbalock);
 
 	/* Disable FW logging to host memory */
 	writel(LPFC_CTL_PDEV_CTL_DDL_RAS,
 	       phba->sli4_hba.conf_regs_memmap_p + LPFC_CTL_PDEV_CTL_OFFSET);
+
+	/* Wait 10ms for firmware to stop using DMA buffer */
+	usleep_range(10 * 1000, 20 * 1000);
 }
 
 /**
@@ -6224,7 +6264,9 @@ lpfc_sli4_ras_dma_free(struct lpfc_hba *phba)
 		ras_fwlog->lwpd.virt = NULL;
 	}
 
-	ras_fwlog->ras_active = false;
+	spin_lock_irq(&phba->hbalock);
+	ras_fwlog->state = INACTIVE;
+	spin_unlock_irq(&phba->hbalock);
 }
 
 /**
@@ -6326,7 +6368,9 @@ lpfc_sli4_ras_mbox_cmpl(struct lpfc_hba *phba, LPFC_MBOXQ_t *pmb)
 		goto disable_ras;
 	}
 
-	ras_fwlog->ras_active = true;
+	spin_lock_irq(&phba->hbalock);
+	ras_fwlog->state = ACTIVE;
+	spin_unlock_irq(&phba->hbalock);
 	mempool_free(pmb, phba->mbox_mem_pool);
 
 	return;
@@ -6357,6 +6401,10 @@ lpfc_sli4_ras_fwlog_init(struct lpfc_hba *phba,
 	LPFC_MBOXQ_t *mbox;
 	uint32_t len = 0, fwlog_buffsize, fwlog_entry_count;
 	int rc = 0;
+
+	spin_lock_irq(&phba->hbalock);
+	ras_fwlog->state = INACTIVE;
+	spin_unlock_irq(&phba->hbalock);
 
 	fwlog_buffsize = (LPFC_RAS_MIN_BUFF_POST_SIZE *
 			  phba->cfg_ras_fwlog_buffsize);
@@ -6417,6 +6465,9 @@ lpfc_sli4_ras_fwlog_init(struct lpfc_hba *phba,
 	mbx_fwlog->u.request.lwpd.addr_lo = putPaddrLow(ras_fwlog->lwpd.phys);
 	mbx_fwlog->u.request.lwpd.addr_hi = putPaddrHigh(ras_fwlog->lwpd.phys);
 
+	spin_lock_irq(&phba->hbalock);
+	ras_fwlog->state = REG_INPROGRESS;
+	spin_unlock_irq(&phba->hbalock);
 	mbox->vport = phba->pport;
 	mbox->mbox_cmpl = lpfc_sli4_ras_mbox_cmpl;
 
@@ -7523,9 +7574,11 @@ lpfc_sli4_hba_setup(struct lpfc_hba *phba)
 		}
 		phba->sli4_hba.nvmet_xri_cnt = rc;
 
-		cnt = phba->cfg_iocb_cnt * 1024;
-		/* We need 1 iocbq for every SGL, for IO processing */
-		cnt += phba->sli4_hba.nvmet_xri_cnt;
+		/* We allocate an iocbq for every receive context SGL.
+		 * The additional allocation is for abort and ls handling.
+		 */
+		cnt = phba->sli4_hba.nvmet_xri_cnt +
+			phba->sli4_hba.max_cfg_param.max_xri;
 	} else {
 		/* update host common xri-sgl sizes and mappings */
 		rc = lpfc_sli4_io_sgl_update(phba);
@@ -7547,14 +7600,17 @@ lpfc_sli4_hba_setup(struct lpfc_hba *phba)
 			rc = -ENODEV;
 			goto out_destroy_queue;
 		}
-		cnt = phba->cfg_iocb_cnt * 1024;
+		/* Each lpfc_io_buf job structure has an iocbq element.
+		 * This cnt provides for abort, els, ct and ls requests.
+		 */
+		cnt = phba->sli4_hba.max_cfg_param.max_xri;
 	}
 
 	if (!phba->sli.iocbq_lookup) {
 		/* Initialize and populate the iocb list per host */
 		lpfc_printf_log(phba, KERN_INFO, LOG_INIT,
-				"2821 initialize iocb list %d total %d\n",
-				phba->cfg_iocb_cnt, cnt);
+				"2821 initialize iocb list with %d entries\n",
+				cnt);
 		rc = lpfc_init_iocb_list(phba, cnt);
 		if (rc) {
 			lpfc_printf_log(phba, KERN_ERR, LOG_INIT,
@@ -8964,7 +9020,8 @@ lpfc_mbox_api_table_setup(struct lpfc_hba *phba, uint8_t dev_grp)
  * @pring: Pointer to driver SLI ring object.
  * @piocb: Pointer to address of newly added command iocb.
  *
- * This function is called with hbalock held to add a command
+ * This function is called with hbalock held for SLI3 ports or
+ * the ring lock held for SLI4 ports to add a command
  * iocb to the txq when SLI layer cannot submit the command iocb
  * to the ring.
  **/
@@ -8972,7 +9029,10 @@ void
 __lpfc_sli_ringtx_put(struct lpfc_hba *phba, struct lpfc_sli_ring *pring,
 		    struct lpfc_iocbq *piocb)
 {
-	lockdep_assert_held(&phba->hbalock);
+	if (phba->sli_rev == LPFC_SLI_REV4)
+		lockdep_assert_held(&pring->ring_lock);
+	else
+		lockdep_assert_held(&phba->hbalock);
 	/* Insert the caller's iocb in the txq tail for later processing. */
 	list_add_tail(&piocb->list, &pring->txq);
 }
@@ -9863,7 +9923,7 @@ lpfc_sli4_iocb2wqe(struct lpfc_hba *phba, struct lpfc_iocbq *iocbq,
  * __lpfc_sli_issue_iocb_s4 is used by other functions in the driver to issue
  * an iocb command to an HBA with SLI-4 interface spec.
  *
- * This function is called with hbalock held. The function will return success
+ * This function is called with ringlock held. The function will return success
  * after it successfully submit the iocb to firmware or after adding to the
  * txq.
  **/
@@ -10678,14 +10738,14 @@ lpfc_sli_host_down(struct lpfc_vport *vport)
 				set_bit(LPFC_DATA_READY, &phba->data_flags);
 			}
 			prev_pring_flag = pring->flag;
-			spin_lock_irq(&pring->ring_lock);
+			spin_lock(&pring->ring_lock);
 			list_for_each_entry_safe(iocb, next_iocb,
 						 &pring->txq, list) {
 				if (iocb->vport != vport)
 					continue;
 				list_move_tail(&iocb->list, &completions);
 			}
-			spin_unlock_irq(&pring->ring_lock);
+			spin_unlock(&pring->ring_lock);
 			list_for_each_entry_safe(iocb, next_iocb,
 						 &pring->txcmplq, list) {
 				if (iocb->vport != vport)
@@ -11050,9 +11110,6 @@ lpfc_sli_abort_els_cmpl(struct lpfc_hba *phba, struct lpfc_iocbq *cmdiocb,
 				irsp->ulpStatus, irsp->un.ulpWord[4]);
 
 		spin_unlock_irq(&phba->hbalock);
-		if (irsp->ulpStatus == IOSTAT_LOCAL_REJECT &&
-		    irsp->un.ulpWord[4] == IOERR_SLI_ABORTED)
-			lpfc_sli_release_iocbq(phba, abort_iocb);
 	}
 release_iocb:
 	lpfc_sli_release_iocbq(phba, cmdiocb);
@@ -11736,7 +11793,10 @@ lpfc_sli_wake_iocb_wait(struct lpfc_hba *phba,
 		!(cmdiocbq->iocb_flag & LPFC_IO_LIBDFC)) {
 		lpfc_cmd = container_of(cmdiocbq, struct lpfc_io_buf,
 			cur_iocbq);
-		lpfc_cmd->exch_busy = rspiocbq->iocb_flag & LPFC_EXCHANGE_BUSY;
+		if (rspiocbq && (rspiocbq->iocb_flag & LPFC_EXCHANGE_BUSY))
+			lpfc_cmd->flags |= LPFC_SBUF_XBUSY;
+		else
+			lpfc_cmd->flags &= ~LPFC_SBUF_XBUSY;
 	}
 
 	pdone_q = cmdiocbq->context_un.wait_queue;
@@ -13158,13 +13218,19 @@ send_current_mbox:
 	phba->sli.sli_flag &= ~LPFC_SLI_MBOX_ACTIVE;
 	/* Setting active mailbox pointer need to be in sync to flag clear */
 	phba->sli.mbox_active = NULL;
+	if (bf_get(lpfc_trailer_consumed, mcqe))
+		lpfc_sli4_mq_release(phba->sli4_hba.mbx_wq);
 	spin_unlock_irqrestore(&phba->hbalock, iflags);
 	/* Wake up worker thread to post the next pending mailbox command */
 	lpfc_worker_wake_up(phba);
+	return workposted;
+
 out_no_mqe_complete:
+	spin_lock_irqsave(&phba->hbalock, iflags);
 	if (bf_get(lpfc_trailer_consumed, mcqe))
 		lpfc_sli4_mq_release(phba->sli4_hba.mbx_wq);
-	return workposted;
+	spin_unlock_irqrestore(&phba->hbalock, iflags);
+	return false;
 }
 
 /**
@@ -13217,7 +13283,6 @@ lpfc_sli4_sp_handle_els_wcqe(struct lpfc_hba *phba, struct lpfc_queue *cq,
 	struct lpfc_sli_ring *pring = cq->pring;
 	int txq_cnt = 0;
 	int txcmplq_cnt = 0;
-	int fcp_txcmplq_cnt = 0;
 
 	/* Check for response status */
 	if (unlikely(bf_get(lpfc_wcqe_c_status, wcqe))) {
@@ -13239,9 +13304,8 @@ lpfc_sli4_sp_handle_els_wcqe(struct lpfc_hba *phba, struct lpfc_queue *cq,
 			txcmplq_cnt++;
 		lpfc_printf_log(phba, KERN_ERR, LOG_SLI,
 			"0387 NO IOCBQ data: txq_cnt=%d iocb_cnt=%d "
-			"fcp_txcmplq_cnt=%d, els_txcmplq_cnt=%d\n",
+			"els_txcmplq_cnt=%d\n",
 			txq_cnt, phba->iocb_cnt,
-			fcp_txcmplq_cnt,
 			txcmplq_cnt);
 		return false;
 	}
@@ -13592,6 +13656,7 @@ __lpfc_sli4_process_cq(struct lpfc_hba *phba, struct lpfc_queue *cq,
 			phba->sli4_hba.sli4_write_cq_db(phba, cq, consumed,
 						LPFC_QUEUE_NOARM);
 			consumed = 0;
+			cq->assoc_qp->q_flag |= HBA_EQ_DELAY_CHK;
 		}
 
 		if (count == LPFC_NVMET_CQ_NOTIFY)
@@ -14220,7 +14285,7 @@ lpfc_sli4_hba_intr_handler(int irq, void *dev_id)
 		spin_lock_irqsave(&phba->hbalock, iflag);
 		if (phba->link_state < LPFC_LINK_DOWN)
 			/* Flush, clear interrupt, and rearm the EQ */
-			lpfc_sli4_eq_flush(phba, fpeq);
+			lpfc_sli4_eqcq_flush(phba, fpeq);
 		spin_unlock_irqrestore(&phba->hbalock, iflag);
 		return IRQ_NONE;
 	}
@@ -14230,7 +14295,7 @@ lpfc_sli4_hba_intr_handler(int irq, void *dev_id)
 	fpeq->last_cpu = raw_smp_processor_id();
 
 	if (icnt > LPFC_EQD_ISR_TRIGGER &&
-	    phba->cfg_irq_chann == 1 &&
+	    fpeq->q_flag & HBA_EQ_DELAY_CHK &&
 	    phba->cfg_auto_imax &&
 	    fpeq->q_mode != LPFC_MAX_AUTO_EQ_DELAY &&
 	    phba->sli.sli_flag & LPFC_SLI_USE_EQDR)
@@ -18124,8 +18189,9 @@ lpfc_sli4_alloc_rpi(struct lpfc_hba *phba)
 		phba->sli4_hba.max_cfg_param.rpi_used++;
 		phba->sli4_hba.rpi_count++;
 	}
-	lpfc_printf_log(phba, KERN_INFO, LOG_SLI,
-			"0001 rpi:%x max:%x lim:%x\n",
+	lpfc_printf_log(phba, KERN_INFO,
+			LOG_NODE | LOG_DISCOVERY,
+			"0001 Allocated rpi:x%x max:x%x lim:x%x\n",
 			(int) rpi, max_rpi, rpi_limit);
 
 	/*
@@ -18185,7 +18251,8 @@ __lpfc_sli4_free_rpi(struct lpfc_hba *phba, int rpi)
 		phba->sli4_hba.rpi_count--;
 		phba->sli4_hba.max_cfg_param.rpi_used--;
 	} else {
-		lpfc_printf_log(phba, KERN_INFO, LOG_SLI,
+		lpfc_printf_log(phba, KERN_INFO,
+				LOG_NODE | LOG_DISCOVERY,
 				"2016 rpi %x not inuse\n",
 				rpi);
 	}
@@ -20093,6 +20160,13 @@ void lpfc_release_io_buf(struct lpfc_hba *phba, struct lpfc_io_buf *lpfc_ncmd,
 	lpfc_ncmd->cur_iocbq.wqe_cmpl = NULL;
 	lpfc_ncmd->cur_iocbq.iocb_cmpl = NULL;
 
+	if (phba->cfg_xpsgl && !phba->nvmet_support &&
+	    !list_empty(&lpfc_ncmd->dma_sgl_xtra_list))
+		lpfc_put_sgl_per_hdwq(phba, lpfc_ncmd);
+
+	if (!list_empty(&lpfc_ncmd->dma_cmd_rsp_list))
+		lpfc_put_cmd_rsp_buf_per_hdwq(phba, lpfc_ncmd);
+
 	if (phba->cfg_xri_rebalancing) {
 		if (lpfc_ncmd->expedite) {
 			/* Return to expedite pool */
@@ -20157,13 +20231,6 @@ void lpfc_release_io_buf(struct lpfc_hba *phba, struct lpfc_io_buf *lpfc_ncmd,
 		spin_unlock_irqrestore(&qp->io_buf_list_put_lock,
 				       iflag);
 	}
-
-	if (phba->cfg_xpsgl && !phba->nvmet_support &&
-	    !list_empty(&lpfc_ncmd->dma_sgl_xtra_list))
-		lpfc_put_sgl_per_hdwq(phba, lpfc_ncmd);
-
-	if (!list_empty(&lpfc_ncmd->dma_cmd_rsp_list))
-		lpfc_put_cmd_rsp_buf_per_hdwq(phba, lpfc_ncmd);
 }
 
 /**
@@ -20399,8 +20466,9 @@ lpfc_get_sgl_per_hdwq(struct lpfc_hba *phba, struct lpfc_io_buf *lpfc_buf)
 	struct sli4_hybrid_sgl *allocated_sgl = NULL;
 	struct lpfc_sli4_hdw_queue *hdwq = lpfc_buf->hdwq;
 	struct list_head *buf_list = &hdwq->sgl_list;
+	unsigned long iflags;
 
-	spin_lock_irq(&hdwq->hdwq_lock);
+	spin_lock_irqsave(&hdwq->hdwq_lock, iflags);
 
 	if (likely(!list_empty(buf_list))) {
 		/* break off 1 chunk from the sgl_list */
@@ -20412,7 +20480,7 @@ lpfc_get_sgl_per_hdwq(struct lpfc_hba *phba, struct lpfc_io_buf *lpfc_buf)
 		}
 	} else {
 		/* allocate more */
-		spin_unlock_irq(&hdwq->hdwq_lock);
+		spin_unlock_irqrestore(&hdwq->hdwq_lock, iflags);
 		tmp = kmalloc_node(sizeof(*tmp), GFP_ATOMIC,
 				   cpu_to_node(smp_processor_id()));
 		if (!tmp) {
@@ -20434,7 +20502,7 @@ lpfc_get_sgl_per_hdwq(struct lpfc_hba *phba, struct lpfc_io_buf *lpfc_buf)
 			return NULL;
 		}
 
-		spin_lock_irq(&hdwq->hdwq_lock);
+		spin_lock_irqsave(&hdwq->hdwq_lock, iflags);
 		list_add_tail(&tmp->list_node, &lpfc_buf->dma_sgl_xtra_list);
 	}
 
@@ -20442,7 +20510,7 @@ lpfc_get_sgl_per_hdwq(struct lpfc_hba *phba, struct lpfc_io_buf *lpfc_buf)
 					struct sli4_hybrid_sgl,
 					list_node);
 
-	spin_unlock_irq(&hdwq->hdwq_lock);
+	spin_unlock_irqrestore(&hdwq->hdwq_lock, iflags);
 
 	return allocated_sgl;
 }
@@ -20466,8 +20534,9 @@ lpfc_put_sgl_per_hdwq(struct lpfc_hba *phba, struct lpfc_io_buf *lpfc_buf)
 	struct sli4_hybrid_sgl *tmp = NULL;
 	struct lpfc_sli4_hdw_queue *hdwq = lpfc_buf->hdwq;
 	struct list_head *buf_list = &hdwq->sgl_list;
+	unsigned long iflags;
 
-	spin_lock_irq(&hdwq->hdwq_lock);
+	spin_lock_irqsave(&hdwq->hdwq_lock, iflags);
 
 	if (likely(!list_empty(&lpfc_buf->dma_sgl_xtra_list))) {
 		list_for_each_entry_safe(list_entry, tmp,
@@ -20480,7 +20549,7 @@ lpfc_put_sgl_per_hdwq(struct lpfc_hba *phba, struct lpfc_io_buf *lpfc_buf)
 		rc = -EINVAL;
 	}
 
-	spin_unlock_irq(&hdwq->hdwq_lock);
+	spin_unlock_irqrestore(&hdwq->hdwq_lock, iflags);
 	return rc;
 }
 
@@ -20501,8 +20570,9 @@ lpfc_free_sgl_per_hdwq(struct lpfc_hba *phba,
 	struct list_head *buf_list = &hdwq->sgl_list;
 	struct sli4_hybrid_sgl *list_entry = NULL;
 	struct sli4_hybrid_sgl *tmp = NULL;
+	unsigned long iflags;
 
-	spin_lock_irq(&hdwq->hdwq_lock);
+	spin_lock_irqsave(&hdwq->hdwq_lock, iflags);
 
 	/* Free sgl pool */
 	list_for_each_entry_safe(list_entry, tmp,
@@ -20514,7 +20584,7 @@ lpfc_free_sgl_per_hdwq(struct lpfc_hba *phba,
 		kfree(list_entry);
 	}
 
-	spin_unlock_irq(&hdwq->hdwq_lock);
+	spin_unlock_irqrestore(&hdwq->hdwq_lock, iflags);
 }
 
 /**
@@ -20538,8 +20608,9 @@ lpfc_get_cmd_rsp_buf_per_hdwq(struct lpfc_hba *phba,
 	struct fcp_cmd_rsp_buf *allocated_buf = NULL;
 	struct lpfc_sli4_hdw_queue *hdwq = lpfc_buf->hdwq;
 	struct list_head *buf_list = &hdwq->cmd_rsp_buf_list;
+	unsigned long iflags;
 
-	spin_lock_irq(&hdwq->hdwq_lock);
+	spin_lock_irqsave(&hdwq->hdwq_lock, iflags);
 
 	if (likely(!list_empty(buf_list))) {
 		/* break off 1 chunk from the list */
@@ -20552,7 +20623,7 @@ lpfc_get_cmd_rsp_buf_per_hdwq(struct lpfc_hba *phba,
 		}
 	} else {
 		/* allocate more */
-		spin_unlock_irq(&hdwq->hdwq_lock);
+		spin_unlock_irqrestore(&hdwq->hdwq_lock, iflags);
 		tmp = kmalloc_node(sizeof(*tmp), GFP_ATOMIC,
 				   cpu_to_node(smp_processor_id()));
 		if (!tmp) {
@@ -20579,7 +20650,7 @@ lpfc_get_cmd_rsp_buf_per_hdwq(struct lpfc_hba *phba,
 		tmp->fcp_rsp = (struct fcp_rsp *)((uint8_t *)tmp->fcp_cmnd +
 				sizeof(struct fcp_cmnd));
 
-		spin_lock_irq(&hdwq->hdwq_lock);
+		spin_lock_irqsave(&hdwq->hdwq_lock, iflags);
 		list_add_tail(&tmp->list_node, &lpfc_buf->dma_cmd_rsp_list);
 	}
 
@@ -20587,7 +20658,7 @@ lpfc_get_cmd_rsp_buf_per_hdwq(struct lpfc_hba *phba,
 					struct fcp_cmd_rsp_buf,
 					list_node);
 
-	spin_unlock_irq(&hdwq->hdwq_lock);
+	spin_unlock_irqrestore(&hdwq->hdwq_lock, iflags);
 
 	return allocated_buf;
 }
@@ -20612,8 +20683,9 @@ lpfc_put_cmd_rsp_buf_per_hdwq(struct lpfc_hba *phba,
 	struct fcp_cmd_rsp_buf *tmp = NULL;
 	struct lpfc_sli4_hdw_queue *hdwq = lpfc_buf->hdwq;
 	struct list_head *buf_list = &hdwq->cmd_rsp_buf_list;
+	unsigned long iflags;
 
-	spin_lock_irq(&hdwq->hdwq_lock);
+	spin_lock_irqsave(&hdwq->hdwq_lock, iflags);
 
 	if (likely(!list_empty(&lpfc_buf->dma_cmd_rsp_list))) {
 		list_for_each_entry_safe(list_entry, tmp,
@@ -20626,7 +20698,7 @@ lpfc_put_cmd_rsp_buf_per_hdwq(struct lpfc_hba *phba,
 		rc = -EINVAL;
 	}
 
-	spin_unlock_irq(&hdwq->hdwq_lock);
+	spin_unlock_irqrestore(&hdwq->hdwq_lock, iflags);
 	return rc;
 }
 
@@ -20647,8 +20719,9 @@ lpfc_free_cmd_rsp_buf_per_hdwq(struct lpfc_hba *phba,
 	struct list_head *buf_list = &hdwq->cmd_rsp_buf_list;
 	struct fcp_cmd_rsp_buf *list_entry = NULL;
 	struct fcp_cmd_rsp_buf *tmp = NULL;
+	unsigned long iflags;
 
-	spin_lock_irq(&hdwq->hdwq_lock);
+	spin_lock_irqsave(&hdwq->hdwq_lock, iflags);
 
 	/* Free cmd_rsp buf pool */
 	list_for_each_entry_safe(list_entry, tmp,
@@ -20661,5 +20734,5 @@ lpfc_free_cmd_rsp_buf_per_hdwq(struct lpfc_hba *phba,
 		kfree(list_entry);
 	}
 
-	spin_unlock_irq(&hdwq->hdwq_lock);
+	spin_unlock_irqrestore(&hdwq->hdwq_lock, iflags);
 }
