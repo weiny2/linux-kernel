@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 Advanced Micro Devices, Inc.
+ * Copyright 2019 Advanced Micro Devices, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -18,24 +18,35 @@
  * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
  * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
  * OTHER DEALINGS IN THE SOFTWARE.
- *
- * Authors: AMD
- *
  */
 
-#ifndef __RN_CLK_MGR_H__
-#define __RN_CLK_MGR_H__
+#include <linux/device.h>
 
-#include "clk_mgr.h"
-#include "dm_pp_smu.h"
+#include <drm/amd_asic_type.h>
 
-struct rn_clk_registers {
-	uint32_t CLK1_CLK0_CURRENT_CNT; /* DPREFCLK */
-};
+#include "amdgpu.h"
+#include "amdgpu_tmz.h"
 
-void rn_clk_mgr_construct(struct dc_context *ctx,
-		struct clk_mgr_internal *clk_mgr,
-		struct pp_smu_funcs *pp_smu,
-		struct dccg *dccg);
 
-#endif //__RN_CLK_MGR_H__
+/**
+ * amdgpu_is_tmz - validate trust memory zone
+ *
+ * @adev: amdgpu_device pointer
+ *
+ * Return true if @dev supports trusted memory zones (TMZ), and return false if
+ * @dev does not support TMZ.
+ */
+bool amdgpu_is_tmz(struct amdgpu_device *adev)
+{
+	if (!amdgpu_tmz)
+		return false;
+
+	if (adev->asic_type < CHIP_RAVEN || adev->asic_type == CHIP_ARCTURUS) {
+		dev_warn(adev->dev, "doesn't support trusted memory zones (TMZ)\n");
+		return false;
+	}
+
+	dev_info(adev->dev, "TMZ feature is enabled\n");
+
+	return true;
+}

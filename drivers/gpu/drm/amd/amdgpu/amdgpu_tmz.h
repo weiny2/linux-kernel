@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 Advanced Micro Devices, Inc.
+ * Copyright 2019 Advanced Micro Devices, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -19,23 +19,21 @@
  * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
  * OTHER DEALINGS IN THE SOFTWARE.
  *
- * Authors: AMD
- *
  */
 
-#ifndef __RN_CLK_MGR_H__
-#define __RN_CLK_MGR_H__
+#ifndef __AMDGPU_TMZ_H__
+#define __AMDGPU_TMZ_H__
 
-#include "clk_mgr.h"
-#include "dm_pp_smu.h"
+#include "amdgpu.h"
 
-struct rn_clk_registers {
-	uint32_t CLK1_CLK0_CURRENT_CNT; /* DPREFCLK */
+/*
+ * Trust memory zone stuff
+ */
+struct amdgpu_tmz {
+	bool	enabled;
 };
 
-void rn_clk_mgr_construct(struct dc_context *ctx,
-		struct clk_mgr_internal *clk_mgr,
-		struct pp_smu_funcs *pp_smu,
-		struct dccg *dccg);
 
-#endif //__RN_CLK_MGR_H__
+extern bool amdgpu_is_tmz(struct amdgpu_device *adev);
+
+#endif
