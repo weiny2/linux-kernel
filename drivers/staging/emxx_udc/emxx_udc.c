@@ -1072,9 +1072,8 @@ static int _nbu2ss_epn_in_pio(struct nbu2ss_udc *udc, struct nbu2ss_ep *ep,
 		if (i_word_length > 0) {
 			for (i = 0; i < i_word_length; i++) {
 				_nbu2ss_writel(
-					&preg->EP_REGS[ep->epnum - 1].EP_WRITE
-					, p_buf_32->dw
-				);
+					&preg->EP_REGS[ep->epnum - 1].EP_WRITE,
+					p_buf_32->dw);
 
 				p_buf_32++;
 			}
@@ -3078,7 +3077,6 @@ static int nbu2ss_drv_probe(struct platform_device *pdev)
 {
 	int	status = -ENODEV;
 	struct nbu2ss_udc	*udc;
-	struct resource *r;
 	int irq;
 	void __iomem *mmio_base;
 
@@ -3088,8 +3086,7 @@ static int nbu2ss_drv_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, udc);
 
 	/* require I/O memory and IRQ to be provided as resources */
-	r = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	mmio_base = devm_ioremap_resource(&pdev->dev, r);
+	mmio_base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(mmio_base))
 		return PTR_ERR(mmio_base);
 
