@@ -576,4 +576,10 @@ static inline bool is_migrate_highatomic_page(struct page *page)
 
 void setup_zone_pageset(struct zone *zone);
 extern struct page *alloc_new_node_page(struct page *page, unsigned long node);
+
+/* Indicates page migration is viable. */
+#define PAGE_MIGRATION_VIABLE    0
+/* Indicates page migration is futile. */
+#define PAGE_MIGRATION_FUTILE    (-1)
+
 #endif	/* __MM_INTERNAL_H */
