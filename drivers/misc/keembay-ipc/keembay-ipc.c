@@ -641,45 +641,55 @@ static void ipc_link_deinit(struct keembay_ipc_dev *ipc_dev,
 	}
 }
 
+static int get_pdev_res_and_ioremap(struct platform_device *pdev,
+				    const char *reg_name,
+				    void __iomem **target_reg)
+{
+	struct resource *res;
+	void __iomem *reg;
+	struct device *dev = &pdev->dev;
+
+	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, reg_name);
+	if (!res) {
+		dev_err(dev, "Couldn't get resource for %s\n", reg_name);
+		return -EINVAL;
+	}
+
+	reg = devm_ioremap_resource(dev, res);
+	if (IS_ERR(reg)) {
+		dev_err(dev, "Couldn't ioremap resource for %s\n", reg_name);
+		return PTR_ERR(reg);
+	}
+	dev_info(dev, "Register base for %s: vaddr %p paddr: %pa\n", reg_name,
+		 reg, &res->start);
+
+	*target_reg = reg;
+
+	return 0;
+}
+
 /**
- * ipc_hw_init() - Init IPC-related hardware and memory.
+ * ipc_hw_init() - Init IPC-related hardware.
  */
 static int ipc_hw_init(struct platform_device *pdev,
 		       struct keembay_ipc_dev *ipc_dev)
 {
+	struct device *dev = &pdev->dev;
 	int rc, irq;
-	struct resource *res;
-	void __iomem *reg;
 
-	/* Get Local FIFO Register. */
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (!res) {
-		dev_err(&pdev->dev, "Couldn't find local FIFO registries\n");
-		return -EINVAL;
+	rc = get_pdev_res_and_ioremap(pdev, "css_fifo",
+				      &ipc_dev->local_fifo_reg);
+	if (rc) {
+		dev_err(dev, "Failed to get local FIFO registers\n");
+		return rc;
 	}
-	reg = devm_ioremap_resource(&pdev->dev, res);
-	if (IS_ERR(reg)) {
-		dev_err(&pdev->dev, "Failed to iomap local FIFO registries\n");
-		return PTR_ERR(reg);
-	}
-	dev_info(&pdev->dev, "Local FIFO register base: vaddr %p paddr: %pa\n",
-		 reg, &res->start);
-	ipc_dev->local_fifo_reg = reg;
 
-	/* Get Remote FIFO Register. */
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 1);
-	if (!res) {
-		dev_err(&pdev->dev, "Couldn't find remote FIFO registries\n");
-		return -EINVAL;
+	rc = get_pdev_res_and_ioremap(pdev, "mss_fifo",
+				      &ipc_dev->remote_fifo_reg);
+	if (rc) {
+		dev_err(dev, "Failed to get remote FIFO registers\n");
+		return rc;
 	}
-	reg = devm_ioremap_resource(&pdev->dev, res);
-	if (IS_ERR(reg)) {
-		dev_err(&pdev->dev, "Failed to iomap remote FIFO registries\n");
-		return PTR_ERR(reg);
-	}
-	dev_info(&pdev->dev, "Remote FIFO register base: vaddr %p paddr: %pa\n",
-		 reg, &res->start);
-	ipc_dev->remote_fifo_reg = reg;
 
 	/*
 	 * Register interrupt handler and initialize IRQ-related fields in IPC
@@ -687,8 +697,8 @@ static int ipc_hw_init(struct platform_device *pdev,
 	 */
 	irq = platform_get_irq(pdev, 0);
 	if (irq < 0) {
-		dev_err(&pdev->dev, "Failed getting IRQ for local fifo: %d\n",
-			irq);
+		dev_err(dev, "Failed getting IRQ for local fifo: %d\n", irq);
+		return irq;
 	}
 	ipc_dev->local_fifo_irq = irq;
 	ipc_dev->local_fifo_irq_enabled = true;
