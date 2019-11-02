@@ -1,13 +1,26 @@
 Intel Keem Bay IPC
------------------------------------------------------
-This binding defines the IPC used on the Intel Keem Bay platform.
+------------------
+
+The Keem Bay IPC driver enables Inter-Processor Communication (IPC) with the
+Visual Processor Unit (VPU) embedded in the Intel Keem Bay SoC.
 
 Required properties:
 - compatible : "intel,keembay-ipc"
-- memory-region: Reference to the reserved memory region used for IPC buffers.
+- reg: list of register areas, as specified in reg-names
+- reg-names: must contain
+	"css_fifo": the CSS (CPU) FIFO registers
+	"mss_fifo": the MSS (VPU) FIFO registers
+- memory-region: the following list of references to memory regions:
+	- A reference to the reserved memory region used for CSS IPC buffers
+	- A reference to the reserved memory region used for MSS IPC buffers
+- interrupts: The number of the CSS IPC FIFO not-empty IRQ
 
 Example:
 	ipc {
 		compatible = "intel,keembay-ipc";
+		reg = <0x0 0x203300f0 0x0 0x310>, /* CPU TIM FIFO */
+		      <0x0 0x208200f0 0x0 0x310>; /* VPU TIM FIFO */
+		reg-names = "css_fifo", "mss_fifo";
+		interrupts = <GIC_SPI 12 IRQ_TYPE_LEVEL_HIGH>;
 		memory-region = <&css_ipc_reserved>, <&mss_ipc_reserved>;
 	};
