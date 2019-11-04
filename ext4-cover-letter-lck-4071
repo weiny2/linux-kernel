@@ -1,0 +1,43 @@
+Enable ext4 support for per-file/directory DAX operations
+
+Changes from V4:
+	Fix up DAX mutual exclusion with other flags.
+	Add clean up patch (remove jflags)
+
+Changes from V3:
+	Change EXT4_DAX_FL to bit24
+	Cache device DAX support in the super block and use that is
+		ext4_should_use_dax()
+
+Changes from V2:
+	Rework DAX exclusivity with verity and encryption based on feedback
+	from Eric
+
+Enable the same per file DAX support in ext4 as was done for xfs.  This series
+builds and depends on the V11 series for xfs.[1]
+
+This passes the same xfstests test as XFS.
+
+The only issue is that this modifies the old mount option parsing code rather
+than waiting for the new parsing code to be finalized.
+
+This series starts with 3 fixes which include making Verity and Encrypt truly
+mutually exclusive from DAX.  I think these first 3 patches should be picked up
+for 5.8 regardless of what is decided regarding the mount parsing.
+
+[1] https://lore.kernel.org/lkml/20200428002142.404144-1-ira.weiny@intel.com/
+
+To: linux-ext4@vger.kernel.org
+To: Andreas Dilger <adilger.kernel@dilger.ca>
+To: "Theodore Y. Ts'o" <tytso@mit.edu>
+To: Jan Kara <jack@suse.cz>
+To: Eric Biggers <ebiggers@kernel.org>
+
+Cc: Al Viro <viro@zeniv.linux.org.uk>
+Cc: Dan Williams <dan.j.williams@intel.com>
+Cc: Dave Chinner <david@fromorbit.com>
+Cc: Christoph Hellwig <hch@lst.de>
+Cc: Jeff Moyer <jmoyer@redhat.com>
+Cc: "Darrick J. Wong" <darrick.wong@oracle.com>
+Cc: linux-fsdevel@vger.kernel.org
+Cc: linux-kernel@vger.kernel.org
