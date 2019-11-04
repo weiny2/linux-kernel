@@ -3162,7 +3162,14 @@
 
 	nosoftlockup	[KNL] Disable the soft-lockup detector.
 
-	nosplit_lock_detect	[X86] Disable split lock detection
+	split_lock_detect
+			[X86] Enable split lock detection
+			Enabling this feature may cause kernel panic or
+			SIGBUS to user application when a split lock issue
+			is detected. Usually this is enabled in real time
+			which treats split lock issues as fatal errors or when
+			debugging and fixing split lock issues to improve
+			performance.
 
 	nosync		[HW,M68K] Disables sync negotiation for all devices.
 
