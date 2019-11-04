@@ -2132,8 +2132,16 @@ page_ok:
 		 * When a sequential read accesses a page several times,
 		 * only mark it as accessed the first time.
 		 */
-		if (prev_index != index || offset != prev_offset)
-			mark_page_accessed(page);
+		if (prev_index != index || offset != prev_offset) {
+			int migration_viable;
+
+			migration_viable = mark_page_accessed(page);
+			ret = promote_viable_page(page, false, migration_viable);
+
+			/* If promoted, 'page' is gone. New location must be found. */
+			if (ret == PAGE_ACCESSED_PROMOTE_SUCCESS)
+				goto find_page;
+		}
 		prev_index = index;
 
 		/*
