@@ -92,6 +92,33 @@ end:
 	return map;
 }
 
+void fill_up_pbus_to_physid_mapping(bool reverse)
+{
+	struct pci2phy_map *map;
+	int i, bus;
+
+	raw_spin_lock(&pci2phy_map_lock);
+	list_for_each_entry(map, &pci2phy_map_head, list) {
+		i = -1;
+		if (reverse) {
+			for (bus = 255; bus >= 0; bus--) {
+				if (map->pbus_to_physid[bus] >= 0)
+					i = map->pbus_to_physid[bus];
+				else
+					map->pbus_to_physid[bus] = i;
+			}
+		} else {
+			for (bus = 0; bus <= 255; bus++) {
+				if (map->pbus_to_physid[bus] >= 0)
+					i = map->pbus_to_physid[bus];
+				else
+					map->pbus_to_physid[bus] = i;
+			}
+		}
+	}
+	raw_spin_unlock(&pci2phy_map_lock);
+}
+
 ssize_t uncore_event_show(struct kobject *kobj,
 			  struct kobj_attribute *attr, char *buf)
 {
