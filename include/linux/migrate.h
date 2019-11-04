@@ -132,6 +132,17 @@ static inline int migrate_promote_mapping(struct page *page)
 	return -ENOSYS;
 }
 
+static inline int promote_page(struct page *page, bool caller_locked_page)
+{
+	return -ENOSYS;
+}
+
+static inline int promote_viable_page(struct page *page,
+		bool caller_locked_page, int migration_viable)
+{
+	return -ENOSYS;
+}
+
 #endif /* CONFIG_MIGRATION */
 
 #ifdef CONFIG_COMPACTION

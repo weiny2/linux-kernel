@@ -582,4 +582,14 @@ extern struct page *alloc_new_node_page(struct page *page, unsigned long node);
 /* Indicates page migration is futile. */
 #define PAGE_MIGRATION_FUTILE    (-1)
 
+enum promotion_status {
+	PAGE_ACCESSED_PROMOTE_SUCCESS = 0,
+	PAGE_ACCESSED_PROMOTE_FAIL,
+	PAGE_ACCESSED_PROMOTE_NO_NEED
+};
+
+extern int promote_page(struct page *page, bool caller_locked_page);
+extern int promote_viable_page(struct page *page,
+		bool caller_locked_page, int migration_viable);
+
 #endif	/* __MM_INTERNAL_H */

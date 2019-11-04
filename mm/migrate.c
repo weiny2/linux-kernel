@@ -1210,6 +1210,71 @@ int migrate_promote_mapping(struct page *page)
 			       &m_detail);
 }
 
+int promote_page(struct page *page, bool caller_locked_page)
+{
+	int err;
+
+	if (!PageLRU(page) ||
+	    next_promotion_node(page_to_nid(page)) == NUMA_NO_NODE)
+		return -EINVAL;
+	/*
+	 * Try to lock page right away.
+	 * This function is usually called by file
+	 * reads/writes. If blocking while locking
+	 * the page, reads/writes performance will
+	 * likely drop.
+	 */
+	if (!caller_locked_page && !trylock_page(page))
+		return -EBUSY;
+
+	err = isolate_lru_page(page);
+	if (err)
+		goto unlock_ret;
+
+	/* Drop reference acquired by isolate_lru_page() */
+	put_page(page);
+
+	err = migrate_promote_mapping(page);
+	if (err != MIGRATEPAGE_SUCCESS) {
+		/* putback_lru_page() drops this reference.*/
+		get_page(page);
+
+		/* Put the page back into LRU list when migration fails. */
+		putback_lru_page(page);
+	}
+
+unlock_ret:
+	/* Restore lock state to that at function entry. */
+	if (!caller_locked_page)
+		unlock_page(page);
+
+	return err;
+}
+
+int promote_viable_page(struct page *page,
+			bool caller_locked_page, int migration_viable)
+{
+	int ret;
+
+	if (migration_viable != PAGE_MIGRATION_VIABLE)
+		return PAGE_ACCESSED_PROMOTE_NO_NEED;
+
+	ret = promote_page(page, caller_locked_page);
+	if (ret != MIGRATEPAGE_SUCCESS)
+		return PAGE_ACCESSED_PROMOTE_FAIL;
+
+	/*
+	 * If the page is locked before promotion,
+	 * unlock it if it's promoted successfully.
+	 */
+	if (caller_locked_page)
+		unlock_page(page);
+
+	put_page(page);
+
+	return PAGE_ACCESSED_PROMOTE_SUCCESS;
+}
+
 /*
  * gcc 4.7 and 4.8 on arm get an ICEs when inlining unmap_and_move().  Work
  * around it.
