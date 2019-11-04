@@ -1378,26 +1378,7 @@ static int snbep_pci2phy_map_init(int devid, int nodeid_loc, int idmap_loc, bool
 		 * For PCI bus with no UBOX device, find the next bus
 		 * that has UBOX device and use its mapping.
 		 */
-		raw_spin_lock(&pci2phy_map_lock);
-		list_for_each_entry(map, &pci2phy_map_head, list) {
-			i = -1;
-			if (reverse) {
-				for (bus = 255; bus >= 0; bus--) {
-					if (map->pbus_to_physid[bus] >= 0)
-						i = map->pbus_to_physid[bus];
-					else
-						map->pbus_to_physid[bus] = i;
-				}
-			} else {
-				for (bus = 0; bus <= 255; bus++) {
-					if (map->pbus_to_physid[bus] >= 0)
-						i = map->pbus_to_physid[bus];
-					else
-						map->pbus_to_physid[bus] = i;
-				}
-			}
-		}
-		raw_spin_unlock(&pci2phy_map_lock);
+		fill_up_pbus_to_physid_mapping(reverse);
 	}
 
 	pci_dev_put(ubox_dev);
