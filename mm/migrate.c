@@ -1160,6 +1160,8 @@ static int migrate_mapping(struct page *page, int next_nid,
 		return -ENOSYS;
 	if (PageTransHuge(page) && !thp_migration_supported())
 		return -ENOMEM;
+	if (PageWriteback(page))
+		return -EACCES;
 
 	if (m_detail->reason == MR_PROMOTION)
 		pr_info_once("promote page from %d to %d\n",
