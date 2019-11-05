@@ -1766,6 +1766,14 @@ static struct ctl_table vm_table[] = {
 		.proc_handler	= promotion_ratelimit_handler,
 		.extra1		= &neg_one,
 	},
+	{
+		.procname	= "demotion_ratelimit_mbytes_per_sec",
+		.data		= &demotion_ratelimit_mbytes_per_sec,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= demotion_ratelimit_handler,
+		.extra1		= &neg_one,
+	},
 #endif
 	{ }
 };

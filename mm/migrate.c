@@ -1211,9 +1211,12 @@ int migrate_promote_mapping(struct page *page)
 }
 
 DEFINE_RATELIMIT_STATE(promotion_ratelimit_state, HZ, 0);
+/* No rate limit for demotion by default. */
+DEFINE_RATELIMIT_STATE(demotion_ratelimit_state, 0, 0);
 
-/* Restrict the rate of promotion per second in MBytes. */
+/* restrict the rate of promotion and demotion per second in mbytes. */
 unsigned int promotion_ratelimit_mbytes_per_sec;
+unsigned int demotion_ratelimit_mbytes_per_sec;
 
 static void setup_migration_rate_limit(struct ratelimit_state *ratelimit,
 				       unsigned int rate)
@@ -1237,6 +1240,20 @@ int promotion_ratelimit_handler(struct ctl_table *table, int write,
 	if (!ret)
 		setup_migration_rate_limit(&promotion_ratelimit_state,
 					   promotion_ratelimit_mbytes_per_sec);
+
+	return ret;
+}
+
+int demotion_ratelimit_handler(struct ctl_table *table, int write,
+				void __user *buffer, size_t *lenp,
+				loff_t *ppos)
+{
+	int ret;
+
+	ret = proc_dointvec_minmax(table, write, buffer, lenp, ppos);
+	if (!ret)
+		setup_migration_rate_limit(&demotion_ratelimit_state,
+					   demotion_ratelimit_mbytes_per_sec);
 
 	return ret;
 }
