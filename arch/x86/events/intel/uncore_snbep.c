@@ -4109,6 +4109,15 @@ basic_uncore_add_type(struct uncore_unit_discovery *unit, int die)
 		new_type->event_ctl = new_type->box_ctl + unit->ctl_offset;
 		uncore_type_insert(&uncore_pci_uncores, new_type);
 		break;
+	case UNCORE_ACCESS_MMIO:
+		new_type->type_id = unit->box_type;
+		new_type->num_counters = unit->num_regs;
+		new_type->perf_ctr_bits = unit->bit_width;
+		uncore_save_box_ctl(new_type, unit->box_ctl, die);
+		new_type->perf_ctr = unit->ctr_offset;
+		new_type->event_ctl = unit->ctl_offset;
+		uncore_type_insert(&uncore_mmio_uncores, new_type);
+		break;
 	default:
 		pr_debug_once("unsupported uncore access type %d\n",
 			      unit->access_type);
@@ -4148,6 +4157,8 @@ check_and_insert_box_ctl(struct uncore_unit_discovery *unit, int die)
 
 	if (unit->access_type == UNCORE_ACCESS_CFG)
 		types = &uncore_pci_uncores;
+	else if (unit->access_type == UNCORE_ACCESS_MMIO)
+		types = &uncore_mmio_uncores;
 	else
 		return;
 
