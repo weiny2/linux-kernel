@@ -1276,8 +1276,10 @@ int promote_page(struct page *page, bool caller_locked_page)
 	    next_promotion_node(page_to_nid(page)) == NUMA_NO_NODE)
 		return -EINVAL;
 
-	if (!__ratelimit(&promotion_ratelimit_state))
+	if (!__ratelimit(&promotion_ratelimit_state)) {
+		inc_node_page_state(page, NR_PROMOTE_RATELIMIT);
 		return -EPERM;
+	}
 
 	/*
 	 * Try to lock page right away.
@@ -1290,14 +1292,18 @@ int promote_page(struct page *page, bool caller_locked_page)
 		return -EBUSY;
 
 	err = isolate_lru_page(page);
-	if (err)
+	if (err) {
+		inc_node_page_state(page, NR_PROMOTE_ISOLATE_FAIL);
 		goto unlock_ret;
+	}
 
 	/* Drop reference acquired by isolate_lru_page() */
 	put_page(page);
 
 	err = migrate_promote_mapping(page);
 	if (err != MIGRATEPAGE_SUCCESS) {
+		inc_node_page_state(page, NR_PROMOTE_FAIL);
+
 		decrease_ratelimit(&promotion_ratelimit_state);
 
 		/* putback_lru_page() drops this reference.*/
@@ -1305,7 +1311,8 @@ int promote_page(struct page *page, bool caller_locked_page)
 
 		/* Put the page back into LRU list when migration fails. */
 		putback_lru_page(page);
-	}
+	} else
+		inc_node_page_state(page, NR_PROMOTED);
 
 unlock_ret:
 	/* Restore lock state to that at function entry. */
