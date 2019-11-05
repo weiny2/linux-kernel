@@ -133,6 +133,28 @@ struct intel_uncore_box {
 	struct intel_uncore_extra_reg shared_regs[0];
 };
 
+/* Capability ID for discovery table */
+#define UNCORE_EXT_CAP_ID_DISCOVERY		0x23
+/* first DVSEC offset */
+#define UNCORE_DISCOVERY_DVSEC_OFFSET		0x8
+/* MASK of supported discovery entry type */
+#define UNCORE_DISCOVERY_DVSEC_ID_MASK		0xffff
+/* PMON discovery entry type ID */
+#define UNCORE_DISCOVERY_DVSEC_ID_PMON		0x1
+/* second DVSEC offset */
+#define UNCORE_DISCOVERY_DVSEC2_OFFSET		0xc
+/* MASK of discovery table offset */
+#define UNCORE_DISCOVERY_DVSEC2_BIR_MASK	0x7
+
+struct uncore_discovery_table {
+	struct list_head list;
+	int domain;
+	unsigned int bus;
+	unsigned int devfn;
+	u32 bar_offset;		/* BAR offset of discovery table */
+	int die;		/* Logical Die ID */
+};
+
 /* CFL uncore 8th cbox MSRs */
 #define CFL_UNC_CBO_7_PERFEVTSEL0		0xf70
 #define CFL_UNC_CBO_7_PER_CTR0			0xf76
@@ -511,6 +533,7 @@ struct event_constraint *
 uncore_get_constraint(struct intel_uncore_box *box, struct perf_event *event);
 void uncore_put_constraint(struct intel_uncore_box *box, struct perf_event *event);
 u64 uncore_shared_reg_config(struct intel_uncore_box *box, int idx);
+bool check_discovery_table(void);
 
 extern struct intel_uncore_type **uncore_msr_uncores;
 extern struct intel_uncore_type **uncore_pci_uncores;
@@ -520,6 +543,7 @@ extern raw_spinlock_t pci2phy_map_lock;
 extern struct list_head pci2phy_map_head;
 extern struct pci_extra_dev *uncore_extra_pci_dev;
 extern struct event_constraint uncore_constraint_empty;
+extern struct list_head discovery_table;
 
 /* uncore_snb.c */
 int snb_uncore_pci_init(void);
