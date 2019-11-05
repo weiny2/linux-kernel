@@ -3387,11 +3387,11 @@
                     "email": "abdul.r.ismail@intel.com"
                 },
                 {
-                    "name": "Hall, Christopher S",
+                    "name": "Hall Christopher S",
                     "email": "christopher.s.hall@intel.com"
                 },
                 {
-                    "name": "Tan, Raymond",
+                    "name": "Tan Raymond",
                     "email": "raymond.tan@intel.com"
                 }
             ],
@@ -3400,7 +3400,7 @@
             "repourl": "ssh://git-amr-4.devtools.intel.com:29418/jarkkoni-linux.git",
             "sdl_contact": [
                 {
-                    "name": "Svahn, Kai",
+                    "name": "Svahn Kai",
                     "email": "kai.svahn@intel.com"
                 }
             ],
