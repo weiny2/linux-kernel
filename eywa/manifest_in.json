@@ -206,7 +206,7 @@
                 }
             ],
             "description": "Drm embargo branch",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Rodrigio Vivi",
@@ -802,7 +802,7 @@
                 }
             ],
             "description": "LPSS/SMBus/GPIO/SPI-NOR/PCI/Thunderbolt driver enabling",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Rajesh Bhaskar",
@@ -3380,27 +3380,27 @@
                 }
             ],
             "description": "TGPIO branch",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Abdul Rahman Ismail",
                     "email": "abdul.r.ismail@intel.com"
                 },
                 {
-                    "name": "Hall Christopher S",
+                    "name": "Hall, Christopher S",
                     "email": "christopher.s.hall@intel.com"
                 },
                 {
-                    "name": "Tan Raymond",
+                    "name": "Tan, Raymond",
                     "email": "raymond.tan@intel.com"
                 }
             ],
             "jira": "NEXT-1669",
             "name": "TGPIO",
-            "repourl": "git://git-amr-4.devtools.intel.com/jarkkoni-linux.git",
+            "repourl": "ssh://git-amr-4.devtools.intel.com:29418/jarkkoni-linux.git",
             "sdl_contact": [
                 {
-                    "name": "Svahn Kai",
+                    "name": "Svahn, Kai",
                     "email": "kai.svahn@intel.com"
                 }
             ],
