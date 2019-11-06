@@ -1008,7 +1008,7 @@
                 }
             ],
             "description": "otc_usb gadget - USB/ADC/TGPIO/PWM/QEP/MCAN",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Abdul Rahman Ismail",
