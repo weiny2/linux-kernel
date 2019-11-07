@@ -1858,7 +1858,7 @@
             "stuck_at_ref": ""
         },
         {
-            "branch": "v5.3-rc1",
+            "branch": "v5.4-rc6",
             "branch_type": "expiring",
             "config_options": [],
             "contributor": [
@@ -1868,14 +1868,14 @@
                 }
             ],
             "description": "Audio solution on KeemBay Platform",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Jee Heng Sia",
                     "email": "jee.heng.sia@intel.com"
                 }
             ],
-            "jira": "NEXT-1516",
+            "jira": "NEXT-1670",
             "name": "audio_keembay",
             "repourl": "ssh://git@gitlab.devtools.intel.com:29418/OWR/IoTG/ESE/Audio/keembay_linux_sound_driver-linux_sound_driver.git",
             "sdl_contact": [
