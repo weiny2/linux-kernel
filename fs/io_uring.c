@@ -506,6 +506,20 @@ static inline bool io_prep_async_work(struct io_kiocb *req)
 		case IORING_OP_WRITEV:
 		case IORING_OP_WRITE_FIXED:
 			do_hashed = true;
+			/* fall-through */
+		case IORING_OP_READV:
+		case IORING_OP_READ_FIXED:
+		case IORING_OP_SENDMSG:
+		case IORING_OP_RECVMSG:
+		case IORING_OP_ACCEPT:
+		case IORING_OP_POLL_ADD:
+			/*
+			 * We know REQ_F_ISREG is not set on some of these
+			 * opcodes, but this enables us to keep the check in
+			 * just one place.
+			 */
+			if (!(req->flags & REQ_F_ISREG))
+				req->work.flags |= IO_WQ_WORK_UNBOUND;
 			break;
 		}
 		if (io_sqe_needs_user(req->submit.sqe))
@@ -3699,7 +3713,7 @@ static int io_sqe_files_update(struct io_ring_ctx *ctx, void __user *arg,
 static int io_sq_offload_start(struct io_ring_ctx *ctx,
 			       struct io_uring_params *p)
 {
-	unsigned concurrency;
+	unsigned bounded;
 	int ret;
 
 	init_waitqueue_head(&ctx->sqo_wait);
@@ -3743,9 +3757,9 @@ static int io_sq_offload_start(struct io_ring_ctx *ctx,
 		goto err;
 	}
 
-	/* Do QD, or 4 * CPUS, whatever is smallest */
-	concurrency = min(ctx->sq_entries, 4 * num_online_cpus());
-	ctx->io_wq = io_wq_create(concurrency, 0, ctx->sqo_mm);
+	/* Do QD, or 2 * CPUS, whatever is smallest */
+	bounded = min(ctx->sq_entries, 2 * num_online_cpus());
+	ctx->io_wq = io_wq_create(bounded, ctx->cq_entries, ctx->sqo_mm);
 	if (IS_ERR(ctx->io_wq)) {
 		ret = PTR_ERR(ctx->io_wq);
 		ctx->io_wq = NULL;
