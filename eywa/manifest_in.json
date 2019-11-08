@@ -275,7 +275,7 @@
                 }
             ],
             "description": "Enables the NVMe driver for the Tiger Lake/ KSL-R platforms",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Jason Akers",
