@@ -1942,7 +1942,7 @@
                 }
             ],
             "description": "Intel Gaussian & Neural Accelerator driver",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Rafal Krolikowski",
