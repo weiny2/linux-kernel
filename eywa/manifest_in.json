@@ -1977,7 +1977,7 @@
                 }
             ],
             "description": "CBC (Carrier Board Communication) line discipline kernel module enablement",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Ryan Tabrah",
