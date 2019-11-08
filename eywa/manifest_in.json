@@ -2877,7 +2877,7 @@
                 }
             ],
             "description": "ACRN/GVT-g Hypervisor to intel-next kernel",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Jason CJ Chenn",
