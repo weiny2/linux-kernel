@@ -1888,6 +1888,8 @@ static int io_accept(struct io_kiocb *req, const struct io_uring_sqe *sqe,
 		req->work.flags |= IO_WQ_WORK_NEEDS_FILES;
 		return -EAGAIN;
 	}
+	if (ret == -ERESTARTSYS)
+		ret = -EINTR;
 	if (ret < 0 && (req->flags & REQ_F_LINK))
 		req->flags |= REQ_F_FAIL_LINK;
 	io_cqring_add_event(req, ret);
@@ -3489,6 +3491,7 @@ static int io_sqe_files_register(struct io_ring_ctx *ctx, void __user *arg,
 
 	if (io_sqe_alloc_file_tables(ctx, nr_tables, nr_args)) {
 		kfree(ctx->file_table);
+		ctx->file_table = NULL;
 		return -ENOMEM;
 	}
 
