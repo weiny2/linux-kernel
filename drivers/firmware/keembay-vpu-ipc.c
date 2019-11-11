@@ -49,10 +49,10 @@
 
 /* Ready message timeout, in ms */
 /*
- * TODO: we are using 30 secs because the FPGA is slow booting the VPU; change
- * this to 2 secs once switched to silicon.
+ * TODO: we are using 120 secs because the pre-silicon platform is slow booting
+ * the VPU; change this to 2 secs once switched to silicon.
  */
-#define READY_MESSAGE_TIMEOUT_MS (30000)
+#define READY_MESSAGE_TIMEOUT_MS (120000)
 
 /* Ready message 'physical data address', which is actually a command. */
 #define READY_MESSAGE_EXPECTED_PADDR (0x424f4f54)

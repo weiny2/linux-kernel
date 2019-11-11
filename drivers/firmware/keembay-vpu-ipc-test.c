@@ -16,7 +16,7 @@
 #include <linux/slab.h>
 #include <linux/uaccess.h>
 
-#define TEST_READY_WAIT_TIME_MS (31000)
+#define TEST_READY_WAIT_TIME_MS (121000)
 
 #define TEST_NODE (KMB_VPU_IPC_NODE_LEON_MSS)
 #define TEST_CHANNEL (10)
