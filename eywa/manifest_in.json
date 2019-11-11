@@ -275,7 +275,7 @@
                 }
             ],
             "description": "Enables the NVMe driver for the Tiger Lake/ KSL-R platforms",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Jason Akers",
@@ -1942,7 +1942,7 @@
                 }
             ],
             "description": "Intel Gaussian & Neural Accelerator driver",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Rafal Krolikowski",
@@ -1977,7 +1977,7 @@
                 }
             ],
             "description": "CBC (Carrier Board Communication) line discipline kernel module enablement",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Ryan Tabrah",
