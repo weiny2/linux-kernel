@@ -481,8 +481,8 @@ static int get_perf_mad(struct ib_device *dev, int port_num, __be16 attr,
 	if (!dev->ops.process_mad)
 		return -ENOSYS;
 
-	in_mad  = kzalloc(sizeof *in_mad, GFP_KERNEL);
-	out_mad = kmalloc(sizeof *out_mad, GFP_KERNEL);
+	in_mad = kzalloc(sizeof(*in_mad), GFP_KERNEL);
+	out_mad = kzalloc(sizeof(*out_mad), GFP_KERNEL);
 	if (!in_mad || !out_mad) {
 		ret = -ENOMEM;
 		goto out;
@@ -1268,7 +1268,7 @@ static ssize_t node_desc_store(struct device *device,
 	int ret;
 
 	if (!dev->ops.modify_device)
-		return -EIO;
+		return -EOPNOTSUPP;
 
 	memcpy(desc.node_desc, buf, min_t(int, count, IB_DEVICE_NODE_DESC_MAX));
 	ret = ib_modify_device(dev, IB_DEVICE_MODIFY_NODE_DESC, &desc);
