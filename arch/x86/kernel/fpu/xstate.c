@@ -72,6 +72,7 @@ u64 xfeatures_mask_all __read_mostly;
  * to task_struct.
  */
 u64 xstate_area_mask __read_mostly;
+EXPORT_SYMBOL_GPL(xstate_area_mask);
 
 /*
  * Mask of xfeatures, the states of which stored in an expanded
