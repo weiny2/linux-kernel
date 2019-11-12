@@ -348,7 +348,29 @@ static int copy_user_to_fpregs_zeroing(void __user *buf, u64 xbv, int fx_only)
 						       init_bv);
 			return r;
 		} else {
+			/*
+			 * The expanded area is not ready for this task.
+			 * Reset the feature bits in the expanded area for
+			 * the bit vector, 'xbv', which is an operand for
+			 * the XRSTOR in copy_user_to_xregs() below; thus,
+			 * loading initial state for those features.
+			 */
+			if (xstate_exp_area_mask) {
+				struct task_struct *tsk = current;
+				struct fpu *fpu = &tsk->thread.fpu;
+
+				if (!fpu->firstuse_bv)
+					xbv &= ~xstate_exp_area_mask;
+			}
+
 			init_bv = xfeatures_mask_user() & ~xbv;
+			/*
+			 * This bit vector, 'init_bv', goes to be an
+			 * operand for restoring the initial FPU state,
+			 * which covers the base xstate area, not the
+			 * expanded area.
+			 */
+			init_bv &= xstate_area_mask;
 
 			r = copy_user_to_xregs(buf, xbv);
 			if (!r && unlikely(init_bv))
@@ -465,7 +487,25 @@ static int __fpu__restore_sig(void __user *buf, void __user *buf_fx, int size)
 	fpregs_unlock();
 
 	if (use_xsave() && !fx_only) {
-		u64 init_bv = xfeatures_mask_user() & ~user_xfeatures;
+		u64 init_bv;
+
+		/*
+		 * The expanded area is not ready for this task. Reset the
+		 * feature bits in the expanded area for the bit vector,
+		 * 'user_xfeatures', which is an operand for the XRSTOR in
+		 * copy_kernel_to_xregs_err() below; thus, loading initial
+		 * state for those features.
+		 */
+		if (!fpu->firstuse_bv)
+			user_xfeatures &= ~xstate_exp_area_mask;
+
+		init_bv = xfeatures_mask_user() & ~user_xfeatures;
+		/*
+		 * This bit vector, 'init_bv', goes to be an operand for
+		 * restoring the initial FPU state, which covers the base
+		 * xstate area, not the expanded area.
+		 */
+		init_bv &= xstate_area_mask;
 
 		if (using_compacted_format())
 			ret = copy_user_to_xstate_comp(fpu, buf_fx);
