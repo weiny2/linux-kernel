@@ -339,8 +339,17 @@ static int copy_user_to_fpregs_zeroing(void __user *buf, u64 xbv, int fx_only)
 			__copy_kernel_to_xregs(&init_fpstate.xsave, init_bv);
 			return copy_user_to_fxregs(buf);
 		} else {
-			u64 init_bv = xfeatures_mask_user() & ~xbv;
+			u64 init_bv;
 
+			if (xstate_exp_area_mask) {
+				struct task_struct *tsk = current;
+				struct fpu *fpu = &tsk->thread.fpu;
+
+				if (!fpu->firstuse_bv)
+					xbv &= ~xstate_exp_area_mask;
+			}
+
+			init_bv = xfeatures_mask_user() & ~xbv;
 			if (unlikely(init_bv))
 				__copy_kernel_to_xregs(&init_fpstate.xsave,
 						       init_bv);
@@ -456,7 +465,12 @@ static int __fpu__restore_sig(void __user *buf, void __user *buf_fx, int size)
 
 
 	if (use_xsave() && !fx_only) {
-		u64 init_bv = xfeatures_mask_user() & ~xfeatures_user;
+		u64 init_bv;
+
+		if (!fpu->firstuse_bv)
+			xfeatures_user &= ~xstate_exp_area_mask;
+
+		init_bv = xfeatures_mask_user() & ~xfeatures_user;
 
 		if (using_compacted_format())
 			ret = copy_user_to_xstate_comp(fpu, buf_fx);
