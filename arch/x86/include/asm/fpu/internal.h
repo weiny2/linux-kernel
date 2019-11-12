@@ -274,7 +274,7 @@ static inline void copy_fxregs_to_kernel(struct fpu *fpu)
  */
 static inline void copy_xregs_to_kernel_booting(struct xregs_state *xstate)
 {
-	u64 mask = -1;
+	u64 mask = xstate_area_mask;
 	u32 lmask = mask;
 	u32 hmask = mask >> 32;
 	int err;
@@ -296,7 +296,7 @@ static inline void copy_xregs_to_kernel_booting(struct xregs_state *xstate)
  */
 static inline void copy_kernel_to_xregs_booting(struct xregs_state *xstate)
 {
-	u64 mask = -1;
+	u64 mask = xstate_area_mask;
 	u32 lmask = mask;
 	u32 hmask = mask >> 32;
 	int err;
@@ -414,9 +414,23 @@ static inline int __copy_kernel_to_xregs_err(struct xregs_state *xstate,
  */
 static inline int copy_kernel_to_xregs_err(struct fpu *fpu, u64 mask)
 {
-	struct xregs_state *xstate = &fpu->state.xsave;
+	int ret;
 
-	return __copy_kernel_to_xregs_err(xstate, mask);
+	/*
+	 * If the bits for features belong to the expanded area
+	 * are set, then it will initialize registers.
+	 */
+	ret = __copy_kernel_to_xregs_err(&fpu->state.xsave, mask);
+	if (ret)
+		return ret;
+
+	if (unlikely(fpu->state_exp)) {
+		u64 bv = mask & fpu->firstuse_bv;
+
+		ret = __copy_kernel_to_xregs_err(&fpu->state_exp->xsave, bv);
+	}
+
+	return ret;
 }
 
 /*
@@ -432,7 +446,11 @@ static inline int copy_kernel_to_xregs_err(struct fpu *fpu, u64 mask)
 static inline int copy_fpregs_to_fpstate(struct fpu *fpu)
 {
 	if (likely(use_xsave())) {
-		__copy_xregs_to_kernel(&fpu->state.xsave, -1);
+		__copy_xregs_to_kernel(&fpu->state.xsave,
+				       ~XFEATURE_MASK_HUGESTATE);
+		if (unlikely(fpu->state_exp))
+			__copy_xregs_to_kernel(&fpu->state_exp->xsave,
+					       fpu->firstuse_bv);
 
 		/*
 		 * AVX512 state is tracked here because its use is
@@ -486,7 +504,15 @@ static inline void copy_kernel_to_fpregs(struct fpu *fpu)
 			: : [addr] "m" (fpstate));
 	}
 
+	/*
+	 * Initialize states in the expanded area as the state-component bitmap
+	 * values are zero.
+	 */
 	__copy_kernel_to_fpregs(fpstate, -1);
+
+	if (unlikely(fpu->state_exp))
+		__copy_kernel_to_xregs(&fpu->state_exp->xsave,
+				       fpu->firstuse_bv);
 }
 
 extern int save_cet_to_sigframe(void __user *fp, unsigned long restorer,
