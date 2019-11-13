@@ -1123,7 +1123,7 @@
                 }
             ],
             "description": "RPMB (CSE) support and SPD (storage proxy driver)",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "William Stevens",
