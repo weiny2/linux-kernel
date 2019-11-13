@@ -941,101 +941,6 @@
             "stuck_at_ref": ""
         },
         {
-            "branch": "for-eywa",
-            "branch_type": "expiring",
-            "config_options": [
-                {
-                    "name": "CONFIG_INTEL_ADC",
-                    "value": "y"
-                },
-                {
-                    "name": "CONFIG_INTEL_QEP",
-                    "value": "y"
-                },
-                {
-                    "name": "CONFIG_PWM_DWC",
-                    "value": "y"
-                },
-                {
-                    "name": "CONFIG_USB_SUPPORT",
-                    "value": "y"
-                },
-                {
-                    "name": "CONFIG_USB_DWC3",
-                    "value": "m"
-                },
-                {
-                    "name": "CONFIG_USB_DWC3_PCI",
-                    "value": "m"
-                },
-                {
-                    "name": "CONFIG_USB_GADGET",
-                    "value": "m"
-                },
-                {
-                    "name": "CONFIG_USB_ZERO",
-                    "value": "m"
-                },
-                {
-                    "name": "CONFIG_USB_MASS_STORAGE",
-                    "value": "m"
-                },
-                {
-                    "name": "CONFIG_CAN_M_CAN_PCI",
-                    "value": "m"
-                },
-                {
-                    "name": "CONFIG_I2C_I801",
-                    "value": "m"
-                },
-                {
-                    "name": "CONFIG_PTP_INTEL_TGPIO",
-                    "value": "m"
-                },
-                {
-                    "name": "CONFIG_PTP_INTEL_PMC_TGPIO",
-                    "value": "m"
-                },
-                {
-                    "name": "CONFIG_CAN_CALC_BITTIMING",
-                    "value": "m"
-                }
-            ],
-            "contributor": [
-                {
-                    "name": "Felipe Balbi",
-                    "email": "felipe.balbi@linux.intel.com"
-                }
-            ],
-            "description": "otc_usb gadget - USB/ADC/TGPIO/PWM/QEP/MCAN",
-            "enabled": false,
-            "ip_owner": [
-                {
-                    "name": "Abdul Rahman Ismail",
-                    "email": "abdul.r.ismail@intel.com"
-                },
-                {
-                    "name": "Christopher S Hall",
-                    "email": "christopher.s.hall@intel.com"
-                },
-                {
-                    "name": "Raymond Tan",
-                    "email": "raymond.tan@intel.com"
-                }
-            ],
-            "jira": "NEXT-1652",
-            "name": "usb-gadget",
-            "repourl": "ssh://git-amr-4.devtools.intel.com:29418/otc_usb-gadget.git",
-            "sdl_contact": [
-                {
-                    "name": "Kai Svahn",
-                    "email": "kai.svahn@intel.com"
-                }
-            ],
-            "status": "intel confidential",
-            "stuck_at_ref": ""
-        },
-        {
             "branch": "rpmb",
             "branch_type": "expiring",
             "config_options": [
@@ -1393,7 +1298,7 @@
                     "email": "filip.kaczmarski@intel.com"
                 }
             ],
-            "jira": "NEXT-1546",
+            "jira": "",
             "name": "audio_coe",
             "repourl": "ssh://git-gar-1.devtools.intel.com:29418/eig_audio_integ-kernel.git",
             "sdl_contact": [
@@ -1448,7 +1353,7 @@
                     "email": "ashok.raj@intel.com"
                 }
             ],
-            "jira": "NEXT-1531",
+            "jira": "",
             "name": "iommu",
             "repourl": "ssh://git-ccr-1.devtools.intel.com:29418/iommu_next-siov.git",
             "sdl_contact": [],
@@ -1568,41 +1473,6 @@
                 {
                     "name": "Charles D Prestopine",
                     "email": "charles.d.prestopine@intel.com"
-                }
-            ],
-            "status": "intel confidential",
-            "stuck_at_ref": ""
-        },
-        {
-            "branch": "cache-pseudo-locking/for-intel-next",
-            "branch_type": "expiring",
-            "config_options": [
-                {
-                    "name": "CONFIG_X86_CPU_RESCTRL",
-                    "value": "y"
-                }
-            ],
-            "contributor": [
-                {
-                    "name": "Reinette Chatre",
-                    "email": "reinette.chatre@intel.com"
-                }
-            ],
-            "description": "Cache Pseudo-Locking in Intel Cache Allocation Technology (CAT)",
-            "enabled": false,
-            "ip_owner": [
-                {
-                    "name": "Kuo-Lang Tseng",
-                    "email": "kuo-lang.tseng@intel.com"
-                }
-            ],
-            "jira": "NEXT-1511",
-            "name": "cache-pseudo-locking",
-            "repourl": "ssh://git-amr-2.devtools.intel.com:29418/rt_linux-linux.git",
-            "sdl_contact": [
-                {
-                    "name": "Cindy R Johnson",
-                    "email": "cindy.r.johnson@intel.com"
                 }
             ],
             "status": "intel confidential",
@@ -1845,7 +1715,7 @@
                     "email": "baiju.v.patel@intel.com"
                 }
             ],
-            "jira": "NEXT-1538",
+            "jira": "",
             "name": "mktme",
             "repourl": "ssh://git-ger-3.devtools.intel.com:29418/linux_mktme-linux.git",
             "sdl_contact": [
@@ -2415,88 +2285,6 @@
             "stuck_at_ref": ""
         },
         {
-            "branch": "keystore-5.3",
-            "branch_type": "expiring",
-            "config_options": [
-                {
-                    "name": "CONFIG_KEYSTORE",
-                    "value": "m"
-                }
-            ],
-            "contributor": [
-                {
-                    "name": "Cliff Cai",
-                    "email": "cliff.cai@intel.com"
-                }
-            ],
-            "description": "Keystore driver enabling",
-            "enabled": false,
-            "ip_owner": [
-                {
-                    "name": "Kai Wang",
-                    "email": "kai.z.wang@intel.com"
-                }
-            ],
-            "jira": "NEXT-1543",
-            "name": "keystore",
-            "repourl": "ssh://git-amr-7.devtools.intel.com:29418/trusty_for_intel_next-intel-next.git",
-            "sdl_contact": [
-                {
-                    "name": "Kai Wang",
-                    "email": "kai.z.wang@intel.com"
-                }
-            ],
-            "status": "public",
-            "stuck_at_ref": ""
-        },
-        {
-            "branch": "dev/vpu-driver",
-            "branch_type": "expiring",
-            "config_options": [
-                {
-                    "name": "CONFIG_XLINK_PCIE_LH_DRIVER",
-                    "value": "m"
-                },
-                {
-                    "name": "CONFIG_XLINK_PCIE_RH_DRIVER",
-                    "value": "m"
-                },
-                {
-                    "name": "CONFIG_USB_G_SERIAL_VPU_USB",
-                    "value": "m"
-                },
-                {
-                    "name": "CONFIG_VPU_USB_ACM",
-                    "value": "m"
-                }
-            ],
-            "contributor": [
-                {
-                    "name": "Jun Ann Lai",
-                    "email": "jun.ann.lai@intel.com"
-                }
-            ],
-            "description": "PCIe VPU drivers for IOTG Keem Bay Xlink",
-            "enabled": false,
-            "ip_owner": [
-                {
-                    "name": "Seng Kai Tan",
-                    "email": "semg.kai.tan@intel.com"
-                }
-            ],
-            "jira": "NEXT-1542",
-            "name": "xlink",
-            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/OWR/IoTG/ESE/Linux-Integration/KMB/xlink.git",
-            "sdl_contact": [
-                {
-                    "name": "Seng Kai Tan",
-                    "email": "semg.kai.tan@intel.com"
-                }
-            ],
-            "status": "intel confidential",
-            "stuck_at_ref": ""
-        },
-        {
             "branch": "for-intel-next",
             "branch_type": "expiring",
             "config_options": [
@@ -2586,44 +2374,6 @@
                 {
                     "name": "Charles Prestopine",
                     "email": "charles.d.prestopine@intel.com"
-                }
-            ],
-            "status": "public",
-            "stuck_at_ref": ""
-        },
-        {
-            "branch": "master",
-            "branch_type": "expiring",
-            "config_options": [],
-            "contributor": [
-                {
-                    "name": "Kyung Min Park",
-                    "email": "kyung.min.park@intel.com"
-                }
-            ],
-            "description": "Scalable Mode fault information",
-            "enabled": false,
-            "ip_owner": [
-                {
-                    "name": "Ashok Raj",
-                    "email": "ashok.raj@intel.com"
-                },
-                {
-                    "name": "Rupin H Vakharwala",
-                    "email": "rupin.h.vakharwala@intel.com"
-                }
-            ],
-            "jira": "NEXT-1570",
-            "name": "scale_fault",
-            "repourl": "ssh://git-amr-1.devtools.intel.com:29418/intel_next_icl_i-secure_git_intel_next.git",
-            "sdl_contact": [
-                {
-                    "name": "Sohil Mehta",
-                    "email": "sohil.mehta@intel.com"
-                },
-                {
-                    "name": "Ashok Raj",
-                    "email": "ashok.raj@intel.com"
                 }
             ],
             "status": "public",
@@ -2975,45 +2725,6 @@
                 {
                     "name": "Kai Svahn",
                     "email": "kai.svahn@intel.com"
-                }
-            ],
-            "status": "public",
-            "stuck_at_ref": ""
-        },
-        {
-            "branch": "gfx-dm-di4in",
-            "branch_type": "expiring",
-            "config_options": [
-                {
-                    "name": "CONFIG_DRM_I915_MEMTRACK",
-                    "value": "y"
-                }
-            ],
-            "contributor": [
-                {
-                    "name": "Yugang Fan",
-                    "email": "yugang.fan@intel.com"
-                }
-            ],
-            "description": "2 patches from Android GFX domain branch rebased for drm intel latest “for-intel-next” branch",
-            "enabled": false,
-            "ip_owner": [
-                {
-                    "name": "Sourab Gupta",
-                    "email": "sourab.gupta@intel.com"
-                },
-                {
-                    "name": "Gao Chun",
-                    "email": "chun.gao@intel.com"
-                }
-            ],
-            "jira": "NEXT-1583",
-            "name": "Android GFX",
-            "repourl": "ssh://git-amr-1.devtools.intel.com:29418/aose_graphics_media-pkt_graphics.git",
-            "sdl_contact": [
-                {
-                    "name": "Yugang Fan",
-                    "email": "yugang.fan@intel.com"
                 }
             ],
             "status": "public",
