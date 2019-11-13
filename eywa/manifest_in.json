@@ -1161,7 +1161,7 @@
                 }
             ],
             "description": "Enable Ethernet TSN driver for SNPS QOS",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Kasichainula, Kishore",
