@@ -448,7 +448,7 @@ err:
 	return NULL;
 }
 
-static inline bool __io_sequence_defer(struct io_kiocb *req)
+static inline bool __req_need_defer(struct io_kiocb *req)
 {
 	struct io_ring_ctx *ctx = req->ctx;
 
@@ -456,12 +456,12 @@ static inline bool __io_sequence_defer(struct io_kiocb *req)
 					+ atomic_read(&ctx->cached_cq_overflow);
 }
 
-static inline bool io_sequence_defer(struct io_kiocb *req)
+static inline bool req_need_defer(struct io_kiocb *req)
 {
-	if ((req->flags & (REQ_F_IO_DRAIN|REQ_F_IO_DRAINED)) != REQ_F_IO_DRAIN)
-		return false;
+	if ((req->flags & (REQ_F_IO_DRAIN|REQ_F_IO_DRAINED)) == REQ_F_IO_DRAIN)
+		return __req_need_defer(req);
 
-	return __io_sequence_defer(req);
+	return false;
 }
 
 static struct io_kiocb *io_get_deferred_req(struct io_ring_ctx *ctx)
@@ -469,7 +469,7 @@ static struct io_kiocb *io_get_deferred_req(struct io_ring_ctx *ctx)
 	struct io_kiocb *req;
 
 	req = list_first_entry_or_null(&ctx->defer_list, struct io_kiocb, list);
-	if (req && !io_sequence_defer(req)) {
+	if (req && !req_need_defer(req)) {
 		list_del_init(&req->list);
 		return req;
 	}
@@ -482,7 +482,7 @@ static struct io_kiocb *io_get_timeout_req(struct io_ring_ctx *ctx)
 	struct io_kiocb *req;
 
 	req = list_first_entry_or_null(&ctx->timeout_list, struct io_kiocb, list);
-	if (req && !__io_sequence_defer(req)) {
+	if (req && !__req_need_defer(req)) {
 		list_del_init(&req->list);
 		return req;
 	}
@@ -2437,7 +2437,8 @@ static int io_req_defer(struct io_kiocb *req)
 	struct io_uring_sqe *sqe_copy;
 	struct io_ring_ctx *ctx = req->ctx;
 
-	if (!io_sequence_defer(req) && list_empty(&ctx->defer_list))
+	/* Still need defer if there is pending req in defer list. */
+	if (!req_need_defer(req) && list_empty(&ctx->defer_list))
 		return 0;
 
 	sqe_copy = kmalloc(sizeof(*sqe_copy), GFP_KERNEL);
@@ -2445,7 +2446,7 @@ static int io_req_defer(struct io_kiocb *req)
 		return -EAGAIN;
 
 	spin_lock_irq(&ctx->completion_lock);
-	if (!io_sequence_defer(req) && list_empty(&ctx->defer_list)) {
+	if (!req_need_defer(req) && list_empty(&ctx->defer_list)) {
 		spin_unlock_irq(&ctx->completion_lock);
 		kfree(sqe_copy);
 		return 0;
@@ -2599,6 +2600,10 @@ static bool io_op_needs_file(const struct io_uring_sqe *sqe)
 	switch (op) {
 	case IORING_OP_NOP:
 	case IORING_OP_POLL_REMOVE:
+	case IORING_OP_TIMEOUT:
+	case IORING_OP_TIMEOUT_REMOVE:
+	case IORING_OP_ASYNC_CANCEL:
+	case IORING_OP_LINK_TIMEOUT:
 		return false;
 	default:
 		return true;
@@ -3823,6 +3828,20 @@ static int io_sqe_files_update(struct io_ring_ctx *ctx, void __user *arg,
 	return done ? done : err;
 }
 
+static void io_put_work(struct io_wq_work *work)
+{
+	struct io_kiocb *req = container_of(work, struct io_kiocb, work);
+
+	io_put_req(req);
+}
+
+static void io_get_work(struct io_wq_work *work)
+{
+	struct io_kiocb *req = container_of(work, struct io_kiocb, work);
+
+	refcount_inc(&req->refs);
+}
+
 static int io_sq_offload_start(struct io_ring_ctx *ctx,
 			       struct io_uring_params *p)
 {
@@ -3872,7 +3891,8 @@ static int io_sq_offload_start(struct io_ring_ctx *ctx,
 
 	/* Do QD, or 4 * CPUS, whatever is smallest */
 	concurrency = min(ctx->sq_entries, 4 * num_online_cpus());
-	ctx->io_wq = io_wq_create(concurrency, ctx->sqo_mm, ctx->user);
+	ctx->io_wq = io_wq_create(concurrency, ctx->sqo_mm, ctx->user,
+					io_get_work, io_put_work);
 	if (IS_ERR(ctx->io_wq)) {
 		ret = PTR_ERR(ctx->io_wq);
 		ctx->io_wq = NULL;
@@ -4289,7 +4309,6 @@ static void io_uring_cancel_files(struct io_ring_ctx *ctx,
 	DEFINE_WAIT(wait);
 
 	while (!list_empty_careful(&ctx->inflight_list)) {
-		enum io_wq_cancel ret = IO_WQ_CANCEL_NOTFOUND;
 		struct io_kiocb *cancel_req = NULL;
 
 		spin_lock_irq(&ctx->inflight_lock);
@@ -4307,14 +4326,12 @@ static void io_uring_cancel_files(struct io_ring_ctx *ctx,
 						TASK_UNINTERRUPTIBLE);
 		spin_unlock_irq(&ctx->inflight_lock);
 
-		if (cancel_req) {
-			ret = io_wq_cancel_work(ctx->io_wq, &cancel_req->work);
-			io_put_req(cancel_req);
-		}
-
 		/* We need to keep going until we don't find a matching req */
 		if (!cancel_req)
 			break;
+
+		io_wq_cancel_work(ctx->io_wq, &cancel_req->work);
+		io_put_req(cancel_req);
 		schedule();
 	}
 	finish_wait(&ctx->inflight_wait, &wait);
