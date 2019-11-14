@@ -1227,6 +1227,8 @@ static int nhi_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	pm_runtime_use_autosuspend(&pdev->dev);
 	pm_runtime_put_autosuspend(&pdev->dev);
 
+	tb_dbg_register_domain(tb);
+
 	return 0;
 }
 
@@ -1234,6 +1236,8 @@ static void nhi_remove(struct pci_dev *pdev)
 {
 	struct tb *tb = pci_get_drvdata(pdev);
 	struct tb_nhi *nhi = tb->nhi;
+
+	tb_dbg_unregister_domain(tb);
 
 	pm_runtime_get_sync(&pdev->dev);
 	pm_runtime_dont_use_autosuspend(&pdev->dev);
@@ -1343,15 +1347,22 @@ static int __init nhi_init(void)
 	ret = tb_domain_init();
 	if (ret)
 		return ret;
+
+	tb_dbg_init();
+
 	ret = pci_register_driver(&nhi_driver);
-	if (ret)
+	if (ret) {
+		tb_dbg_exit();
 		tb_domain_exit();
+	}
+
 	return ret;
 }
 
 static void __exit nhi_unload(void)
 {
 	pci_unregister_driver(&nhi_driver);
+	tb_dbg_exit();
 	tb_domain_exit();
 }
 
