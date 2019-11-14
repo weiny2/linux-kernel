@@ -981,4 +981,16 @@ static inline bool tb_can_tunnel_dp(void) { return true; }
 static inline bool tb_can_tunnel_pcie(void) { return true; }
 #endif
 
+#ifndef CONFIG_USB4_DEBUG
+static inline void tb_dbg_init(void) { }
+static inline void tb_dbg_exit(void) { }
+static inline void tb_dbg_register_domain(struct tb *tb) { }
+static inline void tb_dbg_unregister_domain(struct tb *tb) { }
+#else
+void tb_dbg_init(void);
+void tb_dbg_exit(void);
+void tb_dbg_register_domain(struct tb *tb);
+void tb_dbg_unregister_domain(struct tb *tb);
+#endif
+
 #endif
