@@ -223,7 +223,7 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": "72bc46c110f8504edd092f2a215bdf1b51435b52"
+            "stuck_at_ref": ""
         },
         {
             "branch": "split_lock",
@@ -2042,7 +2042,7 @@
                 }
             ],
             "description": "Add Audio SOF drivers for TGL support",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Michal Grodzicki",
