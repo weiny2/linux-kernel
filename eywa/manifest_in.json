@@ -802,7 +802,7 @@
                 }
             ],
             "description": "LPSS/SMBus/GPIO/SPI-NOR/PCI/Thunderbolt driver enabling",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Rajesh Bhaskar",
@@ -835,7 +835,7 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": "ebbde09f13ef672da48d1ebd154ca11800f00152"
+            "stuck_at_ref": ""
         },
         {
             "branch": "perf-intel-next",
