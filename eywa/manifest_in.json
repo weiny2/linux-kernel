@@ -3164,7 +3164,7 @@
                 }
             ],
             "description": "Thunderbay General Purpose Timer",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Ajit Tapkir",
