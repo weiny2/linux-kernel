@@ -3152,6 +3152,36 @@
             ],
             "status": "public",
             "stuck_at_ref": ""
+        },
+        {
+            "branch": "dev/ssanil/thb_gpt_timer",
+            "branch_type": "expiring",
+            "config_options": [],
+            "contributor": [
+                {
+                    "name": "Rathina Thalaiappan ",
+                    "email": "rathina.thalaiappan@intel.com"
+                }
+            ],
+            "description": "Thunderbay General Purpose Timer",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Ajit Tapkir",
+                    "email": "ajit.tapkir@intel.com"
+                }
+            ],
+            "jira": "NEXT-1677",
+            "name": "Thunderbay",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/hspe_csw/bsp/otc_intel_next-linux.git",
+            "sdl_contact": [
+                {
+                    "name": "Ajit Tapkir",
+                    "email": "ajit.tapkir@intel.com"
+                }
+            ],
+            "status": "public",
+            "stuck_at_ref": ""
         }
     ]
 }
