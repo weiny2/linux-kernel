@@ -297,8 +297,7 @@ void kvm_set_cpu_caps(void)
 	unsigned int f_gbpages = 0;
 	unsigned int f_lm = 0;
 #endif
-	unsigned int f_enqcmd =
-			kvm_x86_ops.pasid_trans_supported() ? F(ENQCMD) : 0;
+	unsigned int f_enqcmd = 0;
 
 	BUILD_BUG_ON(sizeof(kvm_cpu_caps) >
 		     sizeof(boot_cpu_data.x86_capability));
@@ -341,6 +340,9 @@ void kvm_set_cpu_caps(void)
 		F(AVX512ER) | F(AVX512CD) | F(CLFLUSHOPT) | F(CLWB) | F(AVX512DQ) |
 		F(SHA_NI) | F(AVX512BW) | F(AVX512VL) | 0 /*INTEL_PT*/
 	);
+
+	if (enable_pasid_trans && kvm_x86_ops.pasid_trans_supported())
+		f_enqcmd = F(ENQCMD);
 
 	kvm_cpu_cap_mask(CPUID_7_ECX,
 		F(AVX512VBMI) | F(LA57) | 0 /*PKU*/ | 0 /*OSPKE*/ | F(RDPID) |

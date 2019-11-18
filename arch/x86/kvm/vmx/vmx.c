@@ -4216,6 +4216,9 @@ static void vmx_compute_secondary_exec_control(struct vcpu_vmx *vmx)
 	if (!enable_pml)
 		exec_control &= ~SECONDARY_EXEC_ENABLE_PML;
 
+	if (!enable_pasid_trans)
+		exec_control &= ~SECONDARY_EXEC_PASID_TRANS;
+
 	if (vmx_xsaves_supported()) {
 		/* Exposing XSAVES only when XSAVE is exposed */
 		bool xsaves_enabled =
@@ -4431,7 +4434,7 @@ static void init_vmcs(struct vcpu_vmx *vmx)
 		vmcs_write64(GUEST_IA32_RTIT_CTL, 0);
 	}
 
-	if (cpu_has_vmx_pasid_trans()) {
+	if (enable_pasid_trans && cpu_has_vmx_pasid_trans()) {
 		struct kvm_vmx *kvm_vmx = to_kvm_vmx(vmx->vcpu.kvm);
 
 		vmcs_write64(PASID_DIR0, page_to_phys(kvm_vmx->pasid_dir0));
@@ -6836,7 +6839,7 @@ static void vmx_vcpu_run(struct kvm_vcpu *vcpu)
 		vcpu->arch.apic->lapic_timer.timer_advance_ns)
 		kvm_wait_lapic_expire(vcpu);
 
-	if (cpu_has_vmx_pasid_trans()) {
+	if (enable_pasid_trans && cpu_has_vmx_pasid_trans()) {
 		rdmsrl(MSR_IA32_PASID, vmx->host_pasid);
 		if (vmx->host_pasid != vcpu->arch.ia32_pasid)
 			wrmsrl(MSR_IA32_PASID, vcpu->arch.ia32_pasid);
@@ -6864,7 +6867,7 @@ static void vmx_vcpu_run(struct kvm_vcpu *vcpu)
 
 	vcpu->arch.cr2 = read_cr2();
 
-	if (cpu_has_vmx_pasid_trans()) {
+	if (enable_pasid_trans && cpu_has_vmx_pasid_trans()) {
 		rdmsrl(MSR_IA32_PASID, vcpu->arch.ia32_pasid);
 		if (vcpu->arch.ia32_pasid != vmx->host_pasid)
 			wrmsrl(MSR_IA32_PASID, vmx->host_pasid);
@@ -7039,7 +7042,7 @@ static int vmx_create_vcpu(struct kvm_vcpu *vcpu)
 		vmx_disable_intercept_for_msr(msr_bitmap, MSR_CORE_C6_RESIDENCY, MSR_TYPE_R);
 		vmx_disable_intercept_for_msr(msr_bitmap, MSR_CORE_C7_RESIDENCY, MSR_TYPE_R);
 	}
-	if (cpu_has_vmx_pasid_trans())
+	if (enable_pasid_trans && cpu_has_vmx_pasid_trans())
 		vmx_disable_intercept_for_msr(msr_bitmap, MSR_IA32_PASID, MSR_TYPE_RW);
 	vmx->msr_bitmap_mode = 0;
 
@@ -7180,7 +7183,7 @@ static int vmx_vm_init(struct kvm *kvm)
 	spin_lock_init(&to_kvm_vmx(kvm)->ept_pointer_lock);
 	spin_lock_init(&to_kvm_vmx(kvm)->pasid_trans_lock);
 
-	if (cpu_has_vmx_pasid_trans())
+	if (enable_pasid_trans && cpu_has_vmx_pasid_trans())
 		vmx_vm_alloc_pasid_dirs(to_kvm_vmx(kvm));
 
 	if (!ple_gap)
@@ -7215,7 +7218,7 @@ static int vmx_vm_init(struct kvm *kvm)
 
 static void vmx_vm_destroy(struct kvm *kvm)
 {
-	if (cpu_has_vmx_pasid_trans())
+	if (enable_pasid_trans && cpu_has_vmx_pasid_trans())
 		vmx_vm_free_pasid_dirs(to_kvm_vmx(kvm));
 }
 

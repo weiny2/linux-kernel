@@ -164,6 +164,10 @@ module_param(force_emulation_prefix, bool, S_IRUGO);
 int __read_mostly pi_inject_timer = -1;
 module_param(pi_inject_timer, bint, S_IRUGO | S_IWUSR);
 
+bool __read_mostly enable_pasid_trans = 1;
+module_param_named(pasid_trans, enable_pasid_trans, bool, S_IRUGO);
+EXPORT_SYMBOL_GPL(enable_pasid_trans);
+
 #define KVM_NR_SHARED_MSRS 16
 
 struct kvm_shared_msrs_global {
