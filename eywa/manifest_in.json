@@ -3154,7 +3154,7 @@
             "stuck_at_ref": ""
         },
         {
-            "branch": "dev/ssanil/thb_gpt_timer",
+            "branch": "tbh/dev",
             "branch_type": "expiring",
             "config_options": [],
             "contributor": [
