@@ -2042,7 +2042,7 @@
                 }
             ],
             "description": "Add Audio SOF drivers for TGL support",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Michal Grodzicki",
