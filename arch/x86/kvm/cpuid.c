@@ -409,7 +409,8 @@ static inline void do_cpuid_7_mask(struct kvm_cpuid_entry2 *entry, int index)
 		entry->ebx |= F(TSC_ADJUST);
 
 		entry->ecx &= kvm_cpuid_7_0_ecx_x86_features;
-		if (!kvm_x86_ops->pasid_trans_supported())
+		if (!enable_pasid_trans ||
+		    !kvm_x86_ops->pasid_trans_supported())
 			entry->ecx &= ~F(ENQCMD);
 		f_la57 = entry->ecx & F(LA57);
 		cpuid_mask(&entry->ecx, CPUID_7_ECX);
