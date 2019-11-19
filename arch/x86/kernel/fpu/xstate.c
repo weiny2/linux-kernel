@@ -83,7 +83,7 @@ u64 xstate_area_mask __read_mostly;
  *
  * This mask value should be a subset of the xfeatures_mask
  */
-static u64 xstate_exp_area_mask __read_mostly;
+u64 xstate_exp_area_mask __read_mostly;
 
 static unsigned int xstate_offsets[XFEATURE_MAX] = { [ 0 ... XFEATURE_MAX - 1] = -1};
 static unsigned int xstate_sizes[XFEATURE_MAX]   = { [ 0 ... XFEATURE_MAX - 1] = -1};
