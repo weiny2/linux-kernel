@@ -1178,7 +1178,7 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "6f724bce0351926b14289f94971b81d9fbce254a"
         },
         {
             "branch": "intel_th-for-intel-next",
