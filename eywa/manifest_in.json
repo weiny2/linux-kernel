@@ -261,11 +261,11 @@
             "config_options": [
                 {
                     "name": "CONFIG_NVME_CORE",
-                    "value": "m"
+                    "value": "y"
                 },
                 {
                     "name": "CONFIG_BLK_DEV_NVME",
-                    "value": "m"
+                    "value": "y"
                 }
             ],
             "contributor": [
