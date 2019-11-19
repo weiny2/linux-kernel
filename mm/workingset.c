@@ -338,7 +338,7 @@ void workingset_refault(struct page *page, void *shadow)
 	 * However, the cgroup that will own the page is the one that
 	 * is actually experiencing the refault event.
 	 */
-	memcg = get_mem_cgroup_from_mm(current->mm);
+	memcg = page_memcg(page);
 	lruvec = mem_cgroup_lruvec(memcg, pgdat);
 
 	inc_lruvec_state(lruvec, WORKINGSET_REFAULT);
@@ -349,7 +349,7 @@ void workingset_refault(struct page *page, void *shadow)
 	 * the memory was available to the page cache.
 	 */
 	if (refault_distance > active_file)
-		goto out_memcg;
+		goto out;
 
 	SetPageActive(page);
 	advance_inactive_age(memcg, pgdat);
@@ -360,9 +360,6 @@ void workingset_refault(struct page *page, void *shadow)
 		SetPageWorkingset(page);
 		inc_lruvec_state(lruvec, WORKINGSET_RESTORE);
 	}
-
-out_memcg:
-	mem_cgroup_put(memcg);
 out:
 	rcu_read_unlock();
 }
