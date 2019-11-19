@@ -354,7 +354,7 @@ unsigned long lruvec_lru_size(struct lruvec *lruvec, enum lru_list lru, int zone
 	unsigned long size = 0;
 	int zid;
 
-	for (zid = 0; zid <= zone_idx; zid++) {
+	for (zid = 0; zid < zone_idx; zid++) {
 		struct zone *zone = &lruvec_pgdat(lruvec)->node_zones[zid];
 
 		if (!managed_zone(zone))
