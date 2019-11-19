@@ -864,7 +864,7 @@ static int madvise_inject_error(int behavior,
 {
 	struct page *page;
 	struct zone *zone;
-	unsigned int size;
+	unsigned long size;
 
 	if (!capable(CAP_SYS_ADMIN))
 		return -EPERM;
