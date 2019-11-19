@@ -70,6 +70,7 @@ static inline u64 xfeatures_mask_user(void)
 }
 
 extern u64 xstate_area_mask;
+extern u64 xstate_exp_area_mask;
 extern u64 xstate_fx_sw_bytes[USER_XSTATE_FX_SW_WORDS];
 extern u64 xfeatures_firstuse_mask;
 

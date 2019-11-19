@@ -149,11 +149,15 @@ static inline void fpstate_init_fstate(struct fregs_state *fp)
 void fpstate_init(struct fpu *fpu)
 {
 	union fpregs_state *state;
+	bool area_expanded = false;
 
-	if (fpu)
+	if (fpu) {
 		state = &fpu->state;
-	else
+		if (fpu->state_exp)
+			area_expanded = true;
+	} else {
 		state = &init_fpstate;
+	}
 
 	if (!static_cpu_has(X86_FEATURE_FPU)) {
 		fpstate_init_soft(&state->soft);
@@ -161,9 +165,15 @@ void fpstate_init(struct fpu *fpu)
 	}
 
 	memset(state, 0, fpu_kernel_xstate_size);
+	if (area_expanded)
+		memset(fpu->state_exp, 0, fpu_kernel_xstate_exp_size);
 
-	if (static_cpu_has(X86_FEATURE_XSAVES))
+	if (static_cpu_has(X86_FEATURE_XSAVES)) {
 		fpstate_init_xstate(&state->xsave, xstate_area_mask);
+		if (area_expanded)
+			fpstate_init_xstate(&fpu->state_exp->xsave,
+					    xstate_exp_area_mask);
+	}
 	if (static_cpu_has(X86_FEATURE_FXSR))
 		fpstate_init_fxstate(&state->fxsave);
 	else
