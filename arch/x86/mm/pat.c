@@ -1,11 +1,34 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Handle caching attributes in page tables (PAT)
+ * Page Attribute Table (PAT) support: handle memory caching attributes in page tables.
  *
  * Authors: Venkatesh Pallipadi <venkatesh.pallipadi@intel.com>
  *          Suresh B Siddha <suresh.b.siddha@intel.com>
  *
  * Loosely based on earlier PAT patchset from Eric Biederman and Andi Kleen.
+ *
+ * Basic principles:
+ *
+ * PAT is a CPU feature supported by all modern x86 CPUs, to allow the firmware and
+ * the kernel to set one of a handful of 'caching type' attributes for physical
+ * memory ranges: uncached, write-combining, write-through, write-protected,
+ * and the most commonly used and default attribute: write-back caching.
+ *
+ * PAT support supercedes and augments MTRR support in a compatible fashion: MTRR is
+ * a hardware interface to enumerate a limited number of physical memory ranges
+ * and set their caching attributes explicitly, programmed into the CPU via MSRs.
+ * Even modern CPUs have MTRRs enabled - but these are typically not touched
+ * by the kernel or by user-space (such as the X server), we rely on PAT for any
+ * additional cache attribute logic.
+ *
+ * PAT doesn't work via explicit memory ranges, but uses page table entries to add
+ * cache attribute information to the mapped memory range: there's 3 bits used,
+ * (_PAGE_PWT, _PAGE_PCD, _PAGE_PAT), with the 8 possible values mapped by the
+ * CPU to actual cache attributes via an MSR loaded into the CPU (MSR_IA32_CR_PAT).
+ *
+ * ( There's a metric ton of finer details, such as compatibility with CPU quirks
+ *   that only support 4 types of PAT entries, and interaction with MTRRs, see
+ *   below for details. )
  */
 
 #include <linux/seq_file.h>
@@ -38,35 +61,39 @@
 #undef pr_fmt
 #define pr_fmt(fmt) "" fmt
 
-static bool __read_mostly boot_cpu_done;
+static bool __read_mostly pat_bp_initialized;
 static bool __read_mostly pat_disabled = !IS_ENABLED(CONFIG_X86_PAT);
-static bool __read_mostly pat_initialized;
-static bool __read_mostly init_cm_done;
+static bool __read_mostly pat_bp_enabled;
+static bool __read_mostly pat_cm_initialized;
 
-void pat_disable(const char *reason)
+/*
+ * PAT support is enabled by default, but can be disabled for
+ * various user-requested or hardware-forced reasons:
+ */
+void pat_disable(const char *msg_reason)
 {
 	if (pat_disabled)
 		return;
 
-	if (boot_cpu_done) {
+	if (pat_bp_initialized) {
 		WARN_ONCE(1, "x86/PAT: PAT cannot be disabled after initialization\n");
 		return;
 	}
 
 	pat_disabled = true;
-	pr_info("x86/PAT: %s\n", reason);
+	pr_info("x86/PAT: %s\n", msg_reason);
 }
 
 static int __init nopat(char *str)
 {
-	pat_disable("PAT support disabled.");
+	pat_disable("PAT support disabled via boot option.");
 	return 0;
 }
 early_param("nopat", nopat);
 
 bool pat_enabled(void)
 {
-	return pat_initialized;
+	return pat_bp_enabled;
 }
 EXPORT_SYMBOL_GPL(pat_enabled);
 
@@ -197,6 +224,8 @@ static void __init_cache_modes(u64 pat)
 	char pat_msg[33];
 	int i;
 
+	WARN_ON_ONCE(pat_cm_initialized);
+
 	pat_msg[32] = 0;
 	for (i = 7; i >= 0; i--) {
 		cache = pat_get_cache_mode((pat >> (i * 8)) & 7,
@@ -205,28 +234,28 @@ static void __init_cache_modes(u64 pat)
 	}
 	pr_info("x86/PAT: Configuration [0-7]: %s\n", pat_msg);
 
-	init_cm_done = true;
+	pat_cm_initialized = true;
 }
 
 #define PAT(x, y)	((u64)PAT_ ## y << ((x)*8))
 
-static void pat_bsp_init(u64 pat)
+static void pat_bp_init(u64 pat)
 {
 	u64 tmp_pat;
 
 	if (!boot_cpu_has(X86_FEATURE_PAT)) {
-		pat_disable("PAT not supported by CPU.");
+		pat_disable("PAT not supported by the CPU.");
 		return;
 	}
 
 	rdmsrl(MSR_IA32_CR_PAT, tmp_pat);
 	if (!tmp_pat) {
-		pat_disable("PAT MSR is 0, disabled.");
+		pat_disable("PAT support disabled by the firmware.");
 		return;
 	}
 
 	wrmsrl(MSR_IA32_CR_PAT, pat);
-	pat_initialized = true;
+	pat_bp_enabled = true;
 
 	__init_cache_modes(pat);
 }
@@ -248,7 +277,7 @@ void init_cache_modes(void)
 {
 	u64 pat = 0;
 
-	if (init_cm_done)
+	if (pat_cm_initialized)
 		return;
 
 	if (boot_cpu_has(X86_FEATURE_PAT)) {
@@ -291,7 +320,7 @@ void init_cache_modes(void)
 }
 
 /**
- * pat_init - Initialize PAT MSR and PAT table
+ * pat_init - Initialize the PAT MSR and PAT table on the current CPU
  *
  * This function initializes PAT MSR and PAT table with an OS-defined value
  * to enable additional cache attributes, WC, WT and WP.
@@ -304,6 +333,10 @@ void pat_init(void)
 {
 	u64 pat;
 	struct cpuinfo_x86 *c = &boot_cpu_data;
+
+#ifndef CONFIG_X86_PAT
+	pr_info_once("x86/PAT: PAT support disabled because CONFIG_X86_PAT is disabled in the kernel.\n");
+#endif
 
 	if (pat_disabled)
 		return;
@@ -364,9 +397,9 @@ void pat_init(void)
 		      PAT(4, WB) | PAT(5, WP) | PAT(6, UC_MINUS) | PAT(7, WT);
 	}
 
-	if (!boot_cpu_done) {
-		pat_bsp_init(pat);
-		boot_cpu_done = true;
+	if (!pat_bp_initialized) {
+		pat_bp_init(pat);
+		pat_bp_initialized = true;
 	} else {
 		pat_ap_init(pat);
 	}
@@ -545,7 +578,7 @@ static u64 sanitize_phys(u64 address)
 int reserve_memtype(u64 start, u64 end, enum page_cache_mode req_type,
 		    enum page_cache_mode *new_type)
 {
-	struct memtype *new;
+	struct memtype *entry_new;
 	enum page_cache_mode actual_type;
 	int is_range_ram;
 	int err = 0;
@@ -593,22 +626,22 @@ int reserve_memtype(u64 start, u64 end, enum page_cache_mode req_type,
 		return -EINVAL;
 	}
 
-	new  = kzalloc(sizeof(struct memtype), GFP_KERNEL);
-	if (!new)
+	entry_new = kzalloc(sizeof(struct memtype), GFP_KERNEL);
+	if (!entry_new)
 		return -ENOMEM;
 
-	new->start	= start;
-	new->end	= end;
-	new->type	= actual_type;
+	entry_new->start = start;
+	entry_new->end	 = end;
+	entry_new->type	 = actual_type;
 
 	spin_lock(&memtype_lock);
 
-	err = rbt_memtype_check_insert(new, new_type);
+	err = memtype_check_insert(entry_new, new_type);
 	if (err) {
 		pr_info("x86/PAT: reserve_memtype failed [mem %#010Lx-%#010Lx], track %s, req %s\n",
 			start, end - 1,
-			cattr_name(new->type), cattr_name(req_type));
-		kfree(new);
+			cattr_name(entry_new->type), cattr_name(req_type));
+		kfree(entry_new);
 		spin_unlock(&memtype_lock);
 
 		return err;
@@ -617,7 +650,7 @@ int reserve_memtype(u64 start, u64 end, enum page_cache_mode req_type,
 	spin_unlock(&memtype_lock);
 
 	dprintk("reserve_memtype added [mem %#010Lx-%#010Lx], track %s, req %s, ret %s\n",
-		start, end - 1, cattr_name(new->type), cattr_name(req_type),
+		start, end - 1, cattr_name(entry_new->type), cattr_name(req_type),
 		new_type ? cattr_name(*new_type) : "-");
 
 	return err;
@@ -625,9 +658,8 @@ int reserve_memtype(u64 start, u64 end, enum page_cache_mode req_type,
 
 int free_memtype(u64 start, u64 end)
 {
-	int err = -EINVAL;
 	int is_range_ram;
-	struct memtype *entry;
+	struct memtype *entry_old;
 
 	if (!pat_enabled())
 		return 0;
@@ -640,26 +672,22 @@ int free_memtype(u64 start, u64 end)
 		return 0;
 
 	is_range_ram = pat_pagerange_is_ram(start, end);
-	if (is_range_ram == 1) {
-
-		err = free_ram_pages_type(start, end);
-
-		return err;
-	} else if (is_range_ram < 0) {
+	if (is_range_ram == 1)
+		return free_ram_pages_type(start, end);
+	if (is_range_ram < 0)
 		return -EINVAL;
-	}
 
 	spin_lock(&memtype_lock);
-	entry = rbt_memtype_erase(start, end);
+	entry_old = memtype_erase(start, end);
 	spin_unlock(&memtype_lock);
 
-	if (IS_ERR(entry)) {
+	if (IS_ERR(entry_old)) {
 		pr_info("x86/PAT: %s:%d freeing invalid memtype [mem %#010Lx-%#010Lx]\n",
 			current->comm, current->pid, start, end - 1);
 		return -EINVAL;
 	}
 
-	kfree(entry);
+	kfree(entry_old);
 
 	dprintk("free_memtype request [mem %#010Lx-%#010Lx]\n", start, end - 1);
 
@@ -693,13 +721,14 @@ static enum page_cache_mode lookup_memtype(u64 paddr)
 
 	spin_lock(&memtype_lock);
 
-	entry = rbt_memtype_lookup(paddr);
+	entry = memtype_lookup(paddr);
 	if (entry != NULL)
 		rettype = entry->type;
 	else
 		rettype = _PAGE_CACHE_MODE_UC_MINUS;
 
 	spin_unlock(&memtype_lock);
+
 	return rettype;
 }
 
@@ -839,7 +868,7 @@ int phys_mem_access_prot_allowed(struct file *file, unsigned long pfn,
 }
 
 /*
- * Change the memory type for the physial address range in kernel identity
+ * Change the memory type for the physical address range in kernel identity
  * mapping space if that range is a part of identity map.
  */
 int kernel_map_sync_memtype(u64 base, unsigned long size,
@@ -851,15 +880,14 @@ int kernel_map_sync_memtype(u64 base, unsigned long size,
 		return 0;
 
 	/*
-	 * some areas in the middle of the kernel identity range
-	 * are not mapped, like the PCI space.
+	 * Some areas in the middle of the kernel identity range
+	 * are not mapped, for example the PCI space.
 	 */
 	if (!page_is_ram(base >> PAGE_SHIFT))
 		return 0;
 
 	id_sz = (__pa(high_memory-1) <= base + size) ?
-				__pa(high_memory) - base :
-				size;
+				__pa(high_memory) - base : size;
 
 	if (ioremap_change_attr((unsigned long)__va(base), id_sz, pcm) < 0) {
 		pr_info("x86/PAT: %s:%d ioremap_change_attr failed %s for [mem %#010Lx-%#010Lx]\n",
@@ -1099,25 +1127,30 @@ EXPORT_SYMBOL_GPL(pgprot_writethrough);
 
 #if defined(CONFIG_DEBUG_FS) && defined(CONFIG_X86_PAT)
 
+/*
+ * We are allocating a temporary printout-entry to be passed
+ * between seq_start()/next() and seq_show():
+ */
 static struct memtype *memtype_get_idx(loff_t pos)
 {
-	struct memtype *print_entry;
+	struct memtype *entry_print;
 	int ret;
 
-	print_entry  = kzalloc(sizeof(struct memtype), GFP_KERNEL);
-	if (!print_entry)
+	entry_print  = kzalloc(sizeof(struct memtype), GFP_KERNEL);
+	if (!entry_print)
 		return NULL;
 
 	spin_lock(&memtype_lock);
-	ret = rbt_memtype_copy_nth_element(print_entry, pos);
+	ret = memtype_copy_nth_element(entry_print, pos);
 	spin_unlock(&memtype_lock);
 
-	if (!ret) {
-		return print_entry;
-	} else {
-		kfree(print_entry);
+	/* Free it on error: */
+	if (ret) {
+		kfree(entry_print);
 		return NULL;
 	}
+
+	return entry_print;
 }
 
 static void *memtype_seq_start(struct seq_file *seq, loff_t *pos)
@@ -1142,11 +1175,14 @@ static void memtype_seq_stop(struct seq_file *seq, void *v)
 
 static int memtype_seq_show(struct seq_file *seq, void *v)
 {
-	struct memtype *print_entry = (struct memtype *)v;
+	struct memtype *entry_print = (struct memtype *)v;
 
-	seq_printf(seq, "%s @ 0x%Lx-0x%Lx\n", cattr_name(print_entry->type),
-			print_entry->start, print_entry->end);
-	kfree(print_entry);
+	seq_printf(seq, "PAT: [mem 0x%016Lx-0x%016Lx] %s\n",
+			entry_print->start,
+			entry_print->end,
+			cattr_name(entry_print->type));
+
+	kfree(entry_print);
 
 	return 0;
 }
@@ -1178,7 +1214,6 @@ static int __init pat_memtype_list_init(void)
 	}
 	return 0;
 }
-
 late_initcall(pat_memtype_list_init);
 
 #endif /* CONFIG_DEBUG_FS && CONFIG_X86_PAT */
