@@ -3207,7 +3207,7 @@
                 }
             ],
             "description": "TGL/EHL TGPIO branch",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Christopher S Hall",
