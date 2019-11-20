@@ -3182,6 +3182,61 @@
             ],
             "status": "public",
             "stuck_at_ref": ""
+        },
+        {
+            "branch": "chall_tgpio_linus_trunc",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "PTP_INTEL_TGPIO",
+                    "value": "y"
+                },
+                {
+                    "name": "PTP_INTEL_PMC_TGPIO",
+                    "value": "y"
+                },
+                {
+                    "name": "PTP_1588_CLOCK",
+                    "value": "y"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Christopher S Hall ",
+                    "email": "christopher.s.hall@intel.com"
+                }
+            ],
+            "description": "TGL/EHL TGPIO branch",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Christopher S Hall",
+                    "email": "christopher.s.hall@intel.com"
+                },
+                {
+                    "name": "Raymond Tan",
+                    "email": "raymond.tan@intel.com"
+                },
+                {
+                    "name": "CH Gan",
+                    "email": "chai.huat.gan@intel.com"
+                },
+                {
+                    "name": "Alok Anand",
+                    "email": "alok.anand@intel.com"
+                }
+            ],
+            "jira": "NEXT-1679",
+            "name": "Time-aware GPIO Support Code",
+            "repourl": "ssh://git-amr-10.devtools.intel.com:29418/c_hall_kernel-tgpio",
+            "sdl_contact": [
+                {
+                    "name": "Cindy Johnson",
+                    "email": "cindy.r.johnson@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": ""
         }
     ]
 }
