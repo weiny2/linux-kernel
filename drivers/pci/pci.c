@@ -1075,6 +1075,13 @@ int pci_power_up(struct pci_dev *dev)
 		pci_wakeup_bus(dev->subordinate);
 	}
 
+	/*
+	 * After power-on from D3cold, a device may respond to config
+	 * accesses with Configuration Request Retry Status (CRS) until it
+	 * is ready.  Wait for it to be ready.
+	 */
+	pci_dev_wait(dev, "Switch to D0", PCIE_RESET_READY_POLL_MS);
+
 	return pci_raw_set_power_state(dev, PCI_D0);
 }
 
