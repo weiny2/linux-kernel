@@ -88,6 +88,54 @@ u64 xstate_exp_area_mask __read_mostly;
 static unsigned int xstate_offsets[XFEATURE_MAX] = { [ 0 ... XFEATURE_MAX - 1] = -1};
 static unsigned int xstate_sizes[XFEATURE_MAX]   = { [ 0 ... XFEATURE_MAX - 1] = -1};
 static unsigned int xstate_comp_offsets[XFEATURE_MAX] = { [ 0 ... XFEATURE_MAX - 1] = -1};
+static unsigned int xstate_exp_comp_offsets[XFEATURE_MAX] = {
+	[0 ... XFEATURE_MAX - 1] = -1};
+
+/*
+ * To support xstate expansion, we need to maintain two sets of offset
+ * information.
+ */
+static void set_xstate_comp_offset(int xfeature_nr, unsigned int offset)
+{
+	if (xfeature_nr < FIRST_EXTENDED_XFEATURE) {
+		xstate_comp_offsets[xfeature_nr] = offset;
+		xstate_exp_comp_offsets[xfeature_nr] = offset;
+		return;
+	}
+
+	if (xstate_area_mask & BIT_ULL(xfeature_nr))
+		xstate_comp_offsets[xfeature_nr] = offset;
+	else
+		xstate_exp_comp_offsets[xfeature_nr] = offset;
+}
+
+static unsigned int get_xstate_comp_offset(int xfeature_nr)
+{
+	if (xstate_area_mask & BIT_ULL(xfeature_nr))
+		return xstate_comp_offsets[xfeature_nr];
+
+	return xstate_exp_comp_offsets[xfeature_nr];
+}
+
+static int retrieve_prior_xstate_comp_nr(int xfeature_nr)
+{
+	u64 bv = BIT_ULL(xfeature_nr);
+	int nr = xfeature_nr;
+	u64 mask;
+
+	if (xstate_area_mask & bv)
+		mask = xstate_area_mask;
+	else
+		mask = xstate_exp_area_mask;
+
+	do {
+		bv >>= 1;
+		nr--;
+	} while (!(mask & bv) &&
+		 (nr > FIRST_EXTENDED_XFEATURE));
+
+	return nr;
+}
 
 /*
  * Mask for the first-use detection: a combination of feature bit
@@ -243,7 +291,7 @@ void fpstate_sanitize_xstate(struct fpu *fpu)
 	 */
 	while (xfeatures) {
 		if (xfeatures & 0x1) {
-			int offset = xstate_comp_offsets[feature_bit];
+			int offset = get_xstate_comp_offset(feature_bit);
 			int size = xstate_sizes[feature_bit];
 
 			memcpy((void *)fx + offset,
@@ -416,7 +464,6 @@ static int xfeature_is_aligned(int xfeature_nr)
  */
 static void __init setup_xstate_comp_offsets(void)
 {
-	unsigned int next_offset;
 	int i;
 
 	/*
@@ -424,29 +471,33 @@ static void __init setup_xstate_comp_offsets(void)
 	 * in the fixed offsets in the xsave area in either compacted form
 	 * or standard form.
 	 */
-	xstate_comp_offsets[XFEATURE_FP] = 0;
-	xstate_comp_offsets[XFEATURE_SSE] = offsetof(struct fxregs_state,
-						     xmm_space);
+	set_xstate_comp_offset(XFEATURE_FP, 0);
+	set_xstate_comp_offset(XFEATURE_SSE, offsetof(struct fxregs_state,
+						      xmm_space));
 
 	if (!boot_cpu_has(X86_FEATURE_XSAVES)) {
 		for (i = FIRST_EXTENDED_XFEATURE; i < XFEATURE_MAX; i++) {
 			if (xfeature_enabled(i))
-				xstate_comp_offsets[i] = xstate_offsets[i];
+				set_xstate_comp_offset(i, xstate_offsets[i]);
 		}
 		return;
 	}
 
-	next_offset = XSAVE_FIRST_EXT_OFFSET;
-
 	for (i = FIRST_EXTENDED_XFEATURE; i < XFEATURE_MAX; i++) {
+		unsigned int offset;
+		int prior_nr;
+
 		if (!xfeature_enabled(i))
 			continue;
 
-		if (xfeature_is_aligned(i))
-			next_offset = ALIGN(next_offset, 64);
+		prior_nr = retrieve_prior_xstate_comp_nr(i);
+		offset = get_xstate_comp_offset(prior_nr);
+		offset += xstate_sizes[prior_nr];
 
-		xstate_comp_offsets[i] = next_offset;
-		next_offset += xstate_sizes[i];
+		if (xfeature_is_aligned(i))
+			offset = ALIGN(offset, 64);
+
+		set_xstate_comp_offset(i, offset);
 	}
 }
 
@@ -461,7 +512,7 @@ static void __init print_xstate_offset_size(void)
 		if (!xfeature_enabled(i))
 			continue;
 		pr_info("x86/fpu: xstate_offset[%d]: %4d, xstate_sizes[%d]: %4d\n",
-			 i, xstate_comp_offsets[i], i, xstate_sizes[i]);
+			 i, get_xstate_comp_offset(i), i, xstate_sizes[i]);
 	}
 }
 
@@ -985,10 +1036,18 @@ void fpu__resume_cpu(void)
 		xfd_set_bits(xfd_get_cfg(&current->thread.fpu));
 }
 
-static inline struct xregs_state *__xsave_state(struct fpu *fpu,
-						int xfeature_nr)
+static struct xregs_state *__xsave_state(struct fpu *fpu, int xfeature_nr)
 {
-	return (fpu) ? &fpu->state.xsave : &init_fpstate.xsave;
+	if (!fpu)
+		return &init_fpstate.xsave;
+
+	if (xstate_area_mask & BIT_ULL(xfeature_nr))
+		return &fpu->state.xsave;
+
+	if (fpu->state_exp)
+		return  &fpu->state_exp->xsave;
+
+	return NULL;
 }
 
 static u64 __xsave_xfeatures(struct fpu *fpu, int xfeature_nr)
@@ -1008,16 +1067,14 @@ static u64 __xsave_xfeatures(struct fpu *fpu, int xfeature_nr)
  */
 static void *__raw_xsave_addr(struct fpu *fpu, int xfeature_nr)
 {
-	struct xregs_state *xsave;
+	void *xsave = __xsave_state(fpu, xfeature_nr);
 
-	if (!xfeature_enabled(xfeature_nr)) {
+	if (!xfeature_enabled(xfeature_nr) || !xsave) {
 		WARN_ON_FPU(1);
 		return NULL;
 	}
 
-	xsave = __xsave_state(fpu, xfeature_nr);
-
-	return (void *)xsave + xstate_comp_offsets[xfeature_nr];
+	return (xsave + get_xstate_comp_offset(xfeature_nr));
 }
 
 /*
