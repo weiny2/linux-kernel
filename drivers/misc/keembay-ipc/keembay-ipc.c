@@ -486,7 +486,8 @@ static int channel_close(struct ipc_link *link, u16 chan_id)
 
 	/* Remove channel from channel array. */
 	spin_lock_irqsave(&link->chan_lock, flags);
-	chan = rcu_dereference(link->channels[chan_id]);
+	chan = rcu_dereference_protected(link->channels[chan_id],
+					 lockdep_is_held(&link->chan_lock));
 	RCU_INIT_POINTER(link->channels[chan_id], NULL);
 	spin_unlock_irqrestore(&link->chan_lock, flags);
 
@@ -909,7 +910,8 @@ static void process_rx_fifo_entry(uint32_t entry,
 
 	/* Access internal channel struct (this is protected by an SRCU). */
 	idx = srcu_read_lock(&link->srcu_sp[ipc_buf->channel]);
-	chan = rcu_dereference(link->channels[ipc_buf->channel]);
+	chan = srcu_dereference(link->channels[ipc_buf->channel],
+				&link->srcu_sp[ipc_buf->channel]);
 	if (unlikely(!chan)) {
 		srcu_read_unlock(&link->srcu_sp[ipc_buf->channel], idx);
 		dev_warn(dev, "RX: Message for closed channel.\n");
@@ -1285,7 +1287,7 @@ int intel_keembay_ipc_open_channel(u8 node_id, u16 chan_id)
 	int rc;
 	struct device *dev = &kmb_ipc_dev->plat_dev->dev;
 	struct ipc_link *link = &kmb_ipc_dev->leon_mss_link;
-	struct ipc_chan *chan;
+	struct ipc_chan *chan, *cur_chan;
 	unsigned long flags;
 
 	rc = validate_link_chan(dev, node_id, chan_id);
@@ -1302,7 +1304,9 @@ int intel_keembay_ipc_open_channel(u8 node_id, u16 chan_id)
 
 	/* Add channel to the channel array (if not already present). */
 	spin_lock_irqsave(&link->chan_lock, flags);
-	if (link->channels[chan_id]) {
+	cur_chan = rcu_dereference_protected(link->channels[chan_id],
+					     lockdep_is_held(&link->chan_lock));
+	if (cur_chan) {
 		spin_unlock_irqrestore(&link->chan_lock, flags);
 		kfree(chan);
 		return -EEXIST;
@@ -1367,7 +1371,8 @@ int intel_keembay_ipc_send(u8 node_id, u16 chan_id, uint32_t vpu_addr,
 	 */
 	idx = srcu_read_lock(&link->srcu_sp[chan_id]);
 	/* Get channel. */
-	chan = rcu_dereference(link->channels[chan_id]);
+	chan = srcu_dereference(link->channels[chan_id],
+				&link->srcu_sp[chan_id]);
 	if (unlikely(!chan)) {
 		/* The channel is closed. */
 		rc = -ENOENT;
@@ -1414,7 +1419,8 @@ int intel_keembay_ipc_recv(u8 node_id, u16 chan_id, uint32_t *vpu_addr,
 	 */
 	idx = srcu_read_lock(&link->srcu_sp[chan_id]);
 	/* Get channel. */
-	chan = rcu_dereference(link->channels[chan_id]);
+	chan = srcu_dereference(link->channels[chan_id],
+				&link->srcu_sp[chan_id]);
 	if (unlikely(!chan)) {
 		rc = -ENOENT;
 		goto err;
