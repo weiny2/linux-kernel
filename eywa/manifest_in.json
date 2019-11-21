@@ -1980,7 +1980,7 @@
             "config_options": [
                 {
                     "name": "CONFIG_SND_SOC_SOF_TOPLEVEL",
-                    "value": "y"
+                    "value": "n"
                 },
                 {
                     "name": "CONFIG_SND_SOC_SOF_PCI",
