@@ -903,16 +903,7 @@ static void io_req_link_next(struct io_kiocb *req, struct io_kiocb **nxtptr)
 			nxt->flags |= REQ_F_LINK;
 		}
 
-		/*
-		 * If we're in async work, we can continue processing the chain
-		 * in this context instead of having to queue up new async work.
-		 */
-		if (nxt) {
-			if (nxtptr && io_wq_current_is_worker())
-				*nxtptr = nxt;
-			else
-				io_queue_async_work(nxt);
-		}
+		*nxtptr = nxt;
 		break;
 	}
 
@@ -984,36 +975,28 @@ static void io_req_find_next(struct io_kiocb *req, struct io_kiocb **nxt)
 	}
 }
 
-static void io_free_req_find_next(struct io_kiocb *req, struct io_kiocb **nxt)
-{
-	io_req_find_next(req, nxt);
-	__io_free_req(req);
-}
-
 static void io_free_req(struct io_kiocb *req)
 {
-	io_free_req_find_next(req, NULL);
+	struct io_kiocb *nxt = NULL;
+
+	io_req_find_next(req, &nxt);
+	__io_free_req(req);
+
+	if (nxt)
+		io_queue_async_work(nxt);
 }
 
 /*
  * Drop reference to request, return next in chain (if there is one) if this
  * was the last reference to this request.
  */
+__attribute__((nonnull))
 static void io_put_req_find_next(struct io_kiocb *req, struct io_kiocb **nxtptr)
 {
-	struct io_kiocb *nxt = NULL;
-
-	io_req_find_next(req, &nxt);
+	io_req_find_next(req, nxtptr);
 
 	if (refcount_dec_and_test(&req->refs))
 		__io_free_req(req);
-
-	if (nxt) {
-		if (nxtptr)
-			*nxtptr = nxt;
-		else
-			io_queue_async_work(nxt);
-	}
 }
 
 static void io_put_req(struct io_kiocb *req)
@@ -1497,7 +1480,7 @@ static inline void io_rw_done(struct kiocb *kiocb, ssize_t ret)
 static void kiocb_done(struct kiocb *kiocb, ssize_t ret, struct io_kiocb **nxt,
 		       bool in_async)
 {
-	if (in_async && ret >= 0 && nxt && kiocb->ki_complete == io_complete_rw)
+	if (in_async && ret >= 0 && kiocb->ki_complete == io_complete_rw)
 		*nxt = __io_complete_rw(kiocb, ret);
 	else
 		io_rw_done(kiocb, ret);
@@ -2594,8 +2577,9 @@ static int io_req_defer(struct io_kiocb *req)
 	return -EIOCBQUEUED;
 }
 
-static int __io_submit_sqe(struct io_kiocb *req, struct io_kiocb **nxt,
-			   bool force_nonblock)
+__attribute__((nonnull))
+static int io_issue_sqe(struct io_kiocb *req, struct io_kiocb **nxt,
+			bool force_nonblock)
 {
 	int ret, opcode;
 	struct sqe_submit *s = &req->submit;
@@ -2700,7 +2684,7 @@ static void io_wq_submit_work(struct io_wq_work **workptr)
 		s->has_user = (work->flags & IO_WQ_WORK_HAS_MM) != 0;
 		s->in_async = true;
 		do {
-			ret = __io_submit_sqe(req, &nxt, false);
+			ret = io_issue_sqe(req, &nxt, false);
 			/*
 			 * We can get EAGAIN for polled IO even though we're
 			 * forcing a sync submission from here, since we can't
@@ -2908,10 +2892,13 @@ static struct io_kiocb *io_prep_linked_timeout(struct io_kiocb *req)
 
 static void __io_queue_sqe(struct io_kiocb *req)
 {
-	struct io_kiocb *nxt = io_prep_linked_timeout(req);
+	struct io_kiocb *linked_timeout = io_prep_linked_timeout(req);
+	struct io_kiocb *nxt = NULL;
 	int ret;
 
-	ret = __io_submit_sqe(req, NULL, true);
+	ret = io_issue_sqe(req, &nxt, true);
+	if (nxt)
+		io_queue_async_work(nxt);
 
 	/*
 	 * We async punt it if the file wasn't marked NOWAIT, or if the file
@@ -2947,11 +2934,11 @@ err:
 	/* drop submission reference */
 	io_put_req(req);
 
-	if (nxt) {
+	if (linked_timeout) {
 		if (!ret)
-			io_queue_linked_timeout(nxt);
+			io_queue_linked_timeout(linked_timeout);
 		else
-			io_put_req(nxt);
+			io_put_req(linked_timeout);
 	}
 
 	/* and drop final reference, if we failed */
@@ -3127,11 +3114,11 @@ static bool io_get_sqring(struct io_ring_ctx *ctx, struct sqe_submit *s)
 	 */
 	head = ctx->cached_sq_head;
 	/* make sure SQ entry isn't read before tail */
-	if (head == smp_load_acquire(&rings->sq.tail))
+	if (unlikely(head == smp_load_acquire(&rings->sq.tail)))
 		return false;
 
 	head = READ_ONCE(sq_array[head & ctx->sq_mask]);
-	if (head < ctx->sq_entries) {
+	if (likely(head < ctx->sq_entries)) {
 		s->ring_file = NULL;
 		s->sqe = &ctx->sq_sqes[head];
 		s->sequence = ctx->cached_sq_head;
