@@ -78,34 +78,20 @@ int xstateregs_get(struct task_struct *target, const struct user_regset *regset,
 		void *kbuf, void __user *ubuf)
 {
 	struct fpu *fpu = &target->thread.fpu;
-	struct xregs_state *xsave;
 	int ret;
 
 	if (!boot_cpu_has(X86_FEATURE_XSAVE))
 		return -ENODEV;
 
-	xsave = &fpu->state.xsave;
-
 	fpu__prepare_read(fpu);
 
 	if (using_compacted_format()) {
 		if (kbuf)
-			ret = copy_xstate_to_kernel(kbuf, xsave, pos, count);
+			ret = copy_xstate_comp_to_kernel(kbuf, fpu, pos, count);
 		else
-			ret = copy_xstate_to_user(ubuf, xsave, pos, count);
+			ret = copy_xstate_comp_to_user(ubuf, fpu, pos, count);
 	} else {
-		fpstate_sanitize_xstate(fpu);
-		/*
-		 * Copy the 48 bytes defined by the software into the xsave
-		 * area in the thread struct, so that we can copy the whole
-		 * area to user using one user_regset_copyout().
-		 */
-		memcpy(&xsave->i387.sw_reserved, xstate_fx_sw_bytes, sizeof(xstate_fx_sw_bytes));
-
-		/*
-		 * Copy the xstate memory layout.
-		 */
-		ret = user_regset_copyout(&pos, &count, &kbuf, &ubuf, xsave, 0, -1);
+		ret = copy_xstate_to_regset(kbuf, ubuf, fpu, count);
 	}
 	return ret;
 }
@@ -115,7 +101,6 @@ int xstateregs_set(struct task_struct *target, const struct user_regset *regset,
 		  const void *kbuf, const void __user *ubuf)
 {
 	struct fpu *fpu = &target->thread.fpu;
-	struct xregs_state *xsave;
 	int ret;
 
 	if (!boot_cpu_has(X86_FEATURE_XSAVE))
@@ -127,25 +112,21 @@ int xstateregs_set(struct task_struct *target, const struct user_regset *regset,
 	if ((pos != 0) || (count < fpu_user_xstate_size))
 		return -EFAULT;
 
-	xsave = &fpu->state.xsave;
-
 	fpu__prepare_write(fpu);
 
 	if (using_compacted_format()) {
 		if (kbuf)
-			ret = copy_kernel_to_xstate(xsave, kbuf);
+			ret = copy_kernel_to_xstate_comp(fpu, kbuf);
 		else
-			ret = copy_user_to_xstate(xsave, ubuf);
+			ret = copy_user_to_xstate_comp(fpu, ubuf);
 	} else {
-		ret = user_regset_copyin(&pos, &count, &kbuf, &ubuf, xsave, 0, -1);
-		if (!ret)
-			ret = validate_user_xstate_header(&xsave->header);
+		ret = copy_regset_to_xstate(fpu, kbuf, ubuf, count);
 	}
 
 	/*
 	 * mxcsr reserved bits must be masked to zero for security reasons.
 	 */
-	xsave->i387.mxcsr &= mxcsr_feature_mask;
+	fpu->state.xsave.i387.mxcsr &= mxcsr_feature_mask;
 
 	/*
 	 * In case of failure, mark all states as init:
