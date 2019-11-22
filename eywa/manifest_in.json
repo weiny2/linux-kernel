@@ -3184,7 +3184,7 @@
             "stuck_at_ref": ""
         },
         {
-            "branch": "chall_tgpio_linus_trunc",
+            "branch": "chall_linus_tgpio",
             "branch_type": "expiring",
             "config_options": [
                 {
@@ -3202,12 +3202,12 @@
             ],
             "contributor": [
                 {
-                    "name": "Christopher S Hall ",
+                    "name": "Christopher S Hall",
                     "email": "christopher.s.hall@intel.com"
                 }
             ],
             "description": "TGL/EHL TGPIO branch",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Christopher S Hall",
@@ -3228,7 +3228,7 @@
             ],
             "jira": "NEXT-1679",
             "name": "Time-aware GPIO Support Code",
-            "repourl": "ssh://git-amr-10.devtools.intel.com:29418/c_hall_kernel-tgpio",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/chall/christopher-hall-kernel-contribution.git",
             "sdl_contact": [
                 {
                     "name": "Cindy Johnson",
