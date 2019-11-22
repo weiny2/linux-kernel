@@ -3077,11 +3077,11 @@
             "config_options": [
                 {
                     "name": "CONFIG_PTP_INTEL_PMC_TGPIO",
-                    "value": "y"
+                    "value": "m"
                 },
                 {
                     "name": "CONFIG_PTP_INTEL_TGPIO",
-                    "value": "y"
+                    "value": "m"
                 }
             ],
             "contributor": [
