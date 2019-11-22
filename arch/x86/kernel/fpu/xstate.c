@@ -874,20 +874,41 @@ void fpu__resume_cpu(void)
 		wrmsrl(MSR_IA32_XSS, xfeatures_mask_supervisor());
 }
 
+static inline struct xregs_state *__xsave_state(struct fpu *fpu,
+						int xfeature_nr)
+{
+	return (fpu) ? &fpu->state.xsave : &init_fpstate.xsave;
+}
+
+static u64 __xsave_xfeatures(struct fpu *fpu, int xfeature_nr)
+{
+	struct xregs_state *xsave = __xsave_state(fpu, xfeature_nr);
+
+	if (!xsave)
+		return 0;
+
+	return xsave->header.xfeatures;
+}
+
 /*
  * Given an xstate feature nr, calculate where in the xsave
  * buffer the state is.  Callers should ensure that the buffer
  * is valid.
  */
-static void *__raw_xsave_addr(struct xregs_state *xsave, int xfeature_nr)
+static void *__raw_xsave_addr(struct fpu *fpu, int xfeature_nr)
 {
+	struct xregs_state *xsave;
+
 	if (!xfeature_enabled(xfeature_nr)) {
 		WARN_ON_FPU(1);
 		return NULL;
 	}
 
+	xsave = __xsave_state(fpu, xfeature_nr);
+
 	return (void *)xsave + xstate_comp_offsets[xfeature_nr];
 }
+
 /*
  * Given the xsave area and a state inside, this function returns the
  * address of the state.
@@ -899,14 +920,15 @@ static void *__raw_xsave_addr(struct xregs_state *xsave, int xfeature_nr)
  * this will return NULL.
  *
  * Inputs:
- *	xstate: the thread's storage area for all FPU data
+ *	fpu: the thread's FPU data to access all the FPU state storages.
+	     (If a null pointer is given, assume the init_fpstate)
  *	xfeature_nr: state which is defined in xsave.h (e.g. XFEATURE_FP,
  *	XFEATURE_SSE, etc...)
  * Output:
  *	address of the state in the xsave area, or NULL if the
  *	field is not present in the xsave buffer.
  */
-void *get_xsave_addr(struct xregs_state *xsave, int xfeature_nr)
+void *get_xsave_addr(struct fpu *fpu, int xfeature_nr)
 {
 	/*
 	 * Do we even *have* xsave state?
@@ -931,10 +953,10 @@ void *get_xsave_addr(struct xregs_state *xsave, int xfeature_nr)
 	 * or because the "init optimization" caused it
 	 * to not be saved.
 	 */
-	if (!(xsave->header.xfeatures & BIT_ULL(xfeature_nr)))
+	if (!(__xsave_xfeatures(fpu, xfeature_nr) & BIT_ULL(xfeature_nr)))
 		return NULL;
 
-	return __raw_xsave_addr(xsave, xfeature_nr);
+	return __raw_xsave_addr(fpu, xfeature_nr);
 }
 EXPORT_SYMBOL_GPL(get_xsave_addr);
 
@@ -965,7 +987,7 @@ const void *get_xsave_field_ptr(int xfeature_nr)
 	 */
 	fpu__save(fpu);
 
-	return get_xsave_addr(&fpu->state.xsave, xfeature_nr);
+	return get_xsave_addr(fpu, xfeature_nr);
 }
 
 #ifdef CONFIG_ARCH_HAS_PKEYS
@@ -1123,7 +1145,7 @@ int copy_xstate_comp_to_kernel(void *kbuf, struct fpu *fpu,
 		 * Copy only in-use xstates:
 		 */
 		if ((header.xfeatures >> i) & 1) {
-			void *src = __raw_xsave_addr(xsave, i);
+			void *src = __raw_xsave_addr(fpu, i);
 
 			copy_part(xstate_offsets[i], xstate_sizes[i],
 				  src, &kbuf, &offset_start, &count);
@@ -1198,7 +1220,7 @@ int copy_xstate_comp_to_user(void __user *ubuf, struct fpu *fpu,
 		 * Copy only in-use xstates:
 		 */
 		if ((header.xfeatures >> i) & 1) {
-			void *src = __raw_xsave_addr(xsave, i);
+			void *src = __raw_xsave_addr(fpu, i);
 
 			offset = xstate_offsets[i];
 			size = xstate_sizes[i];
@@ -1255,13 +1277,11 @@ int copy_kernel_to_xstate_comp(struct fpu *fpu, const void *kbuf)
 	if (validate_user_xstate_header(&hdr))
 		return -EINVAL;
 
-	xsave = &fpu->state.xsave;
-
 	for (i = 0; i < XFEATURE_MAX; i++) {
 		u64 mask = BIT_ULL(i);
 
 		if (hdr.xfeatures & mask) {
-			void *dst = __raw_xsave_addr(xsave, i);
+			void *dst = __raw_xsave_addr(fpu, i);
 
 			offset = xstate_offsets[i];
 			size = xstate_sizes[i];
@@ -1269,6 +1289,8 @@ int copy_kernel_to_xstate_comp(struct fpu *fpu, const void *kbuf)
 			memcpy(dst, kbuf + offset, size);
 		}
 	}
+
+	xsave = &fpu->state.xsave;
 
 	if (xfeatures_mxcsr_quirk(hdr.xfeatures)) {
 		offset = offsetof(struct fxregs_state, mxcsr);
@@ -1315,13 +1337,11 @@ int copy_user_to_xstate_comp(struct fpu *fpu, const void __user *ubuf)
 	if (validate_user_xstate_header(&hdr))
 		return -EINVAL;
 
-	xsave = &fpu->state.xsave;
-
 	for (i = 0; i < XFEATURE_MAX; i++) {
 		u64 mask = BIT_ULL(i);
 
 		if (hdr.xfeatures & mask) {
-			void *dst = __raw_xsave_addr(xsave, i);
+			void *dst = __raw_xsave_addr(fpu, i);
 
 			offset = xstate_offsets[i];
 			size = xstate_sizes[i];
@@ -1330,6 +1350,8 @@ int copy_user_to_xstate_comp(struct fpu *fpu, const void __user *ubuf)
 				return -EFAULT;
 		}
 	}
+
+	xsave = &fpu->state.xsave;
 
 	if (xfeatures_mxcsr_quirk(hdr.xfeatures)) {
 		offset = offsetof(struct fxregs_state, mxcsr);
