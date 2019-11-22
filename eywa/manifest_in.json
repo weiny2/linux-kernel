@@ -3188,15 +3188,15 @@
             "branch_type": "expiring",
             "config_options": [
                 {
-                    "name": "PTP_INTEL_TGPIO",
-                    "value": "y"
+                    "name": "CONFIG_PTP_INTEL_TGPIO",
+                    "value": "m"
                 },
                 {
-                    "name": "PTP_INTEL_PMC_TGPIO",
-                    "value": "y"
+                    "name": "CONFIG_PTP_INTEL_PMC_TGPIO",
+                    "value": "m"
                 },
                 {
-                    "name": "PTP_1588_CLOCK",
+                    "name": "CONFIG_PTP_1588_CLOCK",
                     "value": "y"
                 }
             ],
