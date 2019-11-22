@@ -353,7 +353,11 @@ static int copy_user_to_fpregs_zeroing(void __user *buf, u64 xbv, int fx_only)
 /* Write pasid to fpstate. */
 static void fpu__pasid_state_write(u64 pasid)
 {
-	struct xregs_state *xsave = &current->thread.fpu.state.xsave;
+	struct xregs_state *xsave;
+	struct fpu *fpu;
+
+	fpu = &current->thread.fpu;
+	xsave = &fpu->state.xsave;
 
 	/*
 	 * If pasid value is init state (i.e. 0), clear the xfeatures
@@ -370,7 +374,7 @@ static void fpu__pasid_state_write(u64 pasid)
 		struct ia32_pasid_state *ppasid_state;
 
 		xsave->header.xfeatures |= XFEATURE_MASK_PASID;
-		ppasid_state = get_xsave_addr(xsave, XFEATURE_PASID);
+		ppasid_state = get_xsave_addr(fpu, XFEATURE_PASID);
 		/*
 		 * ppasid_state shouldn't be NULL because XFEATURE_ENQCMD
 		 * must be supported when this function is called.
@@ -390,7 +394,11 @@ static void fpu__pasid_state_write(u64 pasid)
  */
 static void save_supervisor_xstates(void)
 {
-	struct xregs_state *xsave = &current->thread.fpu.state.xsave;
+	struct xregs_state *xsave;
+	struct fpu *fpu;
+
+	fpu = &current->thread.fpu;
+	xsave = &fpu->state.xsave;
 
 	xsave->header.xfeatures = 0;
 #ifdef CONFIG_X86_INTEL_CET
@@ -399,7 +407,7 @@ static void save_supervisor_xstates(void)
 		struct cet_user_state *cet;
 
 		xsave->header.xfeatures |= XFEATURE_MASK_CET_USER;
-		cet = get_xsave_addr(xsave, XFEATURE_CET_USER);
+		cet = get_xsave_addr(fpu, XFEATURE_CET_USER);
 		cet->user_cet = 0;
 		cet->user_ssp = 0;
 	}
