@@ -20,7 +20,7 @@
 #include <linux/mutex.h>
 #include <linux/version.h>
 #include <linux/mempool.h>
-#include <linux/slab_def.h>
+// #include <linux/slab_def.h>
 #include <linux/dma-mapping.h>
 #include <linux/cache.h>
 #include <linux/wait.h>

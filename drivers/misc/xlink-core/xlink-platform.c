@@ -171,21 +171,21 @@ int xlink_platform_boot_remote(int interface, const char *dev_name,
 void *xlink_platform_allocate(struct device *dev, dma_addr_t *handle,
 		uint32_t size, uint32_t alignment)
 {
-#ifdef CONFIG_XLINK_LOCAL_HOST
-	return dma_alloc_coherent(dev, size, handle, GFP_KERNEL);
-#else
+// #ifdef CONFIG_XLINK_LOCAL_HOST
+	// return dma_alloc_coherent(dev, size, handle, GFP_KERNEL);
+// #else
 	return kzalloc(size, GFP_KERNEL);
-#endif
+// #endif
 }
 
 void xlink_platform_deallocate(struct device *dev, void *buf, dma_addr_t handle,
 		uint32_t size, uint32_t alignment)
 {
-#ifdef CONFIG_XLINK_LOCAL_HOST
-	dma_free_coherent(dev, size, buf, handle);
-#else
+// #ifdef CONFIG_XLINK_LOCAL_HOST
+	// dma_free_coherent(dev, size, buf, handle);
+// #else
 	if (buf) {
 		kfree(buf);
 	}
-#endif
+// #endif
 }

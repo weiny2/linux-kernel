@@ -27,7 +27,7 @@
 #define XLINK_VERSION_MAJOR	0
 #define XLINK_VERSION_MINOR	93
 
-#define XLINK_VPU_WAIT_FOR_READY (3000)
+#define XLINK_VPU_WAIT_FOR_READY (3000000)
 
 #define DEVICE_NAME "xlnk"
 #define CLASS_NAME 	"xlkcore"

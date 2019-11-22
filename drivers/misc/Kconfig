@@ -481,4 +481,6 @@ source "drivers/misc/ocxl/Kconfig"
 source "drivers/misc/cardreader/Kconfig"
 source "drivers/misc/habanalabs/Kconfig"
 source "drivers/misc/keembay-ipc/Kconfig"
+source "drivers/misc/xlink-core/Kconfig"
+source "drivers/misc/xlink-pcie/Kconfig"
 endmenu

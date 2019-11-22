@@ -12,6 +12,7 @@
 #include <linux/cdev.h>
 #include <linux/platform_device.h>
 #include <linux/dma-mapping.h>
+#include <linux/dma-direct.h>
 #include <linux/of_address.h>
 #include <linux/of_reserved_mem.h>
 #include <linux/uaccess.h>
@@ -599,6 +600,22 @@ enum xlink_error xlink_multiplexer_init(void *dev)
 		return -ENOMEM;
 	}
 
+	/*
+	 * Fix up DMA handle value.
+	 *
+	 * dma_alloc_coherent() does not take into account the address
+	 * translation described by the dma-ranges properties in the device
+	 * tree; this seems to be a bug of the Linux kernel:
+	 * https://lists.linuxfoundation.org/pipermail/iommu/2019-October/039417.html
+	 *
+	 * As a workaround, we fix the DMA handle manually, by subtracting the
+	 * device DMA offset.
+	 *
+	 * TODO: remove this once/if the DMA kernel code is fixed.
+	 */
+	mux_init->local_xlink_mem.dma_handle -= mux_init->dev->dma_pfn_offset << PAGE_SHIFT;
+	mux_init->remote_xlink_mem.dma_handle -= mux_init->dev->dma_pfn_offset << PAGE_SHIFT;
+
 	dev_info(&plat_dev->dev, "Local vaddr 0x%p paddr 0x%pad size 0x%zX\n",
 			mux_init->local_xlink_mem.vaddr,
 			&mux_init->local_xlink_mem.dma_handle,
@@ -1169,6 +1186,8 @@ enum xlink_error xlink_passthrough(struct xlink_event *event)
 	enum xlink_error rc = 0;
 #ifdef CONFIG_XLINK_LOCAL_HOST
 	void *vaddr = 0;
+	dma_addr_t vpuaddr = 0;
+	phys_addr_t physaddr = 0;
 	uint32_t paddr;
 	uint32_t timeout = 0;
 	uint32_t thismessage;
@@ -1180,6 +1199,9 @@ enum xlink_error xlink_passthrough(struct xlink_event *event)
 	switch (event->header.type) {
 	case XLINK_WRITE_REQ:
 		if (mux->channels[ipc.chan].status == CHAN_OPEN) {
+			/* Translate physical address to VPU address */
+			vpuaddr = phys_to_dma(mux->dev, *(uint32_t*)event->data);
+			event->data = &vpuaddr;
 			rc = xlink_platform_write(IPC_DEVICE, &ipc, event->data,
 					event->header.size, 0);
 		} else {
@@ -1234,8 +1256,11 @@ enum xlink_error xlink_passthrough(struct xlink_event *event)
 			} else {
 				timeout = mux->channels[ipc.chan].timeout;
 			}
-			rc = xlink_platform_read(IPC_DEVICE, &ipc, event->pdata, //????
+			rc = xlink_platform_read(IPC_DEVICE, &ipc, &vpuaddr, //????
 					(size_t *)event->length, timeout);
+			/* Translate VPU address to physical address */
+			physaddr = dma_to_phys(mux->dev, vpuaddr);
+			*(phys_addr_t *)event->pdata = physaddr;
 		} else {
 			/* channel not open */
 			rc = X_LINK_ERROR;
