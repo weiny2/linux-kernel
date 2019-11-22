@@ -1027,17 +1027,25 @@ __copy_xstate_to_kernel(void *kbuf, const void *data,
  * It supports partial copy but pos always starts from zero. This is called
  * from xstateregs_get() and there we check the CPU has XSAVES.
  */
-int copy_xstate_to_kernel(void *kbuf, struct xregs_state *xsave, unsigned int offset_start, unsigned int size_total)
+int copy_xstate_comp_to_kernel(void *kbuf, struct fpu *fpu,
+			       unsigned int offset_start,
+			       unsigned int size_total)
 {
+	struct xregs_state *xsave;
 	unsigned int offset, size;
 	struct xstate_header header;
 	int i;
+
+	if (!fpu)
+		return -EFAULT;
 
 	/*
 	 * Currently copy_regset_to_user() starts from pos 0:
 	 */
 	if (unlikely(offset_start != 0))
 		return -EFAULT;
+
+	xsave = &fpu->state.xsave;
 
 	/*
 	 * The destination is a ptrace buffer; we put in only user xstates:
@@ -1111,17 +1119,25 @@ __copy_xstate_to_user(void __user *ubuf, const void *data, unsigned int offset, 
  * zero. This is called from xstateregs_get() and there we check the CPU
  * has XSAVES.
  */
-int copy_xstate_to_user(void __user *ubuf, struct xregs_state *xsave, unsigned int offset_start, unsigned int size_total)
+int copy_xstate_comp_to_user(void __user *ubuf, struct fpu *fpu,
+			     unsigned int offset_start,
+			     unsigned int size_total)
 {
+	struct xregs_state *xsave;
 	unsigned int offset, size;
 	int ret, i;
 	struct xstate_header header;
+
+	if (!fpu)
+		return -EFAULT;
 
 	/*
 	 * Currently copy_regset_to_user() starts from pos 0:
 	 */
 	if (unlikely(offset_start != 0))
 		return -EFAULT;
+
+	xsave = &fpu->state.xsave;
 
 	/*
 	 * The destination is a ptrace buffer; we put in only user xstates:
@@ -1184,11 +1200,15 @@ int copy_xstate_to_user(void __user *ubuf, struct xregs_state *xsave, unsigned i
  * Convert from a ptrace standard-format kernel buffer to kernel XSAVES format
  * and copy to the target thread. This is called from xstateregs_set().
  */
-int copy_kernel_to_xstate(struct xregs_state *xsave, const void *kbuf)
+int copy_kernel_to_xstate_comp(struct fpu *fpu, const void *kbuf)
 {
+	struct xregs_state *xsave;
 	unsigned int offset, size;
 	int i;
 	struct xstate_header hdr;
+
+	if (!fpu)
+		return -EFAULT;
 
 	offset = offsetof(struct xregs_state, header);
 	size = sizeof(hdr);
@@ -1198,8 +1218,10 @@ int copy_kernel_to_xstate(struct xregs_state *xsave, const void *kbuf)
 	if (validate_xstate_header_from_user(&hdr))
 		return -EINVAL;
 
+	xsave = &fpu->state.xsave;
+
 	for (i = 0; i < XFEATURE_MAX; i++) {
-		u64 mask = ((u64)1 << i);
+		u64 mask = BIT_ULL(i);
 
 		if (hdr.xfeatures & mask) {
 			void *dst = __raw_xsave_addr(xsave, i);
@@ -1237,11 +1259,15 @@ int copy_kernel_to_xstate(struct xregs_state *xsave, const void *kbuf)
  * xstateregs_set(), as well as potentially from the sigreturn() and
  * rt_sigreturn() system calls.
  */
-int copy_user_to_xstate(struct xregs_state *xsave, const void __user *ubuf)
+int copy_user_to_xstate_comp(struct fpu *fpu, const void __user *ubuf)
 {
+	struct xregs_state *xsave;
 	unsigned int offset, size;
 	int i;
 	struct xstate_header hdr;
+
+	if (!fpu)
+		return -EFAULT;
 
 	offset = offsetof(struct xregs_state, header);
 	size = sizeof(hdr);
@@ -1252,8 +1278,10 @@ int copy_user_to_xstate(struct xregs_state *xsave, const void __user *ubuf)
 	if (validate_xstate_header_from_user(&hdr))
 		return -EINVAL;
 
+	xsave = &fpu->state.xsave;
+
 	for (i = 0; i < XFEATURE_MAX; i++) {
-		u64 mask = ((u64)1 << i);
+		u64 mask = BIT_ULL(i);
 
 		if (hdr.xfeatures & mask) {
 			void *dst = __raw_xsave_addr(xsave, i);
@@ -1285,6 +1313,66 @@ int copy_user_to_xstate(struct xregs_state *xsave, const void __user *ubuf)
 	xsave->header.xfeatures |= hdr.xfeatures;
 
 	return 0;
+}
+
+/*
+ * Copy the kernel XSAVE standard format to either a kernel-space ptrace
+ * buffer or a user-space buffer. It supports partial copy, but pos
+ * always starts from zero. xstateregs_get() calls this, and there we
+ * check if using the standard format.
+ */
+int copy_xstate_to_regset(void *kbuf, void __user *ubuf, struct fpu *fpu,
+			  unsigned int count)
+{
+	unsigned int pos = 0, size;
+	struct xregs_state *xsave;
+	int ret;
+
+	if (!fpu)
+		return -EFAULT;
+
+	fpstate_sanitize_xstate(fpu);
+
+	xsave = &fpu->state.xsave;
+
+	/*
+	 * Copy the 48 bytes defined by the software into the xsave
+	 * area in the thread struct, so that we can copy the whole
+	 * area to user using one user_regset_copyout().
+	 */
+	size = sizeof(xstate_fx_sw_bytes);
+	memcpy(&xsave->i387.sw_reserved, xstate_fx_sw_bytes, size);
+
+	/*
+	 * Copy the xstate memory layout.
+	 */
+	ret = user_regset_copyout(&pos, &count, &kbuf, &ubuf, xsave, 0, -1);
+	return ret;
+}
+
+/*
+ * Copy from a ptrace or sigreturn standard-format kernel or userspace
+ * buffer to the target thread. xstateregs_set(), as well as potentially
+ * from the sigreturn() and rt_sigreturn() system call, calls this.
+ */
+int copy_regset_to_xstate(struct fpu *fpu, const void *kbuf,
+			  const void __user *ubuf, unsigned int count)
+{
+	struct xregs_state *xsave;
+	unsigned int pos = 0;
+	int ret;
+
+	if (!fpu)
+		return -EFAULT;
+
+	xsave = &fpu->state.xsave;
+	ret = user_regset_copyin(&pos, &count, &kbuf, &ubuf, xsave, 0, -1);
+	if (ret)
+		return ret;
+
+	ret = validate_xstate_header_from_user(&xsave->header);
+
+	return ret;
 }
 
 #ifdef CONFIG_PROC_PID_ARCH_STATUS

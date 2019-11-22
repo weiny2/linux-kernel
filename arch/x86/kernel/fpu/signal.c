@@ -276,11 +276,11 @@ retry:
 }
 
 static inline void
-sanitize_restored_user_xstate(union fpregs_state *state,
+sanitize_restored_user_xstate(struct fpu *fpu,
 			      struct user_i387_ia32_struct *ia32_env,
 			      u64 xfeatures_from_user, int fx_only)
 {
-	struct xregs_state *xsave = &state->xsave;
+	struct xregs_state *xsave = &fpu->state.xsave;
 	struct xstate_header *header = &xsave->header;
 
 	if (use_xsave()) {
@@ -317,7 +317,7 @@ sanitize_restored_user_xstate(union fpregs_state *state,
 		xsave->i387.mxcsr &= mxcsr_feature_mask;
 
 		if (ia32_env)
-			convert_to_fxsr(&state->fxsave, ia32_env);
+			convert_to_fxsr(&fpu->state.fxsave, ia32_env);
 	}
 }
 
@@ -452,19 +452,15 @@ static int __fpu__restore_sig(void __user *buf, void __user *buf_fx, int size)
 	if (use_xsave() && !fx_only) {
 		u64 init_bv = xfeatures_mask_user() & ~xfeatures_user;
 
-		if (using_compacted_format()) {
-			ret = copy_user_to_xstate(&fpu->state.xsave, buf_fx);
-		} else {
-			ret = __copy_from_user(&fpu->state.xsave, buf_fx, state_size);
-
-			if (!ret && state_size > offsetof(struct xregs_state, header))
-				ret = validate_xstate_header_from_user(&fpu->state.xsave.header);
-		}
+		if (using_compacted_format())
+			ret = copy_user_to_xstate_comp(fpu, buf_fx);
+		else
+			ret = copy_regset_to_xstate(fpu, NULL, buf_fx,
+						    state_size);
 		if (ret)
 			goto err_out;
 
-		sanitize_restored_user_xstate(&fpu->state, envp, xfeatures_user,
-					      fx_only);
+		sanitize_restored_user_xstate(fpu, envp, xfeatures_user, fx_only);
 
 		ret = restore_cet_from_sigframe((int)ia32_fxstate, buf);
 		if (ret)
@@ -487,8 +483,7 @@ static int __fpu__restore_sig(void __user *buf, void __user *buf_fx, int size)
 			goto err_out;
 		}
 
-		sanitize_restored_user_xstate(&fpu->state, envp,
-					      xfeatures_user, fx_only);
+		sanitize_restored_user_xstate(fpu, envp, xfeatures_user, fx_only);
 
 		fpregs_lock();
 		if (use_xsave()) {
