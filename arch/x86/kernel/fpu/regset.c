@@ -156,7 +156,7 @@ int cetregs_get(struct task_struct *target, const struct user_regset *regset,
 	if (!boot_cpu_has(X86_FEATURE_SHSTK))
 		return -ENODEV;
 
-	cetregs = get_xsave_addr(&fpu->state.xsave, XFEATURE_CET_USER);
+	cetregs = get_xsave_addr(fpu, XFEATURE_CET_USER);
 
 	fpu__prepare_read(fpu);
 	return user_regset_copyout(&pos, &count, &kbuf, &ubuf, cetregs, 0, -1);
@@ -172,7 +172,7 @@ int cetregs_set(struct task_struct *target, const struct user_regset *regset,
 	if (!boot_cpu_has(X86_FEATURE_SHSTK))
 		return -ENODEV;
 
-	cetregs = get_xsave_addr(&fpu->state.xsave, XFEATURE_CET_USER);
+	cetregs = get_xsave_addr(fpu, XFEATURE_CET_USER);
 
 	fpu__prepare_write(fpu);
 	return user_regset_copyin(&pos, &count, &kbuf, &ubuf, cetregs, 0, -1);
