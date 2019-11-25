@@ -314,6 +314,10 @@ struct kvm_vmx {
 
 	enum ept_pointers_status ept_pointers_match;
 	spinlock_t ept_pointer_lock;
+
+	struct page *pasid_dir0;
+	struct page *pasid_dir1;
+	spinlock_t pasid_trans_lock;
 };
 
 bool nested_vmx_allowed(struct kvm_vcpu *vcpu);

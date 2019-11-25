@@ -297,6 +297,8 @@ void kvm_set_cpu_caps(void)
 	unsigned int f_gbpages = 0;
 	unsigned int f_lm = 0;
 #endif
+	unsigned int f_enqcmd =
+			kvm_x86_ops.pasid_trans_supported() ? F(ENQCMD) : 0;
 
 	BUILD_BUG_ON(sizeof(kvm_cpu_caps) >
 		     sizeof(boot_cpu_data.x86_capability));
@@ -344,8 +346,8 @@ void kvm_set_cpu_caps(void)
 		F(AVX512VBMI) | F(LA57) | 0 /*PKU*/ | 0 /*OSPKE*/ | F(RDPID) |
 		F(AVX512_VPOPCNTDQ) | F(UMIP) | F(AVX512_VBMI2) | F(GFNI) |
 		F(VAES) | F(VPCLMULQDQ) | F(AVX512_VNNI) | F(AVX512_BITALG) |
-		F(CLDEMOTE) | F(MOVDIRI) | F(MOVDIR64B) | 0 /*WAITPKG*/ |
-		F(SHSTK)
+		F(CLDEMOTE) | F(MOVDIRI) | F(MOVDIR64B) | f_enqcmd |
+		0 /*WAITPKG*/ | F(SHSTK)
 	);
 	/* Set LA57 based on hardware capability. */
 	if (cpuid_ecx(7) & F(LA57))

@@ -5223,6 +5223,18 @@ set_identity_unlock:
 	case KVM_SET_PMU_EVENT_FILTER:
 		r = kvm_vm_ioctl_set_pmu_event_filter(kvm, argp);
 		break;
+	case KVM_SET_USER_PASID: {
+		struct kvm_user_pasid pasid;
+
+		r = -EFAULT;
+		if (copy_from_user(&pasid, argp, sizeof(pasid)))
+			goto out;
+
+		r = -ENOTTY;
+		if (kvm_x86_ops.pasid_trans_supported())
+			r = kvm_x86_ops.set_user_pasid(kvm, &pasid);
+		break;
+	}
 	default:
 		r = -ENOTTY;
 	}
@@ -9681,11 +9693,11 @@ int kvm_arch_hardware_setup(void *opaque)
 	if (boot_cpu_has(X86_FEATURE_XSAVES))
 		rdmsrl(MSR_IA32_XSS, host_xss);
 
+	memcpy(&kvm_x86_ops, ops->runtime_ops, sizeof(kvm_x86_ops));
+
 	r = ops->hardware_setup();
 	if (r != 0)
 		return r;
-
-	memcpy(&kvm_x86_ops, ops->runtime_ops, sizeof(kvm_x86_ops));
 
 	supported_xss = 0;
 	if (kvm_cpu_cap_has(X86_FEATURE_XSAVES))

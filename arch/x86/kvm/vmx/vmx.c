@@ -2538,7 +2538,8 @@ static __init int setup_vmcs_config(struct vmcs_config *vmcs_conf,
 			SECONDARY_EXEC_ENABLE_USR_WAIT_PAUSE |
 			SECONDARY_EXEC_PT_USE_GPA |
 			SECONDARY_EXEC_PT_CONCEAL_VMX |
-			SECONDARY_EXEC_ENABLE_VMFUNC;
+			SECONDARY_EXEC_ENABLE_VMFUNC |
+			SECONDARY_EXEC_PASID_TRANS;
 		if (cpu_has_sgx())
 			opt2 |= SECONDARY_EXEC_ENCLS_EXITING;
 		if (adjust_vmx_controls(min2, opt2,
@@ -4429,6 +4430,13 @@ static void init_vmcs(struct vcpu_vmx *vmx)
 		vmx->pt_desc.guest.output_mask = 0x7F;
 		vmcs_write64(GUEST_IA32_RTIT_CTL, 0);
 	}
+
+	if (cpu_has_vmx_pasid_trans()) {
+		struct kvm_vmx *kvm_vmx = to_kvm_vmx(vmx->vcpu.kvm);
+
+		vmcs_write64(PASID_DIR0, page_to_phys(kvm_vmx->pasid_dir0));
+		vmcs_write64(PASID_DIR1, page_to_phys(kvm_vmx->pasid_dir1));
+	}
 }
 
 static void vmx_vcpu_reset(struct kvm_vcpu *vcpu, bool init_event)
@@ -5726,6 +5734,44 @@ static int handle_encls(struct kvm_vcpu *vcpu)
 	return 1;
 }
 
+static int handle_enqcmd_pasid(struct kvm_vcpu *vcpu)
+{
+	unsigned long flags;
+
+	kvm_debug_ratelimited("[%s] VM exit_qualification=0x%lx\n", __func__,
+			      vmcs_readl(EXIT_QUALIFICATION));
+
+	/*
+	 * it's required to setup PASID translation table using ioctl
+	 * KVM_SET_USER_PASID before using ENQCMD with that PASID in Guest.
+	 * So translation failure is not expected with any valid guest PASID.
+	 *
+	 * One possible case of translation failure is that people are using
+	 * some invalid guest PASIDs. For safety, we have to skip this ENQCMD
+	 * instruction and set ZF flag to 1.
+	 */
+	flags = vmx_get_rflags(vcpu);
+	flags |= X86_EFLAGS_ZF;
+	vmx_set_rflags(vcpu, flags);
+
+	return kvm_skip_emulated_instruction(vcpu);
+}
+
+static int handle_enqcmds_pasid(struct kvm_vcpu *vcpu)
+{
+	unsigned long flags;
+
+	kvm_debug_ratelimited("[%s] VM exit_qualification=0x%lx\n", __func__,
+			      vmcs_readl(EXIT_QUALIFICATION));
+
+	/* Same case as ENQCMD for ENQCMDS */
+	flags = vmx_get_rflags(vcpu);
+	flags |= X86_EFLAGS_ZF;
+	vmx_set_rflags(vcpu, flags);
+
+	return kvm_skip_emulated_instruction(vcpu);
+}
+
 /*
  * The exit handlers return 1 if the exit was handled fully and guest execution
  * may resume.  Otherwise they set the kvm_run parameter to indicate what needs
@@ -5782,6 +5828,8 @@ static int (*kvm_vmx_exit_handlers[])(struct kvm_vcpu *vcpu) = {
 	[EXIT_REASON_VMFUNC]		      = handle_vmx_instruction,
 	[EXIT_REASON_PREEMPTION_TIMER]	      = handle_preemption_timer,
 	[EXIT_REASON_ENCLS]		      = handle_encls,
+	[EXIT_REASON_ENQCMD_PASID]            = handle_enqcmd_pasid,
+	[EXIT_REASON_ENQCMDS_PASID]           = handle_enqcmds_pasid,
 };
 
 static const int kvm_vmx_max_exit_handlers =
@@ -7035,9 +7083,91 @@ free_vpid:
 #define L1TF_MSG_SMT "L1TF CPU bug present and SMT on, data leak possible. See CVE-2018-3646 and https://www.kernel.org/doc/html/latest/admin-guide/hw-vuln/l1tf.html for details.\n"
 #define L1TF_MSG_L1D "L1TF CPU bug present and virtualization mitigation disabled, data leak possible. See CVE-2018-3646 and https://www.kernel.org/doc/html/latest/admin-guide/hw-vuln/l1tf.html for details.\n"
 
+static int vmx_pasid_trans_conf(struct kvm_vmx *kvm_vmx,
+				unsigned int gpasid, u32 table_entry)
+{
+	struct page *pasid_dir, *new_table;
+	unsigned int de_idx, te_idx;
+	u32 *table_base;
+	u64 *dir_base;
+	int ret = 0;
+
+	spin_lock(&kvm_vmx->pasid_trans_lock);
+
+	pasid_dir = PASID_HIGH_DIR(gpasid) ?
+			kvm_vmx->pasid_dir1 : kvm_vmx->pasid_dir0;
+	dir_base = page_address(pasid_dir);
+
+	de_idx = PASID_DIR_ENTRY_IDX(gpasid);
+	te_idx = PASID_TAB_ENTRY_IDX(gpasid);
+
+	if (dir_base[de_idx] & PASID_DIR_ENTRY_PRESENT) {
+		table_base = __va(dir_base[de_idx] & PAGE_MASK);
+	} else {
+		new_table = alloc_page(GFP_ATOMIC | __GFP_ZERO);
+		if (!new_table) {
+			pr_err("PASID translation: fail to alloc table page\n");
+			ret = -ENOMEM;
+			goto done;
+		}
+
+		table_base = page_address(new_table);
+		dir_base[de_idx] = (u64)page_to_phys(new_table) |
+					PASID_DIR_ENTRY_PRESENT;
+	}
+
+	table_base[te_idx] = table_entry;
+
+	pr_debug("%s: Guest PASID=0x%x Table Entry=0x%x\n", __func__,
+		 gpasid, table_entry);
+done:
+	spin_unlock(&kvm_vmx->pasid_trans_lock);
+	return ret;
+}
+
+#define vmx_pasid_trans_clear(kvm_vmx, gpasid) \
+	vmx_pasid_trans_conf(kvm_vmx, gpasid, 0)
+#define vmx_pasid_trans_set(kvm_vmx, gpasid, hpasid) \
+	vmx_pasid_trans_conf(kvm_vmx, gpasid, (hpasid) | PASID_TAB_ENTRY_VALID)
+
+static void vmx_pasid_trans_free(struct page *pasid_dir)
+{
+	u64 *dir_base = page_address(pasid_dir);
+	void *table_base;
+	int de_idx;
+
+	for (de_idx = 0; de_idx < PASID_DIR_ENTRY_NUM; de_idx++) {
+		if (dir_base[de_idx] & PASID_DIR_ENTRY_PRESENT) {
+			table_base = __va(dir_base[de_idx] & PAGE_MASK);
+
+			free_page((unsigned long)table_base);
+		}
+		dir_base[de_idx] = 0;
+	}
+	__free_page(pasid_dir);
+}
+
+static void vmx_vm_alloc_pasid_dirs(struct kvm_vmx *kvm_vmx)
+{
+	kvm_vmx->pasid_dir0 = alloc_page(GFP_KERNEL | __GFP_ZERO);
+	kvm_vmx->pasid_dir1 = alloc_page(GFP_KERNEL | __GFP_ZERO);
+
+	WARN_ON(!kvm_vmx->pasid_dir0 || !kvm_vmx->pasid_dir1);
+}
+
+static void vmx_vm_free_pasid_dirs(struct kvm_vmx *kvm_vmx)
+{
+	vmx_pasid_trans_free(kvm_vmx->pasid_dir0);
+	vmx_pasid_trans_free(kvm_vmx->pasid_dir1);
+}
+
 static int vmx_vm_init(struct kvm *kvm)
 {
 	spin_lock_init(&to_kvm_vmx(kvm)->ept_pointer_lock);
+	spin_lock_init(&to_kvm_vmx(kvm)->pasid_trans_lock);
+
+	if (cpu_has_vmx_pasid_trans())
+		vmx_vm_alloc_pasid_dirs(to_kvm_vmx(kvm));
 
 	if (!ple_gap)
 		kvm->arch.pause_in_guest = true;
@@ -7067,6 +7197,12 @@ static int vmx_vm_init(struct kvm *kvm)
 	}
 	kvm_apicv_init(kvm, enable_apicv);
 	return 0;
+}
+
+static void vmx_vm_destroy(struct kvm *kvm)
+{
+	if (cpu_has_vmx_pasid_trans())
+		vmx_vm_free_pasid_dirs(to_kvm_vmx(kvm));
 }
 
 static int __init vmx_check_processor_compat(void)
@@ -7929,6 +8065,40 @@ static bool vmx_apic_init_signal_blocked(struct kvm_vcpu *vcpu)
 	return to_vmx(vcpu)->nested.vmxon;
 }
 
+static bool vmx_pasid_trans_supported(void)
+{
+	return cpu_has_vmx_pasid_trans();
+}
+
+static int vmx_set_user_pasid(struct kvm *kvm, struct kvm_user_pasid *pasid)
+{
+	struct kvm_vmx *kvm_vmx = to_kvm_vmx(kvm);
+	unsigned int gpasid = pasid->pasid;
+
+	if (!gpasid || gpasid >= (1 << 20))
+		return -EINVAL;
+
+	if (pasid->flags == KVM_USER_PASID_INVALIDATE) {
+		/*
+		 * TODO: ideally it needs to query Host PASID from ioasid using
+		 * Guest PASID + mm information. Compare it with related entry
+		 * value for double confirmation. And finally put Host PASID
+		 * (ioasid) refcount.
+		 */
+		return vmx_pasid_trans_clear(kvm_vmx, gpasid);
+	} else if (!pasid->flags) {
+		/*
+		 * TODO: ideally it needs to query Host PASID from ioasid using
+		 * Guest PASID + mm information. Increase Host PASID (ioasid)
+		 * refcount.
+		 * Currently it only supports 1:1 Host vs Guest PASID mapping.
+		 */
+		return vmx_pasid_trans_set(kvm_vmx, gpasid, gpasid);
+	}
+
+	return -EINVAL;
+}
+
 static void hardware_unsetup(void)
 {
 	if (nested)
@@ -7955,6 +8125,7 @@ static struct kvm_x86_ops vmx_x86_ops __initdata = {
 
 	.vm_size = sizeof(struct kvm_vmx),
 	.vm_init = vmx_vm_init,
+	.vm_destroy = vmx_vm_destroy,
 
 	.vcpu_create = vmx_create_vcpu,
 	.vcpu_free = vmx_free_vcpu,
@@ -8080,6 +8251,9 @@ static struct kvm_x86_ops vmx_x86_ops __initdata = {
 	.nested_get_evmcs_version = NULL,
 	.need_emulation_on_page_fault = vmx_need_emulation_on_page_fault,
 	.apic_init_signal_blocked = vmx_apic_init_signal_blocked,
+
+	.pasid_trans_supported = vmx_pasid_trans_supported,
+	.set_user_pasid = vmx_set_user_pasid,
 };
 
 static __init int hardware_setup(void)

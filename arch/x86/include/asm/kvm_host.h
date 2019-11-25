@@ -1256,6 +1256,9 @@ struct kvm_x86_ops {
 
 	bool (*apic_init_signal_blocked)(struct kvm_vcpu *vcpu);
 	int (*enable_direct_tlbflush)(struct kvm_vcpu *vcpu);
+
+	bool (*pasid_trans_supported)(void);
+	int (*set_user_pasid)(struct kvm *kvm, struct kvm_user_pasid *pasid);
 };
 
 struct kvm_x86_init_ops {

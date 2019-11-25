@@ -69,6 +69,7 @@
 #define SECONDARY_EXEC_ENABLE_PML               VMCS_CONTROL_BIT(PAGE_MOD_LOGGING)
 #define SECONDARY_EXEC_PT_CONCEAL_VMX		VMCS_CONTROL_BIT(PT_CONCEAL_VMX)
 #define SECONDARY_EXEC_XSAVES			VMCS_CONTROL_BIT(XSAVES)
+#define SECONDARY_EXEC_PASID_TRANS		VMCS_CONTROL_BIT(PASID)
 #define SECONDARY_EXEC_MODE_BASED_EPT_EXEC	VMCS_CONTROL_BIT(MODE_BASED_EPT_EXEC)
 #define SECONDARY_EXEC_PT_USE_GPA		VMCS_CONTROL_BIT(PT_USE_GPA)
 #define SECONDARY_EXEC_TSC_SCALING              VMCS_CONTROL_BIT(TSC_SCALING)
@@ -221,6 +222,10 @@ enum vmcs_field {
 	ENCLS_EXITING_BITMAP_HIGH	= 0x0000202F,
 	TSC_MULTIPLIER                  = 0x00002032,
 	TSC_MULTIPLIER_HIGH             = 0x00002033,
+	PASID_DIR0                      = 0x00002038,
+	PASID_DIR0_HIGH                 = 0x00002039,
+	PASID_DIR1                      = 0x0000203a,
+	PASID_DIR1_HIGH                 = 0x0000203b,
 	GUEST_PHYSICAL_ADDRESS          = 0x00002400,
 	GUEST_PHYSICAL_ADDRESS_HIGH     = 0x00002401,
 	VMCS_LINK_POINTER               = 0x00002800,
@@ -613,5 +618,17 @@ enum vmx_l1d_flush_state {
 };
 
 extern enum vmx_l1d_flush_state l1tf_vmx_mitigation;
+
+/* Guest PASID for PASID Virtualization */
+#define PASID_HIGH_DIR(id)              (((id) >> 19) & 0x1)
+#define PASID_DIR_ENTRY_IDX(id)         (((id) >> 10) & 0x1ff)
+#define PASID_TAB_ENTRY_IDX(id)         ((id) & 0x3ff)
+
+/* PASID Directory Entry - u64 */
+#define PASID_DIR_ENTRY_PRESENT         (1ULL << 0)
+#define PASID_DIR_ENTRY_NUM             512
+
+/* PASID Table Entry - u32 */
+#define PASID_TAB_ENTRY_VALID           (1 << 31)
 
 #endif
