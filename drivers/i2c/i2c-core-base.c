@@ -1656,6 +1656,12 @@ void i2c_parse_fw_timings(struct device *dev, struct i2c_timings *t, bool use_de
 		t->sda_fall_ns = t->scl_fall_ns;
 
 	device_property_read_u32(dev, "i2c-sda-hold-time-ns", &t->sda_hold_ns);
+
+	device_property_read_u32(dev, "i2c-digital-filter-width-ns",
+				 &t->digital_filter_width_ns);
+
+	device_property_read_u32(dev, "i2c-analog-filter-cutoff-frequency",
+				 &t->analog_filter_cutoff_freq_hz);
 }
 EXPORT_SYMBOL_GPL(i2c_parse_fw_timings);
 
@@ -1736,38 +1742,6 @@ void i2c_del_driver(struct i2c_driver *driver)
 EXPORT_SYMBOL(i2c_del_driver);
 
 /* ------------------------------------------------------------------------- */
-
-/**
- * i2c_use_client - increments the reference count of the i2c client structure
- * @client: the client being referenced
- *
- * Each live reference to a client should be refcounted. The driver model does
- * that automatically as part of driver binding, so that most drivers don't
- * need to do this explicitly: they hold a reference until they're unbound
- * from the device.
- *
- * A pointer to the client with the incremented reference counter is returned.
- */
-struct i2c_client *i2c_use_client(struct i2c_client *client)
-{
-	if (client && get_device(&client->dev))
-		return client;
-	return NULL;
-}
-EXPORT_SYMBOL(i2c_use_client);
-
-/**
- * i2c_release_client - release a use of the i2c client structure
- * @client: the client being no longer referenced
- *
- * Must be called when a user of a client is finished with it.
- */
-void i2c_release_client(struct i2c_client *client)
-{
-	if (client)
-		put_device(&client->dev);
-}
-EXPORT_SYMBOL(i2c_release_client);
 
 struct i2c_cmd_arg {
 	unsigned	cmd;
