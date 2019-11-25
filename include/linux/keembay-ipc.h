@@ -25,11 +25,15 @@ enum {
 	KMB_IPC_NODE_LEON_MSS,
 };
 
-int intel_keembay_ipc_open_channel(u8 node_id, u16 chan_id);
-int intel_keembay_ipc_close_channel(u8 node_id, u16 chan_id);
-int intel_keembay_ipc_send(u8 node_id, u16 chan_id, uint32_t paddr,
-			   size_t size);
-int intel_keembay_ipc_recv(u8 node_id, u16 chan_id, uint32_t *paddr,
-			   size_t *size, u32 timeout);
+int intel_keembay_ipc_open_channel(struct device *dev, u8 node_id, u16 chan_id);
+
+int intel_keembay_ipc_close_channel(struct device *dev, u8 node_id,
+				    u16 chan_id);
+
+int intel_keembay_ipc_send(struct device *dev, u8 node_id, u16 chan_id,
+			   u32 vpu_addr, size_t size);
+
+int intel_keembay_ipc_recv(struct device *dev, u8 node_id, u16 chan_id,
+			   u32 *vpu_addr, size_t *size, u32 timeout);
 
 #endif /* __KEEMBAY_IPC_H */
