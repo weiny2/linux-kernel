@@ -7,11 +7,13 @@
 
 #include <linux/debugfs.h>
 #include <linux/delay.h>
+#include <linux/device.h>
 #include <linux/init.h>
 #include <linux/keembay-ipc.h>
 #include <linux/kernel.h>
 #include <linux/kthread.h>
 #include <linux/module.h>
+#include <linux/platform_device.h>
 #include <linux/slab.h>
 #include <linux/string.h>
 
@@ -46,6 +48,10 @@ static ssize_t test_loop_wr(struct file *filp, const char __user *buf,
 			       size_t count, loff_t *fpos);
 static ssize_t test_long_send_wr(struct file *filp, const char __user *buf,
 				 size_t count, loff_t *fpos);
+
+/* The Keem Bay IPC device under test. */
+static struct device *kmb_ipc_dev;
+
 /*
  * The dentry of the base debugfs directory for thie module
  * /<dbgfs>/kmb_ipc_test
@@ -115,40 +121,42 @@ static int test_loop_thread_fn(void *data)
 	get_task_comm(name, current);
 	pr_info("%s: started\n", name);
 
-	rc = intel_keembay_ipc_open_channel(KMB_IPC_NODE_LEON_MSS, chan_id);
+	rc = intel_keembay_ipc_open_channel(kmb_ipc_dev, KMB_IPC_NODE_LEON_MSS,
+					    chan_id);
 	if (rc) {
 		pr_info("Failed to open channel: %d\n", rc);
 		goto err;
 	}
 
 	while (!kthread_should_stop()) {
-		rc = intel_keembay_ipc_recv(KMB_IPC_NODE_LEON_MSS, chan_id,
-					    &paddr1, &size1, U32_MAX);
+		rc = intel_keembay_ipc_recv(kmb_ipc_dev, KMB_IPC_NODE_LEON_MSS,
+					    chan_id, &paddr1, &size1, U32_MAX);
 		if (rc) {
 			pr_info("Failed 1st recv(): %d\n", rc);
 			goto err;
 		}
-		rc = intel_keembay_ipc_recv(KMB_IPC_NODE_LEON_MSS, chan_id,
-					    &paddr2, &size2, U32_MAX);
+		rc = intel_keembay_ipc_recv(kmb_ipc_dev, KMB_IPC_NODE_LEON_MSS,
+					    chan_id, &paddr2, &size2, U32_MAX);
 		if (rc) {
 			pr_info("Failed 2nd recv(): %d\n", rc);
 			goto err;
 		}
-		rc = intel_keembay_ipc_send(KMB_IPC_NODE_LEON_MSS, chan_id,
-					    paddr1, size1);
+		rc = intel_keembay_ipc_send(kmb_ipc_dev, KMB_IPC_NODE_LEON_MSS,
+					    chan_id, paddr1, size1);
 		if (rc) {
 			pr_info("Failed 1st send(): %d\n", rc);
 			goto err;
 		}
-		rc = intel_keembay_ipc_send(KMB_IPC_NODE_LEON_MSS, chan_id,
-					    paddr2, size2);
+		rc = intel_keembay_ipc_send(kmb_ipc_dev, KMB_IPC_NODE_LEON_MSS,
+					    chan_id, paddr2, size2);
 		if (rc) {
 			pr_info("Failed 2nd send(): %d\n", rc);
 			goto err;
 		}
 	}
 
-	rc = intel_keembay_ipc_close_channel(KMB_IPC_NODE_LEON_MSS, chan_id);
+	rc = intel_keembay_ipc_close_channel(kmb_ipc_dev, KMB_IPC_NODE_LEON_MSS,
+					     chan_id);
 	if (rc) {
 		pr_info("Failed to close channel: %d\n", rc);
 		/* Do not jump to error, as we are exiting already. */
@@ -175,15 +183,16 @@ static int test_long_send_thread_fn(void *data)
 	get_task_comm(name, current);
 	pr_info("%s: started\n", name);
 
-	rc = intel_keembay_ipc_open_channel(KMB_IPC_NODE_LEON_MSS, chan_id);
+	rc = intel_keembay_ipc_open_channel(kmb_ipc_dev, KMB_IPC_NODE_LEON_MSS,
+					    chan_id);
 	if (rc) {
 		pr_info("Failed to open channel: %d\n", rc);
 		goto err_open;
 	}
 
 	while (!kthread_should_stop() && send_cnt < send_limit) {
-		rc = intel_keembay_ipc_send(KMB_IPC_NODE_LEON_MSS, chan_id,
-					    0xDEADBEEF, 42);
+		rc = intel_keembay_ipc_send(kmb_ipc_dev, KMB_IPC_NODE_LEON_MSS,
+					    chan_id, 0xDEADBEEF, 42);
 		/* If FIFO full sleep and retry. */
 		if (rc == -EBUSY) {
 			usleep_range(1000, 2000);
@@ -198,7 +207,8 @@ static int test_long_send_thread_fn(void *data)
 			pr_info("send_cnt: %u\n", send_cnt);
 	}
 
-	rc = intel_keembay_ipc_close_channel(KMB_IPC_NODE_LEON_MSS, chan_id);
+	rc = intel_keembay_ipc_close_channel(kmb_ipc_dev, KMB_IPC_NODE_LEON_MSS,
+					     chan_id);
 	if (rc) {
 		pr_info("Failed to close channel: %d\n", rc);
 		/* Do not jump to error, as we are exiting already. */
@@ -245,8 +255,8 @@ static ssize_t recv_wr(struct file *filp, const char __user *buf,
 	if (rc)
 		return rc;
 
-	rc = intel_keembay_ipc_recv(KMB_IPC_NODE_LEON_MSS, chan_id,
-					    &paddr, &size, RECV_TIMEOUT);
+	rc = intel_keembay_ipc_recv(kmb_ipc_dev, KMB_IPC_NODE_LEON_MSS, chan_id,
+				    &paddr, &size, RECV_TIMEOUT);
 	if (rc)
 		pr_info("recv(chan_id=%lu) failed: %d\n", chan_id, rc);
 	else
@@ -273,7 +283,7 @@ static ssize_t send_wr(struct file *filp, const char __user *buf,
 	if (rc)
 		return rc;
 
-	rc = intel_keembay_ipc_send(KMB_IPC_NODE_LEON_MSS, chan_id,
+	rc = intel_keembay_ipc_send(kmb_ipc_dev, KMB_IPC_NODE_LEON_MSS, chan_id,
 				    0xDEADBEEF, 48);
 	pr_info("send(chan_id=%lu): %d\n", chan_id, rc);
 
@@ -292,7 +302,8 @@ static ssize_t open_wr(struct file *filp, const char __user *buf,
 	if (rc)
 		return rc;
 
-	rc = intel_keembay_ipc_open_channel(KMB_IPC_NODE_LEON_MSS, chan_id);
+	rc = intel_keembay_ipc_open_channel(kmb_ipc_dev, KMB_IPC_NODE_LEON_MSS,
+					    chan_id);
 	pr_info("open(chan_id=%lu): %d\n", chan_id, rc);
 
 	return count;
@@ -311,7 +322,8 @@ static ssize_t close_wr(struct file *filp, const char __user *buf,
 	if (rc)
 		return rc;
 
-	rc = intel_keembay_ipc_close_channel(KMB_IPC_NODE_LEON_MSS, chan_id);
+	rc = intel_keembay_ipc_close_channel(kmb_ipc_dev, KMB_IPC_NODE_LEON_MSS,
+					     chan_id);
 	pr_info("close(chan_id=%lu): %d\n", chan_id, rc);
 
 	return count;
@@ -319,7 +331,7 @@ static ssize_t close_wr(struct file *filp, const char __user *buf,
 
 /* Write operation for the 'test-loop' file. */
 static ssize_t test_loop_wr(struct file *filp, const char __user *buf,
-			       size_t count, loff_t *fpos)
+			    size_t count, loff_t *fpos)
 {
 	unsigned long chan_id;
 	struct task_struct *test_loop_thread;
@@ -446,6 +458,18 @@ error:
 	return retv;
 }
 
+static struct device *get_ipc_dev(void)
+{
+	struct device_driver *ipc_drv;
+
+	ipc_drv = driver_find("kmb-ipc-driver", &platform_bus_type);
+	if (!ipc_drv) {
+		pr_err("Cannot find IPC driver\n");
+		return NULL;
+	}
+	return driver_find_next_device(ipc_drv, NULL);
+}
+
 /* Remove the DebugFS tree. */
 static void remove_ipc_test_dbgfs_tree(void)
 {
@@ -459,6 +483,13 @@ static void remove_ipc_test_dbgfs_tree(void)
 static int __init kmb_ipc_test_init(void)
 {
 	pr_info("TEST_MOD: Init\n");
+	kmb_ipc_dev = get_ipc_dev();
+	if (!kmb_ipc_dev) {
+		pr_err("Cannot find the IPC device\n");
+		return -ENODEV;
+	}
+	pr_info("Device under test: %s\n", dev_name(kmb_ipc_dev));
+
 	return create_ipc_test_dbgfs_tree();
 }
 
@@ -466,6 +497,7 @@ static void __exit kmb_ipc_test_exit(void)
 {
 	pr_info("TEST_MOD: Exit\n");
 	remove_ipc_test_dbgfs_tree();
+	put_device(kmb_ipc_dev);
 }
 
 module_init(kmb_ipc_test_init);

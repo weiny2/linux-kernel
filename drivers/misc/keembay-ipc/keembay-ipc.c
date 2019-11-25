@@ -184,9 +184,9 @@ struct keembay_ipc_dev {
  */
 struct rx_data {
 	/* The VPU address of the received data. */
-	uint32_t data_vpu_addr;
+	u32 data_vpu_addr;
 	/* The size of the received data. */
-	uint32_t data_size;
+	u32 data_size;
 	/* List head for creating a list of rx_data elements. */
 	struct list_head list;
 };
@@ -199,7 +199,7 @@ struct rx_data {
  * details.
  */
 struct rx_circ_buf {
-	uint32_t buf[RX_SW_FIFO_LEN];
+	u32 buf[RX_SW_FIFO_LEN];
 	int head;
 	int tail;
 };
@@ -217,14 +217,6 @@ static void rx_tasklet_func(unsigned long);
  * The RX ISR writes to this FIFO and the RX tasklet reads from it.
  */
 static struct rx_circ_buf rx_sw_fifo;
-
-/*
- * Global variable pointing to our KeemBay IPC Device.
- *
- * This is meant to be used only when platform_get_drvdata() cannot be used
- * because we lack a reference to our platform_device.
- */
-static struct keembay_ipc_dev *kmb_ipc_dev;
 
 /*
  * Functions related to reserved-memory sub-devices.
@@ -352,13 +344,13 @@ static int local_fifo_cnt(struct keembay_ipc_dev *ipc_dev)
 	 * Bits 15:8:  IPC FIFO write pointer
 	 * Bits  7:0:  IPC FIFO read pointer
 	 */
-	const uint32_t val = ioread32(ipc_dev->local_fifo_reg + IPC_FIFO_STAT);
+	const u32 val = ioread32(ipc_dev->local_fifo_reg + IPC_FIFO_STAT);
 
 	return (val >> 16) & 0xFF;
 }
 
 /* Extract an entry from the FIFO. */
-static uint32_t local_fifo_get(struct keembay_ipc_dev *ipc_dev)
+static u32 local_fifo_get(struct keembay_ipc_dev *ipc_dev)
 {
 	/*
 	 * TIM_IPC_FIFO_ATM
@@ -399,7 +391,7 @@ static void local_fifo_irq_enable(struct keembay_ipc_dev *ipc_dev)
 }
 
 /* Add an entry to a remote FIFO. */
-static void remote_fifo_put(struct keembay_ipc_dev *ipc_dev, uint32_t entry)
+static void remote_fifo_put(struct keembay_ipc_dev *ipc_dev, u32 entry)
 {
 	/*
 	 * TIM_IPC_FIFO.
@@ -457,9 +449,9 @@ static bool remote_fifo_overflow(struct keembay_ipc_dev *ipc_dev)
 	 *
 	 * Writing 0 to any bit position has not effect.
 	 */
-	const uint32_t offset = (MY_NODE_ID < 32) ? IPC_FIFO_OF_FLAG0
+	const u32 offset = (MY_NODE_ID < 32) ? IPC_FIFO_OF_FLAG0
 						  : IPC_FIFO_OF_FLAG1;
-	const uint32_t mask = 1 << (MY_NODE_ID % 32);
+	const u32 mask = 1 << (MY_NODE_ID % 32);
 	const bool rc = ioread32(ipc_dev->remote_fifo_reg + offset) & mask;
 	/* Clear our overflow bit, if we overflowed. */
 	if (rc)
@@ -707,7 +699,7 @@ static int ipc_hw_init(struct platform_device *pdev,
 	spin_lock_init(&ipc_dev->local_fifo_irq_lock);
 	dev_info(&pdev->dev, "Registering handler for IRQ %d\n", irq);
 	rc = devm_request_irq(&pdev->dev, irq, local_fifo_irq_handler, 0,
-			      "keembay-ipc", ipc_dev);
+			      dev_name(&pdev->dev), ipc_dev);
 	return 0;
 }
 
@@ -776,9 +768,6 @@ static int kmb_ipc_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, ipc_dev);
 
-	/* Set the global reference to our device. */
-	kmb_ipc_dev = ipc_dev;
-
 	return 0;
 }
 
@@ -832,7 +821,7 @@ static int validate_link_chan(struct device *dev, u8 node_id, u16 chan_id)
  *	   is not in the expected memory range.
  */
 static void *ipc_vpu_to_virt(const struct ipc_buf_mem *ipc_mem,
-			    uint32_t vpu_addr)
+			    u32 vpu_addr)
 {
 	if (unlikely(vpu_addr < ipc_mem->dma_handle) ||
 		     vpu_addr >= (ipc_mem->dma_handle + ipc_mem->size))
@@ -850,7 +839,7 @@ static void *ipc_vpu_to_virt(const struct ipc_buf_mem *ipc_mem,
  * Return: 0 on success, negative error code otherwise.
  */
 static int ipc_virt_to_vpu(struct ipc_buf_mem *ipc_mem, void *vaddr,
-			    uint32_t *vpu_addr)
+			    u32 *vpu_addr)
 {
 	if (unlikely((ipc_mem->dma_handle + ipc_mem->size) > 0xFFFFFFFF))
 		return -EINVAL;
@@ -873,7 +862,7 @@ static int ipc_virt_to_vpu(struct ipc_buf_mem *ipc_mem, void *vaddr,
  *   buffer).
  * - Add an RX Data descriptor (data ptr and data size) to the channel RX queue.
  */
-static void process_rx_fifo_entry(uint32_t entry,
+static void process_rx_fifo_entry(u32 entry,
 				  struct keembay_ipc_dev *ipc_dev)
 {
 	struct device *dev = &ipc_dev->plat_dev->dev;
@@ -948,7 +937,7 @@ exit:
  */
 static void rx_tasklet_func(unsigned long ipc_dev_ptr)
 {
-	uint32_t entry;
+	u32 entry;
 	/*
 	 * Memory barrier: make sure that we get buffer head before any other
 	 * operation on the circular buffer.
@@ -1027,7 +1016,7 @@ static int tx_data_send(struct keembay_ipc_dev *ipc_dev,
 {
 	struct kmb_ipc_buf *ipc_buf = NULL;
 	struct device *dev = &ipc_dev->plat_dev->dev;
-	uint32_t entry;
+	u32 entry;
 	int rc;
 
 	dev_dbg(dev, "%s(chan=%u)\n", __func__, tx_data->chan_id);
@@ -1284,13 +1273,14 @@ exit:
  *
  * Return:	0 on success, negative error code otherwise.
  */
-int intel_keembay_ipc_open_channel(u8 node_id, u16 chan_id)
+int intel_keembay_ipc_open_channel(struct device *dev, u8 node_id, u16 chan_id)
 {
-	int rc;
-	struct device *dev = &kmb_ipc_dev->plat_dev->dev;
-	struct ipc_link *link = &kmb_ipc_dev->leon_mss_link;
+	/* TODO: ensure dev is not NULL. */
+	struct keembay_ipc_dev *ipc_dev = dev_get_drvdata(dev);
+	struct ipc_link *link = &ipc_dev->leon_mss_link;
 	struct ipc_chan *chan, *cur_chan;
 	unsigned long flags;
+	int rc;
 
 	rc = validate_link_chan(dev, node_id, chan_id);
 	if (rc)
@@ -1328,11 +1318,12 @@ EXPORT_SYMBOL(intel_keembay_ipc_open_channel);
  *
  * Return:	0 on success, negative error code otherwise.
  */
-int intel_keembay_ipc_close_channel(u8 node_id, u16 chan_id)
+int intel_keembay_ipc_close_channel(struct device *dev, u8 node_id, u16 chan_id)
 {
+	/* TODO: ensure dev is not NULL. */
+	struct keembay_ipc_dev *ipc_dev = dev_get_drvdata(dev);
+	struct ipc_link *link = &ipc_dev->leon_mss_link;
 	int rc;
-	struct device *dev = &kmb_ipc_dev->plat_dev->dev;
-	struct ipc_link *link = &kmb_ipc_dev->leon_mss_link;
 
 	rc = validate_link_chan(dev, node_id, chan_id);
 	if (rc)
@@ -1356,11 +1347,12 @@ EXPORT_SYMBOL(intel_keembay_ipc_close_channel);
  *
  * Return:	0 on success, negative error code otherwise.
  */
-int intel_keembay_ipc_send(u8 node_id, u16 chan_id, uint32_t vpu_addr,
-			   size_t size)
+int intel_keembay_ipc_send(struct device *dev, u8 node_id, u16 chan_id,
+			   u32 vpu_addr, size_t size)
 {
-	struct ipc_link *link = &kmb_ipc_dev->leon_mss_link;
-	struct device *dev = &kmb_ipc_dev->plat_dev->dev;
+	/* TODO: ensure dev is not NULL. */
+	struct keembay_ipc_dev *ipc_dev = dev_get_drvdata(dev);
+	struct ipc_link *link = &ipc_dev->leon_mss_link;
 	struct ipc_chan *chan;
 	int idx, rc;
 
@@ -1381,7 +1373,7 @@ int intel_keembay_ipc_send(u8 node_id, u16 chan_id, uint32_t vpu_addr,
 		goto exit;
 	}
 
-	rc = __ipc_send(kmb_ipc_dev, node_id, chan_id, vpu_addr, size);
+	rc = __ipc_send(ipc_dev, node_id, chan_id, vpu_addr, size);
 exit:
 	/* End sleepable RCU critical section. */
 	srcu_read_unlock(&link->srcu_sp[chan_id], idx);
@@ -1402,11 +1394,12 @@ EXPORT_SYMBOL(intel_keembay_ipc_send);
  *
  * Return:	0 on success, negative error code otherwise
  */
-int intel_keembay_ipc_recv(u8 node_id, u16 chan_id, uint32_t *vpu_addr,
-			   size_t *size, u32 timeout)
+int intel_keembay_ipc_recv(struct device *dev, u8 node_id, u16 chan_id,
+			   u32 *vpu_addr, size_t *size, u32 timeout)
 {
-	struct ipc_link *link = &kmb_ipc_dev->leon_mss_link;
-	struct device *dev = &kmb_ipc_dev->plat_dev->dev;
+	/* TODO: ensure dev is not NULL. */
+	struct keembay_ipc_dev *ipc_dev = dev_get_drvdata(dev);
+	struct ipc_link *link = &ipc_dev->leon_mss_link;
 	struct ipc_chan *chan;
 	struct rx_data *rx_entry;
 	unsigned long flags;

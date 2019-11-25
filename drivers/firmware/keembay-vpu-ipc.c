@@ -19,6 +19,7 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
+#include <linux/of_platform.h>
 #include <linux/of_reserved_mem.h>
 #include <linux/platform_device.h>
 
@@ -211,6 +212,7 @@ struct vpu_ipc_dev {
 	unsigned int nce_wdt_count;
 	unsigned int mss_wdt_count;
 	wait_queue_head_t ready_queue;
+	struct device *ipc_dev;
 };
 
 enum keembay_vpu_event {
@@ -225,7 +227,7 @@ enum keembay_vpu_event {
 	KEEMBAY_VPU_EVENT_MSS_READY_FAIL
 };
 
-static struct vpu_ipc_dev *vpu_ipc_dev;
+static struct vpu_ipc_dev *kmb_vpu_ipc_dev;
 
 /**
  * vpu_ipc_handle_event() - Handle events and optionally update state
@@ -550,6 +552,49 @@ res_mem_setup_fail:
 	of_reserved_mem_device_release(dev);
 
 	return rc;
+}
+
+static void ipc_device_put(struct vpu_ipc_dev *vpu_dev)
+{
+	put_device(vpu_dev->ipc_dev);
+}
+
+static int ipc_device_get(struct vpu_ipc_dev *vpu_dev)
+{
+	struct device *dev = &vpu_dev->pdev->dev;
+	struct device_node *np;
+	struct platform_device *pdev;
+
+	np = of_parse_phandle(dev->of_node, "intel,keembay-ipc", 0);
+	if (!np) {
+		dev_warn(dev, "Cannot find phandle to IPC device\n");
+		/*
+		 * For (temporary) retro-compatibility, if the IPC phandle is
+		 * not defined, we try to find an IPC device whose DT node is a
+		 * sibling of the VPU node.
+		 */
+		dev_warn(dev, "Fallback: looking for a sibling IPC node\n");
+		np = of_get_compatible_child(dev->parent->of_node,
+					     "intel,keembay-ipc");
+		if (!np) {
+			dev_err(dev, "Couldn't find a sibling IPC node\n");
+			return -ENODEV;
+		}
+	}
+
+	pdev = of_find_device_by_node(np);
+	if (!pdev) {
+		dev_info(dev, "IPC device not probed\n");
+		of_node_put(np);
+		return -EPROBE_DEFER;
+	}
+
+	vpu_dev->ipc_dev = get_device(&pdev->dev);
+	of_node_put(np);
+
+	dev_info(dev, "Using IPC device: %s\n", dev_name(vpu_dev->ipc_dev));
+
+	return 0;
 }
 
 static int retrieve_clocks(struct vpu_ipc_dev *vpu_dev)
@@ -996,7 +1041,7 @@ static int ready_message_wait_thread(void *arg)
 	 * We will wait a few seconds for the message. We will
 	 * complete earlier if the message is received earlier.
 	 */
-	rc = intel_keembay_ipc_recv(KMB_IPC_NODE_LEON_MSS,
+	rc = intel_keembay_ipc_recv(vpu_dev->ipc_dev, KMB_IPC_NODE_LEON_MSS,
 				    READY_MESSAGE_IPC_CHANNEL, &paddr, &size,
 				    READY_MESSAGE_TIMEOUT_MS);
 	if (rc < 0) {
@@ -1006,7 +1051,8 @@ static int ready_message_wait_thread(void *arg)
 	}
 
 	/* Close the channel. */
-	close_rc = intel_keembay_ipc_close_channel(KMB_IPC_NODE_LEON_MSS,
+	close_rc = intel_keembay_ipc_close_channel(vpu_dev->ipc_dev,
+						   KMB_IPC_NODE_LEON_MSS,
 						   READY_MESSAGE_IPC_CHANNEL);
 	if (close_rc < 0)
 		dev_warn(dev, "Couldn't close IPC channel.\n");
@@ -1077,7 +1123,8 @@ static int kickoff_vpu_sequence(struct vpu_ipc_dev *vpu_dev,
 	 * the VPU, we may miss the message, as the IPC driver will
 	 * discard messages for unopened channels.
 	 */
-	rc = intel_keembay_ipc_open_channel(KMB_IPC_NODE_LEON_MSS,
+	rc = intel_keembay_ipc_open_channel(vpu_dev->ipc_dev,
+					    KMB_IPC_NODE_LEON_MSS,
 					    READY_MESSAGE_IPC_CHANNEL);
 	if (rc < 0) {
 		dev_err(dev,
@@ -1108,7 +1155,8 @@ static int kickoff_vpu_sequence(struct vpu_ipc_dev *vpu_dev,
 close_and_kickoff_failed:
 	/* Close the channel. */
 	error_close_rc = intel_keembay_ipc_close_channel(
-		KMB_IPC_NODE_LEON_MSS, READY_MESSAGE_IPC_CHANNEL);
+				vpu_dev->ipc_dev, KMB_IPC_NODE_LEON_MSS,
+				READY_MESSAGE_IPC_CHANNEL);
 	if (error_close_rc < 0) {
 		dev_err(dev, "Couldn't close IPC channel.\n");
 		/*
@@ -1123,27 +1171,31 @@ kickoff_failed:
 
 int intel_keembay_vpu_ipc_open_channel(u8 node_id, u16 chan_id)
 {
-	return intel_keembay_ipc_open_channel(node_id, chan_id);
+	return intel_keembay_ipc_open_channel(kmb_vpu_ipc_dev->ipc_dev,
+					      node_id, chan_id);
 }
 EXPORT_SYMBOL(intel_keembay_vpu_ipc_open_channel);
 
 int intel_keembay_vpu_ipc_close_channel(u8 node_id, u16 chan_id)
 {
-	return intel_keembay_ipc_close_channel(node_id, chan_id);
+	return intel_keembay_ipc_close_channel(kmb_vpu_ipc_dev->ipc_dev,
+					       node_id, chan_id);
 }
 EXPORT_SYMBOL(intel_keembay_vpu_ipc_close_channel);
 
 int intel_keembay_vpu_ipc_send(u8 node_id, u16 chan_id, uint32_t paddr,
 			       size_t size)
 {
-	return intel_keembay_ipc_send(node_id, chan_id, paddr, size);
+	return intel_keembay_ipc_send(kmb_vpu_ipc_dev->ipc_dev,
+				      node_id, chan_id, paddr, size);
 }
 EXPORT_SYMBOL(intel_keembay_vpu_ipc_send);
 
 int intel_keembay_vpu_ipc_recv(u8 node_id, u16 chan_id, uint32_t *paddr,
 			       size_t *size, u32 timeout)
 {
-	return intel_keembay_ipc_recv(node_id, chan_id, paddr, size, timeout);
+	return intel_keembay_ipc_recv(kmb_vpu_ipc_dev->ipc_dev,
+				      node_id, chan_id, paddr, size, timeout);
 }
 EXPORT_SYMBOL(intel_keembay_vpu_ipc_recv);
 
@@ -1173,9 +1225,9 @@ int intel_keembay_vpu_startup(const char *firmware_name)
 	int rc;
 	int event_rc;
 	const struct firmware *fw;
-	struct device *dev = &vpu_ipc_dev->pdev->dev;
+	struct device *dev = &kmb_vpu_ipc_dev->pdev->dev;
 
-	rc = vpu_ipc_handle_event(vpu_ipc_dev, KEEMBAY_VPU_EVENT_BOOT);
+	rc = vpu_ipc_handle_event(kmb_vpu_ipc_dev, KEEMBAY_VPU_EVENT_BOOT);
 	if (rc < 0) {
 		dev_err(dev, "Can't start in this state.\n");
 		return rc;
@@ -1184,28 +1236,28 @@ int intel_keembay_vpu_startup(const char *firmware_name)
 	dev_info(dev, "Keem Bay VPU IPC start with %s.\n", firmware_name);
 
 	/* Request firmware and wait for it. */
-	rc = request_firmware(&fw, firmware_name, &vpu_ipc_dev->pdev->dev);
+	rc = request_firmware(&fw, firmware_name, &kmb_vpu_ipc_dev->pdev->dev);
 	if (rc < 0) {
 		dev_err(dev, "Couldn't find firmware: %d\n", rc);
 		goto boot_failed_no_fw;
 	}
 
 	/* Do checks on the firmware header. */
-	rc = parse_fw_header(vpu_ipc_dev, fw);
+	rc = parse_fw_header(kmb_vpu_ipc_dev, fw);
 	if (rc < 0) {
 		dev_err(dev, "Firmware checks failed.\n");
 		goto boot_failed;
 	}
 
 	/* Write configuration data. */
-	rc = setup_boot_parameters(vpu_ipc_dev);
+	rc = setup_boot_parameters(kmb_vpu_ipc_dev);
 	if (rc < 0) {
 		dev_err(dev, "Failed to set up boot parameters.\n");
 		goto boot_failed;
 	}
 
 	/* Try 'boot' sequence */
-	rc = kickoff_vpu_sequence(vpu_ipc_dev, request_vpu_boot);
+	rc = kickoff_vpu_sequence(kmb_vpu_ipc_dev, request_vpu_boot);
 	if (rc < 0) {
 		dev_err(dev, "Failed to boot VPU.\n");
 		goto boot_failed;
@@ -1218,8 +1270,8 @@ boot_failed:
 	release_firmware(fw);
 
 boot_failed_no_fw:
-	event_rc = vpu_ipc_handle_event(vpu_ipc_dev,
-			KEEMBAY_VPU_EVENT_BOOT_FAILED);
+	event_rc = vpu_ipc_handle_event(kmb_vpu_ipc_dev,
+					KEEMBAY_VPU_EVENT_BOOT_FAILED);
 	if (event_rc < 0)
 		dev_err(dev, "Fatal error: failed to handle fail event: %d.\n",
 				event_rc);
@@ -1242,9 +1294,9 @@ int intel_keembay_vpu_reset(void)
 {
 	int rc;
 	int event_rc;
-	struct device *dev = &vpu_ipc_dev->pdev->dev;
+	struct device *dev = &kmb_vpu_ipc_dev->pdev->dev;
 
-	rc = vpu_ipc_handle_event(vpu_ipc_dev, KEEMBAY_VPU_EVENT_RESET);
+	rc = vpu_ipc_handle_event(kmb_vpu_ipc_dev, KEEMBAY_VPU_EVENT_RESET);
 	if (rc < 0) {
 		dev_err(dev, "Can't reset in this state.\n");
 		return rc;
@@ -1253,7 +1305,7 @@ int intel_keembay_vpu_reset(void)
 	dev_info(dev, "Keem Bay VPU IPC reset.\n");
 
 	/* Try 'reset' sequence */
-	rc = kickoff_vpu_sequence(vpu_ipc_dev, request_vpu_reset);
+	rc = kickoff_vpu_sequence(kmb_vpu_ipc_dev, request_vpu_reset);
 	if (rc < 0) {
 		dev_err(dev, "Failed to reset VPU.\n");
 		goto reset_failed;
@@ -1263,8 +1315,8 @@ int intel_keembay_vpu_reset(void)
 
 reset_failed:
 	/* Reset failed somewhere, reset the state. */
-	event_rc = vpu_ipc_handle_event(vpu_ipc_dev,
-			KEEMBAY_VPU_EVENT_BOOT_FAILED);
+	event_rc = vpu_ipc_handle_event(kmb_vpu_ipc_dev,
+					KEEMBAY_VPU_EVENT_BOOT_FAILED);
 	if (event_rc < 0)
 		dev_err(dev, "Fatal error: failed to handle fail event: %d.\n",
 				event_rc);
@@ -1287,9 +1339,9 @@ int intel_keembay_vpu_stop(void)
 {
 	int rc;
 	int event_rc;
-	struct device *dev = &vpu_ipc_dev->pdev->dev;
+	struct device *dev = &kmb_vpu_ipc_dev->pdev->dev;
 
-	rc = vpu_ipc_handle_event(vpu_ipc_dev, KEEMBAY_VPU_EVENT_STOP);
+	rc = vpu_ipc_handle_event(kmb_vpu_ipc_dev, KEEMBAY_VPU_EVENT_STOP);
 	if (rc < 0) {
 		dev_err(dev, "Can't stop in this state.\n");
 		return rc;
@@ -1298,13 +1350,13 @@ int intel_keembay_vpu_stop(void)
 	dev_info(dev, "Keem Bay VPU IPC stop.\n");
 
 	/* Request stop */
-	rc = request_vpu_stop(vpu_ipc_dev);
+	rc = request_vpu_stop(kmb_vpu_ipc_dev);
 	if (rc < 0) {
 		dev_err(dev,
 			"Failed to do request to stop - resetting state to OFF anyway.\n");
 	}
 
-	event_rc = vpu_ipc_handle_event(vpu_ipc_dev,
+	event_rc = vpu_ipc_handle_event(kmb_vpu_ipc_dev,
 					KEEMBAY_VPU_EVENT_STOP_COMPLETE);
 	if (event_rc < 0) {
 		dev_err(dev,
@@ -1325,7 +1377,7 @@ EXPORT_SYMBOL(intel_keembay_vpu_stop);
  */
 enum intel_keembay_vpu_state intel_keembay_vpu_status(void)
 {
-	return vpu_ipc_dev->state;
+	return kmb_vpu_ipc_dev->state;
 }
 EXPORT_SYMBOL(intel_keembay_vpu_status);
 
@@ -1342,10 +1394,10 @@ int intel_keembay_vpu_get_wdt_count(enum intel_keembay_wdt_cpu_id id)
 
 	switch (id) {
 	case KEEMBAY_VPU_NCE:
-		rc = vpu_ipc_dev->nce_wdt_count;
+		rc = kmb_vpu_ipc_dev->nce_wdt_count;
 		break;
 	case KEEMBAY_VPU_MSS:
-		rc = vpu_ipc_dev->mss_wdt_count;
+		rc = kmb_vpu_ipc_dev->mss_wdt_count;
 		break;
 	default:
 		break;
@@ -1375,13 +1427,13 @@ int intel_keembay_vpu_wait_for_ready(u32 timeout)
 	 * state without some other transitions, so return
 	 * error immediately for caller to handle.
 	 */
-	if (vpu_ipc_dev->state == KEEMBAY_VPU_ERROR)
+	if (kmb_vpu_ipc_dev->state == KEEMBAY_VPU_ERROR)
 		return -EIO;
 
-	rc = wait_event_interruptible_timeout(vpu_ipc_dev->ready_queue,
-					      vpu_ipc_dev->state ==
-						      KEEMBAY_VPU_READY,
-					      msecs_to_jiffies(timeout));
+	rc = wait_event_interruptible_timeout(
+			kmb_vpu_ipc_dev->ready_queue,
+			kmb_vpu_ipc_dev->state == KEEMBAY_VPU_READY,
+			msecs_to_jiffies(timeout));
 
 	/* Condition was false after timeout elapsed */
 	if (!rc)
@@ -1422,6 +1474,10 @@ static int keembay_vpu_ipc_probe(struct platform_device *pdev)
 		return rc;
 	}
 
+	rc = ipc_device_get(vpu_dev);
+	if (rc)
+		return rc;
+
 	/* Retrieve memory regions, allocate memory */
 	rc = setup_reserved_memory(vpu_dev);
 	if (rc) {
@@ -1449,7 +1505,7 @@ static int keembay_vpu_ipc_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, vpu_dev);
 
 	/* Set our local global reference. */
-	vpu_ipc_dev = vpu_dev;
+	kmb_vpu_ipc_dev = vpu_dev;
 
 	return 0;
 
@@ -1464,12 +1520,14 @@ static int keembay_vpu_ipc_remove(struct platform_device *pdev)
 	struct vpu_ipc_dev *vpu_dev = platform_get_drvdata(pdev);
 	struct device *dev = &pdev->dev;
 
-	if (vpu_ipc_dev->ready_message_task) {
+	if (vpu_dev->ready_message_task) {
 		kthread_stop(vpu_dev->ready_message_task);
 		vpu_dev->ready_message_task = NULL;
 	}
 
 	of_reserved_mem_device_release(dev);
+
+	ipc_device_put(vpu_dev);
 
 	dev_info(dev, "Keem Bay VPU IPC driver removed.\n");
 
