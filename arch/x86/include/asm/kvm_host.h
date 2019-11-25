@@ -1271,6 +1271,9 @@ struct kvm_x86_ops {
 	int (*enable_direct_tlbflush)(struct kvm_vcpu *vcpu);
 
 	u64 (*supported_xss)(void);
+
+	bool (*pasid_trans_supported)(void);
+	int (*set_user_pasid)(struct kvm *kvm, struct kvm_user_pasid *pasid);
 };
 
 struct kvm_arch_async_pf {

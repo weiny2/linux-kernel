@@ -5258,6 +5258,18 @@ set_identity_unlock:
 	case KVM_SET_PMU_EVENT_FILTER:
 		r = kvm_vm_ioctl_set_pmu_event_filter(kvm, argp);
 		break;
+	case KVM_SET_USER_PASID: {
+		struct kvm_user_pasid pasid;
+
+		r = -EFAULT;
+		if (copy_from_user(&pasid, argp, sizeof(pasid)))
+			goto out;
+
+		r = -ENOTTY;
+		if (kvm_x86_ops->pasid_trans_supported())
+			r = kvm_x86_ops->set_user_pasid(kvm, &pasid);
+		break;
+	}
 	default:
 		r = -ENOTTY;
 	}

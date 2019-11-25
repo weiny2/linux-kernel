@@ -387,7 +387,7 @@ static inline void do_cpuid_7_mask(struct kvm_cpuid_entry2 *entry, int index)
 		F(AVX512VBMI) | F(LA57) | 0 /*PKU*/ | 0 /*OSPKE*/ | F(RDPID) |
 		F(AVX512_VPOPCNTDQ) | F(UMIP) | F(AVX512_VBMI2) | F(GFNI) |
 		F(VAES) | F(VPCLMULQDQ) | F(AVX512_VNNI) | F(AVX512_BITALG) |
-		F(CLDEMOTE) | F(MOVDIRI) | F(MOVDIR64B) | F(SHSTK) |
+		F(CLDEMOTE) | F(MOVDIRI) | F(MOVDIR64B) | F(ENQCMD) | F(SHSTK) |
 		0 /*WAITPKG*/;
 
 	/* cpuid 7.0.edx*/
@@ -409,6 +409,8 @@ static inline void do_cpuid_7_mask(struct kvm_cpuid_entry2 *entry, int index)
 		entry->ebx |= F(TSC_ADJUST);
 
 		entry->ecx &= kvm_cpuid_7_0_ecx_x86_features;
+		if (!kvm_x86_ops->pasid_trans_supported())
+			entry->ecx &= ~F(ENQCMD);
 		f_la57 = entry->ecx & F(LA57);
 		cpuid_mask(&entry->ecx, CPUID_7_ECX);
 		/* Set LA57 based on hardware capability. */

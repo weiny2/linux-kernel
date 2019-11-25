@@ -1478,6 +1478,8 @@ struct kvm_enc_region {
 #define KVM_S390_NORMAL_RESET	_IO(KVMIO,   0xc3)
 #define KVM_S390_CLEAR_RESET	_IO(KVMIO,   0xc4)
 
+#define KVM_SET_USER_PASID        _IOW(KVMIO,  0xc5, struct kvm_user_pasid)
+
 /* Secure Encrypted Virtualization command */
 enum sev_cmd_id {
 	/* Guest initialization commands */
@@ -1627,5 +1629,12 @@ struct kvm_hyperv_eventfd {
 
 #define KVM_HYPERV_CONN_ID_MASK		0x00ffffff
 #define KVM_HYPERV_EVENTFD_DEASSIGN	(1 << 0)
+
+struct kvm_user_pasid {
+	__u32 flags;
+	__u32 pasid;
+};
+
+#define KVM_USER_PASID_INVALIDATE       (1 << 0)
 
 #endif /* __LINUX_KVM_H */
