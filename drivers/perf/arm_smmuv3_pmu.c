@@ -652,6 +652,10 @@ static void smmu_pmu_write_msi_msg(struct msi_desc *desc, struct msi_msg *msg)
 		       pmu->reg_base + SMMU_PMCG_IRQ_CFG2);
 }
 
+static const struct platform_msi_ops smmu_pmu_msi_ops = {
+	.write_msg	= smmu_pmu_write_msi_msg,
+};
+
 static void smmu_pmu_setup_msi(struct smmu_pmu *pmu)
 {
 	struct msi_desc *desc;
@@ -665,7 +669,7 @@ static void smmu_pmu_setup_msi(struct smmu_pmu *pmu)
 	if (!(readl(pmu->reg_base + SMMU_PMCG_CFGR) & SMMU_PMCG_CFGR_MSI))
 		return;
 
-	ret = platform_msi_domain_alloc_irqs(dev, 1, smmu_pmu_write_msi_msg);
+	ret = platform_msi_domain_alloc_irqs(dev, 1, &smmu_pmu_msi_ops);
 	if (ret) {
 		dev_warn(dev, "failed to allocate MSIs\n");
 		return;

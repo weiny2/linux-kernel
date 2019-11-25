@@ -321,6 +321,18 @@ enum {
 	MSI_FLAG_LEVEL_CAPABLE		= (1 << 6),
 };
 
+/*
+ * platform_msi_ops - Callbacks for platform MSI ops
+ * @irq_mask:   mask an interrupt source
+ * @irq_unmask: unmask an interrupt source
+ * @irq_write_msi_msg: write message content
+ */
+struct platform_msi_ops {
+	unsigned int		(*irq_mask)(struct msi_desc *desc);
+	unsigned int		(*irq_unmask)(struct msi_desc *desc);
+	irq_write_msi_msg_t	write_msg;
+};
+
 int msi_domain_set_affinity(struct irq_data *data, const struct cpumask *mask,
 			    bool force);
 
@@ -336,7 +348,7 @@ struct irq_domain *platform_msi_create_irq_domain(struct fwnode_handle *fwnode,
 						  struct msi_domain_info *info,
 						  struct irq_domain *parent);
 int platform_msi_domain_alloc_irqs(struct device *dev, unsigned int nvec,
-				   irq_write_msi_msg_t write_msi_msg);
+				   const struct platform_msi_ops *platform_ops);
 void platform_msi_domain_free_irqs(struct device *dev);
 
 /* When an MSI domain is used as an intermediate domain */
@@ -348,14 +360,14 @@ struct irq_domain *
 __platform_msi_create_device_domain(struct device *dev,
 				    unsigned int nvec,
 				    bool is_tree,
-				    irq_write_msi_msg_t write_msi_msg,
+				    const struct platform_msi_ops *platform_ops,
 				    const struct irq_domain_ops *ops,
 				    void *host_data);
 
-#define platform_msi_create_device_domain(dev, nvec, write, ops, data)	\
-	__platform_msi_create_device_domain(dev, nvec, false, write, ops, data)
-#define platform_msi_create_device_tree_domain(dev, nvec, write, ops, data) \
-	__platform_msi_create_device_domain(dev, nvec, true, write, ops, data)
+#define platform_msi_create_device_domain(dev, nvec, p_ops, ops, data)	\
+	__platform_msi_create_device_domain(dev, nvec, false, p_ops, ops, data)
+#define platform_msi_create_device_tree_domain(dev, nvec, p_ops, ops, data) \
+	__platform_msi_create_device_domain(dev, nvec, true, p_ops, ops, data)
 
 int platform_msi_domain_alloc(struct irq_domain *domain, unsigned int virq,
 			      unsigned int nr_irqs);

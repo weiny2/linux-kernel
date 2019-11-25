@@ -21,11 +21,11 @@
  * and the callback to write the MSI message.
  */
 struct platform_msi_priv_data {
-	struct device		*dev;
-	void 			*host_data;
-	msi_alloc_info_t	arg;
-	irq_write_msi_msg_t	write_msg;
-	int			devid;
+	struct device			*dev;
+	void				*host_data;
+	msi_alloc_info_t		arg;
+	const struct platform_msi_ops	*ops;
+	int				devid;
 };
 
 /* The devid allocator */
@@ -83,7 +83,7 @@ static void platform_msi_write_msg(struct irq_data *data, struct msi_msg *msg)
 
 	priv_data = desc->platform.msi_priv_data;
 
-	priv_data->write_msg(desc, msg);
+	priv_data->ops->write_msg(desc, msg);
 }
 
 static void platform_msi_update_chip_ops(struct msi_domain_info *info)
@@ -194,7 +194,7 @@ struct irq_domain *platform_msi_create_irq_domain(struct fwnode_handle *fwnode,
 
 static struct platform_msi_priv_data *
 platform_msi_alloc_priv_data(struct device *dev, unsigned int nvec,
-			     irq_write_msi_msg_t write_msi_msg)
+			     const struct platform_msi_ops *platform_ops)
 {
 	struct platform_msi_priv_data *datap;
 	/*
@@ -203,7 +203,8 @@ platform_msi_alloc_priv_data(struct device *dev, unsigned int nvec,
 	 * accordingly (which would impact the max number of MSI
 	 * capable devices).
 	 */
-	if (!dev->msi_domain || !write_msi_msg || !nvec || nvec > MAX_DEV_MSIS)
+	if (!dev->msi_domain || !platform_ops->write_msg || !nvec ||
+	    nvec > MAX_DEV_MSIS)
 		return ERR_PTR(-EINVAL);
 
 	if (dev->msi_domain->bus_token != DOMAIN_BUS_PLATFORM_MSI) {
@@ -227,7 +228,7 @@ platform_msi_alloc_priv_data(struct device *dev, unsigned int nvec,
 		return ERR_PTR(err);
 	}
 
-	datap->write_msg = write_msi_msg;
+	datap->ops = platform_ops;
 	datap->dev = dev;
 
 	return datap;
@@ -249,12 +250,12 @@ static void platform_msi_free_priv_data(struct platform_msi_priv_data *data)
  * Zero for success, or an error code in case of failure
  */
 int platform_msi_domain_alloc_irqs(struct device *dev, unsigned int nvec,
-				   irq_write_msi_msg_t write_msi_msg)
+				   const struct platform_msi_ops *platform_ops)
 {
 	struct platform_msi_priv_data *priv_data;
 	int err;
 
-	priv_data = platform_msi_alloc_priv_data(dev, nvec, write_msi_msg);
+	priv_data = platform_msi_alloc_priv_data(dev, nvec, platform_ops);
 	if (IS_ERR(priv_data))
 		return PTR_ERR(priv_data);
 
@@ -324,7 +325,7 @@ struct irq_domain *
 __platform_msi_create_device_domain(struct device *dev,
 				    unsigned int nvec,
 				    bool is_tree,
-				    irq_write_msi_msg_t write_msi_msg,
+				    const struct platform_msi_ops *platform_ops,
 				    const struct irq_domain_ops *ops,
 				    void *host_data)
 {
@@ -332,7 +333,7 @@ __platform_msi_create_device_domain(struct device *dev,
 	struct irq_domain *domain;
 	int err;
 
-	data = platform_msi_alloc_priv_data(dev, nvec, write_msi_msg);
+	data = platform_msi_alloc_priv_data(dev, nvec, platform_ops);
 	if (IS_ERR(data))
 		return NULL;
 
