@@ -835,7 +835,7 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "42e9dc5308071ef24b1633e69e73e86a700c903b"
         },
         {
             "branch": "perf-intel-next",
@@ -2498,7 +2498,7 @@
                 }
             ],
             "description": "This pull request introduces the boot/ota/dnt support for Android project.",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Tian  Baofeng",
