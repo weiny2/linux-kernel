@@ -5,6 +5,7 @@ TEST_PROGS := \
 	test-livepatch.sh \
 	test-callbacks.sh \
 	test-shadow-vars.sh \
-	test-ftrace.sh
+	test-ftrace.sh \
+	test-state.sh
 
 include ../lib.mk
