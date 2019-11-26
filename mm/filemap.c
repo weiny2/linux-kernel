@@ -23,6 +23,7 @@
 #include <linux/swap.h>
 #include <linux/mman.h>
 #include <linux/pagemap.h>
+#include <linux/migrate.h>
 #include <linux/file.h>
 #include <linux/uio.h>
 #include <linux/error-injection.h>
@@ -2494,6 +2495,7 @@ vm_fault_t filemap_fault(struct vm_fault *vmf)
 	pgoff_t max_off;
 	struct page *page;
 	vm_fault_t ret = 0;
+	int m_ret = -1;
 
 	max_off = DIV_ROUND_UP(i_size_read(inode), PAGE_SIZE);
 	if (unlikely(offset >= max_off))
@@ -2502,8 +2504,29 @@ vm_fault_t filemap_fault(struct vm_fault *vmf)
 	/*
 	 * Do we have something in the page cache already?
 	 */
+recheck_page:
 	page = find_get_page(mapping, offset);
 	if (likely(page) && !(vmf->flags & FAULT_FLAG_TRIED)) {
+
+		/*
+		 * For page in slow memory, it will redo the
+		 * find_get_page on promotion success, or continue
+		 * on failure.
+		 *
+		 * For page in fast memory, the prmotition will fail
+		 * and continue to readahead.
+		 */
+		if (vmf->flags & FAULT_FLAG_WRITE)
+			m_ret = promote_page(page, 0);
+
+		if (m_ret == MIGRATEPAGE_SUCCESS) {
+#ifdef CONFIG_MIGRATION
+			count_vm_events(
+				PGMIGRATE_PAGECACHE_WRFLT_PROMOTION_SUCCESS, 1);
+#endif
+			goto recheck_page;
+		}
+
 		/*
 		 * We found the page, so try async readahead before
 		 * waiting for the lock.

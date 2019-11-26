@@ -1275,6 +1275,7 @@ const char * const vmstat_text[] = {
 	"pgmigrate_fail_numa_isolate_fail",
 	"pgmigrate_fail_nomem_fail",
 	"pgmigrate_fail_refcount_fail",
+	"pgmigrate_success_pagecache_wrflt",
 #endif
 #ifdef CONFIG_COMPACTION
 	"compact_migrate_scanned",
