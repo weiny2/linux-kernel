@@ -468,7 +468,7 @@
                     "value": "m"
                 },
                 {
-                    "name": "CCONFIG_INTEL_MEI_WDT",
+                    "name": "CONFIG_INTEL_MEI_WDT",
                     "value": "m"
                 },
                 {
