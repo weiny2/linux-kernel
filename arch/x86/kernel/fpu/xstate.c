@@ -226,19 +226,21 @@ static bool xfeature_is_supervisor(int xfeature_nr)
 void fpstate_sanitize_xstate(struct fpu *fpu)
 {
 	struct fxregs_state *fx = &fpu->state.fxsave;
+	u64 xfeatures, feature_bv;
 	int feature_bit;
-	u64 xfeatures;
 
 	if (!use_xsaveopt())
 		return;
 
 	xfeatures = fpu->state.xsave.header.xfeatures;
+	if (fpu->state_exp)
+		xfeatures |= fpu->state_exp->xsave.header.xfeatures;
 
 	/*
 	 * None of the feature bits are in init state. So nothing else
 	 * to do for us, as the memory layout is up to date.
 	 */
-	if ((xfeatures & xstate_area_mask) == xstate_area_mask)
+	if ((xfeatures & xfeatures_mask_all) == xfeatures_mask_all)
 		return;
 
 	/*
@@ -265,8 +267,8 @@ void fpstate_sanitize_xstate(struct fpu *fpu)
 	 * in a special way already:
 	 */
 	feature_bit = FIRST_EXTENDED_XFEATURE;
-	xfeatures = (xfeatures_mask_user() & xstate_area_mask & ~xfeatures);
-	xfeatures >>= feature_bit;
+	xfeatures = (xfeatures_mask_user() & ~xfeatures) >> feature_bit;
+	feature_bv = BIT_ULL(feature_bit);
 
 	/*
 	 * Update all the remaining memory layouts according to their
@@ -277,13 +279,21 @@ void fpstate_sanitize_xstate(struct fpu *fpu)
 		if (xfeatures & 0x1) {
 			int offset = get_xstate_comp_offset(feature_bit);
 			int size = xstate_sizes[feature_bit];
+			void *dst;
 
-			memcpy((void *)fx + offset,
-			       (void *)&init_fpstate.xsave + offset,
-			       size);
+			if (feature_bv & xstate_area_mask) {
+				void *src = (void *)&init_fpstate.xsave;
+
+				dst = (void *)fx;
+				memcpy(dst + offset, src + offset, size);
+			} else if (fpu->state_exp) {
+				dst = (void *)&fpu->state_exp->xsave;
+				memset(dst + offset, 0, size);
+			}
 		}
 
 		xfeatures >>= 1;
+		feature_bv <<= 1;
 		feature_bit++;
 	}
 }
@@ -1243,14 +1253,24 @@ void free_xstate_exp(struct fpu *fpu)
 	vfree(fpu->state_exp);
 }
 
-static void fill_gap(unsigned to, void **kbuf, unsigned *pos, unsigned *count)
+static void fill_gap(unsigned to, void **kbuf, unsigned *pos, unsigned *count,
+		     bool zeroing)
 {
 	if (*pos < to) {
 		unsigned size = to - *pos;
 
 		if (size > *count)
 			size = *count;
-		memcpy(*kbuf, (void *)&init_fpstate.xsave + *pos, size);
+		if (zeroing || (*pos >= fpu_kernel_xstate_size)) {
+			memset(*kbuf, 0, size);
+		} else if ((*pos + size) >= fpu_kernel_xstate_size) {
+			memcpy(*kbuf, (void *)&init_fpstate.xsave + *pos,
+			       fpu_kernel_xstate_size - *pos);
+			memset(*kbuf + (fpu_kernel_xstate_size - *pos),
+			       0, size - fpu_kernel_xstate_size);
+		} else {
+			memcpy(*kbuf, (void *)&init_fpstate.xsave, size);
+		}
 		*kbuf += size;
 		*pos += size;
 		*count -= size;
@@ -1258,9 +1278,10 @@ static void fill_gap(unsigned to, void **kbuf, unsigned *pos, unsigned *count)
 }
 
 static void copy_part(unsigned offset, unsigned size, void *from,
-			void **kbuf, unsigned *pos, unsigned *count)
+		      void **kbuf, unsigned *pos, unsigned *count,
+		      bool fill_zeros)
 {
-	fill_gap(offset, kbuf, pos, count);
+	fill_gap(offset, kbuf, pos, count, fill_zeros);
 	if (size > *count)
 		size = *count;
 	if (size) {
@@ -1304,30 +1325,35 @@ int copy_xstate_comp_to_kernel(void *kbuf, struct fpu *fpu,
 	 */
 	memset(&header, 0, sizeof(header));
 	header.xfeatures = xsave->header.xfeatures;
+	if (fpu->state_exp)
+		header.xfeatures |= fpu->state_exp->xsave.header.xfeatures;
 	header.xfeatures &= xfeatures_mask_user();
 
 	if (header.xfeatures & XFEATURE_MASK_FP)
 		copy_part(0, off_mxcsr,
-			  &xsave->i387, &kbuf, &offset_start, &count);
+			  &xsave->i387, &kbuf, &offset_start, &count, false);
 	if (header.xfeatures & (XFEATURE_MASK_SSE | XFEATURE_MASK_YMM))
 		copy_part(off_mxcsr, MXCSR_AND_FLAGS_SIZE,
-			  &xsave->i387.mxcsr, &kbuf, &offset_start, &count);
+			  &xsave->i387.mxcsr, &kbuf, &offset_start,
+			  &count, false);
 	if (header.xfeatures & XFEATURE_MASK_FP)
 		copy_part(offsetof(struct fxregs_state, st_space), 128,
-			  &xsave->i387.st_space, &kbuf, &offset_start, &count);
+			  &xsave->i387.st_space, &kbuf, &offset_start,
+			  &count, false);
 	if (header.xfeatures & XFEATURE_MASK_SSE)
 		copy_part(xstate_offsets[XFEATURE_MASK_SSE], 256,
-			  &xsave->i387.xmm_space, &kbuf, &offset_start, &count);
+			  &xsave->i387.xmm_space, &kbuf, &offset_start,
+			  &count, false);
 	/*
 	 * Fill xsave->i387.sw_reserved value for ptrace frame:
 	 */
 	copy_part(offsetof(struct fxregs_state, sw_reserved), 48,
-		  xstate_fx_sw_bytes, &kbuf, &offset_start, &count);
+		  xstate_fx_sw_bytes, &kbuf, &offset_start, &count, false);
 	/*
 	 * Copy xregs_state->header:
 	 */
 	copy_part(offsetof(struct xregs_state, header), sizeof(header),
-		  &header, &kbuf, &offset_start, &count);
+		  &header, &kbuf, &offset_start, &count, false);
 
 	for (i = FIRST_EXTENDED_XFEATURE; i < XFEATURE_MAX; i++) {
 		/*
@@ -1335,13 +1361,18 @@ int copy_xstate_comp_to_kernel(void *kbuf, struct fpu *fpu,
 		 */
 		if ((header.xfeatures >> i) & 1) {
 			void *src = __raw_xsave_addr(fpu, i);
+			bool fill_zeros = false;
+
+			if ((xstate_area_mask & BIT_ULL(i)) || !src)
+				fill_zeros = true;
 
 			copy_part(xstate_offsets[i], xstate_sizes[i],
-				  src, &kbuf, &offset_start, &count);
+				  src, &kbuf, &offset_start, &count,
+				  fill_zeros);
 		}
 
 	}
-	fill_gap(size_total, &kbuf, &offset_start, &count);
+	fill_gap(size_total, &kbuf, &offset_start, &count, false);
 
 	return 0;
 }
@@ -1392,6 +1423,8 @@ int copy_xstate_comp_to_user(void __user *ubuf, struct fpu *fpu,
 	 */
 	memset(&header, 0, sizeof(header));
 	header.xfeatures = xsave->header.xfeatures;
+	if (fpu->state_exp)
+		header.xfeatures |= fpu->state_exp->xsave.header.xfeatures;
 	header.xfeatures &= xfeatures_mask_user();
 
 	/*
@@ -1418,7 +1451,11 @@ int copy_xstate_comp_to_user(void __user *ubuf, struct fpu *fpu,
 			if (offset + size > size_total)
 				break;
 
-			ret = __copy_xstate_to_user(ubuf, src, offset, size, size_total);
+			if (!src)
+				ret = __clear_user(ubuf, size);
+			else
+				ret = __copy_xstate_to_user(ubuf, src, offset,
+							    size, size_total);
 			if (ret)
 				return ret;
 		}
@@ -1472,6 +1509,9 @@ int copy_kernel_to_xstate_comp(struct fpu *fpu, const void *kbuf)
 		if (hdr.xfeatures & mask) {
 			void *dst = __raw_xsave_addr(fpu, i);
 
+			if (!dst)
+				continue;
+
 			offset = xstate_offsets[i];
 			size = xstate_sizes[i];
 
@@ -1496,7 +1536,13 @@ int copy_kernel_to_xstate_comp(struct fpu *fpu, const void *kbuf)
 	/*
 	 * Add back in the features that came in from userspace:
 	 */
-	xsave->header.xfeatures |= hdr.xfeatures;
+	xsave->header.xfeatures |= hdr.xfeatures & xstate_area_mask;
+
+	if (fpu->state_exp) {
+		xsave = &fpu->state_exp->xsave;
+		xsave->header.xfeatures &= XFEATURE_MASK_SUPERVISOR_ALL;
+		xsave->header.xfeatures |= hdr.xfeatures & xstate_exp_area_mask;
+	}
 
 	return 0;
 }
@@ -1532,6 +1578,9 @@ int copy_user_to_xstate_comp(struct fpu *fpu, const void __user *ubuf)
 		if (hdr.xfeatures & mask) {
 			void *dst = __raw_xsave_addr(fpu, i);
 
+			if (!dst)
+				continue;
+
 			offset = xstate_offsets[i];
 			size = xstate_sizes[i];
 
@@ -1558,7 +1607,13 @@ int copy_user_to_xstate_comp(struct fpu *fpu, const void __user *ubuf)
 	/*
 	 * Add back in the features that came in from userspace:
 	 */
-	xsave->header.xfeatures |= hdr.xfeatures;
+	xsave->header.xfeatures |= hdr.xfeatures & xstate_area_mask;
+
+	if (fpu->state_exp) {
+		xsave = &fpu->state_exp->xsave;
+		xsave->header.xfeatures &= XFEATURE_MASK_SUPERVISOR_ALL;
+		xsave->header.xfeatures |= hdr.xfeatures & xstate_exp_area_mask;
+	}
 
 	return 0;
 }
@@ -1631,6 +1686,7 @@ int copy_xstate_to_regset(void *kbuf, void __user *ubuf, struct fpu *fpu,
 {
 	unsigned int pos = 0, size;
 	struct xregs_state *xsave;
+	struct xstate_header hdr;
 	int ret;
 
 	if (!fpu)
@@ -1641,17 +1697,56 @@ int copy_xstate_to_regset(void *kbuf, void __user *ubuf, struct fpu *fpu,
 	xsave = &fpu->state.xsave;
 
 	/*
+	 * The kernel xstate now has two areas while the destination, either
+	 * userspace or kernel ptrace buffer, has a uniform buffer. Copying
+	 * the first 48 bytes and combined header first and then copying the
+	 * two states:
+	 */
+
+	/*
 	 * Copy the 48 bytes defined by the software into the xsave
-	 * area in the thread struct, so that we can copy the whole
-	 * area to user using one user_regset_copyout().
+	 * area in the thread struct.
 	 */
 	size = sizeof(xstate_fx_sw_bytes);
 	memcpy(&xsave->i387.sw_reserved, xstate_fx_sw_bytes, size);
 
+	size = sizeof(struct fxregs_state);
+	ret = user_regset_copyout(&pos, &count, &kbuf, &ubuf,
+				  xsave, 0, size);
+	if (ret || !count)
+		return ret;
+
 	/*
-	 * Copy the xstate memory layout.
+	 * Combine the two xstate headers in the kernel and copy it to the
+	 * buffer
 	 */
-	ret = user_regset_copyout(&pos, &count, &kbuf, &ubuf, xsave, 0, -1);
+	size = sizeof(hdr);
+	memset(&hdr, 0, size);
+	hdr.xfeatures = xsave->header.xfeatures;
+	if (fpu->state_exp)
+		hdr.xfeatures |= fpu->state_exp->xsave.header.xfeatures;
+
+	ret = user_regset_copyout(&pos, &count, &kbuf, &ubuf, &hdr, pos, size);
+	if (ret || !count)
+		return ret;
+
+	/*
+	 * Copy the rest xstate memory layout.
+	 */
+	size = fpu_kernel_xstate_size;
+	ret = user_regset_copyout(&pos, &count, &kbuf, &ubuf, xsave, 0, size);
+	if (ret || !count)
+		return ret;
+
+	size = fpu_kernel_xstate_exp_size;
+	if (fpu->state_exp) {
+		xsave = &fpu->state_exp->xsave;
+		ret = user_regset_copyout(&pos, &count, &kbuf,
+					  &ubuf, xsave, 0, size);
+	} else {
+		ret = user_regset_copyout_zero(&pos, &count, &kbuf,
+					       &ubuf, 0, size);
+	}
 	return ret;
 }
 
@@ -1665,6 +1760,8 @@ int copy_regset_to_xstate(struct fpu *fpu, const void *kbuf,
 {
 	struct xregs_state *xsave;
 	unsigned int pos = 0;
+	unsigned int size;
+	u64 xfeatures;
 	int ret;
 
 	if (!fpu)
@@ -1672,12 +1769,34 @@ int copy_regset_to_xstate(struct fpu *fpu, const void *kbuf,
 
 	xsave = &fpu->state.xsave;
 
-	ret = user_regset_copyin(&pos, &count, &kbuf, &ubuf, xsave, 0, -1);
+	/*
+	 * The kernel xstate now has two areas, while the source, either
+	 * userspace or kernel ptrace buffer, has a uniform buffer. Copy
+	 * to the two kernel state if needed and also already expanded.
+	 * Otherwise, copy to the kernel's base area. Also, split the
+	 * feature bitmap into the two pieces accordingly:
+	 */
+
+	size = fpu_kernel_xstate_size;
+	ret = user_regset_copyin(&pos, &count, &kbuf, &ubuf, xsave, 0, size);
 	if (ret)
 		return ret;
 
 	ret = validate_user_xstate_header(&xsave->header);
+	if (ret)
+		return ret;
 
+	xfeatures = xsave->header.xfeatures;
+	xsave->header.xfeatures &= xstate_area_mask;
+
+	if (!count || !fpu->state_exp)
+		return ret;
+
+	xsave = &fpu->state_exp->xsave;
+	xsave->header.xfeatures = xfeatures & xstate_exp_area_mask;
+
+	size = fpu_kernel_xstate_exp_size;
+	ret = user_regset_copyin(&pos, &count, &kbuf, &ubuf, xsave, 0, size);
 	return ret;
 }
 
