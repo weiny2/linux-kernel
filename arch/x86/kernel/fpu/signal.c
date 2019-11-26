@@ -284,9 +284,10 @@ sanitize_restored_user_xstate(struct fpu *fpu,
 			      u64 xfeatures_from_user, int fx_only)
 {
 	struct xregs_state *xsave = &fpu->state.xsave;
-	struct xstate_header *header = &xsave->header;
 
 	if (use_xsave()) {
+		struct xstate_header *header = &xsave->header;
+
 		/*
 		 * Note: we don't need to zero the reserved bits in the
 		 * xstate_header here because we either didn't copy them at all,
@@ -305,11 +306,16 @@ sanitize_restored_user_xstate(struct fpu *fpu,
 		 * Ensure supervisor state bits stay set and supervisor
 		 * state is not modified.
 		 */
-		if (fx_only)
+		if (fx_only) {
 			header->xfeatures = XFEATURE_MASK_FPSSE;
-		else
-			header->xfeatures &= xfeatures_from_user |
-					     xfeatures_mask_supervisor();
+		} else {
+			u64 m = xfeatures_from_user |
+				xfeatures_mask_supervisor();
+
+			header->xfeatures &= m;
+			if (fpu->state_exp)
+				fpu->state_exp->xsave.header.xfeatures &=m;
+		}
 	}
 
 	if (use_fxsr()) {
