@@ -2498,7 +2498,7 @@
                 }
             ],
             "description": "This pull request introduces the boot/ota/dnt support for Android project.",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Tian  Baofeng",
