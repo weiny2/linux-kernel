@@ -31,12 +31,11 @@ struct platform_msi_priv_data {
 /* The devid allocator */
 static DEFINE_IDA(platform_msi_devid_ida);
 
-#ifdef GENERIC_MSI_DOMAIN_OPS
 /*
  * Convert an msi_desc to a globaly unique identifier (per-device
  * devid + msi_desc position in the msi_list).
  */
-static irq_hw_number_t platform_msi_calc_hwirq(struct msi_desc *desc)
+irq_hw_number_t platform_msi_calc_hwirq(struct msi_desc *desc)
 {
 	u32 devid;
 
@@ -45,6 +44,7 @@ static irq_hw_number_t platform_msi_calc_hwirq(struct msi_desc *desc)
 	return (devid << (32 - DEV_ID_SHIFT)) | desc->platform.msi_index;
 }
 
+#ifdef GENERIC_MSI_DOMAIN_OPS
 static void platform_msi_set_desc(msi_alloc_info_t *arg, struct msi_desc *desc)
 {
 	arg->desc = desc;
@@ -76,7 +76,7 @@ static void platform_msi_update_dom_ops(struct msi_domain_info *info)
 		ops->set_desc = platform_msi_set_desc;
 }
 
-static void platform_msi_write_msg(struct irq_data *data, struct msi_msg *msg)
+void platform_msi_write_msg(struct irq_data *data, struct msi_msg *msg)
 {
 	struct msi_desc *desc = irq_data_get_msi_desc(data);
 	struct platform_msi_priv_data *priv_data;
