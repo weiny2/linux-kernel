@@ -36,7 +36,6 @@ struct mdev_device {
 };
 
 #define to_mdev_device(dev)	container_of(dev, struct mdev_device, dev)
-#define dev_is_mdev(d)		((d)->bus == &mdev_bus_type)
 
 struct mdev_type {
 	struct kobject kobj;

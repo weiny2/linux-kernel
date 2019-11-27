@@ -418,6 +418,8 @@ int platform_msi_domain_alloc(struct irq_domain *domain, unsigned int virq,
 void platform_msi_domain_free(struct irq_domain *domain, unsigned int virq,
 			      unsigned int nvec);
 void *platform_msi_get_host_data(struct irq_domain *domain);
+irq_hw_number_t platform_msi_calc_hwirq(struct msi_desc *desc);
+void platform_msi_write_msg(struct irq_data *data, struct msi_msg *msg);
 #endif /* CONFIG_GENERIC_MSI_IRQ_DOMAIN */
 
 #ifdef CONFIG_PCI_MSI_IRQ_DOMAIN

@@ -144,5 +144,8 @@ void mdev_unregister_driver(struct mdev_driver *drv);
 struct device *mdev_parent_dev(struct mdev_device *mdev);
 struct device *mdev_dev(struct mdev_device *mdev);
 struct mdev_device *mdev_from_dev(struct device *dev);
+struct device *mdev_dev_to_parent_dev(struct device *dev);
+
+#define dev_is_mdev(dev) ((dev)->bus == symbol_get(mdev_bus_type))
 
 #endif /* MDEV_H */
