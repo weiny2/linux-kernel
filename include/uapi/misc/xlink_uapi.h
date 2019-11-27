@@ -8,7 +8,7 @@
 #ifndef __XLINK_UAPI_H
 #define __XLINK_UAPI_H
 
-#include <linux/xlink.h>
+#include <linux/types.h>
 
 #define XLINK_MAGIC 'x'
 #define XL_OPEN_CHANNEL			_IOW(XLINK_MAGIC, 1, void*)
@@ -28,7 +28,7 @@
 struct xlinkopenchannel {
 	void *handle;
 	uint16_t chan;
-	enum xlink_opmode mode;
+	int mode;
 	uint32_t data_size;
 	uint32_t timeout;
 	uint32_t *return_code;

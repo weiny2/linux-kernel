@@ -10,6 +10,8 @@
 #ifndef MXLK_INTERFACE_HEADER_
 #define MXLK_INTERFACE_HEADER_
 
+#include <linux/types.h>
+
 int keembay_pcie_boot_remote(const char *deviceName, const char *binaryPath);
 int keembay_pcie_reset_remote(void *fd);
 int keembay_pcie_get_devicename(int index, char *name, int nameSize, int pid);

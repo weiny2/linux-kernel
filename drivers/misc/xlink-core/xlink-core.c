@@ -18,7 +18,6 @@
 #include <linux/keembay-vpu-ipc.h>
 #endif
 
-#include <uapi/misc/xlink_uapi.h>
 #include "xlink-defs.h"
 #include "xlink-multiplexer.h"
 #include "xlink-dispatcher.h"

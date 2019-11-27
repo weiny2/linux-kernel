@@ -8,6 +8,9 @@
 #ifndef __XLINK_H
 #define __XLINK_H
 
+#include <linux/types.h>
+#include <uapi/misc/xlink_uapi.h>
+
 typedef uint32_t xlink_channel_id_t;
 
 enum xlink_prof_cfg {
