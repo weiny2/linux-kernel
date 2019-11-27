@@ -209,4 +209,13 @@ config GENERIC_ARCH_TOPOLOGY
 	  appropriate scaling, sysfs interface for reading capacity values at
 	  runtime.
 
+config MSI_IMS
+	bool "Device Specific Interrupt Message Storage (IMS)"
+	depends on X86
+	select GENERIC_MSI_IRQ_DOMAIN
+	select IRQ_REMAP
+	help
+	  This allows device drivers to enable device specific
+	  interrupt message storage (IMS) besides standard MSI-X interrupts.
+
 endmenu
