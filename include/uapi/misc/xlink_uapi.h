@@ -27,57 +27,57 @@
 
 struct xlinkopenchannel {
 	void *handle;
-	uint16_t chan;
+	__u16 chan;
 	int mode;
-	uint32_t data_size;
-	uint32_t timeout;
-	uint32_t *return_code;
+	__u32 data_size;
+	__u32 timeout;
+	__u32 *return_code;
 };
 
 struct xlinkwritedata {
 	void *handle;
-	uint16_t chan;
+	__u16 chan;
 	void const *pmessage;
-	uint32_t size;
-	uint32_t *return_code;
+	__u32 size;
+	__u32 *return_code;
 };
 
 struct xlinkreaddata {
 	void *handle;
-	uint16_t chan;
+	__u16 chan;
 	void *pmessage;
-	uint32_t *size;
-	uint32_t *return_code;
+	__u32 *size;
+	__u32 *return_code;
 };
 
 struct xlinkreadtobuffer {
 	void *handle;
-	uint16_t chan;
+	__u16 chan;
 	void *pmessage;
-	uint32_t *size;
-	uint32_t *return_code;
+	__u32 *size;
+	__u32 *return_code;
 };
 
 struct xlinkconnect {
 	void *handle;
-	uint32_t *return_code;
+	__u32 *return_code;
 };
 
 struct xlinkrelease {
 	void *handle;
-	uint16_t chan;
+	__u16 chan;
 	void *addr;
-	uint32_t *return_code;
+	__u32 *return_code;
 };
 
 struct xlinkstartvpu {
 	char *filename;
 	int namesize;
-	uint32_t *return_code;
+	__u32 *return_code;
 };
 
 struct xlinkstopvpu {
-	uint32_t *return_code;
+	__u32 *return_code;
 };
 
 #endif /* __XLINK_UAPI_H */
