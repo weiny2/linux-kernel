@@ -42,6 +42,7 @@ Required properties:
 - intel,keembay-vpu-ipc-imr: IMR (isolated memory region) number which
 	we will request the runtime service uses to protect the VPU
 	memory region before authentication
+- intel,keembay-vpu-ipc-id: The ID uniquely identifying the VPU within the SoC.
 
 Example:
 	vpu-ipc {
@@ -83,4 +84,5 @@ Example:
 		intel,keembay-vpu-ipc-nce-wdt-redirect = <63>;
 		intel,keembay-vpu-ipc-mss-wdt-redirect = <47>;
 		intel,keembay-vpu-ipc-imr = <9>;
+		intel,keembay-vpu-ipc-id = <0>;
 	};
