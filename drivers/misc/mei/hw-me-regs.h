@@ -110,6 +110,8 @@
 
 #define MEI_DEV_ID_EGLS       0x1BE0  /* Emmitsburg (Eagle Stream) WS */
 
+#define MEI_DEV_ID_ADP_S      0x7AE8  /* Alder Lake Point S */
+
 /*
  * MEI HW Section
  */
