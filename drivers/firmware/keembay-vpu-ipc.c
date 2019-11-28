@@ -205,6 +205,7 @@ struct vpu_ipc_dev {
 	uint32_t nce_wdt_redirect;
 	uint32_t mss_wdt_redirect;
 	uint32_t imr;
+	u32 vpu_id;
 	void __iomem *nce_wdt_reg;
 	void __iomem *nce_tim_cfg_reg;
 	void __iomem *mss_wdt_reg;
@@ -1501,6 +1502,18 @@ static int keembay_vpu_ipc_probe(struct platform_device *pdev)
 		goto probe_fail_post_resmem_setup;
 	}
 
+	/* Get VPU ID. */
+	rc = of_property_read_u32(dev->of_node, "intel,keembay-vpu-ipc-id",
+				  &vpu_dev->vpu_id);
+	if (rc) {
+		/* Only warn for now; we will enforce this in the future. */
+		dev_warn(dev,
+			 "VPU ID not defined in Device Tree, using 0 as default.\n");
+		dev_warn(dev,
+			 "WARNING: This may cause additional VPU devices to fail probing.\n");
+		vpu_dev->vpu_id = 0;
+	}
+
 	/* Set platform data reference. */
 	platform_set_drvdata(pdev, vpu_dev);
 
@@ -1553,4 +1566,5 @@ module_platform_driver(keem_bay_vpu_ipc_driver);
 
 MODULE_DESCRIPTION("Keem Bay VPU IPC Driver");
 MODULE_AUTHOR("Paul Murphy <paul.j.murphy@intel.com>");
+MODULE_AUTHOR("Daniele Alessandrelli <daniele.alessandrelli@intel.com>");
 MODULE_LICENSE("Dual BSD/GPL");
