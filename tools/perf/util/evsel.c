@@ -44,6 +44,7 @@
 #include "stat.h"
 #include "string2.h"
 #include "memswap.h"
+#include "pmu.h"
 #include "util.h"
 #include "../perf-sys.h"
 #include "util/parse-branch-options.h"
@@ -98,6 +99,25 @@ set_methods:
 		perf_evsel__object.fini = fini;
 
 	return 0;
+}
+
+struct perf_pmu *perf_evsel__find_pmu(struct evsel *evsel)
+{
+	struct perf_pmu *pmu = NULL;
+
+	while ((pmu = perf_pmu__scan(pmu)) != NULL) {
+		if (pmu->type == evsel->core.attr.type)
+			break;
+	}
+
+	return pmu;
+}
+
+bool perf_evsel__is_aux_event(struct evsel *evsel)
+{
+	struct perf_pmu *pmu = perf_evsel__find_pmu(evsel);
+
+	return pmu && pmu->auxtrace;
 }
 
 #define FD(e, x, y) (*(int *)xyarray__entry(e->core.fd, x, y))
