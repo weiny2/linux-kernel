@@ -31,17 +31,20 @@ enum intel_keembay_wdt_cpu_id {
 	KEEMBAY_VPU_NCE
 };
 
-int intel_keembay_vpu_ipc_open_channel(u8 node_id, u16 chan_id);
-int intel_keembay_vpu_ipc_close_channel(u8 node_id, u16 chan_id);
-int intel_keembay_vpu_ipc_send(u8 node_id, u16 chan_id, uint32_t paddr,
-			       size_t size);
-int intel_keembay_vpu_ipc_recv(u8 node_id, u16 chan_id, uint32_t *paddr,
-			       size_t *size, u32 timeout);
-int intel_keembay_vpu_startup(const char *firmware_name);
-int intel_keembay_vpu_reset(void);
-int intel_keembay_vpu_stop(void);
-enum intel_keembay_vpu_state intel_keembay_vpu_status(void);
-int intel_keembay_vpu_get_wdt_count(enum intel_keembay_wdt_cpu_id id);
-int intel_keembay_vpu_wait_for_ready(u32 timeout);
+int intel_keembay_vpu_ipc_open_channel(struct device *dev, u8 node_id,
+				       u16 chan_id);
+int intel_keembay_vpu_ipc_close_channel(struct device *dev, u8 node_id,
+					u16 chan_id);
+int intel_keembay_vpu_ipc_send(struct device *dev, u8 node_id, u16 chan_id,
+			       u32 paddr, size_t size);
+int intel_keembay_vpu_ipc_recv(struct device *dev, u8 node_id, u16 chan_id,
+			       u32 *paddr, size_t *size, u32 timeout);
+int intel_keembay_vpu_startup(struct device *dev, const char *firmware_name);
+int intel_keembay_vpu_reset(struct device *dev);
+int intel_keembay_vpu_stop(struct device *dev);
+enum intel_keembay_vpu_state intel_keembay_vpu_status(struct device *dev);
+int intel_keembay_vpu_get_wdt_count(struct device *dev,
+				    enum intel_keembay_wdt_cpu_id id);
+int intel_keembay_vpu_wait_for_ready(struct device *dev, u32 timeout);
 
 #endif /* __KEEMBAY_VPU_IPC_H */
