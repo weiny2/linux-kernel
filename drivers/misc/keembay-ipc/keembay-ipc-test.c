@@ -25,27 +25,26 @@ MODULE_VERSION("0.1");
 /* Timeout out in ms. */
 #define RECV_TIMEOUT	(15 * 1000)
 
-#define LOCAL_IPC_MEM_VADDR ((void *) 0xffff000009200000)
+#define LOCAL_IPC_MEM_VADDR ((void *)0xffff000009200000)
 #define LOCAL_IPC_MEM_SIZE  0x200000
 
 /* IPC buffer. */
 struct kmb_ipc_buf {
-	uint32_t data_paddr; /* Physical address where payload is located. */
-	uint32_t data_size;  /* Size of payload. */
-	uint16_t channel;    /* The channel used. */
-	uint8_t src_node;    /* The Node ID of the sender. */
-	uint8_t dst_node;    /* The Node ID of the intended receiver. */
-	uint8_t status;	     /* Either free or allocated. */
+	u32 data_paddr; /* Physical address where payload is located. */
+	u32 data_size;  /* Size of payload. */
+	u16 channel;    /* The channel used. */
+	u8 src_node;    /* The Node ID of the sender. */
+	u8 dst_node;    /* The Node ID of the intended receiver. */
+	u8 status;	/* Either free or allocated. */
 } __packed __aligned(64);
 
 static void remove_ipc_test_dbgfs_tree(void);
 static ssize_t recv_wr(struct file *, const char __user *, size_t, loff_t *);
 static ssize_t send_wr(struct file *, const char __user *, size_t, loff_t *);
 static ssize_t open_wr(struct file *, const char __user *, size_t, loff_t *);
-static ssize_t close_wr(struct file *, const char __user *, size_t,
-			   loff_t *);
+static ssize_t close_wr(struct file *, const char __user *, size_t, loff_t *);
 static ssize_t test_loop_wr(struct file *filp, const char __user *buf,
-			       size_t count, loff_t *fpos);
+			    size_t count, loff_t *fpos);
 static ssize_t test_long_send_wr(struct file *filp, const char __user *buf,
 				 size_t count, loff_t *fpos);
 
@@ -94,7 +93,6 @@ static const struct file_operations test_long_send_fops = {
 	.write	= test_long_send_wr,
 };
 
-
 static size_t ipc_buf_used_cnt(void)
 {
 	struct kmb_ipc_buf *buffers = LOCAL_IPC_MEM_VADDR;
@@ -114,7 +112,7 @@ static int test_loop_thread_fn(void *data)
 {
 	u16 chan_id = (unsigned long)data;
 	int rc;
-	uint32_t paddr1, paddr2;
+	u32 paddr1, paddr2;
 	size_t size1, size2;
 	char name[TASK_COMM_LEN];
 
@@ -241,10 +239,10 @@ int parse_chan(const char __user *buf, size_t count, unsigned long *chan_id)
 }
 
 /* Write operation for the 'recv' file. */
-static ssize_t recv_wr(struct file *filp, const char __user *buf,
-			  size_t count, loff_t *fpos)
+static ssize_t recv_wr(struct file *filp, const char __user *buf, size_t count,
+		       loff_t *fpos)
 {
-	uint32_t paddr;
+	u32 paddr;
 	size_t size;
 	int rc;
 	unsigned long chan_id;
@@ -267,8 +265,8 @@ static ssize_t recv_wr(struct file *filp, const char __user *buf,
 }
 
 /* Write operation for the 'send' file. */
-static ssize_t send_wr(struct file *filp, const char __user *buf,
-			  size_t count, loff_t *fpos)
+static ssize_t send_wr(struct file *filp, const char __user *buf, size_t count,
+		       loff_t *fpos)
 {
 	int rc;
 	unsigned long chan_id;
@@ -291,8 +289,8 @@ static ssize_t send_wr(struct file *filp, const char __user *buf,
 }
 
 /* Write operation for the 'close' file. */
-static ssize_t open_wr(struct file *filp, const char __user *buf,
-			       size_t count, loff_t *fpos)
+static ssize_t open_wr(struct file *filp, const char __user *buf, size_t count,
+		       loff_t *fpos)
 {
 	int rc;
 	unsigned long chan_id;
@@ -310,8 +308,8 @@ static ssize_t open_wr(struct file *filp, const char __user *buf,
 }
 
 /* Write operation for the 'open' file. */
-static ssize_t close_wr(struct file *filp, const char __user *buf,
-			       size_t count, loff_t *fpos)
+static ssize_t close_wr(struct file *filp, const char __user *buf, size_t count,
+			loff_t *fpos)
 {
 	int rc;
 	unsigned long chan_id;
@@ -374,7 +372,6 @@ static ssize_t test_long_send_wr(struct file *filp, const char __user *buf,
 
 	return count;
 }
-
 
 /*
  * My debugfs tree.
