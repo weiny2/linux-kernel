@@ -364,8 +364,10 @@ static void __intel_pmu_lbr_restore(struct x86_perf_task_context *task_ctx)
 	}
 
 	mask = x86_pmu.lbr_nr - 1;
-	for (i = 0; i < task_ctx->valid_lbrs; i++) {
+	for (i = 0; i < x86_pmu.lbr_nr; i++) {
 		lbr_idx = (tos - i) & mask;
+		if (!task_ctx->lbr_from[i])
+			break;
 		wrlbr_from(lbr_idx, task_ctx->lbr_from[i]);
 		wrlbr_to  (lbr_idx, task_ctx->lbr_to[i]);
 
@@ -389,7 +391,7 @@ static void __intel_pmu_lbr_save(struct x86_perf_task_context *task_ctx)
 {
 	struct cpu_hw_events *cpuc = this_cpu_ptr(&cpu_hw_events);
 	unsigned lbr_idx, mask;
-	u64 tos, from;
+	u64 tos;
 	int i;
 
 	if (task_ctx->lbr_callstack_users == 0) {
@@ -401,15 +403,13 @@ static void __intel_pmu_lbr_save(struct x86_perf_task_context *task_ctx)
 	tos = intel_pmu_lbr_tos();
 	for (i = 0; i < x86_pmu.lbr_nr; i++) {
 		lbr_idx = (tos - i) & mask;
-		from = rdlbr_from(lbr_idx);
-		if (!from)
+		task_ctx->lbr_from[i] = rdlbr_from(lbr_idx);
+		if (!task_ctx->lbr_from[i])
 			break;
-		task_ctx->lbr_from[i] = from;
 		task_ctx->lbr_to[i]   = rdlbr_to(lbr_idx);
 		if (x86_pmu.intel_cap.lbr_format == LBR_FORMAT_INFO)
 			rdmsrl(MSR_LBR_INFO_0 + lbr_idx, task_ctx->lbr_info[i]);
 	}
-	task_ctx->valid_lbrs = i;
 	task_ctx->tos = tos;
 	task_ctx->lbr_stack_state = LBR_VALID;
 
