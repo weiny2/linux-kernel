@@ -183,6 +183,7 @@ static struct sdw_intel_ctx
 	ctx->mmio_base = res->mmio_base;
 	ctx->link_mask = res->link_mask;
 	ctx->handle = res->handle;
+	mutex_init(&ctx->shim_lock);
 
 	link = ctx->links;
 	link_mask = ctx->link_mask;
@@ -207,6 +208,7 @@ static struct sdw_intel_ctx
 		link->ops = res->ops;
 		link->dev = res->dev;
 		link->clock_stop_quirks = res->clock_stop_quirks;
+		link->shim_lock = &ctx->shim_lock;
 
 		md = sdw_master_device_add(res->parent,
 					   acpi_fwnode_handle(adev),
