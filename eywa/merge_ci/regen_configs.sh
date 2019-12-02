@@ -32,33 +32,16 @@ mkdir new_configs
 echo "regen_configs diff log " >$LOG_FILE
 echo $RULE >>$LOG_FILE
 #intel-next ubuntu config
-create_defconfig intel_next_generic_defconfig intel_next_generic_defconfig  "intel_next_fragments/intel.*.config"
+create_defconfig intel_next_generic_defconfig intel_next_generic_defconfig  "intel_next_config_options.config" 
 #intel-next clear config base off ubuntu with few options set to y
-create_defconfig intel_next_generic_defconfig intel_next_clear_generic_defconfig  "intel_next_fragments/intel.*.config clear_fragments/clear.*.config"
+create_defconfig intel_next_generic_defconfig intel_next_clear_generic_defconfig  "intel_next_config_options.config dcg_fragments/dcg.*.config clear_fragments/clear.*.config" 
 #intel-next dcg rpm config  with dbg off
-create_defconfig dcg_x86_64_defconfig  dcg_x86_64_defconfig "intel_next_fragments/intel.*.config dcg_fragments/dcg.*.config clear_fragments/clear.*.config" 
+create_defconfig dcg_x86_64_defconfig  dcg_x86_64_defconfig "intel_next_config_options.config clear_fragments/clear.*.config"  
 #intel-next ubuntu based fedora rpm config with dbg off 
-create_defconfig intel_next_generic_defconfig intel_next_rpm_defconfig  "intel_next_fragments/intel.*.config fedora_fragments/fedora.*.config clear_fragments/clear.*.config"
-
-
-
-#add new configs to repo 
-git fetch
-git checkout configs -f
-git reset --hard origin/configs
+create_defconfig intel_next_generic_defconfig intel_next_rpm_defconfig  "intel_next_config_options.config fedora_fragments/fedora.*.config clear_fragments/clear.*.config"
 
 #copy generated configs to correct folder
 cp -rfv new_configs/* $CONFIG_FOLDER
-
-#add to git
-git add arch/x86/configs
-git commit -s -m "Regen configs based on fragments"
-
-echo "Done push changes with: git push origin configs:configs"
-if [ "$1" == "-p" ]; then
-	git push origin configs:configs
-fi
-
-#since this is ran from buildbot, just print out log file to screen 
-#to save a step
 cat $LOG_FILE
+exit 0
+
