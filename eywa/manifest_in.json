@@ -223,7 +223,7 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "e990bfae46c95978ff2ca9d6812cd65e74b82963"
         },
         {
             "branch": "split_lock",
