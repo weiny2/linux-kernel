@@ -102,7 +102,7 @@
             "repourl": "git://git.kernel.org/pub/scm/linux/kernel/git/rafael/linux-pm.git",
             "sdl_contact": [],
             "status": "public",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "16512c3e4523bbe84a2b60d16d986b638bff257c"
         },
         {
             "branch": "next",
