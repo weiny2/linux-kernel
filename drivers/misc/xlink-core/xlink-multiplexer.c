@@ -1304,7 +1304,8 @@ enum xlink_error xlink_passthrough(struct xlink_event *event)
 			mux->channels[ipc.chan].size = event->header.size;
 			mux->channels[ipc.chan].timeout = event->header.timeout;
 			mux->channels[ipc.chan].mode = *(enum xlink_opmode *)event->data;
-			rc = intel_keembay_vpu_ipc_open_channel(ipc.node, ipc.chan);
+			rc = intel_keembay_vpu_ipc_open_channel(NULL, ipc.node,
+								ipc.chan);
 			if (rc) {
 				rc = X_LINK_ERROR;
 			} else {
@@ -1317,7 +1318,8 @@ enum xlink_error xlink_passthrough(struct xlink_event *event)
 		break;
 	case XLINK_CLOSE_CHANNEL_REQ:
 		if (mux->channels[ipc.chan].status == CHAN_OPEN) {
-			rc = intel_keembay_vpu_ipc_close_channel(ipc.node, ipc.chan);
+			rc = intel_keembay_vpu_ipc_close_channel(NULL, ipc.node,
+								 ipc.chan);
 			if (rc)
 				rc = X_LINK_ERROR;
 			else

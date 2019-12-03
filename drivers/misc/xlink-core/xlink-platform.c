@@ -32,8 +32,8 @@ static int ipc_write(void *fd, void *data, size_t size, unsigned int timeout)
 	int rc = 0;
 #ifdef CONFIG_XLINK_LOCAL_HOST
 	struct xlink_ipc_fd *ipc = (struct xlink_ipc_fd *)fd;
-	rc = intel_keembay_vpu_ipc_send(ipc->node, ipc->chan, *(uint32_t *)data,
-			size);
+	rc = intel_keembay_vpu_ipc_send(NULL, ipc->node, ipc->chan,
+					*(uint32_t *)data, size);
 #endif
 	return rc;
 }
@@ -44,8 +44,8 @@ static int ipc_read(void *fd, void *data, size_t *size, unsigned int timeout)
 #ifdef CONFIG_XLINK_LOCAL_HOST
 	int addr = 0;
 	struct xlink_ipc_fd *ipc = (struct xlink_ipc_fd *)fd;
-	rc = intel_keembay_vpu_ipc_recv(ipc->node, ipc->chan, &addr,
-			size, timeout);
+	rc = intel_keembay_vpu_ipc_recv(NULL, ipc->node, ipc->chan, &addr,
+					size, timeout);
 	*(uint32_t*)data = addr;
 #endif
 	return rc;

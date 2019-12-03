@@ -444,7 +444,7 @@ enum xlink_error xlink_stop_vpu(void)
 	enum intel_keembay_vpu_state state;
 
 	/* Stop the VPU */
-	rc = intel_keembay_vpu_stop();
+	rc = intel_keembay_vpu_stop(NULL);
 	if (rc) {
 		pr_err("Failed to stop VPU: %d\n", rc);
 		return X_LINK_ERROR;
@@ -452,7 +452,7 @@ enum xlink_error xlink_stop_vpu(void)
 	pr_info("Successfully stopped VPU!\n");
 
 	/* Check state */
-	state = intel_keembay_vpu_status();
+	state = intel_keembay_vpu_status(NULL);
 	if (state != KEEMBAY_VPU_OFF) {
 		pr_err("VPU was not OFF after stop request, it was %d\n", state);
 		return X_LINK_ERROR;
@@ -469,7 +469,7 @@ enum xlink_error xlink_start_vpu(char *filename)
 	enum intel_keembay_vpu_state state;
 
 	pr_info("\nStart VPU - %s\n", filename);
-	rc = intel_keembay_vpu_startup(filename);
+	rc = intel_keembay_vpu_startup(NULL, filename);
 	if (rc) {
 		pr_err("Failed to start VPU: %d\n", rc);
 		return X_LINK_ERROR;
@@ -477,8 +477,7 @@ enum xlink_error xlink_start_vpu(char *filename)
 	pr_info("Successfully started VPU!\n");
 
 	/* Wait for VPU to be READY */
-	rc = intel_keembay_vpu_wait_for_ready(
-			XLINK_VPU_WAIT_FOR_READY);
+	rc = intel_keembay_vpu_wait_for_ready(NULL, XLINK_VPU_WAIT_FOR_READY);
 	if (rc) {
 		pr_err("Tried to start VPU but never got READY.\n");
 		return X_LINK_ERROR;
@@ -486,7 +485,7 @@ enum xlink_error xlink_start_vpu(char *filename)
 	pr_info("Successfully synchronised state with VPU!\n");
 
 	/* Check state */
-	state = intel_keembay_vpu_status();
+	state = intel_keembay_vpu_status(NULL);
 	if (state != KEEMBAY_VPU_READY) {
 		pr_err("VPU was not ready, it was %d\n", state);
 		return X_LINK_ERROR;
