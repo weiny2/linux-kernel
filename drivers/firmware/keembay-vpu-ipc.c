@@ -230,6 +230,8 @@ enum keembay_vpu_event {
 
 static struct vpu_ipc_dev *to_vpu_dev(struct device *dev);
 
+static struct vpu_ipc_dev *vpu0_dev;
+
 /**
  * vpu_ipc_handle_event() - Handle events and optionally update state
  *
@@ -1561,6 +1563,19 @@ static int keembay_vpu_ipc_probe(struct platform_device *pdev)
 	/* Set platform data reference. */
 	platform_set_drvdata(pdev, vpu_dev);
 
+	/*
+	 * To avoid xLink without multi-slice support to fail, we keep track of
+	 * VPU with ID 0 for now.
+	 * TODO: remove this once xLink is supported.
+	 */
+	if (vpu_dev->vpu_id == 0) {
+		if (vpu0_dev) {
+			dev_err(dev, "VPU device with ID 0 already probed\n");
+			goto probe_fail_post_resmem_setup;
+		}
+		vpu0_dev = vpu_dev;
+	}
+
 	return 0;
 
 probe_fail_post_resmem_setup:
@@ -1573,6 +1588,9 @@ static int keembay_vpu_ipc_remove(struct platform_device *pdev)
 {
 	struct vpu_ipc_dev *vpu_dev = platform_get_drvdata(pdev);
 	struct device *dev = &pdev->dev;
+
+	if (vpu_dev->vpu_id == 0)
+		vpu0_dev = NULL;
 
 	if (vpu_dev->ready_message_task) {
 		kthread_stop(vpu_dev->ready_message_task);
@@ -1611,6 +1629,14 @@ module_platform_driver(keem_bay_vpu_ipc_driver);
 static struct vpu_ipc_dev *to_vpu_dev(struct device *dev)
 {
 	struct platform_device *pdev;
+
+	/*
+	 * For temporary compatibility with xLink, if dev is NULL, we return
+	 * the VPU with ID 0.
+	 * TODO: remove this once xLink is updated.
+	 */
+	if (!dev && vpu0_dev)
+		return vpu0_dev;
 
 	if (!dev || dev->driver != &keem_bay_vpu_ipc_driver.driver)
 		return ERR_PTR(-EINVAL);
