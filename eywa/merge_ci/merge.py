@@ -9,7 +9,7 @@ import glob
 import datetime
 import re
 import argparse
-
+import os
 
 pp = pprint.PrettyPrinter(indent=4)
 
@@ -232,15 +232,26 @@ def create_readme_file():
 
 def merge_commit(manifest, config_options):
     #Final Intel next commit. We need to make it look good.
-    artifacts=["manifest","manifest.json",log_file_name,"README.intel",patch_manifest]
+    artifacts=["manifest","manifest.json"]
     date = datetime.date.today()
     #commit everything important
     for artifact in artifacts:
         run_shell_cmd("mv {} eywa".format(artifact))
-        run_shell_cmd("git add eywa/".format(artifact))
+        run_shell_cmd("git add eywa/{}".format(artifact))
+    #Flush log files and add them as well
+    #Use cp for log file because it will be stil be written even after we add to git
+    log.flush()
+    patch.flush()
+    os.fsync(log.fileno())
+    os.fsync(patch.fileno())
+    run_shell_cmd("git add README.intel")
+    run_shell_cmd("cp {} eywa".format(log_file_name))
+    run_shell_cmd("git add eywa/{}".format(log_file_name))
+    run_shell_cmd("cp {} eywa/{}".format(patch_manifest,patch_manifest))
+    run_shell_cmd("git add eywa/{}".format(patch_manifest))
 
     commit_msg = "Intel Next: Add release files for {} {}\n\n".format(manifest["master_branch"]["tag"],date)
-    commit_msg += "\nAdded: {} \n\n ".format(", ".join(artifacts))
+    commit_msg += "\nAdded: {} \n\n ".format(", ".join(artifacts+[log_file_name,patch_manifest,"README.intel"]))
 
     commit_msg +="\nManifest:\n"
     
