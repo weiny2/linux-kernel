@@ -697,6 +697,13 @@ config INGENIC_TIMER
 	help
 	  Support for the timer/counter unit of the Ingenic JZ SoCs.
 
+config THUNDERBAY_TIMER
+	bool "Intel Thunder Bay timer driver"
+	depends on ARM || ARM64
+	select TIMER_OF if OF
+	help
+	  Enables the support for the Intel Thunder Bay timer driver.
+
 config MICROCHIP_PIT64B
 	bool "Microchip PIT64B support"
 	depends on OF || COMPILE_TEST
