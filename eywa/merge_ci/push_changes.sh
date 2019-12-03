@@ -19,7 +19,7 @@ if [ $DAYOFWEEK -ge 6 ]  || [ $HOUR -lt 10 ]; then
 	exit 0
 fi
 
-LOGNAME=$(echo eywa/merge-$DATE.log | sed "s/.log//g")
+LOGNAME=$(echo eywa/intel-next-merge-$DATE.log | sed "s/.log//g")
 baseversion=$(grep "Resetting master to" $LOGNAME.log | uniq  | sed "s/Resetting master to //gi")
 baseversion=$(echo $baseversion | sed "s/v//g")
 #intel next tag
