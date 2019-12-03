@@ -2460,6 +2460,8 @@ static struct file *do_async_mmap_readahead(struct vm_fault *vmf,
 	return fpin;
 }
 
+int hmem_enable_pagecache_write_fault_promotion;
+
 /**
  * filemap_fault - read in file data for page fault handling
  * @vmf:	struct vm_fault containing details of the fault
@@ -2516,7 +2518,8 @@ recheck_page:
 		 * For page in fast memory, the prmotition will fail
 		 * and continue to readahead.
 		 */
-		if (vmf->flags & FAULT_FLAG_WRITE)
+		if (hmem_enable_pagecache_write_fault_promotion &&
+				(vmf->flags & FAULT_FLAG_WRITE))
 			m_ret = promote_page(page, 0);
 
 		if (m_ret == MIGRATEPAGE_SUCCESS) {
