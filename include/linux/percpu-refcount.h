@@ -91,8 +91,8 @@ struct percpu_ref {
 	 * The low bit of the pointer indicates whether the ref is in percpu
 	 * mode; if set, then get/put will manipulate the atomic_t.
 	 */
-	unsigned long		percpu_count_ptr;
-	percpu_ref_func_t	*release;
+	unsigned long		percpu_count_ptr	____cacheline_aligned;
+	percpu_ref_func_t	*release		____cacheline_aligned;
 	percpu_ref_func_t	*confirm_switch;
 	bool			force_atomic:1;
 	struct rcu_head		rcu;
