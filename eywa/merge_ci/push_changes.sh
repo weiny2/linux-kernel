@@ -9,7 +9,7 @@ die() {
         exit 1
 }
 
-if [ ! -f eywa/merge-$DATE.log ]; then
+if [ ! -f eywa/intel-next-merge-$DATE.log ]; then
 	die "Merge not complete: missing log file in eywa dir"
 fi
 
