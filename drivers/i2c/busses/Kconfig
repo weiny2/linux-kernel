@@ -136,6 +136,7 @@ config I2C_I801
 	    Sunrise Point (PCH)
 	    Kaby Lake (PCH)
 	    DNV (SOC)
+	    Sapphire Rapids (SOC)
 	    Broxton (SOC)
 	    Lewisburg (PCH)
 	    Gemini Lake (SOC)
