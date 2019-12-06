@@ -134,12 +134,49 @@ void tb_lc_unconfigure_link(struct tb_switch *sw)
 	tb_lc_configure_lane(down, false);
 }
 
+static int tb_lc_set_sleep_one(struct tb_switch *sw, unsigned int offset)
+{
+	bool wakeup = device_may_wakeup(&sw->dev);
+	u32 ctrl;
+	int ret;
+
+	/*
+	 * Enable wake on PCIe and USB4 (wake coming from another
+	 * router). This only applies to device routers. Do this as
+	 * separate writes (sleep bit must be set separately).
+	 */
+	if (tb_route(sw)) {
+		ret = tb_sw_read(sw, &ctrl, TB_CFG_SWITCH,
+				 offset + TB_LC_SX_CTRL, 1);
+		if (ret)
+			return ret;
+
+		if (wakeup)
+			ctrl |= TB_LC_SX_CTRL_WOP | TB_LC_SX_CTRL_WOU4;
+		else
+			ctrl &= ~(TB_LC_SX_CTRL_WOP | TB_LC_SX_CTRL_WOU4);
+
+		ret = tb_sw_write(sw, &ctrl, TB_CFG_SWITCH,
+				  offset + TB_LC_SX_CTRL, 1);
+		if (ret)
+			return ret;
+	}
+
+	ret = tb_sw_read(sw, &ctrl, TB_CFG_SWITCH, offset + TB_LC_SX_CTRL, 1);
+	if (ret)
+		return ret;
+
+	ctrl |= TB_LC_SX_CTRL_SLP;
+
+	return tb_sw_write(sw, &ctrl, TB_CFG_SWITCH, offset + TB_LC_SX_CTRL, 1);
+}
+
 /**
  * tb_lc_set_sleep() - Inform LC that the switch is going to sleep
  * @sw: Switch to set sleep
  *
  * Let the switch link controllers know that the switch is going to
- * sleep.
+ * sleep. Also enables wakes accordingly.
  */
 int tb_lc_set_sleep(struct tb_switch *sw)
 {
@@ -161,16 +198,8 @@ int tb_lc_set_sleep(struct tb_switch *sw)
 	/* For each link controller set sleep bit */
 	for (i = 0; i < nlc; i++) {
 		unsigned int offset = sw->cap_lc + start + i * size;
-		u32 ctrl;
 
-		ret = tb_sw_read(sw, &ctrl, TB_CFG_SWITCH,
-				 offset + TB_LC_SX_CTRL, 1);
-		if (ret)
-			return ret;
-
-		ctrl |= TB_LC_SX_CTRL_SLP;
-		ret = tb_sw_write(sw, &ctrl, TB_CFG_SWITCH,
-				  offset + TB_LC_SX_CTRL, 1);
+		ret = tb_lc_set_sleep_one(sw, offset);
 		if (ret)
 			return ret;
 	}
