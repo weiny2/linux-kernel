@@ -265,6 +265,52 @@ static int alloc_pasid(struct intel_svm *svm, struct mm_struct *mm,
 	return pasid;
 }
 
+static int ioasid_status_change(struct notifier_block *nb,
+				unsigned long code, void *data)
+{
+	ioasid_t ioasid = *(ioasid_t *)data;
+	struct intel_svm_dev *sdev;
+	struct intel_svm *svm;
+
+	if (code == IOASID_FREE) {
+		/*
+		 * Unbind all devices associated with this PASID which is
+		 * being freed by other users such as VFIO.
+		 */
+		svm = ioasid_find(NULL, ioasid, NULL);
+		if (!svm || !svm->iommu)
+			return NOTIFY_DONE;
+
+		if (IS_ERR(svm))
+			return NOTIFY_BAD;
+
+		mutex_lock(&pasid_mutex);
+		list_for_each_entry_rcu(sdev, &svm->devs, list) {
+			/* Does not poison forward pointer */
+			list_del_rcu(&sdev->list);
+			intel_pasid_tear_down_entry(svm->iommu, sdev->dev,
+						    svm->pasid);
+			kfree_rcu(sdev, rcu);
+
+			if (list_empty(&svm->devs)) {
+				list_del(&svm->list);
+				ioasid_set_data(ioasid, NULL);
+				kfree(svm);
+			}
+			synchronize_rcu();
+		}
+		mutex_unlock(&pasid_mutex);
+
+		return NOTIFY_OK;
+	}
+
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block svm_ioasid_notifier = {
+		.notifier_call = ioasid_status_change,
+};
+
 int intel_svm_bind_gpasid(struct iommu_domain *domain,
 			struct device *dev,
 			struct iommu_gpasid_bind_data *data)
@@ -357,6 +403,13 @@ int intel_svm_bind_gpasid(struct iommu_domain *domain,
 		if (data->flags & IOMMU_SVA_GPASID_VAL) {
 			svm->gpasid = data->gpasid;
 			svm->flags |= SVM_FLAG_GUEST_PASID;
+		}
+		/* Get notified when IOASID is freed by others, e.g. VFIO */
+		ret = ioasid_add_notifier(data->hpasid, &svm_ioasid_notifier);
+		if (ret) {
+			mmput(svm->mm);
+			kfree(svm);
+			goto out;
 		}
 		ioasid_set_data(data->hpasid, svm);
 		INIT_LIST_HEAD_RCU(&svm->devs);
@@ -477,6 +530,9 @@ int intel_svm_unbind_gpasid(struct device *dev, int pasid)
 				 * that PASID allocated by one guest cannot be
 				 * used by another.
 				 */
+				ioasid_remove_notifier(pasid,
+						       &svm_ioasid_notifier);
+
 				ioasid_set_data(pasid, NULL);
 				kfree(svm);
 			}

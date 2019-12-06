@@ -720,7 +720,7 @@ struct intel_svm_dev {
 struct intel_svm {
 	struct mmu_notifier notifier;
 	struct mm_struct *mm;
-
+	struct notifier_block *nb;
 	struct intel_iommu *iommu;
 	int flags;
 	int pasid;
