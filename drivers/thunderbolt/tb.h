@@ -893,7 +893,7 @@ static inline struct tb_retimer *tb_to_retimer(struct device *dev)
 	return NULL;
 }
 
-int usb4_switch_setup(struct tb_switch *sw);
+int usb4_switch_setup(struct tb_switch *sw, bool restore);
 int usb4_switch_read_uid(struct tb_switch *sw, u64 *uid);
 int usb4_switch_drom_read(struct tb_switch *sw, unsigned int address, void *buf,
 			  size_t size);
