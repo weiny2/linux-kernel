@@ -17,12 +17,7 @@
         {
             "branch": "eywa",
             "branch_type": "internal nonexpiring",
-            "config_options": [
-                {
-                    "name": "CONFIG_RAR",
-                    "value": "y"
-                }
-            ],
+            "config_options": [],
             "contributor": [],
             "description": "intel-next scripts and patches",
             "enabled": true,
@@ -37,12 +32,7 @@
         {
             "branch": "configs",
             "branch_type": "internal nonexpiring",
-            "config_options": [
-                {
-                    "name": "CONFIG_RAR",
-                    "value": "n"
-                }
-            ],
+            "config_options": [],
             "contributor": [],
             "description": "intel-next scripts and patches",
             "enabled": true,
