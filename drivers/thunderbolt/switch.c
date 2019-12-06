@@ -2511,6 +2511,13 @@ int tb_switch_add(struct tb_switch *sw)
 		return ret;
 	}
 
+	/*
+	 * Thunderbolt routers do not generate wakeups themselves but
+	 * they forward wakeups from tunneled protocols, so enable it
+	 * here.
+	 */
+	device_init_wakeup(&sw->dev, true);
+
 	pm_runtime_set_active(&sw->dev);
 	if (sw->rpm) {
 		pm_runtime_set_autosuspend_delay(&sw->dev, TB_AUTOSUSPEND_DELAY);
@@ -2585,6 +2592,18 @@ void tb_sw_set_unplugged(struct tb_switch *sw)
 	}
 }
 
+static int tb_switch_set_wake(struct tb_switch *sw, unsigned int flags)
+{
+	if (flags)
+		tb_sw_dbg(sw, "enabling wakeup: %#x\n", flags);
+	else
+		tb_sw_dbg(sw, "disabling wakeup\n");
+
+	if (tb_switch_is_usb4(sw))
+		return usb4_switch_set_wake(sw, flags);
+	return tb_lc_set_wake(sw, flags);
+}
+
 int tb_switch_resume(struct tb_switch *sw)
 {
 	struct tb_port *port;
@@ -2630,6 +2649,9 @@ int tb_switch_resume(struct tb_switch *sw)
 	if (err)
 		return err;
 
+	/* Disable wakes */
+	tb_switch_set_wake(sw, 0);
+
 	err = tb_switch_tmu_init(sw);
 	if (err)
 		return err;
@@ -2665,6 +2687,7 @@ int tb_switch_resume(struct tb_switch *sw)
 
 void tb_switch_suspend(struct tb_switch *sw)
 {
+	unsigned int flags = 0;
 	struct tb_port *port;
 	int err;
 
@@ -2676,6 +2699,11 @@ void tb_switch_suspend(struct tb_switch *sw)
 		if (tb_port_has_remote(port))
 			tb_switch_suspend(port->remote->sw);
 	}
+
+	if (device_may_wakeup(&sw->dev))
+		flags = TB_WAKE_ON_USB4 | TB_WAKE_ON_USB3 | TB_WAKE_ON_PCIE;
+
+	tb_switch_set_wake(sw, flags);
 
 	if (tb_switch_is_usb4(sw))
 		usb4_switch_set_sleep(sw);
