@@ -1681,53 +1681,6 @@
             "stuck_at_ref": ""
         },
         {
-            "branch": "mktme/integration",
-            "branch_type": "expiring",
-            "config_options": [
-                {
-                    "name": "CONFIG_ACPI_HMAT",
-                    "value": "y"
-                },
-                {
-                    "name": "CONFIG_MEMORY_HOTPLUG_DEFAULT_ONLINE",
-                    "value": "n"
-                },
-                {
-                    "name": "CONFIG_X86_INTEL_MKTME",
-                    "value": "y"
-                },
-                {
-                    "name": "CONFIG_GUP_BENCHMARK",
-                    "value": "y"
-                }
-            ],
-            "contributor": [
-                {
-                    "name": "Kirill Shutemov",
-                    "email": "kirill.shutemov@linux.intel.com"
-                }
-            ],
-            "description": "Multi-Key Total Memory Encryption enabling",
-            "enabled": false,
-            "ip_owner": [
-                {
-                    "name": "Baiju Patel",
-                    "email": "baiju.v.patel@intel.com"
-                }
-            ],
-            "jira": "",
-            "name": "mktme",
-            "repourl": "ssh://git-ger-3.devtools.intel.com:29418/linux_mktme-linux.git",
-            "sdl_contact": [
-                {
-                    "name": "Robert Kasten",
-                    "email": "robert.a.kasten@intel.com"
-                }
-            ],
-            "status": "intel confidential",
-            "stuck_at_ref": ""
-        },
-        {
             "branch": "v5.4-rc6",
             "branch_type": "expiring",
             "config_options": [],
