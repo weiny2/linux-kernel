@@ -72,7 +72,7 @@
             "description": "Len Brown's patches",
             "enabled": false,
             "ip_owner": [],
-            "jira": "",
+            "jira": "NEXT-1691",
             "name": "len-x86",
             "repourl": "git://linux-os.sc.intel.com/~lenb/linux",
             "sdl_contact": [
@@ -97,7 +97,7 @@
             "description": "NEXT PM tree",
             "enabled": false,
             "ip_owner": [],
-            "jira": "",
+            "jira": "NEXT-1690",
             "name": "pm-testing",
             "repourl": "git://git.kernel.org/pub/scm/linux/kernel/git/rafael/linux-pm.git",
             "sdl_contact": [],
@@ -175,7 +175,7 @@
             "description": "SGX code",
             "enabled": false,
             "ip_owner": [],
-            "jira": "",
+            "jira": "NEXT-1688",
             "name": "SGX",
             "repourl": "git://github.com/jsakkine-intel/linux-sgx.git",
             "sdl_contact": [],
@@ -213,7 +213,7 @@
                     "email": "rodrigo.vivi@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1687",
             "name": "drm",
             "repourl": "ssh://git-amr-1.devtools.intel.com:29418/otc_gen_graphics-drm-intel.git",
             "sdl_contact": [
@@ -243,7 +243,7 @@
                     "email": "ravi.v.shankar@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1689",
             "name": "split_lock",
             "repourl": "ssh://git-amr-4.devtools.intel.com:29418/enabling_cldemote_in_linux_kerne-linux_git",
             "sdl_contact": [
@@ -282,7 +282,7 @@
                     "email": "jason.b.akers@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1686",
             "name": "nvme",
             "repourl": "ssh://git-gar-1.devtools.intel.com:29418/otc_nvme_linux-kernel",
             "sdl_contact": [],
