@@ -15,6 +15,7 @@ struct ioasid_data {
 	struct ioasid_set *set;
 	void *private;
 	struct rcu_head rcu;
+	struct atomic_notifier_head notifications;
 };
 
 /*
@@ -314,6 +315,7 @@ ioasid_t ioasid_alloc(struct ioasid_set *set, ioasid_t min, ioasid_t max,
 
 	data->set = set;
 	data->private = private;
+	ATOMIC_INIT_NOTIFIER_HEAD(&data->notifications);
 
 	/*
 	 * Custom allocator needs allocator data to perform platform specific
@@ -360,6 +362,9 @@ void ioasid_free(ioasid_t ioasid)
 		goto exit_unlock;
 	}
 
+	/* Notify all users that this IOASID is being freed */
+	atomic_notifier_call_chain(&ioasid_data->notifications, IOASID_FREE,
+				     &ioasid);
 	active_allocator->ops->free(ioasid, active_allocator->ops->pdata);
 	/* Custom allocator needs additional steps to free the xa element */
 	if (active_allocator->flags & IOASID_ALLOCATOR_CUSTOM) {
@@ -415,6 +420,44 @@ unlock:
 	return priv;
 }
 EXPORT_SYMBOL_GPL(ioasid_find);
+
+int ioasid_add_notifier(ioasid_t ioasid, struct notifier_block *nb)
+{
+	struct ioasid_allocator_data *idata;
+	struct ioasid_data *data;
+	int ret = 0;
+
+	rcu_read_lock();
+	idata = rcu_dereference(active_allocator);
+	data = xa_load(&idata->xa, ioasid);
+	if (!data) {
+		ret = -ENOENT;
+		goto unlock;
+	}
+	ret = atomic_notifier_chain_register(&data->notifications, nb);
+unlock:
+	rcu_read_unlock();
+	return ret;
+}
+EXPORT_SYMBOL_GPL(ioasid_add_notifier);
+
+void ioasid_remove_notifier(ioasid_t ioasid, struct notifier_block *nb)
+{
+	struct ioasid_allocator_data *idata;
+	struct ioasid_data *data;
+
+	rcu_read_lock();
+	idata = rcu_dereference(active_allocator);
+	data = xa_load(&idata->xa, ioasid);
+	rcu_read_unlock();
+	if (!data) {
+		pr_err("IOASID %d not found\n", ioasid);
+		return;
+	}
+	/* Unregister can sleep, called outside RCU critical section. */
+	atomic_notifier_chain_unregister(&data->notifications, nb);
+}
+EXPORT_SYMBOL_GPL(ioasid_remove_notifier);
 
 MODULE_AUTHOR("Jean-Philippe Brucker <jean-philippe.brucker@arm.com>");
 MODULE_AUTHOR("Jacob Pan <jacob.jun.pan@linux.intel.com>");
