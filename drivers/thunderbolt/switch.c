@@ -1992,6 +1992,7 @@ tb_switch_alloc_safe_mode(struct tb *tb, struct device *parent, u64 route)
  */
 int tb_switch_configure(struct tb_switch *sw)
 {
+	bool restore = sw->config.enabled;
 	struct tb *tb = sw->tb;
 	u64 route;
 	int ret;
@@ -1999,7 +2000,7 @@ int tb_switch_configure(struct tb_switch *sw)
 	route = tb_route(sw);
 
 	tb_dbg(tb, "%s Switch at %#llx (depth: %d, up port: %d)\n",
-	       sw->config.enabled ? "restoring " : "initializing", route,
+	       restore ? "restoring " : "initializing", route,
 	       tb_route_length(route), sw->config.upstream_port_number);
 
 	sw->config.enabled = 1;
@@ -2018,7 +2019,7 @@ int tb_switch_configure(struct tb_switch *sw)
 		if (ret)
 			return ret;
 
-		ret = usb4_switch_setup(sw);
+		ret = usb4_switch_setup(sw, restore);
 		if (ret)
 			return ret;
 

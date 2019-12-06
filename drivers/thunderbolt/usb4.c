@@ -189,9 +189,38 @@ static int usb4_switch_op(struct tb_switch *sw, u16 opcode, u8 *status)
 	return 0;
 }
 
+static void usb4_switch_check_wakes(struct tb_switch *sw)
+{
+	struct tb_port *port;
+	u32 val;
+
+	if (tb_route(sw)) {
+		if (tb_sw_read(sw, &val, TB_CFG_SWITCH, ROUTER_CS_6, 1))
+			return;
+
+		tb_sw_dbg(sw, "PCIe wake: %s, USB3 wake: %s\n",
+		val & ROUTER_CS_6_WOPS ? "yes" : "no",
+		val & ROUTER_CS_6_WOUS ? "yes" : "no");
+	}
+
+	/* Check for any connected downstream ports for USB4 wake */
+	tb_switch_for_each_port(sw, port) {
+		if (!tb_port_has_remote(port))
+			continue;
+
+		if (tb_port_read(port, &val, TB_CFG_PORT,
+				 port->cap_usb4 + PORT_CS_18, 1))
+			break;
+
+		tb_port_dbg(port, "USB4 wake: %s\n",
+			    val & PORT_CS_18_WOU4S ? "yes" : "no");
+	}
+}
+
 /**
  * usb4_switch_setup() - Additional setup for USB4 device
  * @sw: USB4 router to setup
+ * @restore: Is the router being restored after sleep
  *
  * USB4 routers need additional settings in order to enable all the
  * tunneling. This function enables USB and PCIe tunneling if it can be
@@ -200,12 +229,15 @@ static int usb4_switch_op(struct tb_switch *sw, u16 opcode, u8 *status)
  * switch upstream) then the internal xHCI controller is enabled
  * instead.
  */
-int usb4_switch_setup(struct tb_switch *sw)
+int usb4_switch_setup(struct tb_switch *sw, bool restore)
 {
 	struct tb_switch *parent;
 	bool tbt3, xhci;
 	u32 val = 0;
 	int ret;
+
+	if (restore)
+		usb4_switch_check_wakes(sw);
 
 	if (!tb_route(sw))
 		return 0;
@@ -396,8 +428,56 @@ bool usb4_switch_lane_bonding_possible(struct tb_switch *sw)
  */
 int usb4_switch_set_sleep(struct tb_switch *sw)
 {
+	bool wakeup = device_may_wakeup(&sw->dev);
 	int ret;
 	u32 val;
+
+	if (wakeup) {
+		struct tb_port *port;
+
+		/*
+		 * Enable wake coming from all USB4 downstream ports
+		 * (from child routers). For device routers also do this
+		 * for the upstream port.
+		 */
+		tb_switch_for_each_port(sw, port) {
+			if (!tb_port_has_remote(port) ||
+			    (tb_route(sw) && !tb_is_upstream_port(port)))
+				continue;
+
+			ret = tb_port_read(port, &val, TB_CFG_PORT,
+					   port->cap_usb4 + PORT_CS_19, 1);
+			if (ret)
+				return ret;
+
+			val |= PORT_CS_19_WOU4;
+
+			ret = tb_port_write(port, &val, TB_CFG_PORT,
+					    port->cap_usb4 + PORT_CS_19, 1);
+			if (ret)
+				return ret;
+		}
+	}
+
+	/*
+	 * Enable wakes from PCIe and USB 3.x on this router. Only
+	 * needed for device routers. Do this separately from the sleep
+	 * bit.
+	 */
+	if (tb_route(sw)) {
+		ret = tb_sw_read(sw, &val, TB_CFG_SWITCH, ROUTER_CS_5, 1);
+		if (ret)
+			return ret;
+
+		if (wakeup)
+			val |= ROUTER_CS_5_WOP | ROUTER_CS_5_WOU;
+		else
+			val &= ~(ROUTER_CS_5_WOP | ROUTER_CS_5_WOU);
+
+		ret = tb_sw_write(sw, &val, TB_CFG_SWITCH, ROUTER_CS_5, 1);
+		if (ret)
+			return ret;
+	}
 
 	/* Set sleep bit and wait for sleep ready to be asserted */
 	ret = tb_sw_read(sw, &val, TB_CFG_SWITCH, ROUTER_CS_5, 1);

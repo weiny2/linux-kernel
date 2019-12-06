@@ -374,6 +374,8 @@ static void tb_scan_port(struct tb_port *port)
 	if (!tcm->hotplug_active)
 		dev_set_uevent_suppress(&sw->dev, true);
 
+	device_init_wakeup(&sw->dev, true);
+
 	if (tb_switch_add(sw)) {
 		tb_switch_put(sw);
 		return;
@@ -971,6 +973,13 @@ static int tb_start(struct tb *tb)
 		tb_switch_put(tb->root_switch);
 		return ret;
 	}
+
+	/*
+	 * Thunderbolt and USB4 devices themselves do not generate
+	 * wakeup but they are used to tunnel other protocols that do
+	 * wake so we enable it here.
+	 */
+	device_init_wakeup(&tb->root_switch->dev, true);
 
 	/* Announce the switch to the world */
 	ret = tb_switch_add(tb->root_switch);
