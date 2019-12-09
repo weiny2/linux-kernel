@@ -4064,6 +4064,173 @@ int skx_uncore_pci_init(void)
 
 /* end of SKX uncore support */
 
+/* Discovery table based basic uncore support */
+
+static struct rb_root *
+basic_uncore_get_types(int access_type)
+{
+	switch (access_type) {
+	case UNCORE_ACCESS_MSR:
+		return &uncore_msr_uncores;
+	case UNCORE_ACCESS_MMIO:
+		return &uncore_mmio_uncores;
+	case UNCORE_ACCESS_CFG:
+		return &uncore_pci_uncores;
+	}
+	return NULL;
+}
+
+static __init struct intel_uncore_type *
+basic_uncore_add_type(struct uncore_unit_discovery *unit, int die)
+{
+	struct intel_uncore_type *new_type;
+
+	new_type = kzalloc(sizeof(struct intel_uncore_type), GFP_KERNEL);
+	if (!new_type)
+		return NULL;
+
+	switch (unit->access_type) {
+	case UNCORE_ACCESS_MSR:
+		new_type->type_id = unit->box_type;
+		new_type->num_counters = unit->num_regs;
+		new_type->perf_ctr_bits = unit->bit_width;
+		new_type->box_ctl = (unsigned int)unit->box_ctl;
+		new_type->perf_ctr = (unsigned int)unit->box_ctl + unit->ctr_offset;
+		new_type->event_ctl = (unsigned int)unit->box_ctl + unit->ctl_offset;
+		uncore_type_insert(&uncore_msr_uncores, new_type);
+		break;
+	default:
+		pr_debug_once("unsupported uncore access type %d\n",
+			      unit->access_type);
+		kfree(new_type);
+		return NULL;
+	}
+
+	return new_type;
+}
+
+static void basic_uncore_del_type(struct intel_uncore_type *type,
+				  int access_type)
+{
+	struct rb_root *types = basic_uncore_get_types(access_type);
+
+	if (types)
+		rb_erase(&type->type_node, types);
+	kfree(type);
+}
+
+static bool check_invalid_unit(struct uncore_unit_discovery *unit)
+{
+	return !unit->table1 || !unit->table2 || !unit->table3 ||
+	       (unit->table1 == -1ULL) || (unit->table2 == -1ULL) ||
+	       (unit->table3 == -1ULL);
+}
+
+int __init basic_uncore_discovery(void)
+{
+	struct intel_uncore_type *box_type, *prev_box_type = NULL;
+	struct uncore_global_discovery global;
+	struct uncore_discovery_table *table;
+	struct pci_dev *discovery_dev = NULL;
+	struct uncore_unit_discovery unit;
+	struct rb_root *types;
+	void __iomem *io_addr;
+	resource_size_t addr;
+	bool parsed = false;
+	u32 pci_dword;
+	int die, i;
+
+	list_for_each_entry(table, &discovery_table, list) {
+		die = table->die;
+		discovery_dev = pci_get_domain_bus_and_slot(table->domain,
+							    table->bus,
+							    table->devfn);
+		if (!discovery_dev)
+			continue;
+
+		pci_read_config_dword(discovery_dev, table->bar_offset,
+				      &pci_dword);
+		addr = pci_dword & ~(PAGE_SIZE - 1);
+		io_addr = ioremap(addr, UNCORE_DISCOVERY_MAP_SIZE);
+		if (!io_addr) {
+			pci_dev_put(discovery_dev);
+			continue;
+		}
+
+		/* Read Global Discovery State */
+		memcpy_fromio(&global, io_addr,
+			      sizeof(struct uncore_global_discovery));
+
+		if (!global.table1 || !global.table2 || !global.table3) {
+			pr_info("Invalid Global Discovery State: 0x%llx 0x%llx 0x%llx\n",
+				global.table1, global.table2, global.table3);
+			iounmap(io_addr);
+			pci_dev_put(discovery_dev);
+			return -EINVAL;
+		}
+
+		/* Parsing Unit Discovery State */
+		for (i = 0; i < global.max_units; i++) {
+			memcpy_fromio(&unit,
+				      io_addr + (i + 1) * (global.stride * 8),
+				      sizeof(struct uncore_unit_discovery));
+
+			/* ignore the invalid unit */
+			if (check_invalid_unit(&unit))
+				continue;
+
+			/*
+			 * For MSR type of uncore, the unit discovery tables
+			 * are the same among sockets/dies.
+			 * Only need to parse the unit discovery tables once.
+			 */
+			if (parsed)
+				continue;
+
+			/*
+			 * Fast path:
+			 * Still processing the same uncore block.
+			 * Just update the offset and box id for the new box.
+			 */
+			if (prev_box_type && prev_box_type->type_id == unit.box_type) {
+				uncore_save_box_info(prev_box_type, unit.box_id,
+						     (unsigned int)unit.box_ctl, die);
+				continue;
+			}
+
+			types = basic_uncore_get_types(unit.access_type);
+			if (!types)
+				continue;
+			box_type = uncore_type_search(types, unit.box_type);
+
+			if (!box_type) {
+				/*
+				 * Save everything for the first box of a
+				 * uncore block, and insert the block to
+				 * the RB tree.
+				 */
+				box_type = basic_uncore_add_type(&unit, die);
+				if (!box_type)
+					continue;
+				if (uncore_save_box_info(box_type, unit.box_id, (unsigned int)unit.box_ctl, die)) {
+					basic_uncore_del_type(box_type, unit.access_type);
+					continue;
+				}
+			} else if (uncore_save_box_info(box_type, unit.box_id, (unsigned int)unit.box_ctl, die))
+					continue;
+			prev_box_type = box_type;
+		}
+
+		parsed = true;
+		iounmap(io_addr);
+		pci_dev_put(discovery_dev);
+	}
+
+	return 0;
+}
+
+/* end of discovery based basic uncore support */
+
 /* SNR uncore support */
 
 static struct intel_uncore_type snr_uncore_ubox = {
