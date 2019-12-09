@@ -444,7 +444,7 @@
             "stuck_at_ref": ""
         },
         {
-            "branch": "cse-5.4",
+            "branch": "cse-5.5",
             "branch_type": "expiring",
             "config_options": [
                 {
@@ -502,6 +502,10 @@
                 {
                     "name": "CONFIG_NFC_MICROREAD_MEI",
                     "value": "m"
+                },
+                {
+                    "name": "CONFIG_INTEL_MEI_HDCP",
+                    "value": "m"
                 }
             ],
             "contributor": [
@@ -511,14 +515,14 @@
                 }
             ],
             "description": "CSE/CSME MEI driver and MEI client drivers",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "William A. Stevens",
                     "email": "William.a.stevens@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1705",
             "name": "mei",
             "repourl": "ssh://git-ger-8.devtools.intel.com:29418/sfip_linux-linux-mei.git",
             "sdl_contact": [
