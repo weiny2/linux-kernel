@@ -1015,6 +1015,8 @@ static void uncore_type_exit(struct intel_uncore_type *type)
 	}
 	kfree(type->events_group);
 	type->events_group = NULL;
+	kfree(type->box_ctls);
+	type->box_ctls = NULL;
 }
 
 static void uncore_types_exit(struct rb_root *types)
@@ -1102,7 +1104,10 @@ static unsigned int
 uncore_get_box_ctl_offset(struct intel_uncore_type *type,
 			  unsigned int box_ctl, int die)
 {
-	return box_ctl - type->box_ctl;
+	if (type->box_ctls)
+		return box_ctl - type->box_ctls[die];
+	else
+		return box_ctl - type->box_ctl;
 }
 
 /*
@@ -1147,6 +1152,21 @@ int uncore_save_box_info(struct intel_uncore_type *type,
 	type->msr_offsets = new_offsets;
 	type->box_ids = new_box_ids;
 	type->num_boxes = num_boxes;
+
+	return 0;
+}
+
+/* Save the first box ctl for each die */
+int uncore_save_box_ctl(struct intel_uncore_type *type,
+			unsigned int box_ctl, int die)
+{
+	if (!type->box_ctls) {
+		type->box_ctls = kcalloc(max_dies, sizeof(unsigned), GFP_KERNEL);
+		if (!type->box_ctls)
+			return -ENOMEM;
+	}
+
+	type->box_ctls[die] = box_ctl;
 
 	return 0;
 }
@@ -1282,6 +1302,107 @@ static void uncore_pci_remove(struct pci_dev *pdev)
 	kfree(box);
 }
 
+static int __init uncore_pci_type_pmu_register(struct intel_uncore_type *type)
+{
+	struct uncore_discovery_table *table;
+	struct pci_dev *table_pdev;
+	unsigned int devfn;
+	int segment, bus;
+	struct intel_uncore_pmu *pmu = NULL;
+	struct intel_uncore_box *box;
+	struct pci_dev *pdev;
+	struct pci_bus *pbus;
+	u64 box_ctl;
+	int ret, i, dieid;
+
+	if (!type->box_ctls)
+		return -ENOMEM;
+
+	for (dieid = 0; dieid < max_dies; dieid++) {
+
+		if (!type->box_ctls[dieid])
+				continue;
+
+		table_pdev = NULL;
+		list_for_each_entry(table, &discovery_table, list) {
+			if (table->die == dieid) {
+				table_pdev = pci_get_domain_bus_and_slot(table->domain,
+									 table->bus,
+									 table->devfn);
+				break;
+			}
+		}
+		if (!table || !table_pdev)
+			continue;
+
+		segment = table->domain;
+
+		for (i = 0; i < type->num_boxes; i++) {
+			pmu = &type->pmus[i];
+			box = uncore_alloc_box(type, NUMA_NO_NODE);
+			if (!box) {
+				pci_dev_put(table_pdev);
+				return -ENOMEM;
+			}
+			box->dieid = dieid;
+			box_ctl = type->box_ctls[dieid] + type->pci_offsets[i];
+			bus = (box_ctl >> 20) & 0xff;
+			devfn = (box_ctl >> 12) & 0xff;
+			pbus = pci_find_bus(segment, bus);
+			if (pbus == NULL)
+				continue;
+			pdev = pci_get_slot(pbus, devfn);
+			if (pdev == NULL)
+				continue;
+			box->pci_dev = pdev;
+
+			pmu->func_id = devfn;
+			box->pmu = pmu;
+			uncore_box_init(box);
+
+			pmu->boxes[dieid] = box;
+			if (atomic_inc_return(&pmu->activeboxes) > 1) {
+				pci_dev_put(pdev);
+				continue;
+			}
+
+			ret = uncore_pmu_register(pmu);
+			if (ret) {
+				pmu->boxes[dieid] = NULL;
+				uncore_box_exit(box);
+				kfree(box);
+			}
+			pci_dev_put(pdev);
+		}
+		pci_dev_put(table_pdev);
+	}
+	return 0;
+}
+
+static int __init uncore_pci_init_discovery(void)
+{
+	struct rb_root *types = &uncore_pci_uncores;
+	struct intel_uncore_type *type, *next;
+	int ret;
+
+	ret = uncore_types_init(types, false);
+	if (ret)
+		goto err;
+
+	rbtree_postorder_for_each_entry_safe(type, next, types, type_node) {
+		ret = uncore_pci_type_pmu_register(type);
+		if (ret)
+			goto err;
+	}
+
+	return 0;
+
+err:
+	uncore_types_exit(&uncore_pci_uncores);
+	uncore_type_delete_all(&uncore_pci_uncores);
+	return ret;
+}
+
 static int __init uncore_pci_init(void)
 {
 	size_t size;
@@ -1324,10 +1445,11 @@ static void uncore_pci_exit(void)
 	if (pcidrv_registered) {
 		pcidrv_registered = false;
 		pci_unregister_driver(uncore_pci_driver);
-		uncore_types_exit(&uncore_pci_uncores);
 		kfree(uncore_extra_pci_dev);
 		uncore_free_pcibus_map();
 	}
+	uncore_types_exit(&uncore_pci_uncores);
+	uncore_type_delete_all(&uncore_pci_uncores);
 }
 
 static void uncore_change_type_ctx(struct intel_uncore_type *type, int old_cpu,
