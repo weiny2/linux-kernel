@@ -739,22 +739,6 @@
                     "value": "m"
                 },
                 {
-                    "name": "CONFIG_PINCTRL_ICELAKE_N",
-                    "value": "m"
-                },
-                {
-                    "name": "CONFIG_PINCTRL_JASPERLAKE",
-                    "value": "m"
-                },
-                {
-                    "name": "CONFIG_DEBUG_GPIO",
-                    "value": "y"
-                },
-                {
-                    "name": "CONFIG_DEBUG_PINCTRL",
-                    "value": "y"
-                },
-                {
                     "name": "CONFIG_SPI_INTEL_SPI_PCI",
                     "value": "m"
                 },
@@ -769,30 +753,6 @@
                 {
                     "name": "CONFIG_THUNDERBOLT_NET",
                     "value": "m"
-                },
-                {
-                    "name": "CONFIG_TYPEC",
-                    "value": "m"
-                },
-                {
-                    "name": "CONFIG_TYPEC_TCPM",
-                    "value": "m"
-                },
-                {
-                    "name": "CONFIG_TYPEC_UCSI",
-                    "value": "m"
-                },
-                {
-                    "name": "CONFIG_UCSI_ACPI",
-                    "value": "m"
-                },
-                {
-                    "name": "CONFIG_TYPEC_TPS6598X",
-                    "value": "m"
-                },
-                {
-                    "name": "CONFIG_TYPEC_DP_ALTMODE",
-                    "value": "m"
                 }
             ],
             "contributor": [
@@ -801,8 +761,8 @@
                     "email": "mika.westerberg@intel.com"
                 }
             ],
-            "description": "LPSS/SMBus/GPIO/SPI-NOR/PCI/Thunderbolt driver enabling",
-            "enabled": false,
+            "description": "LPSS/SMBus/GPIO/SPI-NOR/PCI/Thunderbolt/USB4\nenabling",
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Rajesh Bhaskar",
