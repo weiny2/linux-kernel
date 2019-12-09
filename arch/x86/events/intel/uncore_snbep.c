@@ -4229,6 +4229,53 @@ int __init basic_uncore_discovery(void)
 	return 0;
 }
 
+static void uncore_type_customized_copy(struct intel_uncore_type *to_type,
+					struct intel_uncore_type *from_type)
+{
+	if (from_type->name != NULL)
+		to_type->name = from_type->name;
+	if (from_type->fixed_ctr_bits)
+		to_type->fixed_ctr_bits = from_type->fixed_ctr_bits;
+	if (from_type->event_mask)
+		to_type->event_mask = from_type->event_mask;
+	if (from_type->event_mask_ext)
+		to_type->event_mask_ext = from_type->event_mask_ext;
+	if (from_type->fixed_ctr)
+		to_type->fixed_ctr = from_type->fixed_ctr;
+	if (from_type->fixed_ctl)
+		to_type->fixed_ctl = from_type->fixed_ctl;
+	if (from_type->num_shared_regs)
+		to_type->num_shared_regs = from_type->num_shared_regs;
+	if (from_type->constraints)
+		to_type->constraints = from_type->constraints;
+	if (from_type->ops)
+		to_type->ops = from_type->ops;
+	if (from_type->event_descs)
+		to_type->event_descs = from_type->event_descs;
+	if (from_type->format_group)
+		to_type->format_group = from_type->format_group;
+}
+
+static void basic_uncore_init(struct rb_root *types,
+			      struct intel_uncore_type *from_type)
+{
+	struct intel_uncore_type *type, *next;
+
+	rbtree_postorder_for_each_entry_safe(type, next, types, type_node)
+		uncore_type_customized_copy(type, from_type);
+}
+
+static struct intel_uncore_type basic_uncore_msr_box = {
+	.event_mask		= SNBEP_PMON_RAW_EVENT_MASK,
+	.ops			= &ivbep_uncore_msr_ops,
+	.format_group		= &ivbep_uncore_ubox_format_group,
+};
+
+void basic_uncore_cpu_init(void)
+{
+	basic_uncore_init(&uncore_msr_uncores, &basic_uncore_msr_box);
+}
+
 /* end of discovery based basic uncore support */
 
 /* SNR uncore support */
