@@ -50,6 +50,7 @@ struct intel_uncore_type {
 	int perf_ctr_bits;
 	int fixed_ctr_bits;
 	int num_freerunning_types;
+	int type_id;
 	unsigned perf_ctr;
 	unsigned event_ctl;
 	unsigned event_mask;
@@ -65,6 +66,7 @@ struct intel_uncore_type {
 	unsigned single_fixed:1;
 	unsigned pair_ctr_ctl:1;
 	unsigned *msr_offsets;
+	struct rb_node type_node;
 	struct event_constraint unconstrainted;
 	struct event_constraint *constraints;
 	struct intel_uncore_pmu *pmus;
@@ -534,6 +536,10 @@ uncore_get_constraint(struct intel_uncore_box *box, struct perf_event *event);
 void uncore_put_constraint(struct intel_uncore_box *box, struct perf_event *event);
 u64 uncore_shared_reg_config(struct intel_uncore_box *box, int idx);
 bool check_discovery_table(void);
+void uncore_type_insert(struct rb_root *root, struct intel_uncore_type *type);
+struct intel_uncore_type *uncore_type_search(struct rb_root *root, int value);
+void uncore_generate_types_rb_tree(struct rb_root *root,
+				   struct intel_uncore_type **types);
 
 extern struct intel_uncore_type **uncore_msr_uncores;
 extern struct intel_uncore_type **uncore_pci_uncores;
