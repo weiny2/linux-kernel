@@ -4308,6 +4308,19 @@ void basic_uncore_cpu_init(void)
 	basic_uncore_init(&uncore_msr_uncores, &basic_uncore_msr_box);
 }
 
+static struct intel_uncore_type basic_uncore_pci_box = {
+	.event_mask		= SNBEP_PMON_RAW_EVENT_MASK,
+	.ops			= &ivbep_uncore_pci_ops,
+	.format_group		= &skx_uncore_format_group,
+};
+
+int basic_uncore_pci_init(void)
+{
+	basic_uncore_init(&uncore_pci_uncores, &basic_uncore_pci_box);
+
+	return 0;
+}
+
 /* end of discovery based basic uncore support */
 
 /* SNR uncore support */
