@@ -4332,6 +4332,67 @@ int basic_uncore_pci_init(void)
 	return 0;
 }
 
+#define UNCORE_BASIC_MMIO_SIZE         0x4000
+
+static unsigned int basic_uncore_mmio_box_ctl(struct intel_uncore_box *box)
+{
+	struct intel_uncore_type *type = box->pmu->type;
+
+	if (!type->box_ctls || !type->box_ctls[box->dieid])
+		return 0;
+
+	return type->box_ctls[box->dieid] +
+	       type->mmio_offset * box->pmu->pmu_idx;
+}
+
+static void basic_uncore_mmio_init_box(struct intel_uncore_box *box)
+{
+	unsigned int box_ctl = basic_uncore_mmio_box_ctl(box);
+	resource_size_t addr;
+
+	if (!box_ctl) {
+		pr_info("failed to init MMIO box\n");
+		return;
+	}
+
+	addr = box_ctl;
+
+	box->io_addr = ioremap(addr, UNCORE_BASIC_MMIO_SIZE);
+	if (!box->io_addr) {
+		pr_info("failed to ioremap IMC box\n");
+		return;
+	}
+	writel(IVBEP_PMON_BOX_CTL_INT, box->io_addr);
+}
+
+
+static void snr_uncore_mmio_disable_box(struct intel_uncore_box *box);
+static void snr_uncore_mmio_enable_box(struct intel_uncore_box *box);
+static void snr_uncore_mmio_disable_event(struct intel_uncore_box *box,
+					    struct perf_event *event);
+static void snr_uncore_mmio_enable_event(struct intel_uncore_box *box,
+					   struct perf_event *event);
+
+static struct intel_uncore_ops basic_uncore_mmio_ops = {
+	.init_box	= basic_uncore_mmio_init_box,
+	.exit_box	= uncore_mmio_exit_box,
+	.disable_box	= snr_uncore_mmio_disable_box,
+	.enable_box	= snr_uncore_mmio_enable_box,
+	.disable_event	= snr_uncore_mmio_disable_event,
+	.enable_event	= snr_uncore_mmio_enable_event,
+	.read_counter	= uncore_mmio_read_counter,
+};
+
+static struct intel_uncore_type basic_uncore_mmio_box = {
+	.event_mask		= SNBEP_PMON_RAW_EVENT_MASK,
+	.ops			= &basic_uncore_mmio_ops,
+	.format_group		= &skx_uncore_format_group,
+};
+
+void basic_uncore_mmio_init(void)
+{
+	basic_uncore_init(&uncore_mmio_uncores, &basic_uncore_mmio_box);
+}
 /* end of discovery based basic uncore support */
 
 /* SNR uncore support */
