@@ -541,9 +541,9 @@ struct intel_uncore_type *uncore_type_search(struct rb_root *root, int value);
 void uncore_generate_types_rb_tree(struct rb_root *root,
 				   struct intel_uncore_type **types);
 
-extern struct intel_uncore_type **uncore_msr_uncores;
-extern struct intel_uncore_type **uncore_pci_uncores;
-extern struct intel_uncore_type **uncore_mmio_uncores;
+extern struct rb_root uncore_msr_uncores;
+extern struct rb_root uncore_pci_uncores;
+extern struct rb_root uncore_mmio_uncores;
 extern struct pci_driver *uncore_pci_driver;
 extern raw_spinlock_t pci2phy_map_lock;
 extern struct list_head pci2phy_map_head;
