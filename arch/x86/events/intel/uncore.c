@@ -841,6 +841,72 @@ static void uncore_pmu_disable(struct pmu *pmu)
 		uncore_pmu->type->ops->disable_box(box);
 }
 
+void uncore_type_insert(struct rb_root *root,
+			struct intel_uncore_type *type)
+{
+	struct rb_node **node = &root->rb_node;
+	struct rb_node *parent = *node;
+	struct intel_uncore_type *cur;
+
+	while (*node) {
+		parent = *node;
+		cur = rb_entry(parent, struct intel_uncore_type, type_node);
+
+		if (cur->type_id > type->type_id)
+			node = &parent->rb_left;
+		else
+			node = &parent->rb_right;
+	}
+
+	rb_link_node(&type->type_node, parent, node);
+	rb_insert_color(&type->type_node, root);
+}
+
+void uncore_generate_types_rb_tree(struct rb_root *root,
+				   struct intel_uncore_type **types)
+{
+	struct intel_uncore_type *type;
+	int i;
+
+	for (i = 0; *types; types++, i++) {
+		type = kmalloc(sizeof(struct intel_uncore_type), GFP_KERNEL);
+		if (!type)
+			continue;
+
+		memcpy(type, *types, sizeof(*type));
+		type->type_id = i;
+		uncore_type_insert(root, type);
+	}
+}
+
+struct intel_uncore_type *
+uncore_type_search(struct rb_root *root, int value)
+{
+	struct rb_node *node = root->rb_node;
+	struct intel_uncore_type *type;
+
+	while (node) {
+		type = rb_entry(node, struct intel_uncore_type, type_node);
+
+		if (type->type_id > value)
+			node = node->rb_left;
+		else if (type->type_id < value)
+			node = node->rb_right;
+		else
+			return type;
+	}
+
+	return NULL;
+}
+
+static void uncore_type_delete_all(struct rb_root *root)
+{
+	struct intel_uncore_type *type, *next;
+
+	rbtree_postorder_for_each_entry_safe(type, next, root, type_node)
+		kfree(type);
+}
+
 static ssize_t uncore_get_attr_cpumask(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
