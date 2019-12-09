@@ -735,23 +735,11 @@
                     "value": "m"
                 },
                 {
-                    "name": "CONFIG_PINCTRL_WHITLEY",
-                    "value": "m"
-                },
-                {
                     "name": "CONFIG_SPI_INTEL_SPI_PCI",
                     "value": "m"
                 },
                 {
                     "name": "CONFIG_SPI_INTEL_SPI_PLATFORM",
-                    "value": "m"
-                },
-                {
-                    "name": "CONFIG_THUNDERBOLT",
-                    "value": "m"
-                },
-                {
-                    "name": "CONFIG_THUNDERBOLT_NET",
                     "value": "m"
                 }
             ],
@@ -3006,11 +2994,15 @@
                     "value": "m"
                 },
                 {
-                    "name": "CONFIG_INTEL_QEP",
+                    "name": "CONFIG_PWM_DWC",
                     "value": "m"
                 },
                 {
-                    "name": "CONFIG_PWM_DWC",
+                    "name": "CONFIG_COUNTER",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_INTEL_QEP",
                     "value": "m"
                 }
             ],
