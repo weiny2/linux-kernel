@@ -4099,6 +4099,16 @@ basic_uncore_add_type(struct uncore_unit_discovery *unit, int die)
 		new_type->event_ctl = (unsigned int)unit->box_ctl + unit->ctl_offset;
 		uncore_type_insert(&uncore_msr_uncores, new_type);
 		break;
+	case UNCORE_ACCESS_CFG:
+		new_type->type_id = unit->box_type;
+		new_type->num_counters = unit->num_regs;
+		new_type->perf_ctr_bits = unit->bit_width;
+		uncore_save_box_ctl(new_type, unit->box_ctl, die);
+		new_type->box_ctl = unit->box_ctl & UNCORE_CFG_BOX_CTL_MASK;
+		new_type->perf_ctr = new_type->box_ctl + unit->ctr_offset;
+		new_type->event_ctl = new_type->box_ctl + unit->ctl_offset;
+		uncore_type_insert(&uncore_pci_uncores, new_type);
+		break;
 	default:
 		pr_debug_once("unsupported uncore access type %d\n",
 			      unit->access_type);
@@ -4124,6 +4134,26 @@ static bool check_invalid_unit(struct uncore_unit_discovery *unit)
 	return !unit->table1 || !unit->table2 || !unit->table3 ||
 	       (unit->table1 == -1ULL) || (unit->table2 == -1ULL) ||
 	       (unit->table3 == -1ULL);
+}
+
+static void
+check_and_insert_box_ctl(struct uncore_unit_discovery *unit, int die)
+{
+	struct intel_uncore_type *type;
+	struct rb_root *types;
+
+	/* Only need to save first box's box_ctl */
+	if (unit->box_id != 0)
+		return;
+
+	if (unit->access_type == UNCORE_ACCESS_CFG)
+		types = &uncore_pci_uncores;
+	else
+		return;
+
+	type = uncore_type_search(types, unit->box_type);
+	if (type)
+		uncore_save_box_ctl(type, unit->box_ctl, die);
 }
 
 int __init basic_uncore_discovery(void)
@@ -4178,6 +4208,8 @@ int __init basic_uncore_discovery(void)
 			/* ignore the invalid unit */
 			if (check_invalid_unit(&unit))
 				continue;
+
+			check_and_insert_box_ctl(&unit, die);
 
 			/*
 			 * For MSR type of uncore, the unit discovery tables

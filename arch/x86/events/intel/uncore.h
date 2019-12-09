@@ -59,6 +59,7 @@ struct intel_uncore_type {
 	unsigned fixed_ctr;
 	unsigned fixed_ctl;
 	unsigned box_ctl;
+	unsigned *box_ctls;		/* first box ctl of each die */
 	union {
 		unsigned msr_offset;
 		unsigned mmio_offset;
@@ -66,7 +67,10 @@ struct intel_uncore_type {
 	unsigned num_shared_regs:8;
 	unsigned single_fixed:1;
 	unsigned pair_ctr_ctl:1;
-	unsigned *msr_offsets;
+	union {
+		unsigned *msr_offsets;
+		unsigned *pci_offsets;
+	};
 	struct rb_node type_node;
 	struct event_constraint unconstrainted;
 	struct event_constraint *constraints;
@@ -607,6 +611,8 @@ void uncore_generate_types_rb_tree(struct rb_root *root,
 				   struct intel_uncore_type **types);
 int uncore_save_box_info(struct intel_uncore_type *type,
 			 int id, unsigned int box_ctl, int die);
+int uncore_save_box_ctl(struct intel_uncore_type *type,
+			unsigned int box_ctl, int die);
 
 extern struct rb_root uncore_msr_uncores;
 extern struct rb_root uncore_pci_uncores;
