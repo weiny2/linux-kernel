@@ -2999,7 +2999,7 @@
                 },
                 {
                     "name": "CONFIG_CAN_CALC_BITTIMING",
-                    "value": "m"
+                    "value": "y"
                 },
                 {
                     "name": "CONFIG_INTEL_ADC",
