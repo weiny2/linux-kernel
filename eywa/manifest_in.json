@@ -558,7 +558,7 @@
                 }
             ],
             "description": "Intel Integrated Sensor Hub enabling",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Guangyu Ren",
@@ -569,7 +569,7 @@
                     "email": "guangyu.ren@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1703",
             "name": "ish",
             "repourl": "ssh://git-amr-4.devtools.intel.com:29418/otc_linux_spandruv-internal.git",
             "sdl_contact": [],
@@ -2022,14 +2022,14 @@
                 }
             ],
             "description": "Intel Thermal",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Jim Hermerding",
                     "email": "jim.g.hermerding@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1704",
             "name": "thermal",
             "repourl": "ssh://git-amr-4.devtools.intel.com:29418/otc_linux_spandruv-internal.git",
             "sdl_contact": [
@@ -2057,14 +2057,14 @@
                 }
             ],
             "description": "Speed Select Technologies (SST)",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Stanley Chen",
                     "email": "stanley.chen@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1702",
             "name": "sst",
             "repourl": "ssh://git-amr-4.devtools.intel.com:29418/otc_linux_spandruv-internal.git",
             "sdl_contact": [
