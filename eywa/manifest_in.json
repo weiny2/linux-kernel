@@ -1311,21 +1311,9 @@
             "stuck_at_ref": ""
         },
         {
-            "branch": "for_intel_next_5.3-rc1",
+            "branch": "for_intel_next_5.5-rc1",
             "branch_type": "expiring",
             "config_options": [
-                {
-                    "name": "CONFIG_INTEL_IOMMU",
-                    "value": "y"
-                },
-                {
-                    "name": "CONFIG_IOMMU_DEBUGFS",
-                    "value": "y"
-                },
-                {
-                    "name": "CONFIG_INTEL_IOMMU_DEBUGFS",
-                    "value": "y"
-                },
                 {
                     "name": "CONFIG_INTEL_IOMMU_SVM",
                     "value": "y"
@@ -1333,30 +1321,47 @@
                 {
                     "name": "CONFIG_INTEL_IOMMU_DEFAULT_ON",
                     "value": "y"
+                },
+                {
+                    "name": "CONFIG_INTEL_IOMMU_SCALABLE_MODE_ON",
+                    "value": "y"
                 }
             ],
             "contributor": [
                 {
                     "name": "Baolu Lu",
-                    "email": "baolu.lu@linux.intel.co"
-                }
-            ],
-            "description": "IOMMU scalable mode",
-            "enabled": false,
-            "ip_owner": [
-                {
-                    "name": "Baolu Lu",
                     "email": "baolu.lu@linux.intel.com"
                 },
                 {
-                    "name": "Ashok Raj",
-                    "email": "ashok.raj@intel.com"
+                    "name": "Jacob Pan",
+                    "email": "jacon.jun.pan@linux.intel.com"
                 }
             ],
-            "jira": "",
+            "description": "IOMMU scalable mode",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Ashok Raj",
+                    "email": "ashok.raj@intel.com"
+                },
+                {
+                    "name": "Kevin Tian",
+                    "email": "kevin.tian@intel.com"
+                }
+            ],
+            "jira": "NEXT-1692",
             "name": "iommu",
             "repourl": "ssh://git-ccr-1.devtools.intel.com:29418/iommu_next-siov.git",
-            "sdl_contact": [],
+            "sdl_contact": [
+                {
+                    "name": "Ashok Raj",
+                    "email": "ashok.raj@intel.com"
+                },
+                {
+                    "name": "Kevin Tian",
+                    "email": "kenvin.tian@intel.com"
+                }
+            ],
             "status": "public",
             "stuck_at_ref": ""
         },
