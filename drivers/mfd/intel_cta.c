@@ -155,6 +155,8 @@ static void cta_pci_remove(struct pci_dev *pdev)
 static const struct pci_device_id cta_pci_ids[] = {
 	/* TGL */
 	{ PCI_VDEVICE(INTEL, 0x9a0d), },
+	/* OOBMSM */
+	{ PCI_VDEVICE(INTEL, 0x09a7), },
 	{ }
 };
 MODULE_DEVICE_TABLE(pci, cta_pci_ids);
