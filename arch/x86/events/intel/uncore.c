@@ -1078,6 +1078,59 @@ uncore_types_init(struct rb_root *types, bool setid)
 	return 0;
 }
 
+static unsigned int
+uncore_get_box_ctl_offset(struct intel_uncore_type *type,
+			  unsigned int box_ctl, int die)
+{
+	return box_ctl - type->box_ctl;
+}
+
+/*
+ * Save the box id and box ctl offset among boxes
+ */
+int uncore_save_box_info(struct intel_uncore_type *type,
+			 int id, unsigned int box_ctl, int die)
+{
+	unsigned int *new_offsets;
+	unsigned int offset;
+	int *new_box_ids;
+	int num_boxes, i;
+
+	if (type == NULL)
+		return 0;
+
+	num_boxes = type->num_boxes + 1;
+	new_offsets = kcalloc(num_boxes, sizeof(unsigned int), GFP_KERNEL);
+	if (!new_offsets)
+		return -ENOMEM;
+
+	new_box_ids = kcalloc(num_boxes, sizeof(int), GFP_KERNEL);
+	if (!new_box_ids) {
+		kfree(new_offsets);
+		return -ENOMEM;
+	}
+
+	offset = uncore_get_box_ctl_offset(type, box_ctl, die);
+
+	if (!type->num_boxes)
+		*new_box_ids = id;
+	else {
+		for (i = 0; i < type->num_boxes; i++) {
+			new_offsets[i] = type->msr_offsets[i];
+			new_box_ids[i] = type->box_ids[i];
+		}
+		new_offsets[i] = offset;
+		new_box_ids[i] = id;
+		kfree(type->msr_offsets);
+		kfree(type->box_ids);
+	}
+	type->msr_offsets = new_offsets;
+	type->box_ids = new_box_ids;
+	type->num_boxes = num_boxes;
+
+	return 0;
+}
+
 /*
  * add a pci uncore device
  */

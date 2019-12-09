@@ -51,6 +51,7 @@ struct intel_uncore_type {
 	int fixed_ctr_bits;
 	int num_freerunning_types;
 	int type_id;
+	int *box_ids;
 	unsigned perf_ctr;
 	unsigned event_ctl;
 	unsigned event_mask;
@@ -147,6 +148,8 @@ struct intel_uncore_box {
 #define UNCORE_DISCOVERY_DVSEC2_OFFSET		0xc
 /* MASK of discovery table offset */
 #define UNCORE_DISCOVERY_DVSEC2_BIR_MASK	0x7
+/* discovery table size */
+#define UNCORE_DISCOVERY_MAP_SIZE		0x80000
 
 struct uncore_discovery_table {
 	struct list_head list;
@@ -190,6 +193,68 @@ struct pci2phy_map {
 struct pci2phy_map *__find_pci2phy_map(int segment);
 int uncore_pcibus_to_physid(struct pci_bus *bus);
 void fill_up_pbus_to_physid_mapping(bool reverse);
+
+enum uncore_access_type {
+	UNCORE_ACCESS_MSR	= 0,
+	UNCORE_ACCESS_MMIO,
+	UNCORE_ACCESS_CFG,
+
+	UNCORE_ACCESS_MAX,
+};
+
+struct uncore_global_discovery {
+	union {
+		u64	table1;
+		struct {
+			u64	type : 8,
+				stride : 8,
+				max_units : 10,
+				__reserved_1 : 36,
+				access_type : 2;
+		};
+	};
+	union {
+		u64	table2;
+		u64	global_ctl;
+	};
+	union {
+		u64	table3;
+		struct {
+			u64	status_offset : 8,
+				num_status : 16,
+				__reserved_2 : 40;
+		};
+	};
+};
+
+struct uncore_unit_discovery {
+	union {
+		u64	table1;
+		struct {
+			u64	num_regs : 8,
+				ctl_offset : 8,
+				bit_width : 8,
+				ctr_offset : 8,
+				status_offset : 8,
+				__reserved_1 : 22,
+				access_type : 2;
+		};
+	};
+	union {
+		u64	table2;
+		u64	box_ctl;
+	};
+	union {
+		u64	table3;
+		struct {
+			u64	box_type : 16,
+				box_id : 16,
+				__reserved_2 : 32;
+		};
+	};
+};
+
+#define UNCORE_CFG_BOX_CTL_MASK		0xfff
 
 ssize_t uncore_event_show(struct kobject *kobj,
 			  struct kobj_attribute *attr, char *buf);
@@ -540,6 +605,8 @@ void uncore_type_insert(struct rb_root *root, struct intel_uncore_type *type);
 struct intel_uncore_type *uncore_type_search(struct rb_root *root, int value);
 void uncore_generate_types_rb_tree(struct rb_root *root,
 				   struct intel_uncore_type **types);
+int uncore_save_box_info(struct intel_uncore_type *type,
+			 int id, unsigned int box_ctl, int die);
 
 extern struct rb_root uncore_msr_uncores;
 extern struct rb_root uncore_pci_uncores;
@@ -578,6 +645,7 @@ int knl_uncore_pci_init(void);
 void knl_uncore_cpu_init(void);
 int skx_uncore_pci_init(void);
 void skx_uncore_cpu_init(void);
+int basic_uncore_discovery(void);
 int snr_uncore_pci_init(void);
 void snr_uncore_cpu_init(void);
 void snr_uncore_mmio_init(void);
