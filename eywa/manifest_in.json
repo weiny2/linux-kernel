@@ -1873,7 +1873,7 @@
                 }
             ],
             "description": "Custom intel-next logo on bootup",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Kyle Pelton",
