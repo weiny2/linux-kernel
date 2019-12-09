@@ -761,7 +761,7 @@
                     "email": "mika.westerberg@intel.com"
                 }
             ],
-            "description": "LPSS/SMBus/GPIO/SPI-NOR/PCI/Thunderbolt/USB4\nenabling",
+            "description": "LPSS/SMBus/GPIO/SPI-NOR/PCI/Thunderbolt driver enabling",
             "enabled": true,
             "ip_owner": [
                 {
