@@ -1834,14 +1834,14 @@
                 }
             ],
             "description": "GFX patch to load DMC firmware",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Matthew Attwood",
                     "email": "matthew.s.atwood@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1699",
             "name": "chrome-dmc",
             "repourl": "ssh://git-amr-4.devtools.intel.com:29418/otc_power-kernel.git",
             "sdl_contact": [
@@ -1880,7 +1880,7 @@
                     "email": "kyle.d.pelton@intel.com"
                 }
             ],
-            "jira": "NXT-1697",
+            "jira": "NEXT-1697",
             "name": "branding",
             "repourl": "ssh://git-amr-4.devtools.intel.com:29418/otc_power-kernel.git",
             "sdl_contact": [
