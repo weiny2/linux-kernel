@@ -2599,7 +2599,7 @@
                 }
             ],
             "description": "Add Custom clear linux patches required to boot clear linux",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Kyle Pelton",
