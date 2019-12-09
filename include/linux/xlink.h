@@ -8,7 +8,6 @@
 #ifndef __XLINK_H
 #define __XLINK_H
 
-#include <linux/types.h>
 #include <uapi/misc/xlink_uapi.h>
 
 typedef uint32_t xlink_channel_id_t;
@@ -81,6 +80,12 @@ enum xlink_error xlink_connect(struct xlink_handle *handle);
 enum xlink_error xlink_open_channel(struct xlink_handle *handle,
 		uint16_t chan, enum xlink_opmode mode, uint32_t data_size,
 		uint32_t timeout);
+
+enum xlink_error xlink_data_ready_callback(struct xlink_handle *handle,
+		uint16_t chan, void *func);
+
+enum xlink_error xlink_data_consumed_callback(struct xlink_handle *handle,
+		uint16_t chan, void *func);
 
 enum xlink_error xlink_close_channel(struct xlink_handle *handle,
 		uint16_t chan);
