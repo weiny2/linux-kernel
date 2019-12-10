@@ -268,7 +268,10 @@ struct cpu_hw_events {
 	int				lbr_pebs_users;
 	struct perf_branch_stack	lbr_stack;
 	struct perf_branch_entry	lbr_entries[MAX_LBR_ENTRIES];
-	struct er_account		*lbr_sel;
+	union {
+		struct er_account		*lbr_sel;
+		struct er_account		*lbr_ctl;
+	};
 	u64				br_sel;
 	struct x86_perf_task_context	*last_task_ctx;
 	int				last_log_id;
@@ -734,10 +737,44 @@ struct x86_pmu {
 	 */
 	unsigned long	lbr_tos, lbr_from, lbr_to; /* MSR base regs       */
 	int		lbr_nr;			   /* hardware stack size */
-	u64		lbr_sel_mask;		   /* LBR_SELECT valid bits */
-	const int	*lbr_sel_map;		   /* lbr_select mappings */
-	bool		lbr_double_abort;	   /* duplicated lbr aborts */
-	bool		lbr_pt_coexist;		   /* (LBR|BTS) may coexist with PT */
+	union {
+		u64		lbr_sel_mask;	   /* LBR_SELECT valid bits */
+		u64		lbr_ctl_mask;	   /* LBR_CTL valid bits */
+	};
+	int			*lbr_ctl_map;	   /* LBR_CTL mappings */
+	const int		*lbr_sel_map;	   /* lbr_select mappings */
+
+	unsigned int	lbr_double_abort	:1,/* duplicated lbr aborts */
+			lbr_pt_coexist		:1,/* (LBR|BTS) may coexist with PT */
+			arch_lbr		:1;/* Arch LBR supported */
+
+	/* Arch LBR Capabilities */
+	union {
+		struct {
+			/* CPL Filtering Supported */
+			unsigned int	arch_lbr_cpl:1;
+
+			/* Branch Filtering Supported */
+			unsigned int	arch_lbr_filter:1;
+
+			/* Call-stack Mode Supported */
+			unsigned int	arch_lbr_call_stack:1;
+		};
+		unsigned int		arch_lbr_ctl_cap;
+	};
+	union {
+		struct {
+			/* Mispredict Bit Supported */
+			unsigned int	arch_lbr_mispred:1;
+
+			/* Timed LBRs Supported */
+			unsigned int	arch_lbr_timed_lbr:1;
+
+			/* Branch Type Field Supported */
+			unsigned int	arch_lbr_br_type:1;
+		};
+		unsigned int		arch_lbr_info_cap;
+	};
 
 	/*
 	 * Intel PT/LBR/BTS are exclusive
@@ -853,8 +890,10 @@ extern struct x86_pmu x86_pmu __read_mostly;
 
 static inline bool x86_pmu_has_lbr_callstack(void)
 {
-	return  x86_pmu.lbr_sel_map &&
-		x86_pmu.lbr_sel_map[PERF_SAMPLE_BRANCH_CALL_STACK_SHIFT] > 0;
+	return  (x86_pmu.lbr_ctl_map &&
+		x86_pmu.lbr_ctl_map[PERF_SAMPLE_BRANCH_CALL_STACK_SHIFT] > 0) ||
+		(x86_pmu.lbr_sel_map &&
+		x86_pmu.lbr_sel_map[PERF_SAMPLE_BRANCH_CALL_STACK_SHIFT] > 0);
 }
 
 DECLARE_PER_CPU(struct cpu_hw_events, cpu_hw_events);
@@ -1177,6 +1216,8 @@ void intel_pmu_lbr_init_hsw(void);
 void intel_pmu_lbr_init_skl(void);
 
 void intel_pmu_lbr_init_knl(void);
+
+void intel_pmu_arch_lbr_init(void);
 
 void intel_pmu_pebs_data_source_nhm(void);
 
