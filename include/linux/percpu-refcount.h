@@ -251,7 +251,7 @@ static inline bool percpu_ref_tryget_live(struct percpu_ref *ref)
 
 	rcu_read_lock_sched();
 
-	if (__ref_is_percpu(ref, &percpu_count)) {
+	if (likely(__ref_is_percpu(ref, &percpu_count))) {
 		this_cpu_inc(*percpu_count);
 		ret = true;
 	} else if (!(ref->percpu_count_ptr & __PERCPU_REF_DEAD)) {

@@ -372,7 +372,7 @@ static inline bool css_tryget(struct cgroup_subsys_state *css)
  */
 static inline bool css_tryget_online(struct cgroup_subsys_state *css)
 {
-	if (!(css_no_ref(css)))
+	if (likely(!(css_no_ref(css))))
 		return percpu_ref_tryget_live(&css->refcnt);
 	return true;
 }
