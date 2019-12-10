@@ -2745,11 +2745,15 @@
             "stuck_at_ref": ""
         },
         {
-            "branch": "release-mainline-tracking-v5.4-rc2",
+            "branch": "release-v5.5-rc1",
             "branch_type": "expiring",
             "config_options": [
                 {
                     "name": "CONFIG_KEEMBAY_IPC",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_KEEMBAY_VPU_IPC",
                     "value": "y"
                 }
             ],
@@ -2759,7 +2763,7 @@
                     "email": "daniele.alessandrelli@intel.com"
                 }
             ],
-            "description": "IPC support for Keem Bay and TBH",
+            "description": "VPU/IPC support for Keem Bay and TBH",
             "enabled": false,
             "ip_owner": [
                 {
