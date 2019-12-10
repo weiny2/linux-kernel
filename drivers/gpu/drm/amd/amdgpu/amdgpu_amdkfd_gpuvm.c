@@ -85,7 +85,7 @@ static bool check_if_add_bo_to_vm(struct amdgpu_vm *avm,
 }
 
 /* Set memory usage limits. Current, limits are
- *  System (TTM + userptr) memory - 3/4th System RAM
+ *  System (TTM + userptr) memory - 15/16th System RAM
  *  TTM memory - 3/8th System RAM
  */
 void amdgpu_amdkfd_gpuvm_init_mem_limits(void)
@@ -98,7 +98,7 @@ void amdgpu_amdkfd_gpuvm_init_mem_limits(void)
 	mem *= si.mem_unit;
 
 	spin_lock_init(&kfd_mem_limit.mem_limit_lock);
-	kfd_mem_limit.max_system_mem_limit = (mem >> 1) + (mem >> 2);
+	kfd_mem_limit.max_system_mem_limit = mem - (mem >> 4);
 	kfd_mem_limit.max_ttm_mem_limit = (mem >> 1) - (mem >> 3);
 	pr_debug("Kernel memory limit %lluM, TTM limit %lluM\n",
 		(kfd_mem_limit.max_system_mem_limit >> 20),
@@ -1674,10 +1674,10 @@ int amdgpu_amdkfd_evict_userptr(struct kgd_mem *mem,
 				struct mm_struct *mm)
 {
 	struct amdkfd_process_info *process_info = mem->process_info;
-	int invalid, evicted_bos;
+	int evicted_bos;
 	int r = 0;
 
-	invalid = atomic_inc_return(&mem->invalid);
+	atomic_inc(&mem->invalid);
 	evicted_bos = atomic_inc_return(&process_info->evicted_bos);
 	if (evicted_bos == 1) {
 		/* First eviction, stop the queues */
