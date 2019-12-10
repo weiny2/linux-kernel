@@ -407,20 +407,6 @@ static int setup_vpu_fw_region(struct vpu_ipc_dev *vpu_dev)
 
 	rsvd_mem->vaddr = dmam_alloc_coherent(dev, rsvd_mem->size,
 					      &rsvd_mem->vpu_addr, GFP_KERNEL);
-	/*
-	 * Fix up DMA handle value.
-	 *
-	 * dma_alloc_coherent() does not take into account the address
-	 * translation described by the dma-ranges properties in the device
-	 * tree; this seems to be a bug of the Linux kernel:
-	 * https://lists.linuxfoundation.org/pipermail/iommu/2019-October/039417.html
-	 *
-	 * As a workaround, we fix the DMA handle manually, by subtracting the
-	 * device DMA offset.
-	 *
-	 * TODO: remove this once/if the DMA kernel code is fixed.
-	 */
-	rsvd_mem->vpu_addr -= dev->dma_pfn_offset << PAGE_SHIFT;
 	/* Get the physical address of the reserved memory region. */
 	rsvd_mem->paddr = dma_to_phys(dev, vpu_dev->reserved_mem.vpu_addr);
 
