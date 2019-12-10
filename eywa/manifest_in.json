@@ -815,7 +815,7 @@
                     "email": "jeremiah.d.williamson@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1711",
             "name": "perf",
             "repourl": "ssh://git-amr-2.devtools.intel.com:29418/kan_lkp-perf-intel-next.git",
             "sdl_contact": [
@@ -2732,7 +2732,7 @@
                     "email": "jonathan.derrick@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1712",
             "name": "vmd",
             "repourl": "ssh://git-amr-10.devtools.intel.com:29418/nsgsw-for-intel-next.git",
             "sdl_contact": [
@@ -2771,7 +2771,7 @@
                     "email": "david.t.farrell@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1710",
             "name": "ipc",
             "repourl": "ssh://git@gitlab.devtools.intel.com:29418/mvds-linux-dev/thunder-bay-linux/tbh-linux.git",
             "sdl_contact": [
@@ -3106,7 +3106,7 @@
                     "email": "ajit.tapkir@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1707",
             "name": "Thunderbay IO",
             "repourl": "ssh://git@gitlab.devtools.intel.com:29418/hspe_csw/bsp/linux.git",
             "sdl_contact": [
