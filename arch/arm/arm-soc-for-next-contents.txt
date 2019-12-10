@@ -1,0 +1,18 @@
+arm/soc
+
+arm/dt
+	exynos/dt-5.5-2
+		https://git.kernel.org/pub/scm/linux/kernel/git/krzk/linux tags/samsung-dt-5.5-2
+	socfpga/dt-5.5-2
+		git://git.kernel.org/pub/scm/linux/kernel/git/dinguyen/linux tags/socfpga_dts_updates_for_v5.5_part2
+
+arm/drivers
+
+arm/defconfig
+
+arm/late
+
+arm/fixes
+	<no branch> (c9385887cbbf292ee367f75b400874f00ea34890)
+		git://git.kernel.org/pub/scm/linux/kernel/git/sudeep.holla/linux tags/vexpress-fixes-5.5
+
