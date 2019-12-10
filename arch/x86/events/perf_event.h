@@ -750,6 +750,7 @@ struct x86_pmu {
 	void		(*lbr_enable)(bool pmi);
 	void		(*lbr_disable)(void);
 	void		(*lbr_reset)(void);
+	void		(*lbr_read)(struct cpu_hw_events *cpuc);
 
 	/*
 	 * Intel perf metrics
@@ -1149,7 +1150,11 @@ void intel_pmu_lbr_disable_all(void);
 
 void intel_pmu_lbr_disable(void);
 
-void intel_pmu_lbr_read(void);
+void intel_pmu_lbr_read_all(void);
+
+void intel_pmu_lbr_read_32(struct cpu_hw_events *cpuc);
+
+void intel_pmu_lbr_read_64(struct cpu_hw_events *cpuc);
 
 void intel_pmu_lbr_init_core(void);
 
