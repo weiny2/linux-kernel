@@ -734,6 +734,12 @@ struct x86_pmu {
 	atomic_t	lbr_exclusive[x86_lbr_exclusive_max];
 
 	/*
+	 * Intel LBR function pointers
+	 */
+	void		(*lbr_enable)(bool pmi);
+	void		(*lbr_disable)(void);
+
+	/*
 	 * Intel perf metrics
 	 */
 	u64		(*update_topdown_event)(struct perf_event *event);
@@ -1121,7 +1127,11 @@ void intel_pmu_lbr_del(struct perf_event *event);
 
 void intel_pmu_lbr_enable_all(bool pmi);
 
+void intel_pmu_lbr_enable(bool pmi);
+
 void intel_pmu_lbr_disable_all(void);
+
+void intel_pmu_lbr_disable(void);
 
 void intel_pmu_lbr_read(void);
 
