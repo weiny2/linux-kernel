@@ -294,20 +294,6 @@ static int init_ipc_rsvd_mem(struct device *dev, struct ipc_buf_mem *mem,
 		rc = -ENOMEM;
 		goto err;
 	}
-	/*
-	 * Fix up DMA handle value.
-	 *
-	 * dma_alloc_coherent() does not take into account the address
-	 * translation described by the dma-ranges properties in the device
-	 * tree; this seems to be a bug of the Linux kernel:
-	 * https://lists.linuxfoundation.org/pipermail/iommu/2019-October/039417.html
-	 *
-	 * As a workaround, we fix the DMA handle manually, by subtracting the
-	 * device DMA offset.
-	 *
-	 * TODO: remove this once/if the DMA kernel code is fixed.
-	 */
-	dma_handle -= dev->dma_pfn_offset << PAGE_SHIFT;
 
 	mem->dev = mem_dev;
 	mem->vaddr = vaddr;
