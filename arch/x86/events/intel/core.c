@@ -4057,7 +4057,7 @@ static void intel_pmu_cpu_starting(int cpu)
 	/*
 	 * Deal with CPUs that don't clear their LBRs on power-up.
 	 */
-	intel_pmu_lbr_reset();
+	intel_pmu_lbr_reset_all();
 
 	cpuc->lbr_sel = NULL;
 
@@ -4267,6 +4267,7 @@ static __initconst const struct x86_pmu core_pmu = {
 
 	.lbr_enable		= intel_pmu_lbr_enable,
 	.lbr_disable		= intel_pmu_lbr_disable,
+	.lbr_reset		= intel_pmu_lbr_reset_64,
 };
 
 static __initconst const struct x86_pmu intel_pmu = {
@@ -4315,6 +4316,7 @@ static __initconst const struct x86_pmu intel_pmu = {
 
 	.lbr_enable		= intel_pmu_lbr_enable,
 	.lbr_disable		= intel_pmu_lbr_disable,
+	.lbr_reset		= intel_pmu_lbr_reset_64,
 };
 
 static __init void intel_clovertown_quirk(void)
@@ -4985,6 +4987,9 @@ __init int intel_pmu_init(void)
 		rdmsrl(MSR_IA32_PERF_CAPABILITIES, capabilities);
 		x86_pmu.intel_cap.capabilities = capabilities;
 	}
+
+	if (x86_pmu.intel_cap.lbr_format == LBR_FORMAT_32)
+		x86_pmu.lbr_reset = intel_pmu_lbr_reset_32;
 
 	intel_ds_init();
 

@@ -203,6 +203,17 @@ struct x86_perf_task_context;
 #define MAX_LBR_ENTRIES		32
 
 enum {
+	LBR_FORMAT_32		= 0x00,
+	LBR_FORMAT_LIP		= 0x01,
+	LBR_FORMAT_EIP		= 0x02,
+	LBR_FORMAT_EIP_FLAGS	= 0x03,
+	LBR_FORMAT_EIP_FLAGS2	= 0x04,
+	LBR_FORMAT_INFO		= 0x05,
+	LBR_FORMAT_TIME		= 0x06,
+	LBR_FORMAT_MAX_KNOWN    = LBR_FORMAT_TIME,
+};
+
+enum {
 	X86_PERF_KFREE_SHARED = 0,
 	X86_PERF_KFREE_EXCL   = 1,
 	X86_PERF_KFREE_MAX
@@ -738,6 +749,7 @@ struct x86_pmu {
 	 */
 	void		(*lbr_enable)(bool pmi);
 	void		(*lbr_disable)(void);
+	void		(*lbr_reset)(void);
 
 	/*
 	 * Intel perf metrics
@@ -1119,7 +1131,11 @@ void intel_pmu_lbr_sched_task(struct perf_event_context *ctx, bool sched_in);
 
 u64 lbr_from_signext_quirk_wr(u64 val);
 
-void intel_pmu_lbr_reset(void);
+void intel_pmu_lbr_reset_all(void);
+
+void intel_pmu_lbr_reset_32(void);
+
+void intel_pmu_lbr_reset_64(void);
 
 void intel_pmu_lbr_add(struct perf_event *event);
 

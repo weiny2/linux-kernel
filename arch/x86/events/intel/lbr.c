@@ -8,17 +8,6 @@
 
 #include "../perf_event.h"
 
-enum {
-	LBR_FORMAT_32		= 0x00,
-	LBR_FORMAT_LIP		= 0x01,
-	LBR_FORMAT_EIP		= 0x02,
-	LBR_FORMAT_EIP_FLAGS	= 0x03,
-	LBR_FORMAT_EIP_FLAGS2	= 0x04,
-	LBR_FORMAT_INFO		= 0x05,
-	LBR_FORMAT_TIME		= 0x06,
-	LBR_FORMAT_MAX_KNOWN    = LBR_FORMAT_TIME,
-};
-
 static const enum {
 	LBR_EIP_FLAGS		= 1,
 	LBR_TSX			= 2,
@@ -194,7 +183,7 @@ void intel_pmu_lbr_disable(void)
 	wrmsrl(MSR_IA32_DEBUGCTLMSR, debugctl);
 }
 
-static void intel_pmu_lbr_reset_32(void)
+void intel_pmu_lbr_reset_32(void)
 {
 	int i;
 
@@ -202,7 +191,7 @@ static void intel_pmu_lbr_reset_32(void)
 		wrmsrl(x86_pmu.lbr_from + i, 0);
 }
 
-static void intel_pmu_lbr_reset_64(void)
+void intel_pmu_lbr_reset_64(void)
 {
 	int i;
 
@@ -214,17 +203,14 @@ static void intel_pmu_lbr_reset_64(void)
 	}
 }
 
-void intel_pmu_lbr_reset(void)
+void intel_pmu_lbr_reset_all(void)
 {
 	struct cpu_hw_events *cpuc = this_cpu_ptr(&cpu_hw_events);
 
 	if (!x86_pmu.lbr_nr)
 		return;
 
-	if (x86_pmu.intel_cap.lbr_format == LBR_FORMAT_32)
-		intel_pmu_lbr_reset_32();
-	else
-		intel_pmu_lbr_reset_64();
+	x86_pmu.lbr_reset();
 
 	cpuc->last_task_ctx = NULL;
 	cpuc->last_log_id = 0;
@@ -346,7 +332,7 @@ static void __intel_pmu_lbr_restore(struct x86_perf_task_context *task_ctx)
 
 	if (task_ctx->lbr_callstack_users == 0 ||
 	    task_ctx->lbr_stack_state == LBR_NONE) {
-		intel_pmu_lbr_reset();
+		intel_pmu_lbr_reset_all();
 		return;
 	}
 
@@ -469,7 +455,7 @@ void intel_pmu_lbr_sched_task(struct perf_event_context *ctx, bool sched_in)
 	 * address space.
 	 */
 	if (sched_in)
-		intel_pmu_lbr_reset();
+		intel_pmu_lbr_reset_all();
 }
 
 static inline bool branch_user_callstack(unsigned br_sel)
@@ -515,7 +501,7 @@ void intel_pmu_lbr_add(struct perf_event *event)
 		cpuc->lbr_pebs_users++;
 	perf_sched_cb_inc(event->ctx->pmu);
 	if (!cpuc->lbr_users++ && !event->total_time_running)
-		intel_pmu_lbr_reset();
+		intel_pmu_lbr_reset_all();
 }
 
 void intel_pmu_lbr_del(struct perf_event *event)
