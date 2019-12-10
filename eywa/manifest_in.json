@@ -3082,14 +3082,19 @@
         {
             "branch": "tbh/dev",
             "branch_type": "expiring",
-            "config_options": [],
+            "config_options": [
+                {
+                    "name": "CONFIG_THUNDERBAY_TIMER",
+                    "value": "y"
+                }
+            ],
             "contributor": [
                 {
                     "name": "Rathina Thalaiappan ",
                     "email": "rathina.thalaiappan@intel.com"
                 }
             ],
-            "description": "Thunderbay General Purpose Timer",
+            "description": "Thunderbay I/O drivers",
             "enabled": false,
             "ip_owner": [
                 {
@@ -3098,7 +3103,7 @@
                 }
             ],
             "jira": "",
-            "name": "Thunderbay",
+            "name": "Thunderbay IO",
             "repourl": "ssh://git@gitlab.devtools.intel.com:29418/hspe_csw/bsp/linux.git",
             "sdl_contact": [
                 {
@@ -3106,7 +3111,7 @@
                     "email": "ajit.tapkir@intel.com"
                 }
             ],
-            "status": "public",
+            "status": "intel confidential",
             "stuck_at_ref": ""
         },
         {
