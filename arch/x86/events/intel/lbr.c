@@ -216,7 +216,7 @@ void intel_pmu_lbr_enable(bool pmi)
 static void intel_pmu_arch_lbr_enable(bool pmi)
 {
 	struct cpu_hw_events *cpuc = this_cpu_ptr(&cpu_hw_events);
-	u64 debugctl, lbr_ctl = 0, orig_debugctl;
+	u64 debugctl, lbr_ctl = 0;
 
 	/*
 	 * No need to unfreeze manually, as arch LBR can do that as part
@@ -232,14 +232,16 @@ static void intel_pmu_arch_lbr_enable(bool pmi)
 	 * If FREEZE_LBRS_ON_PMI is set, PMI near call/return instructions
 	 * may cause superfluous increase/decrease of LBR_TOS.
 	 */
-	rdmsrl(MSR_IA32_DEBUGCTLMSR, debugctl);
-	orig_debugctl = debugctl;
-	if (lbr_ctl & ARCH_LBR_CALL_STACK)
-		debugctl &= ~DEBUGCTLMSR_FREEZE_LBRS_ON_PMI;
-	else
-		debugctl |= DEBUGCTLMSR_FREEZE_LBRS_ON_PMI;
-	if (orig_debugctl != debugctl)
+	if ((cpuc->last_lbr_ctl & ARCH_LBR_CALL_STACK) !=
+	    (lbr_ctl & ARCH_LBR_CALL_STACK)) {
+		rdmsrl(MSR_IA32_DEBUGCTLMSR, debugctl);
+		if (lbr_ctl & ARCH_LBR_CALL_STACK)
+			debugctl &= ~DEBUGCTLMSR_FREEZE_LBRS_ON_PMI;
+		else
+			debugctl |= DEBUGCTLMSR_FREEZE_LBRS_ON_PMI;
 		wrmsrl(MSR_IA32_DEBUGCTLMSR, debugctl);
+	}
+	cpuc->last_lbr_ctl = lbr_ctl;
 
 	wrmsrl(MSR_ARCH_LBR_CTL, lbr_ctl | ARCH_LBR_CTL_LBREN);
 }
