@@ -275,6 +275,7 @@ struct cpu_hw_events {
 	u64				br_sel;
 	struct x86_perf_task_context	*last_task_ctx;
 	int				last_log_id;
+	u64				last_lbr_ctl;
 
 	/*
 	 * Intel host/guest exclude bits
