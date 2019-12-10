@@ -464,10 +464,8 @@ static inline int snd_soc_new_compress(struct snd_soc_pcm_runtime *rtd, int num)
 
 void snd_soc_disconnect_sync(struct device *dev);
 
-struct snd_pcm_substream *snd_soc_get_dai_substream(struct snd_soc_card *card,
-		const char *dai_link, int stream);
 struct snd_soc_pcm_runtime *snd_soc_get_pcm_runtime(struct snd_soc_card *card,
-		const char *dai_link);
+				struct snd_soc_dai_link *dai_link);
 
 bool snd_soc_runtime_ignore_pmdown_time(struct snd_soc_pcm_runtime *rtd);
 void snd_soc_runtime_activate(struct snd_soc_pcm_runtime *rtd, int stream);
@@ -852,7 +850,6 @@ struct snd_soc_dai_link {
 	/* Do not create a PCM for this DAI link (Backend link) */
 	unsigned int ignore:1;
 
-	struct list_head list; /* DAI link list of the soc card */
 #ifdef CONFIG_SND_SOC_TOPOLOGY
 	struct snd_soc_dobj dobj; /* For topology */
 #endif
@@ -1037,7 +1034,6 @@ struct snd_soc_card {
 	/* CPU <--> Codec DAI links  */
 	struct snd_soc_dai_link *dai_link;  /* predefined links only */
 	int num_links;  /* predefined links only */
-	struct list_head dai_link_list; /* all links */
 
 	struct list_head rtd_list;
 	int num_rtd;
@@ -1106,11 +1102,6 @@ struct snd_soc_card {
 	for ((i) = 0;							\
 	     ((i) < (card)->num_aux_devs) && ((aux) = &(card)->aux_dev[i]); \
 	     (i)++)
-
-#define for_each_card_links(card, link)				\
-	list_for_each_entry(link, &(card)->dai_link_list, list)
-#define for_each_card_links_safe(card, link, _link)			\
-	list_for_each_entry_safe(link, _link, &(card)->dai_link_list, list)
 
 #define for_each_card_rtds(card, rtd)			\
 	list_for_each_entry(rtd, &(card)->rtd_list, list)
@@ -1333,13 +1324,10 @@ int snd_soc_of_get_dai_link_codecs(struct device *dev,
 				   struct snd_soc_dai_link *dai_link);
 void snd_soc_of_put_dai_link_codecs(struct snd_soc_dai_link *dai_link);
 
-int snd_soc_add_dai_link(struct snd_soc_card *card,
-				struct snd_soc_dai_link *dai_link);
-void snd_soc_remove_dai_link(struct snd_soc_card *card,
-			     struct snd_soc_dai_link *dai_link);
-struct snd_soc_dai_link *snd_soc_find_dai_link(struct snd_soc_card *card,
-					       int id, const char *name,
-					       const char *stream_name);
+int snd_soc_add_pcm_runtime(struct snd_soc_card *card,
+			    struct snd_soc_dai_link *dai_link);
+void snd_soc_remove_pcm_runtime(struct snd_soc_card *card,
+				struct snd_soc_pcm_runtime *rtd);
 
 struct snd_soc_dai *snd_soc_register_dai(struct snd_soc_component *component,
 					 struct snd_soc_dai_driver *dai_drv,
