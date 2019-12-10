@@ -4264,6 +4264,9 @@ static __initconst const struct x86_pmu core_pmu = {
 	.cpu_dead		= intel_pmu_cpu_dead,
 
 	.check_period		= intel_pmu_check_period,
+
+	.lbr_enable		= intel_pmu_lbr_enable,
+	.lbr_disable		= intel_pmu_lbr_disable,
 };
 
 static __initconst const struct x86_pmu intel_pmu = {
@@ -4309,6 +4312,9 @@ static __initconst const struct x86_pmu intel_pmu = {
 	.check_period		= intel_pmu_check_period,
 
 	.aux_output_match	= intel_pmu_aux_output_match,
+
+	.lbr_enable		= intel_pmu_lbr_enable,
+	.lbr_disable		= intel_pmu_lbr_disable,
 };
 
 static __init void intel_clovertown_quirk(void)
