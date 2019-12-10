@@ -600,22 +600,6 @@ enum xlink_error xlink_multiplexer_init(void *dev)
 		return -ENOMEM;
 	}
 
-	/*
-	 * Fix up DMA handle value.
-	 *
-	 * dma_alloc_coherent() does not take into account the address
-	 * translation described by the dma-ranges properties in the device
-	 * tree; this seems to be a bug of the Linux kernel:
-	 * https://lists.linuxfoundation.org/pipermail/iommu/2019-October/039417.html
-	 *
-	 * As a workaround, we fix the DMA handle manually, by subtracting the
-	 * device DMA offset.
-	 *
-	 * TODO: remove this once/if the DMA kernel code is fixed.
-	 */
-	mux_init->local_xlink_mem.dma_handle -= mux_init->dev->dma_pfn_offset << PAGE_SHIFT;
-	mux_init->remote_xlink_mem.dma_handle -= mux_init->dev->dma_pfn_offset << PAGE_SHIFT;
-
 	dev_info(&plat_dev->dev, "Local vaddr 0x%p paddr 0x%pad size 0x%zX\n",
 			mux_init->local_xlink_mem.vaddr,
 			&mux_init->local_xlink_mem.dma_handle,
