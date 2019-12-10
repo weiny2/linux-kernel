@@ -2710,7 +2710,7 @@
             "stuck_at_ref": ""
         },
         {
-            "branch": "v5.4-for-tgl",
+            "branch": "v5.5-for-rkl-adl",
             "branch_type": "expiring",
             "config_options": [
                 {
@@ -2724,8 +2724,8 @@
                     "email": "jonathan.derrick@intel.com"
                 }
             ],
-            "description": "VMD support for Tigerlake for 5.4",
-            "enabled": false,
+            "description": "VMD support for RKL",
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Jonathan Derrick",
