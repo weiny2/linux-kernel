@@ -236,7 +236,7 @@
                 }
             ],
             "description": "Enable split lock detection",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Ravi Shankar",
