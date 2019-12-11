@@ -130,6 +130,8 @@
 #define X86_CR4_SMAP		_BITUL(X86_CR4_SMAP_BIT)
 #define X86_CR4_PKE_BIT		22 /* enable Protection Keys support */
 #define X86_CR4_PKE		_BITUL(X86_CR4_PKE_BIT)
+#define X86_CR4_LASS_BIT	27 /* enable LASS support */
+#define X86_CR4_LASS		_BITUL(X86_CR4_LASS_BIT)
 
 /*
  * x86-64 Task Priority Register, CR8
