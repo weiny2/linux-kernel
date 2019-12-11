@@ -302,6 +302,21 @@ void css_task_iter_end(struct css_task_iter *it);
  * Inline functions.
  */
 
+static inline bool css_no_ref(struct cgroup_subsys_state *css)
+{
+	return css->no_ref;
+}
+
+static inline void css_clear_ref(struct cgroup_subsys_state *css)
+{
+	css->no_ref = false;
+}
+
+static inline void css_set_ref(struct cgroup_subsys_state *css)
+{
+	css->no_ref = true;
+}
+
 /**
  * css_get - obtain a reference on the specified css
  * @css: target css
@@ -310,7 +325,7 @@ void css_task_iter_end(struct css_task_iter *it);
  */
 static inline void css_get(struct cgroup_subsys_state *css)
 {
-	if (!(css->flags & CSS_NO_REF))
+	if (!(css_no_ref(css)))
 		percpu_ref_get(&css->refcnt);
 }
 
@@ -323,7 +338,7 @@ static inline void css_get(struct cgroup_subsys_state *css)
  */
 static inline void css_get_many(struct cgroup_subsys_state *css, unsigned int n)
 {
-	if (!(css->flags & CSS_NO_REF))
+	if (!(css_no_ref(css)))
 		percpu_ref_get_many(&css->refcnt, n);
 }
 
@@ -340,7 +355,7 @@ static inline void css_get_many(struct cgroup_subsys_state *css, unsigned int n)
  */
 static inline bool css_tryget(struct cgroup_subsys_state *css)
 {
-	if (!(css->flags & CSS_NO_REF))
+	if (!(css_no_ref(css)))
 		return percpu_ref_tryget(&css->refcnt);
 	return true;
 }
@@ -357,7 +372,7 @@ static inline bool css_tryget(struct cgroup_subsys_state *css)
  */
 static inline bool css_tryget_online(struct cgroup_subsys_state *css)
 {
-	if (!(css->flags & CSS_NO_REF))
+	if (likely(!(css_no_ref(css))))
 		return percpu_ref_tryget_live(&css->refcnt);
 	return true;
 }
@@ -379,7 +394,7 @@ static inline bool css_tryget_online(struct cgroup_subsys_state *css)
  */
 static inline bool css_is_dying(struct cgroup_subsys_state *css)
 {
-	return !(css->flags & CSS_NO_REF) && percpu_ref_is_dying(&css->refcnt);
+	return !css_no_ref(css) && percpu_ref_is_dying(&css->refcnt);
 }
 
 /**
@@ -390,7 +405,7 @@ static inline bool css_is_dying(struct cgroup_subsys_state *css)
  */
 static inline void css_put(struct cgroup_subsys_state *css)
 {
-	if (!(css->flags & CSS_NO_REF))
+	if (!(css_no_ref(css)))
 		percpu_ref_put(&css->refcnt);
 }
 
@@ -403,7 +418,7 @@ static inline void css_put(struct cgroup_subsys_state *css)
  */
 static inline void css_put_many(struct cgroup_subsys_state *css, unsigned int n)
 {
-	if (!(css->flags & CSS_NO_REF))
+	if (!(css_no_ref(css)))
 		percpu_ref_put_many(&css->refcnt, n);
 }
 

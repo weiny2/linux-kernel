@@ -91,8 +91,8 @@ struct percpu_ref {
 	 * The low bit of the pointer indicates whether the ref is in percpu
 	 * mode; if set, then get/put will manipulate the atomic_t.
 	 */
-	unsigned long		percpu_count_ptr;
-	percpu_ref_func_t	*release;
+	unsigned long		percpu_count_ptr	____cacheline_aligned;
+	percpu_ref_func_t	*release		____cacheline_aligned;
 	percpu_ref_func_t	*confirm_switch;
 	bool			force_atomic:1;
 	struct rcu_head		rcu;
@@ -251,7 +251,7 @@ static inline bool percpu_ref_tryget_live(struct percpu_ref *ref)
 
 	rcu_read_lock_sched();
 
-	if (__ref_is_percpu(ref, &percpu_count)) {
+	if (likely(__ref_is_percpu(ref, &percpu_count))) {
 		this_cpu_inc(*percpu_count);
 		ret = true;
 	} else if (!(ref->percpu_count_ptr & __PERCPU_REF_DEAD)) {
