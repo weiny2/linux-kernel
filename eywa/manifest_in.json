@@ -1018,6 +1018,14 @@
                 {
                     "name": "CONFIG_EDAC_I10NM",
                     "value": "m"
+                },
+                {
+                    "name": "CONFIG_EDAC_DEBUG",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_EDAC_IEH",
+                    "value": "m"
                 }
             ],
             "contributor": [
@@ -1026,8 +1034,8 @@
                     "email": "qiuxu.zhu@intel.com"
                 }
             ],
-            "description": "Linux EDAC support for SPR, EHL and ICL NNPI",
-            "enabled": false,
+            "description": "Linux EDAC support for SPR, EHL, ICL NNPI and and IEH support for TGL.",
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Puneet Wadhawan",
@@ -1040,9 +1048,13 @@
                 {
                     "name": "Ahmad, Annie",
                     "email": "quarat-ul-ann.ahmad@intel.com"
+                },
+                {
+                    "name": "Revuelta, Julian J",
+                    "email": "julian.j.revuelta@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1714",
             "name": "edac",
             "repourl": "ssh://git-ccr-1.devtools.intel.com:29418/otc_edac_driver-linux.git",
             "sdl_contact": [
