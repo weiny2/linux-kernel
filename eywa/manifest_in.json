@@ -274,18 +274,23 @@
                     "email": "shyjumon.n@intel.com"
                 }
             ],
-            "description": "Enables the NVMe driver for the Tiger Lake/ KSL-R platforms",
+            "description": "NVME driver enabling",
             "enabled": true,
             "ip_owner": [
                 {
-                    "name": "Jason Akers",
-                    "email": "jason.b.akers@intel.com"
+                    "name": "Boyd, James A",
+                    "email": "james.a.boyd@intel.com"
                 }
             ],
             "jira": "NEXT-1686",
             "name": "nvme",
             "repourl": "ssh://git-gar-1.devtools.intel.com:29418/otc_nvme_linux-kernel",
-            "sdl_contact": [],
+            "sdl_contact": [
+                {
+                    "name": "N,Shyjumon",
+                    "email": "shyjumon.n@intel.com"
+                }
+            ],
             "status": "intel confidential",
             "stuck_at_ref": ""
         },
