@@ -25,7 +25,21 @@ enum migrate_reason {
 	MR_MEMPOLICY_MBIND,
 	MR_NUMA_MISPLACED,
 	MR_CONTIG_RANGE,
+	MR_DEMOTION,
+	MR_PROMOTION,
 	MR_TYPES
+};
+
+enum migrate_hmem_reason {
+	MR_HMEM_UNKNOWN,
+	MR_HMEM_RECLAIM_DEMOTE,
+	MR_HMEM_RECLAIM_PROMOTE,
+	MR_HMEM_NR_REASONS
+};
+
+struct migrate_detail {
+	enum migrate_reason reason;
+	enum migrate_hmem_reason h_reason;
 };
 
 /* In mm/debug.c; also keep sync with include/trace/events/migrate.h */
@@ -66,7 +80,8 @@ extern int migrate_page(struct address_space *mapping,
 			struct page *newpage, struct page *page,
 			enum migrate_mode mode);
 extern int migrate_pages(struct list_head *l, new_page_t new, free_page_t free,
-		unsigned long private, enum migrate_mode mode, int reason);
+		unsigned long private, enum migrate_mode mode,
+		struct migrate_detail *m_detail);
 extern int isolate_movable_page(struct page *page, isolate_mode_t mode);
 extern void putback_movable_page(struct page *page);
 
@@ -79,12 +94,14 @@ extern int migrate_huge_page_move_mapping(struct address_space *mapping,
 extern int migrate_page_move_mapping(struct address_space *mapping,
 		struct page *newpage, struct page *page, enum migrate_mode mode,
 		int extra_count);
+extern int migrate_demote_mapping(struct page *page);
+extern int migrate_promote_mapping(struct page *page);
 #else
 
 static inline void putback_movable_pages(struct list_head *l) {}
 static inline int migrate_pages(struct list_head *l, new_page_t new,
 		free_page_t free, unsigned long private, enum migrate_mode mode,
-		int reason)
+		struct migrate_detail *m_detail)
 	{ return -ENOSYS; }
 static inline int isolate_movable_page(struct page *page, isolate_mode_t mode)
 	{ return -EBUSY; }
@@ -101,6 +118,16 @@ static inline void migrate_page_copy(struct page *newpage,
 
 static inline int migrate_huge_page_move_mapping(struct address_space *mapping,
 				  struct page *newpage, struct page *page)
+{
+	return -ENOSYS;
+}
+
+static inline int migrate_demote_mapping(struct page *page)
+{
+	return -ENOSYS;
+}
+
+static inline int migrate_promote_mapping(struct page *page)
 {
 	return -ENOSYS;
 }

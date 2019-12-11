@@ -17,6 +17,7 @@
 #include <linux/nodemask.h>
 #include <linux/cpu.h>
 #include <linux/device.h>
+#include <linux/list_sort.h>
 #include <linux/pm_runtime.h>
 #include <linux/swap.h>
 #include <linux/slab.h>
@@ -73,6 +74,9 @@ struct node_access_nodes {
 	unsigned		access;
 #ifdef CONFIG_HMEM_REPORTING
 	struct node_hmem_attrs	hmem_attrs;
+	struct list_head	target_list;
+	struct list_head	target_siblings;
+	int			initiator_node;
 #endif
 };
 #define to_access_nodes(dev) container_of(dev, struct node_access_nodes, dev)
@@ -101,6 +105,11 @@ static const struct attribute_group *node_access_node_groups[] = {
 	NULL,
 };
 
+#define TERMINAL_NODE -1
+static int node_migration[MAX_NUMNODES] = {[0 ...  MAX_NUMNODES - 1] = TERMINAL_NODE};
+static int node_promotion[MAX_NUMNODES] = {[0 ...  MAX_NUMNODES - 1] = TERMINAL_NODE};
+static DEFINE_SPINLOCK(node_migration_lock);
+
 static void node_remove_accesses(struct node *node)
 {
 	struct node_access_nodes *c, *cnext;
@@ -114,6 +123,17 @@ static void node_remove_accesses(struct node *node)
 static void node_access_release(struct device *dev)
 {
 	kfree(to_access_nodes(dev));
+}
+
+static struct node_access_nodes *node_find_access_node(struct node *node,
+						       unsigned access)
+{
+	struct node_access_nodes *access_node;
+
+	list_for_each_entry(access_node, &node->access_list, list_node)
+		if (access_node->access == access)
+			return access_node;
+	return NULL;
 }
 
 static struct node_access_nodes *node_init_node_access(struct node *node,
@@ -137,6 +157,12 @@ static struct node_access_nodes *node_init_node_access(struct node *node,
 	dev->groups = node_access_node_groups;
 	if (dev_set_name(dev, "access%u", access))
 		goto free;
+
+#ifdef CONFIG_HMEM_REPORTING
+	INIT_LIST_HEAD(&access_node->target_list);
+	INIT_LIST_HEAD(&access_node->target_siblings);
+	access_node->initiator_node = -1;
+#endif
 
 	if (device_register(dev))
 		goto free_name;
@@ -174,6 +200,58 @@ static struct attribute *access_attrs[] = {
 	NULL,
 };
 
+/*
+ * Sort priority: read latency, write latency, read bandwidth, write bandwidth,
+ * and finally capacity. We'll prefer to migrate to nodes with more plentiful
+ * memory.
+ */
+static int access_cmp(void *priv, struct list_head *a, struct list_head *b)
+{
+	struct node_access_nodes *access_a = container_of(a,
+						struct node_access_nodes,
+						target_siblings);
+	struct node_access_nodes *access_b = container_of(b,
+						struct node_access_nodes,
+						target_siblings);
+	struct node *node_a, *node_b;
+	struct sysinfo ia, ib;
+
+	if (access_a->hmem_attrs.read_latency != 0 &&
+	    access_b->hmem_attrs.read_latency != 0 &&
+	    access_a->hmem_attrs.read_latency !=
+			access_b->hmem_attrs.read_latency)
+		return access_a->hmem_attrs.read_latency -
+				access_b->hmem_attrs.read_latency;
+
+	if (access_a->hmem_attrs.write_latency != 0 &&
+	    access_b->hmem_attrs.write_latency != 0 &&
+	    access_a->hmem_attrs.write_latency !=
+			access_b->hmem_attrs.write_latency)
+		return access_a->hmem_attrs.write_latency -
+				access_b->hmem_attrs.write_latency;
+
+	if (access_a->hmem_attrs.read_bandwidth != 0 &&
+	    access_b->hmem_attrs.read_bandwidth != 0 &&
+	    access_a->hmem_attrs.read_bandwidth !=
+			access_b->hmem_attrs.read_bandwidth)
+		return access_b->hmem_attrs.read_bandwidth -
+				access_a->hmem_attrs.read_bandwidth;
+
+	if (access_a->hmem_attrs.write_bandwidth != 0 &&
+	    access_b->hmem_attrs.write_bandwidth != 0 &&
+	    access_a->hmem_attrs.write_bandwidth !=
+			access_b->hmem_attrs.write_bandwidth)
+		return access_b->hmem_attrs.write_bandwidth -
+				access_a->hmem_attrs.write_bandwidth;
+
+	node_a = to_node(access_a->dev.parent);
+	node_b = to_node(access_b->dev.parent);
+	si_meminfo_node(&ia, node_a->dev.id);
+	si_meminfo_node(&ib, node_b->dev.id);
+
+	return ib.totalram - ia.totalram;
+}
+
 /**
  * node_set_perf_attrs - Set the performance values for given access class
  * @nid: Node identifier to be set
@@ -183,26 +261,54 @@ static struct attribute *access_attrs[] = {
 void node_set_perf_attrs(unsigned int nid, struct node_hmem_attrs *hmem_attrs,
 			 unsigned access)
 {
-	struct node_access_nodes *c;
-	struct node *node;
-	int i;
+	struct node_access_nodes *m, *c;
+	struct node *node, *initiator;
+	int i, cpu_nid;
 
 	if (WARN_ON_ONCE(!node_online(nid)))
 		return;
 
 	node = node_devices[nid];
-	c = node_init_node_access(node, access);
-	if (!c)
+	m = node_init_node_access(node, access);
+	if (!m)
 		return;
 
-	c->hmem_attrs = *hmem_attrs;
+	m->hmem_attrs = *hmem_attrs;
 	for (i = 0; access_attrs[i] != NULL; i++) {
-		if (sysfs_add_file_to_group(&c->dev.kobj, access_attrs[i],
+		if (sysfs_add_file_to_group(&m->dev.kobj, access_attrs[i],
 					    "initiators")) {
 			pr_info("failed to add performance attribute to node %d\n",
 				nid);
 			break;
 		}
+	}
+
+	if (access != 0)
+		return;
+
+	cpu_nid = m->initiator_node;
+	if (cpu_nid < 0)
+		return;
+
+	initiator = node_devices[cpu_nid];
+	if (!initiator)
+		return;
+
+	c = node_find_access_node(initiator, access);
+	if (!c)
+		return;
+
+	list_add_tail(&m->target_siblings, &c->target_list);
+	list_sort(NULL, &c->target_list, access_cmp);
+
+	i = -1;
+	list_for_each_entry(m, &c->target_list, target_siblings) {
+		node = to_node(m->dev.parent);
+		if (i >= 0) {
+			node_migration[i] = node->dev.id;
+			node_promotion[node->dev.id] = i;
+		}
+		i = node->dev.id;
 	}
 }
 
@@ -530,6 +636,92 @@ static ssize_t node_read_distance(struct device *dev,
 }
 static DEVICE_ATTR(distance, S_IRUGO, node_read_distance, NULL);
 
+static ssize_t migration_path_show(struct device *dev,
+				   struct device_attribute *attr,
+				   char *buf)
+{
+	return sprintf(buf, "%d\n", node_migration[dev->id]);
+}
+
+static ssize_t promotion_path_show(struct device *dev,
+				   struct device_attribute *attr,
+				   char *buf)
+{
+	return sprintf(buf, "%d\n", node_promotion[dev->id]);
+}
+
+static ssize_t migration_path_store(struct device *dev,
+				    struct device_attribute *attr,
+				    const char *buf, size_t count)
+{
+	int i, err, nid = dev->id;
+	nodemask_t visited = NODE_MASK_NONE;
+	long next;
+
+	err = kstrtol(buf, 0, &next);
+	if (err)
+		return -EINVAL;
+
+	if (next < 0) {
+		spin_lock(&node_migration_lock);
+		WRITE_ONCE(node_migration[nid], TERMINAL_NODE);
+		spin_unlock(&node_migration_lock);
+		return count;
+	}
+	if (next >= MAX_NUMNODES || !node_online(next))
+		return -EINVAL;
+
+	/*
+	 * Follow the entire migration path from 'nid' through the point where
+	 * we hit a TERMINAL_NODE.
+	 *
+	 * Don't allow loops migration cycles in the path.
+	 */
+	node_set(nid, visited);
+	spin_lock(&node_migration_lock);
+	for (i = next; node_migration[i] != TERMINAL_NODE;
+	     i = node_migration[i]) {
+		/* Fail if we have visited this node already */
+		if (node_test_and_set(i, visited)) {
+			spin_unlock(&node_migration_lock);
+			return -EINVAL;
+		}
+	}
+	WRITE_ONCE(node_migration[nid], next);
+	WRITE_ONCE(node_promotion[next], nid);
+	spin_unlock(&node_migration_lock);
+
+	return count;
+}
+static DEVICE_ATTR_RW(migration_path);
+static DEVICE_ATTR_RO(promotion_path);
+
+/**
+ * next_migration_node() - Get the next node in the migration path
+ * @current_node: The starting node to lookup the next node
+ *
+ * @returns: node id for next memory node in the migration path hierarchy from
+ * 	     @current_node; -1 if @current_node is terminal or its migration
+ * 	     node is not online.
+ */
+int next_migration_node(int current_node)
+{
+	int nid = READ_ONCE(node_migration[current_node]);
+
+	if (nid >= 0 && node_online(nid))
+		return nid;
+	return TERMINAL_NODE;
+}
+
+int next_promotion_node(int current_node)
+{
+	int nid = READ_ONCE(node_promotion[current_node]);
+
+	if (nid >= 0 && node_online(nid))
+		return nid;
+	return TERMINAL_NODE;
+}
+
 static struct attribute *node_dev_attrs[] = {
 	&dev_attr_cpumap.attr,
 	&dev_attr_cpulist.attr,
@@ -537,6 +729,8 @@ static struct attribute *node_dev_attrs[] = {
 	&dev_attr_numastat.attr,
 	&dev_attr_distance.attr,
 	&dev_attr_vmstat.attr,
+	&dev_attr_migration_path.attr,
+	&dev_attr_promotion_path.attr,
 	NULL
 };
 ATTRIBUTE_GROUPS(node_dev);
@@ -713,6 +907,9 @@ int register_memory_node_under_compute_node(unsigned int mem_nid,
 	if (ret)
 		goto err;
 
+#ifdef CONFIG_HMEM_REPORTING
+	target->initiator_node = cpu_nid;
+#endif
 	return 0;
  err:
 	sysfs_remove_link_from_group(&initiator->dev.kobj, "targets",
