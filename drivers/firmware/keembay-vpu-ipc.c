@@ -765,7 +765,7 @@ static int request_vpu_boot(struct vpu_ipc_dev *vpu_dev)
 					 ARM_SMCCC_OWNER_SIP, function_number);
 
 	/* Arguments are as follows:
-	 * 1. Reserved region physical base address
+	 * 1. VPU ID (was 'Reserved region physical base address')
 	 * 2. Reserved region size
 	 * 3. Firmware image physical base address
 	 * 4. Firmware image size
@@ -775,8 +775,12 @@ static int request_vpu_boot(struct vpu_ipc_dev *vpu_dev)
 	 *
 	 * FIXME: fw_res addresses are VPU addresses; convert them to CPU
 	 * physical addresses.
+	 *
+	 * FIXME: Parameter 'Reserved region physical base address' was removed
+	 * by IO team when they added multi-slice support in ATF. This needs to
+	 * be re-added somehow.
 	 */
-	arm_smccc_smc(function_id, vpu_dev->reserved_mem.paddr,
+	arm_smccc_smc(function_id, vpu_dev->vpu_id,
 		      vpu_dev->reserved_mem.size, vpu_dev->fw_res.start,
 		      resource_size(&vpu_dev->fw_res), vpu_dev->boot_vec_paddr,
 		      vpu_dev->x509_mem.paddr, vpu_dev->imr, &res);
@@ -800,7 +804,7 @@ static int request_vpu_reset(struct vpu_ipc_dev *vpu_dev)
 	function_id = ARM_SMCCC_CALL_VAL(ARM_SMCCC_FAST_CALL, ARM_SMCCC_SMC_32,
 					 ARM_SMCCC_OWNER_SIP, function_number);
 
-	arm_smccc_smc(function_id, 0, 0, 0, 0, 0, 0, 0, &res);
+	arm_smccc_smc(function_id, vpu_dev->vpu_id, 0, 0, 0, 0, 0, 0, &res);
 
 	if (res.a0) {
 		dev_info(&vpu_dev->pdev->dev, "Reset failed: 0x%lx.\n", res.a0);
@@ -821,7 +825,7 @@ static int request_vpu_stop(struct vpu_ipc_dev *vpu_dev)
 	function_id = ARM_SMCCC_CALL_VAL(ARM_SMCCC_FAST_CALL, ARM_SMCCC_SMC_32,
 					 ARM_SMCCC_OWNER_SIP, function_number);
 
-	arm_smccc_smc(function_id, 0, 0, 0, 0, 0, 0, 0, &res);
+	arm_smccc_smc(function_id, vpu_dev->vpu_id, 0, 0, 0, 0, 0, 0, &res);
 
 	if (res.a0) {
 		dev_info(&vpu_dev->pdev->dev, "Stop failed: 0x%lx.\n", res.a0);
