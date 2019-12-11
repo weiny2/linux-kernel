@@ -1,0 +1,10 @@
+URL: ssh://git@gitlab.devtools.intel.com:29418/otc-clk-server/linux.git
+
+branch	baseline
+kb/hmem v5.2
+hy/hmem kb/hmem
+ft/hmem	v5.2
+dh/hmem	v5.2
+dw/hmem v5.2
+hw/hmem v5.2
+tc/hmem v5.2
