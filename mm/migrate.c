@@ -47,6 +47,7 @@
 #include <linux/page_owner.h>
 #include <linux/sched/mm.h>
 #include <linux/ptrace.h>
+#include <linux/sched/sysctl.h>
 
 #include <asm/tlbflush.h>
 
@@ -1945,16 +1946,25 @@ static bool migrate_balanced_pgdat(struct pglist_data *pgdat,
 	int z;
 
 	for (z = pgdat->nr_zones - 1; z >= 0; z--) {
+		unsigned long wmark;
 		struct zone *zone = pgdat->node_zones + z;
 
 		if (!populated_zone(zone))
 			continue;
 
 		/* Avoid waking kswapd by allocating pages_to_migrate pages. */
+		wmark = high_wmark_pages(zone);
+		/*
+		 * For hierarchy memory system, kswapd will
+		 * periodically migrate cold pages to slower memory
+		 * node.  And the half of the high watermark is used
+		 * to allocate promoted pages.
+		 */
+		if (sysctl_numa_balancing_mode & NUMA_BALANCING_HMEM)
+			wmark = (wmark + low_wmark_pages(zone)) / 2;
 		if (!zone_watermark_ok(zone, 0,
-				       high_wmark_pages(zone) +
-				       nr_migrate_pages,
-				       0, 0))
+				       wmark + nr_migrate_pages,
+				       ZONE_MOVABLE, 0))
 			continue;
 		return true;
 	}
@@ -1962,16 +1972,24 @@ static bool migrate_balanced_pgdat(struct pglist_data *pgdat,
 }
 
 static struct page *alloc_misplaced_dst_page(struct page *page,
-					   unsigned long data)
+					     unsigned long nid)
 {
-	int nid = (int) data;
 	struct page *newpage;
 
-	newpage = __alloc_pages_node(nid,
-					 (GFP_HIGHUSER_MOVABLE |
-					  __GFP_THISNODE | __GFP_NOMEMALLOC |
-					  __GFP_NORETRY | __GFP_NOWARN) &
-					 ~__GFP_RECLAIM, 0);
+	if (PageTransHuge(page)) {
+		newpage = alloc_pages_node(
+			nid,
+			(GFP_TRANSHUGE | __GFP_THISNODE | __GFP_NOMEMALLOC |
+			 __GFP_NORETRY | __GFP_NOWARN) & ~__GFP_RECLAIM,
+			HPAGE_PMD_ORDER);
+		if (newpage)
+			prep_transhuge_page(newpage);
+	} else
+		newpage = __alloc_pages_node(
+			nid,
+			(GFP_HIGHUSER_MOVABLE | __GFP_THISNODE |
+			 __GFP_NOMEMALLOC | __GFP_NORETRY | __GFP_NOWARN) &
+			~__GFP_RECLAIM, 0);
 
 	return newpage;
 }
@@ -2038,7 +2056,7 @@ int migrate_misplaced_page(struct page *page, struct vm_area_struct *vma,
 	 * Don't migrate file pages that are mapped in multiple processes
 	 * with execute permissions as they are probably shared libraries.
 	 */
-	if (page_mapcount(page) != 1 && page_is_file_cache(page) &&
+	if (vma && page_mapcount(page) != 1 && page_is_file_cache(page) &&
 	    (vma->vm_flags & VM_EXEC))
 		goto out;
 
@@ -2054,7 +2072,17 @@ int migrate_misplaced_page(struct page *page, struct vm_area_struct *vma,
 		goto out;
 
 	list_add(&page->lru, &migratepages);
-	m_detail.reason = MR_NUMA_MISPLACED;
+	/* Promote from slow memory node to fast memory node */
+	if (next_migration_node(node) != -1 &&
+	    next_promotion_node(page_to_nid(page)) != -1) {
+		m_detail.reason = MR_PROMOTION;
+		m_detail.h_reason = MR_HMEM_AUTONUMA_PROMOTE;
+	} else if (next_promotion_node(node) != -1 &&
+		   next_migration_node(page_to_nid(page)) != -1) {
+		m_detail.reason = MR_DEMOTION;
+		m_detail.h_reason = MR_HMEM_AUTONUMA_DEMOTE;
+	} else
+		m_detail.reason = MR_NUMA_MISPLACED;
 	nr_remaining = migrate_pages(&migratepages, alloc_misplaced_dst_page,
 				     NULL, node, MIGRATE_ASYNC, &m_detail);
 	if (nr_remaining) {

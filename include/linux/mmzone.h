@@ -20,6 +20,7 @@
 #include <linux/atomic.h>
 #include <linux/mm_types.h>
 #include <linux/page-flags.h>
+#include <linux/workqueue.h>
 #include <asm/page.h>
 
 /* Free memory management - zoned buddy allocator.  */
@@ -211,6 +212,8 @@ enum zone_stat_item {
 	HMEM_MIGRATE_FIRST_ENTRY = HMEM_MIGRATE_UNKNOWN,
 	HMEM_MIGRATE(MR_HMEM_RECLAIM_DEMOTE),
 	HMEM_MIGRATE(MR_HMEM_RECLAIM_PROMOTE),
+	HMEM_MIGRATE(MR_HMEM_AUTONUMA_PROMOTE),
+	HMEM_MIGRATE(MR_HMEM_AUTONUMA_DEMOTE),
 	NR_VM_ZONE_STAT_ITEMS
 };
 
@@ -247,6 +250,9 @@ enum node_stat_item {
 	NR_DIRTIED,		/* page dirtyings since bootup */
 	NR_WRITTEN,		/* page writings since bootup */
 	NR_KERNEL_MISC_RECLAIMABLE,	/* reclaimable non-slab kernel pages */
+#ifdef CONFIG_NUMA_BALANCING
+	NUMA_TRY_MIGRATE,	/* pages to try to migrate via NUMA balancing */
+#endif
 	NR_VM_NODE_STAT_ITEMS
 };
 
@@ -682,6 +688,19 @@ struct zonelist {
 extern struct page *mem_map;
 #endif
 
+struct random_migrate_work_item;
+
+struct random_migrate_state {
+	int nr_page;
+	int period;
+	int threshold;
+	int threshold_max;
+	int nr_item;
+	unsigned long when_select;
+	struct delayed_work work;
+	struct random_migrate_work_item *work_items;
+};
+
 /*
  * On NUMA machines, each NUMA node would have a pg_data_t to describe
  * it's memory layout. On UMA machines there is a single pglist_data which
@@ -766,6 +785,15 @@ typedef struct pglist_data {
 	unsigned long split_queue_len;
 #endif
 
+#ifdef CONFIG_NUMA_BALANCING
+	unsigned long autonuma_jiffies;
+	unsigned long autonuma_try_migrate;
+	unsigned long autonuma_threshold_jiffies;
+	unsigned long autonuma_threshold_try_migrate;
+	unsigned long autonuma_threshold;
+#endif
+	struct random_migrate_state random_promote_state;
+	struct random_migrate_state random_demote_state;
 	/* Fields commonly accessed by the page reclaim scanner */
 	struct lruvec		lruvec;
 
@@ -810,6 +838,7 @@ static inline bool pgdat_is_empty(pg_data_t *pgdat)
 void build_all_zonelists(pg_data_t *pgdat);
 void wakeup_kswapd(struct zone *zone, gfp_t gfp_mask, int order,
 		   enum zone_type classzone_idx);
+void wakeup_all_kswapds(void);
 bool __zone_watermark_ok(struct zone *z, unsigned int order, unsigned long mark,
 			 int classzone_idx, unsigned int alloc_flags,
 			 long free_pages);
@@ -818,6 +847,9 @@ bool zone_watermark_ok(struct zone *z, unsigned int order,
 		unsigned int alloc_flags);
 bool zone_watermark_ok_safe(struct zone *z, unsigned int order,
 		unsigned long mark, int classzone_idx);
+unsigned long pgdat_wmark_pages(struct pglist_data *pgdat,
+				enum zone_watermarks m);
+
 enum memmap_context {
 	MEMMAP_EARLY,
 	MEMMAP_HOTPLUG,

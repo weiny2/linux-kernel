@@ -1718,6 +1718,14 @@ bool mod_delayed_work_on(int cpu, struct workqueue_struct *wq,
 }
 EXPORT_SYMBOL_GPL(mod_delayed_work_on);
 
+bool mod_delayed_work_node(int node, struct workqueue_struct *wq,
+			   struct delayed_work *dwork, unsigned long delay)
+{
+	int cpu = workqueue_select_cpu_near(node);
+	return mod_delayed_work_on(cpu, wq, dwork, delay);
+}
+
+
 static void rcu_work_rcufn(struct rcu_head *rcu)
 {
 	struct rcu_work *rwork = container_of(rcu, struct rcu_work, rcu);

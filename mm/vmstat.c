@@ -551,8 +551,10 @@ void inc_hmem_state(enum migrate_hmem_reason hr, struct page *src, struct page *
 		return;
 	if (hr == MR_HMEM_UNKNOWN)
 		return;
-	inc_zone_page_state(src, zone_stat_src);
-	inc_zone_page_state(dst, zone_stat_dst);
+	mod_zone_page_state(page_zone(src), zone_stat_src,
+			    hpage_nr_pages(src));
+	mod_zone_page_state(page_zone(dst), zone_stat_dst,
+			    hpage_nr_pages(dst));
 }
 EXPORT_SYMBOL(inc_hmem_state);
 
@@ -1156,6 +1158,10 @@ const char * const vmstat_text[] = {
 	"hmem_reclaim_demote_dst",
 	"hmem_reclaim_promote_src",
 	"hmem_reclaim_promote_dst",
+	"hmem_autonuma_promote_src",
+	"hmem_autonuma_promote_dst",
+	"hmem_autonuma_demote_src",
+	"hmem_autonuma_demote_dst",
 
 	/* enum numa_stat_item counters */
 #ifdef CONFIG_NUMA
@@ -1198,6 +1204,9 @@ const char * const vmstat_text[] = {
 	"nr_dirtied",
 	"nr_written",
 	"nr_kernel_misc_reclaimable",
+#ifdef CONFIG_NUMA_BALANCING
+	"numa_try_migrate",
+#endif
 
 	/* enum writeback_stat_item counters */
 	"nr_dirty_threshold",
