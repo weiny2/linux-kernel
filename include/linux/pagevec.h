@@ -11,8 +11,8 @@
 
 #include <linux/xarray.h>
 
-/* 31 pointers + header align the pagevec structure to a power of two */
-#define PAGEVEC_SIZE	31
+/* 63 pointers + header align the pagevec structure to a power of two */
+#define PAGEVEC_SIZE	63
 
 struct page;
 struct address_space;
