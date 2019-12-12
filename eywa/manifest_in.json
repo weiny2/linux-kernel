@@ -985,14 +985,14 @@
                 }
             ],
             "description": "RPMB (CSE) support and SPD (storage proxy driver)",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "William Stevens",
                     "email": "william.a.stevens@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1717",
             "name": "rpmb",
             "repourl": "ssh://git-ger-8.devtools.intel.com:29418/sfip_linux-linux-mei.git",
             "sdl_contact": [
