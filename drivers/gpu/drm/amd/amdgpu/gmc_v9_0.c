@@ -468,8 +468,11 @@ static void gmc_v9_0_flush_gpu_tlb(struct amdgpu_device *adev, uint32_t vmid,
 	 */
 
 	/* TODO: It needs to continue working on debugging with semaphore for GFXHUB as well. */
-	if (vmhub == AMDGPU_MMHUB_0 ||
-	    vmhub == AMDGPU_MMHUB_1) {
+	if ((vmhub == AMDGPU_MMHUB_0 ||
+	     vmhub == AMDGPU_MMHUB_1) &&
+	    (!(adev->asic_type == CHIP_RAVEN &&
+	       adev->rev_id < 0x8 &&
+	       adev->pdev->device == 0x15d8))) {
 		for (j = 0; j < adev->usec_timeout; j++) {
 			/* a read return value of 1 means semaphore acuqire */
 			tmp = RREG32_NO_KIQ(hub->vm_inv_eng0_sem + eng);
@@ -499,8 +502,11 @@ static void gmc_v9_0_flush_gpu_tlb(struct amdgpu_device *adev, uint32_t vmid,
 	}
 
 	/* TODO: It needs to continue working on debugging with semaphore for GFXHUB as well. */
-	if (vmhub == AMDGPU_MMHUB_0 ||
-	    vmhub == AMDGPU_MMHUB_1)
+	if ((vmhub == AMDGPU_MMHUB_0 ||
+	     vmhub == AMDGPU_MMHUB_1) &&
+	    (!(adev->asic_type == CHIP_RAVEN &&
+	       adev->rev_id < 0x8 &&
+	       adev->pdev->device == 0x15d8)))
 		/*
 		 * add semaphore release after invalidation,
 		 * write with 0 means semaphore release
@@ -531,8 +537,11 @@ static uint64_t gmc_v9_0_emit_flush_gpu_tlb(struct amdgpu_ring *ring,
 	 */
 
 	/* TODO: It needs to continue working on debugging with semaphore for GFXHUB as well. */
-	if (ring->funcs->vmhub == AMDGPU_MMHUB_0 ||
-	    ring->funcs->vmhub == AMDGPU_MMHUB_1)
+	if ((ring->funcs->vmhub == AMDGPU_MMHUB_0 ||
+	     ring->funcs->vmhub == AMDGPU_MMHUB_1) &&
+	    (!(adev->asic_type == CHIP_RAVEN &&
+	       adev->rev_id < 0x8 &&
+	       adev->pdev->device == 0x15d8)))
 		/* a read return value of 1 means semaphore acuqire */
 		amdgpu_ring_emit_reg_wait(ring,
 					  hub->vm_inv_eng0_sem + eng, 0x1, 0x1);
@@ -548,8 +557,11 @@ static uint64_t gmc_v9_0_emit_flush_gpu_tlb(struct amdgpu_ring *ring,
 					    req, 1 << vmid);
 
 	/* TODO: It needs to continue working on debugging with semaphore for GFXHUB as well. */
-	if (ring->funcs->vmhub == AMDGPU_MMHUB_0 ||
-	    ring->funcs->vmhub == AMDGPU_MMHUB_1)
+	if ((ring->funcs->vmhub == AMDGPU_MMHUB_0 ||
+	     ring->funcs->vmhub == AMDGPU_MMHUB_1) &&
+	    (!(adev->asic_type == CHIP_RAVEN &&
+	       adev->rev_id < 0x8 &&
+	       adev->pdev->device == 0x15d8)))
 		/*
 		 * add semaphore release after invalidation,
 		 * write with 0 means semaphore release
@@ -699,7 +711,15 @@ static void gmc_v9_0_set_umc_funcs(struct amdgpu_device *adev)
 		adev->umc.max_ras_err_cnt_per_query = UMC_V6_1_TOTAL_CHANNEL_NUM;
 		adev->umc.channel_inst_num = UMC_V6_1_CHANNEL_INSTANCE_NUM;
 		adev->umc.umc_inst_num = UMC_V6_1_UMC_INSTANCE_NUM;
-		adev->umc.channel_offs = UMC_V6_1_PER_CHANNEL_OFFSET;
+		adev->umc.channel_offs = UMC_V6_1_PER_CHANNEL_OFFSET_VG20;
+		adev->umc.channel_idx_tbl = &umc_v6_1_channel_idx_tbl[0][0];
+		adev->umc.funcs = &umc_v6_1_funcs;
+		break;
+	case CHIP_ARCTURUS:
+		adev->umc.max_ras_err_cnt_per_query = UMC_V6_1_TOTAL_CHANNEL_NUM;
+		adev->umc.channel_inst_num = UMC_V6_1_CHANNEL_INSTANCE_NUM;
+		adev->umc.umc_inst_num = UMC_V6_1_UMC_INSTANCE_NUM;
+		adev->umc.channel_offs = UMC_V6_1_PER_CHANNEL_OFFSET_ARCT;
 		adev->umc.channel_idx_tbl = &umc_v6_1_channel_idx_tbl[0][0];
 		adev->umc.funcs = &umc_v6_1_funcs;
 		break;
@@ -713,6 +733,9 @@ static void gmc_v9_0_set_mmhub_funcs(struct amdgpu_device *adev)
 	switch (adev->asic_type) {
 	case CHIP_VEGA20:
 		adev->mmhub.funcs = &mmhub_v1_0_funcs;
+		break;
+	case CHIP_ARCTURUS:
+		adev->mmhub.funcs = &mmhub_v9_4_funcs;
 		break;
 	default:
 		break;
@@ -809,6 +832,7 @@ static int gmc_v9_0_late_init(void *handle)
 		switch (adev->asic_type) {
 		case CHIP_VEGA10:
 		case CHIP_VEGA20:
+		case CHIP_ARCTURUS:
 			r = amdgpu_atomfirmware_mem_ecc_supported(adev);
 			if (!r) {
 				DRM_INFO("ECC is not present.\n");
