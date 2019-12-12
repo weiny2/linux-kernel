@@ -105,22 +105,24 @@ def add_remotes(manifest):
             current_remotes = git_add_remote(name,url,current_remotes)
    
 
-def fetch_remotes(manifest_in,skip_fetch,fetch_single):
+def fetch_remotes(manifest_in,skip_fetch,fetch_single,fetch_all):
     #fetch remots from enabled branches from manifest_in
     #replaces legacy gen-manifest.sh script
     done_fetch = {}
     name_single = None
+    skip=skip_fetch
     if fetch_single != None:
         name_single = sanitize_repo_name(fetch_single)
-   
+        skip=True
+
     manifest = manifest_in
     for branch in manifest["topic_branches"]:
-        if branch["enabled"] == False:
+        if branch["enabled"] == False and fetch_all == False:
             continue
         name = sanitize_repo_name(branch["repourl"])
         rev=""
         if not branch["stuck_at_ref"]:
-            if (skip_fetch == False and name not in done_fetch) or (name_single == name and name not in done_fetch):
+            if (skip == False and name not in done_fetch) or (name_single == name and name not in done_fetch):
                 git_fetch_remote(name)
             done_fetch[name] = True
             rev = run_shell_cmd("git rev-list {}/{} -1".format(name,branch["branch"]))
@@ -130,9 +132,8 @@ def fetch_remotes(manifest_in,skip_fetch,fetch_single):
         branch[u"rev"] = rev
     return manifest
 
-def setup_linus_branch(manifest):
+def setup_linus_branch(manifest,skip_fetch):
     #sets up the master branch what we are merging on top of
-    #manifest #copy.deepcopy(manifest_in)
     main_branch = manifest["master_branch"]
     #if use latest_tag is set, get ref of latest tag
     name = sanitize_repo_name(main_branch["repourl"])
@@ -141,7 +142,8 @@ def setup_linus_branch(manifest):
     rev = ""
 
     if main_branch["use_latest_tag"] == True:
-            git_fetch_remote(name)
+            if skip_fetch == False:
+                git_fetch_remote(name)
             tag = run_shell_cmd("git describe {}/{} --abbrev=0".format(name,main_branch["branch"])).split("\n")[0]
             print("using tag",tag)
             main_branch[u"tag"] =tag
@@ -186,13 +188,10 @@ def do_merge(manifest, continue_merge):
     for branch in manifest["topic_branches"]:
         if branch["enabled"] == True:
             if continue_merge and branch["rev"] in patch_branches:
+                print_and_log("Skipping {} since patch-manifest says it is merged".format(branch["name"]))
                 continue
 
-            print ("Merging {} {} {} {}".format(branch["name"],
-                                      branch["repourl"],
-                                      branch["branch"],
-                                      branch["rev"]))
-            log.write("Merging {} {} {} {}\n".format(branch["name"],
+            print_and_log("Merging {} {} {} {}".format(branch["name"],
                                       branch["repourl"],
                                       branch["branch"],
                                       branch["rev"]))
@@ -204,9 +203,9 @@ def do_merge(manifest, continue_merge):
                 if rerere_output == "":
                     run_shell_cmd("git diff --stat --stat-width=200 --cached")
                     run_shell_cmd("git commit --no-edit")
-                    print("Git rerere handled merge")
+                    print_and_log("Git rerere handled merge")
                 else:
-                    print("Git has has exited with non-zero. check log")
+                    print_and_log("Git has has exited with non-zero. check log")
                     raise Exception("Merge has failed. Check git status/merge log to see conflicts/issues. Fix them and then run './merge.py -c (-r)' to continue")
             patch.write("Merging {} {} {} {}\n".format(branch["name"],
                                       branch["repourl"],
@@ -214,6 +213,10 @@ def do_merge(manifest, continue_merge):
                                       branch["rev"]))
   
     print("Merge succeeded")
+
+def print_and_log(str):
+    print(str)
+    log.write(str+"\n")
 
 
 def create_readme_file():
@@ -238,8 +241,9 @@ def merge_commit(manifest, config_options):
     for artifact in artifacts:
         run_shell_cmd("mv {} eywa".format(artifact))
         run_shell_cmd("git add eywa/{}".format(artifact))
+    
     #Flush log files and add them as well
-    #Use cp for log file because it will be stil be written even after we add to git
+    #Use cp for log file because it will be stil be written even after we add to git which is a little weird
     log.flush()
     patch.flush()
     os.fsync(log.fileno())
@@ -249,7 +253,6 @@ def merge_commit(manifest, config_options):
     run_shell_cmd("git add eywa/{}".format(log_file_name))
     run_shell_cmd("cp {} eywa/{}".format(patch_manifest,patch_manifest))
     run_shell_cmd("git add eywa/{}".format(patch_manifest))
-
     commit_msg = "Intel Next: Add release files for {} {}\n\n".format(manifest["master_branch"]["tag"],date)
     commit_msg += "\nAdded: {} \n\n ".format(", ".join(artifacts+[log_file_name,patch_manifest,"README.intel"]))
 
@@ -302,34 +305,46 @@ def print_manifest_log(manifest):
             if branch["enabled"]:
                 f.write("{} {} {}\n\n".format(branch["repourl"],branch["branch"],branch["rev"]))
             else:
+                #If we want to print out DISABLED branches them change for loop above
                 f.write("#DISABLED {} {}\n\n".format(branch["repourl"],branch["branch"]))
 
-def gen_manifest(skip_fetch,fetch_single):
+
+def gen_manifest(skip_fetch,fetch_single,fetch_all,blacklist,whitelist):
  
     manifest=read_manifest(manifest_in_path)
+    #Process whitelist
+    #Don't check to make sure each argument passed it was valid. The user can figure that out
+    if whitelist != None:
+       for branch in manifest["topic_branches"]:
+           branch["enabled"] = False
+           if branch["name"] in whitelist:
+               print_and_log("Exclusively enabled {} due to -w option".format(branch["name"]))
+               branch["enabled"] = True
+    #Proccess blacklist
+    #Don't check to make sure each argument passed it was valid. The user can figure that out
+    for branch in manifest["topic_branches"]:
+        if branch["name"] in blacklist:
+           branch["enabled"] = False
+           print_and_log("Disabling {} due to -b option".format(branch["name"]))
+    
     #Add repos as remotes
     add_remotes(manifest)
     #fetch repos
-    manifest=fetch_remotes(manifest,skip_fetch,fetch_single)
-    manifest=setup_linus_branch(manifest)
+    manifest=fetch_remotes(manifest,skip_fetch,fetch_single,fetch_all)
+    manifest=setup_linus_branch(manifest,skip_fetch)
     s=json.dumps(manifest,indent=4)
     open(manifest_out_path,"w").write(s)
     print_manifest_log(manifest)
     return manifest
 
 
-def config_validation(branches):
+def config_validation(all_options,branch_tracker):
     #This function checks to make sure all cfg options were set from the manifest
     #Prints a report that is to be read by a human
-    all_options = []
-    for branch in branches:
-        if branch["enabled"] == True:
-            all_options+= branch["config_options"]
-    
     
     for cfg_file in config_files_to_val:
-        print("\nValidation for {}".format(cfg_file)) 
-        print(rule)
+        print_and_log("\nValidation for {}".format(cfg_file))
+        print_and_log(rule)
         with open(config_path + "/" + cfg_file) as cfg_obj:
             gen_cfg =cfg_obj.read()
             gen_cfg_split = gen_cfg.split("\n")
@@ -342,23 +357,22 @@ def config_validation(branches):
                 else:
                     opt_str = "{}={}".format(name,value)
                 if opt_str not in gen_cfg:
-                    print("Expected {}".format(opt_str))
+                    print_and_log("Expected {} defined in {}".format(opt_str,",".join(branch_tracker[name])))
                     if name not in gen_cfg:
-                        print("  Not found".format(name))
+                        print_and_log("  Not found".format(name))
                     else:
                         for line in gen_cfg_split:
                             if name in line:
-                                print("  Got {}".format(line))
+                                print_and_log("  Got {} ".format(line))
                                 break
     
 
-def run_regen_script(branches):
+def run_regen_script(all_options,branch_tracker):
     run_shell_cmd("mv {} {}".format(config_fragments, config_path))
     run_shell_cmd_output("./regen_configs.sh")
     output_array = []
     #Do validation to make sure everything was set in Kconfig
-    config_validation(branches)
-
+    config_validation(all_options,branch_tracker)
     #After validation is complete add files to git
     for config_file in config_files:
         output = run_shell_cmd("git diff {}/{}".format(config_path, config_file))
@@ -367,49 +381,73 @@ def run_regen_script(branches):
             output_array.append("{}/{}".format(config_path, config_file))
     return output_array
 
-def gen_config():
-    manifest=read_manifest(manifest_out_path)
-    branches = manifest["topic_branches"]
 
+
+def pre_kconfig_validation(branches):
+    #check for conflicting options and raise exception if found
     configs_dict = {}
-    configs_li =[]
-    
-    #Create a list of cfg options
-    #Track them to make sure there are not conflicting values in two branches
     for branch in branches:
         if branch["enabled"] == True and branch['config_options'] != []:
             config_options = branch["config_options"]
-            configs_li.append((" ".join([branch["name"],branch["repourl"],branch["branch"]]),config_options))
             for config in config_options:
                 name = config["name"]
                 value = config["value"]
                 if name in configs_dict and configs_dict[name][0] != value :
-                    print("{} is set to {} and {} by '{}' and '{}'".format(name,value,configs_dict[name][0],branch["name"],configs_dict[name][1]))
+                    print_and_log("{} is set to {} and {} by '{}' and '{}'".format(name,value,configs_dict[name][0],branch["name"],configs_dict[name][1]))
+                    #TODO: Make a list of conflicts print all of them out and then raise exception
                     raise Exception("Option set by two different branches, resolve the conflict and rerun")
                 configs_dict[name] = (value,branch["name"])
-    print("Intel Next CFG options")
+ 
+def gen_config():
+    manifest=read_manifest(manifest_out_path)
+    branches = manifest["topic_branches"]
+    configs_li =[]
+    branch_tracker={}
+    all_options=[]
+    #Create a list of cfg options, and also a dict matching config to branch names
+    for branch in branches:
+        if branch["enabled"] == True and branch['config_options'] != []:
+            config_options = branch["config_options"]
+            configs_li.append((" ".join([branch["name"],branch["repourl"],branch["branch"]]),config_options))
+            all_options+= branch["config_options"]
+            for opt in branch["config_options"]:
+                name = opt["name"]
+                if name in branch_tracker:
+                    branch_tracker[name].append(branch["name"])
+                else:
+                    branch_tracker[name] = [branch["name"]]
 
-    #Once we know there are not any conflicts, run code below that writes the txt fragment from the manifest
+    #Write CFG options to fragment
     with open(config_fragments,"w") as f:
         for cfg in configs_li:
-            print("#Branch: {}".format(cfg[0]))
+            print_and_log("#Branch: {}".format(cfg[0]))
             f.write("#Branch: {}\n".format(cfg[0]))
             for config in cfg[1]:
-                print("{}={}".format(config["name"],config["value"]))
+                print_and_log("{}={}".format(config["name"],config["value"]))
                 f.write("{}={}\n".format(config["name"],config["value"]))
+    
+    print_and_log("Fragment has been written, running ./regen_configs.sh")
+    return run_regen_script(all_options,branch_tracker)
 
-    print("Fragment has been written, running ./regen_configs.sh")
-    return run_regen_script(branches)
+def run_git_describe(manifest,fetch_all):
+    for branch in manifest["topic_branches"]:
+        if branch["enabled"] == True or fetch_all == True:
+            remote_name = sanitize_repo_name(branch["repourl"])
+            tag = run_shell_cmd("git describe {}/{}".format(remote_name,branch["branch"])).split("\n")[0]
+            print("{} {}".format(branch["name"],tag))
 
 def main():
     parser = argparse.ArgumentParser(description=script_name)
     parser.add_argument('-s','--skip_fetch', help='skip git fetch',action='store_true')
     parser.add_argument('-g','--gen_manifest', help='just generate manifest and don\'t merge',action='store_true')
     parser.add_argument('-c','--continue_merge', help='continue merge using manifest.json/patch_manifest',action='store_true')
-    parser.add_argument('-n','--skip_merge', help='skip merge',action='store_true')
     parser.add_argument('-v','--verbose_mode', help='output all git output to terminal',action='store_true')
     parser.add_argument('-u','--update_branch', help='fetch a single branch given repo url',type=str)
     parser.add_argument('-r','--regen_config', help='regen config options after merge is completed or if -n is passed', action='store_true')
+    parser.add_argument('-d','--run_describe', help='run git describe on all enabled branches (unless -a is passed )', action='store_true')
+    parser.add_argument('-b','--blacklist', help='comma seperated list of branches not to merge even if enabled',type=str)
+    parser.add_argument('-w','--whitelist', help='comma seperated list of branches to exclusively merge (eywa branch is required; configs is required for -r option)',type=str)
+    parser.add_argument('-a','--all', help='merge or run git discribe even if branch is disabled', action='store_true')
     args = parser.parse_args()
 
     skip_fetch = args.skip_fetch
@@ -417,26 +455,40 @@ def main():
     fetch_single = args.update_branch
     run_gen_manifest = args.gen_manifest
     regen_config = args.regen_config
-    skip_merge = args.skip_merge
-   
+    run_describe = args.run_describe
+    fetch_all = args.all
+
+    blacklist = []
+    if args.blacklist != None:
+        blacklist = args.blacklist.split(",")
+    whitelist = None
+    if args.whitelist != None:
+        whitelist = args.whitelist.split(",")
+
     global verbose_mode
     verbose_mode = args.verbose_mode
-    
    
-    if  skip_merge == False and continue_merge == False:
-        manifest = gen_manifest(skip_fetch,fetch_single)
+    if continue_merge == False:
+        manifest = gen_manifest(skip_fetch,fetch_single,fetch_all,blacklist,whitelist)
         if run_gen_manifest:
             print("Manifest generation has completed")
             return
+        if run_describe:
+           run_git_describe(manifest,fetch_all)
+           return
         #We are starting a new merge so reset the repo
         #manifest=read_manifest(manifest_out_path)
+        if regen_config:
+           pre_kconfig_validation(manifest["topic_branches"])
         reset_repo(manifest)
     else:
+        #Continue merge
         manifest=read_manifest("manifest.json")
         print_manifest_log(manifest)
-    if skip_merge == False:
-        do_merge(manifest, continue_merge)
-        create_readme_file()
+    
+    #Do actual merge now that everything is setup
+    do_merge(manifest, continue_merge)
+    create_readme_file()
     
     config_change = None 
     if regen_config:
@@ -444,6 +496,8 @@ def main():
 
     #Last step is to do the merge commit which checks in log files/cfg files etc 
     merge_commit(manifest, config_change)
+    #If we get here without Exception, merge is done
+    print("Merge script has completed without error")
 
 if __name__ == "__main__":
     main()

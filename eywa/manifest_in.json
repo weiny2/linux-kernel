@@ -353,10 +353,6 @@
                 {
                     "name": "CONFIG_PINCTRL_TIGERLAKE",
                     "value": "m"
-                },
-                {
-                    "name": "CONFIG_PINCTRL_WHITLEY",
-                    "value": "m"
                 }
             ],
             "contributor": [
@@ -366,18 +362,18 @@
                 }
             ],
             "description": "MMC Subsystem and SCS (eMMC/SD card/SDIO/UFS) driver enabling",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Rajesh Bhaskar",
                     "email": "rajesh.bhaskar@intel.com"
                 },
                 {
-                    "name": "Eric Thian Aun Tan",
-                    "email": "eric.thian.aun.tan@intel.com"
+                    "name": "Tomasz Pielaszkiewicz",
+                    "email": "tomasz.pielaszkiewicz@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1718",
             "name": "mmc",
             "repourl": "ssh://git-amr-3.devtools.intel.com:29418/otc_mmc-linux",
             "sdl_contact": [
@@ -553,10 +549,6 @@
             "config_options": [
                 {
                     "name": "CONFIG_INTEL_ISH_HID",
-                    "value": "m"
-                },
-                {
-                    "name": "CONFIG_INTEL_ISH_UART_INTERFACE",
                     "value": "m"
                 }
             ],
@@ -1700,14 +1692,14 @@
                 }
             ],
             "description": "Interrupt Message Store",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Megha Dey",
                     "email": "megha.dey@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1719",
             "name": "ims",
             "repourl": "ssh://git-amr-4.devtools.intel.com:29418/otc_core_linux-linux.git",
             "sdl_contact": [
