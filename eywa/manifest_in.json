@@ -1699,7 +1699,7 @@
                     "email": "megha.dey@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1719",
             "name": "ims",
             "repourl": "ssh://git-amr-4.devtools.intel.com:29418/otc_core_linux-linux.git",
             "sdl_contact": [
