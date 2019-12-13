@@ -353,10 +353,6 @@
                 {
                     "name": "CONFIG_PINCTRL_TIGERLAKE",
                     "value": "m"
-                },
-                {
-                    "name": "CONFIG_PINCTRL_WHITLEY",
-                    "value": "m"
                 }
             ],
             "contributor": [
@@ -553,10 +549,6 @@
             "config_options": [
                 {
                     "name": "CONFIG_INTEL_ISH_HID",
-                    "value": "m"
-                },
-                {
-                    "name": "CONFIG_INTEL_ISH_UART_INTERFACE",
                     "value": "m"
                 }
             ],
