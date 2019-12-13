@@ -1692,7 +1692,7 @@
                 }
             ],
             "description": "Interrupt Message Store",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Megha Dey",
