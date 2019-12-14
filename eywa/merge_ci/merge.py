@@ -144,10 +144,14 @@ def setup_linus_branch(manifest,skip_fetch):
     if main_branch["use_latest_tag"] == True:
             if skip_fetch == False:
                 git_fetch_remote(name)
-            tag = run_shell_cmd("git describe {}/{} --abbrev=0".format(name,main_branch["branch"])).split("\n")[0]
+            #this code is taken out of gen_manifest.sh
+            #TODO:find better way than this
+            tag_cmd = "git ls-remote --tags {}".format(name)
+            tag_cmd+= "| awk '{ print $2 }' | awk -F/ ' { print $3 } ' | sort -Vr | head -1 | sed 's/\^{}//'"
+            tag = run_shell_cmd(tag_cmd).split("\n")[0]
             print("using tag",tag)
             main_branch[u"tag"] =tag
-            rev = run_shell_cmd("git rev-list {} -1".format(tag))
+            rev = run_shell_cmd("git rev-list {} -1".format(tag)).split("\n")[0]
 
     elif main_branch["stuck_at_ref"] != "" :
             rev = main_branch["stuck_at_ref"]
