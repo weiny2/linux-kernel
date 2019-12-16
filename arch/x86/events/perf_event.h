@@ -841,6 +841,15 @@ struct x86_perf_task_context {
 	int log_id;
 };
 
+struct x86_perf_xsave_task_context {
+	struct fxregs_state i387;
+	struct xstate_header header;
+	struct arch_lbr_state lbr_state;
+	int lbr_callstack_users;
+	int lbr_stack_state;
+	int log_id;
+};
+
 #define x86_add_quirk(func_)						\
 do {									\
 	static struct x86_pmu_quirk __quirk __initdata = {		\
