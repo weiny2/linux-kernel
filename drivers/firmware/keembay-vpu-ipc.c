@@ -674,15 +674,11 @@ static int setup_watchdog_resources(struct vpu_ipc_dev *vpu_dev)
 
 	/* Request interrupts */
 	vpu_dev->nce_irq = platform_get_irq_byname(pdev, "nce_wdt");
-	if (vpu_dev->nce_irq < 0) {
-		dev_err(dev, "failed to retrieve NCE IRQ.\n");
+	if (vpu_dev->nce_irq < 0)
 		return vpu_dev->nce_irq;
-	}
 	vpu_dev->mss_irq = platform_get_irq_byname(pdev, "mss_wdt");
-	if (vpu_dev->mss_irq < 0) {
-		dev_err(dev, "failed to retrieve MSS IRQ.\n");
+	if (vpu_dev->mss_irq < 0)
 		return vpu_dev->mss_irq;
-	}
 	rc = devm_request_irq(dev, vpu_dev->nce_irq, nce_wdt_irq_handler, 0,
 			      "keembay-vpu-ipc", vpu_dev);
 	if (rc) {
