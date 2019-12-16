@@ -2278,15 +2278,15 @@
                     "email": "kyle.d.pelton@intel.com"
                 }
             ],
-            "description": "Fix up branch for DSA and CoE audio branch Makefiles",
-            "enabled": false,
+            "description": "Fix up branch to solve root mounting problem",
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Kyle Pelton",
                     "email": "kyle.d.pelton@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1720",
             "name": "fixups",
             "repourl": "ssh://git-amr-4.devtools.intel.com:29418/otc_power-kernel.git",
             "sdl_contact": [
