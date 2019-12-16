@@ -10,6 +10,7 @@
 #include <linux/io.h>
 #include <linux/keembay-vpu-ipc.h>
 #include <linux/kernel.h>
+#include <linux/kthread.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
@@ -186,17 +187,37 @@ static int run_vpu_test(struct device *dev)
 	return 0;
 }
 
+/* VPU Test thread func. */
+static int test_vpu_thread_fn(void *data)
+{
+	struct device *vpu_dev = data;
+	int rc;
+	char name[TASK_COMM_LEN];
+
+	get_task_comm(name, current);
+	pr_info("%s: started\n", name);
+
+	rc = run_vpu_test(vpu_dev);
+	if (rc)
+		pr_info("VPU test FAILED for %s: %d\n", dev_name(vpu_dev), rc);
+	else
+		pr_info("VPU test SUCCESSFUL for %s\n", dev_name(vpu_dev));
+	/* Leave channel open. */
+	do_exit(rc);
+}
+
 static ssize_t test_vpu_wr(struct file *filp, const char __user *buf,
 			   size_t count, loff_t *fpos)
 {
-	int rc;
+	struct task_struct *thread;
 	struct device *vpu_dev = filp->f_inode->i_private;
 
 	pr_info("TEST_VPU write: %s\n", dev_name(vpu_dev));
 
-	rc = run_vpu_test(vpu_dev);
-	if (rc)
-		return rc;
+	thread = kthread_run(&test_vpu_thread_fn, (void *)vpu_dev,
+			     "t-vpu-boot-%s", dev_name(vpu_dev));
+	if (IS_ERR(thread))
+		return PTR_ERR(thread);
 
 	return count;
 }
