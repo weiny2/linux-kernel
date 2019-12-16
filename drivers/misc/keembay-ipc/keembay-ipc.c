@@ -585,9 +585,7 @@ static int ipc_link_init(struct keembay_ipc_dev *ipc_dev, struct ipc_link *link)
 	/* Start TX thread. */
 	link->tx_thread = kthread_run(tx_thread_fn, ipc_dev,
 				      "kmb_ipc_tx_thread");
-	if (IS_ERR(link->tx_thread))
-		return PTR_ERR(link->tx_thread);
-	return 0;
+	return PTR_ERR_OR_ZERO(link->tx_thread);
 }
 
 /**
@@ -675,10 +673,8 @@ static int ipc_hw_init(struct platform_device *pdev,
 	 * device struct.
 	 */
 	irq = platform_get_irq(pdev, 0);
-	if (irq < 0) {
-		dev_err(dev, "Failed getting IRQ for local fifo: %d\n", irq);
+	if (irq < 0)
 		return irq;
-	}
 	ipc_dev->local_fifo_irq = irq;
 	ipc_dev->local_fifo_irq_enabled = true;
 	tasklet_init(&ipc_dev->rx_tasklet, rx_tasklet_func, (uintptr_t)ipc_dev);
