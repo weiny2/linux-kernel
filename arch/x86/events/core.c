@@ -1934,6 +1934,11 @@ static int __init init_hw_perf_events(void)
 	if (!x86_pmu.events_sysfs_show)
 		x86_pmu_events_group.attrs = &empty_attrs;
 
+	if (boot_cpu_has(X86_FEATURE_XSAVES))
+		pmu.task_ctx_size = sizeof(struct x86_perf_xsave_task_context);
+	else
+		pmu.task_ctx_size = sizeof(struct x86_perf_task_context);
+
 	pmu.attr_update = x86_pmu.attr_update;
 
 	pr_info("... version:                %d\n",     x86_pmu.version);
@@ -2428,7 +2433,6 @@ static struct pmu pmu = {
 
 	.event_idx		= x86_pmu_event_idx,
 	.sched_task		= x86_pmu_sched_task,
-	.task_ctx_size          = sizeof(struct x86_perf_task_context),
 	.swap_task_ctx		= x86_pmu_swap_task_ctx,
 	.check_period		= x86_pmu_check_period,
 

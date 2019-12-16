@@ -5,6 +5,12 @@
 #include <asm/perf_event.h>
 #include <asm/msr.h>
 #include <asm/insn.h>
+/*
+ * TODO
+ * Used for XSTATE_XSAVE and XSTATE_XRESTORE
+ * Probably needs to be in a different header.
+ */
+#include <asm/fpu/internal.h>
 
 #include "../perf_event.h"
 
@@ -454,6 +460,17 @@ static void intel_pmu_arch_lbr_restore(void *ctx)
 	}
 }
 
+static void intel_pmu_arch_lbr_xrstors(void *ctx)
+{
+	u64 xss;
+
+	rdmsrl(MSR_IA32_XSS, xss);
+	wrmsrl(MSR_IA32_XSS, (1 << 15));
+
+	XSTATE_XRESTORE((struct xregs_state *)ctx, (1 << 15), 0);
+
+	wrmsrl(MSR_IA32_XSS, xss);
+}
 
 static void intel_pmu_lbr_restore_opt(void *ctx)
 {
@@ -523,6 +540,19 @@ static void intel_pmu_arch_lbr_save(void *ctx)
 		task_ctx->lbr_from[x86_pmu.lbr_nr - 1] = 0;
 
 	task_ctx->tos = 0;
+}
+
+static void intel_pmu_arch_lbr_xsaves(void *ctx)
+{
+	u64 xss;
+	int err;
+
+	rdmsrl(MSR_IA32_XSS, xss);
+	wrmsrl(MSR_IA32_XSS, (1 << 15));
+
+	XSTATE_XSAVE((struct xregs_state *)ctx, (1 << 15), 0, err);
+
+	wrmsrl(MSR_IA32_XSS, xss);
 }
 
 static void intel_pmu_lbr_save_opt(void *ctx)
@@ -1660,8 +1690,13 @@ void __init intel_pmu_arch_lbr_init(void)
 	x86_pmu.lbr_disable = intel_pmu_arch_lbr_disable;
 	x86_pmu.lbr_reset = intel_pmu_arch_lbr_reset;
 	x86_pmu.lbr_read = intel_pmu_arch_lbr_read;
-	x86_pmu.lbr_save = intel_pmu_arch_lbr_save;
-	x86_pmu.lbr_restore = intel_pmu_arch_lbr_restore;
 
+	if (boot_cpu_has(X86_FEATURE_XSAVES)) {
+		x86_pmu.lbr_save = intel_pmu_arch_lbr_xsaves;
+		x86_pmu.lbr_restore = intel_pmu_arch_lbr_xrstors;
+	} else {
+		x86_pmu.lbr_save = intel_pmu_arch_lbr_save;
+		x86_pmu.lbr_restore = intel_pmu_arch_lbr_restore;
+	}
 	pr_cont("Architectural LBR, ");
 }
