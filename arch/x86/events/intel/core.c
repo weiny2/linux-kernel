@@ -4179,6 +4179,49 @@ static int intel_pmu_aux_output_match(struct perf_event *event)
 	return is_intel_pt_event(event);
 }
 
+#ifdef CONFIG_X86_INTEL_CET
+
+static int
+intel_pmu_store_shadow_stack_user(struct perf_callchain_entry_ctx *entry)
+{
+	struct cet_status *cet = &current->thread.cet;
+	unsigned long left, stack_base, stack_top = 0;
+	int nr = 0;
+
+	if (!cet->shstk_base || !cet->shstk_enabled)
+		return 0;
+
+	stack_base = cet->shstk_base + cet->shstk_size;
+	rdmsrl(MSR_IA32_PL3_SSP, stack_top);
+	if ((stack_base < stack_top) || ((stack_base - stack_top) > cet->shstk_size))
+		return 0;
+
+	while ((entry->nr < entry->max_stack) && (stack_top < stack_base)) {
+
+#ifdef CONFIG_X86_32
+		u32	return_addr;
+
+		left = __copy_from_user_nmi(&return_addr, (void __user *)stack_top, 4);
+		stack_top += 4;
+#else
+		u64	return_addr;
+
+		left = __copy_from_user_nmi(&return_addr, (void __user *)stack_top, 8);
+		stack_top += 8;
+#endif
+
+		if (left != 0)
+			break;
+
+		perf_callchain_store(entry, return_addr);
+		nr++;
+	}
+
+	return nr;
+}
+
+#endif
+
 PMU_FORMAT_ATTR(offcore_rsp, "config1:0-63");
 
 PMU_FORMAT_ATTR(ldlat, "config1:0-15");
@@ -5508,6 +5551,11 @@ __init int intel_pmu_init(void)
 		x86_pmu.update_topdown_event = icl_update_topdown_event;
 		x86_pmu.set_topdown_event_period = icl_set_topdown_event_period;
 		x86_pmu.validate_group = icl_validate_group;
+
+#ifdef CONFIG_X86_INTEL_CET
+		if (boot_cpu_has(X86_FEATURE_SHSTK))
+			x86_pmu.store_shadow_stack_user = intel_pmu_store_shadow_stack_user;
+#endif
 		pr_cont("Icelake events, ");
 		name = "icelake";
 		break;
