@@ -1182,7 +1182,6 @@ static void tx_data_remove(struct ipc_link *link, struct tx_data *tx_data)
  */
 static int tx_thread_fn(void *ptr)
 {
-	DECLARE_WAIT_QUEUE_HEAD(wait_queue);
 	struct keembay_ipc_dev *ipc_dev = ptr;
 	struct ipc_link *link = &ipc_dev->leon_mss_link;
 	struct tx_data *tx_data;
@@ -1202,8 +1201,13 @@ static int tx_thread_fn(void *ptr)
 		tx_data->retv = tx_data_send(ipc_dev, tx_data);
 		complete(&tx_data->tx_done);
 	}
-	/* Wait until the process is stopped by removing the module. */
-	wait_event_interruptible(wait_queue, kthread_should_stop());
+	/* Wait until kthread_stop() is called. */
+	set_current_state(TASK_INTERRUPTIBLE);
+	while (!kthread_should_stop()) {
+		schedule();
+		set_current_state(TASK_INTERRUPTIBLE);
+	}
+	__set_current_state(TASK_RUNNING);
 
 	return rc;
 }
