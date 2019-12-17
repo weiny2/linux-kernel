@@ -1113,6 +1113,18 @@
                 {
                     "name": "CONFIG_STMMAC_ETH",
                     "value": "m"
+                },
+                {
+                    "name": "CONFIG_MARVELL_10G_PHY",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_STMMAC_SELFTESTS",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_STMMAC_HWTS",
+                    "value": "y"
                 }
             ],
             "contributor": [
@@ -1122,14 +1134,14 @@
                 }
             ],
             "description": "Enable Ethernet TSN driver for SNPS QOS",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Kasichainula, Kishore",
                     "email": "kishore.kasichainula@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1724",
             "name": "TSN ethernet driver",
             "repourl": "ssh://git@gitlab.devtools.intel.com:29418/OWR/IoTG/ESE/Connectivity/Linux-Ethernet/ese_linux_net_next.git",
             "sdl_contact": [
