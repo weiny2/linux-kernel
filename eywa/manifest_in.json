@@ -3163,7 +3163,7 @@
                 }
             ],
             "description": "TGL/EHL TGPIO branch",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Christopher S Hall",
