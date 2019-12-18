@@ -3247,7 +3247,7 @@
                     "email": "alan.chin.loon.tan@intel.com"
                 }
             ],
-            "description": "Adding multi-slice\nHantro driver for THB",
+            "description": "Adding multi-slice Hantro driver for THB",
             "enabled": false,
             "ip_owner": [
                 {
