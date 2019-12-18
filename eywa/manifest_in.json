@@ -3229,11 +3229,15 @@
             "branch_type": "expiring",
             "config_options": [
                 {
-                    "name": "CONFIG_DRM,\nCONFIG_DRM_KMS_HELPER",
+                    "name": "CONFIG_DRM_KMS_HELPER",
                     "value": "y"
                 },
                 {
                     "name": "CONFIG_DRM_PANEL_ORIENTATION_QUIRKS",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_DRM",
                     "value": "y"
                 }
             ],
