@@ -3223,6 +3223,45 @@
             ],
             "status": "public",
             "stuck_at_ref": ""
+        },
+        {
+            "branch": "thb_ms_2002",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "CONFIG_DRM,\nCONFIG_DRM_KMS_HELPER",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_DRM_PANEL_ORIENTATION_QUIRKS",
+                    "value": "y"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Alan Chin Loon Tan",
+                    "email": "alan.chin.loon.tan@intel.com"
+                }
+            ],
+            "description": "Adding multi-slice\nHantro driver for THB",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Tan, Alan Chin Loon",
+                    "email": "alan.chin.loon.tan@intel.com"
+                }
+            ],
+            "jira": "NEXT-1729",
+            "name": "Hantro driver for THB",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/OWR/IoTG/GMS/Yocto/Graphics/Media/hantrodriver.git",
+            "sdl_contact": [
+                {
+                    "name": "Tan, Alan Chin Loon",
+                    "email": "alan.chin.loon.tan@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": ""
         }
     ]
 }
