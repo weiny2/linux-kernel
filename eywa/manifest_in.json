@@ -3248,7 +3248,7 @@
                 }
             ],
             "description": "Adding multi-slice Hantro driver for THB",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Tan, Alan Chin Loon",
