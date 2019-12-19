@@ -2384,6 +2384,36 @@
             "stuck_at_ref": ""
         },
         {
+            "branch": "amx",
+            "branch_type": "expiring",
+            "config_options": [],
+            "contributor": [
+                {
+                    "name": "Chang S. Bae",
+                    "email": "chang.seok.bae@intel.com"
+                }
+            ],
+            "description": "Advanced Matrix Extension (AMX/TMUL)",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Bob Valentine",
+                    "email": "bob.valentine@intel.com"
+                }
+            ],
+            "jira": "NEXT-1734",
+            "name": "AMX/TMUL",
+            "repourl": "git://git-amr-4.devtools.intel.com/enabling_cldemote_in_linux_kerne-linux_git.git",
+            "sdl_contact": [
+                {
+                    "name": "Israel Hirsh",
+                    "email": "israel.hirsh@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": ""
+        },
+        {
             "branch": "for-sos-intel-next",
             "branch_type": "expiring",
             "config_options": [
@@ -3314,36 +3344,6 @@
                 {
                     "name": "Ashok Raj",
                     "email": "ashok.raj@intel.com"
-                }
-            ],
-            "status": "intel confidential",
-            "stuck_at_ref": ""
-        },
-        {
-            "branch": "amx",
-            "branch_type": "expiring",
-            "config_options": [],
-            "contributor": [
-                {
-                    "name": "Chang S. Bae",
-                    "email": "chang.seok.bae@intel.com"
-                }
-            ],
-            "description": "Advanced Matrix Extension (AMX/TMUL)",
-            "enabled": true,
-            "ip_owner": [
-                {
-                    "name": "Bob Valentine",
-                    "email": "bob.valentine@intel.com"
-                }
-            ],
-            "jira": "NEXT-1734",
-            "name": "AMX/TMUL",
-            "repourl": "git://git-amr-4.devtools.intel.com/enabling_cldemote_in_linux_kerne-linux_git.git",
-            "sdl_contact": [
-                {
-                    "name": "Israel Hirsh",
-                    "email": "israel.hirsh@intel.com"
                 }
             ],
             "status": "intel confidential",
