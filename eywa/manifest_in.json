@@ -2824,14 +2824,14 @@
                 }
             ],
             "description": "IOMMU workarounds/fixes for upcoming affected platforms.",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Ashok Raj",
                     "email": "ashok.raj@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1733",
             "name": "iommu-workarounds",
             "repourl": "ssh://git-amr-4.devtools.intel.com:29418/linux_iommu-iommu.git",
             "sdl_contact": [
