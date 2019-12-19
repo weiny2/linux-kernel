@@ -2251,36 +2251,6 @@
             "stuck_at_ref": ""
         },
         {
-            "branch": "amx",
-            "branch_type": "expiring",
-            "config_options": [],
-            "contributor": [
-                {
-                    "name": "Chang S. Bae",
-                    "email": "chang.seok.bae@intel.com"
-                }
-            ],
-            "description": "Advanced Matrix Extension",
-            "enabled": false,
-            "ip_owner": [
-                {
-                    "name": "Bob Valentine",
-                    "email": "bob.valentine@intel.com"
-                }
-            ],
-            "jira": "",
-            "name": "amx",
-            "repourl": "ssh://git-amr-4.devtools.intel.com:29418/enabling_cldemote_in_linux_kerne-linux_git.git",
-            "sdl_contact": [
-                {
-                    "name": "Israel Hirsh",
-                    "email": "israel.hirsh@intel.com"
-                }
-            ],
-            "status": "intel confidential",
-            "stuck_at_ref": ""
-        },
-        {
             "branch": "fixups",
             "branch_type": "expiring",
             "config_options": [],
