@@ -3318,7 +3318,7 @@
                 }
             ],
             "description": "IOMMU scalable mode",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Ashok Raj",
