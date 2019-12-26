@@ -33,6 +33,7 @@ SECTIONS
 
 	.text : AT(ADDR(.text) - LOAD_OFFSET) {
 		_text = .;
+		ENTRY_TEXT
 		IRQENTRY_TEXT
 		SOFTIRQENTRY_TEXT
 		TEXT_TEXT
