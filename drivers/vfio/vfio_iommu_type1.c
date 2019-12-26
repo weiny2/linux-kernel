@@ -2223,6 +2223,75 @@ out_unlock:
 	return ret;
 }
 
+static int vfio_iommu_get_pasid_format(struct vfio_iommu *iommu,
+					u32 *pasid_format)
+{
+	struct vfio_domain *domain;
+	u32 format = 0, tracker = 0;
+	int ret;
+
+	mutex_lock(&iommu->lock);
+	if (list_empty(&iommu->domain_list)) {
+		mutex_unlock(&iommu->lock);
+		return -EINVAL;
+	}
+
+	list_for_each_entry(domain, &iommu->domain_list, next) {
+		if (iommu_domain_get_attr(domain->domain,
+			DOMAIN_ATTR_PASID_FORMAT, &format)) {
+			ret = -EINVAL;
+			format = 0;
+			goto out_unlock;
+		}
+		/*
+		 * format is always non-zero (the first format is
+		 * IOMMU_PASID_FORMAT_INTEL_VTD which is 1)
+		 */
+		if (tracker && tracker != format) {
+			ret = -EINVAL;
+			format = 0;
+			goto out_unlock;
+		}
+
+		tracker = format;
+	}
+	ret = 0;
+
+out_unlock:
+	if (format)
+		*pasid_format = format;
+	mutex_unlock(&iommu->lock);
+	return ret;
+}
+
+static int vfio_iommu_info_add_nesting_cap(struct vfio_iommu *iommu,
+					 struct vfio_info_cap *caps)
+{
+	struct vfio_info_cap_header *header;
+	struct vfio_iommu_type1_info_cap_nesting *nesting_cap;
+	u32 format = 0;
+	int ret;
+
+	ret = vfio_iommu_get_pasid_format(iommu, &format);
+	if (ret) {
+		pr_warn("Failed to get domain format\n");
+		return ret;
+	}
+
+	header = vfio_info_cap_add(caps, sizeof(*nesting_cap) + sizeof(format),
+				   VFIO_IOMMU_TYPE1_INFO_CAP_NESTING, 1);
+	if (IS_ERR(header))
+		return PTR_ERR(header);
+
+	nesting_cap = container_of(header,
+				struct vfio_iommu_type1_info_cap_nesting,
+				header);
+
+	nesting_cap->pasid_format = format;
+
+	return 0;
+}
+
 static int vfio_iommu_type1_set_pasid_quota(struct vfio_iommu *iommu,
 					    u32 quota)
 {
@@ -2290,6 +2359,10 @@ static long vfio_iommu_type1_ioctl(void *iommu_data,
 		info.iova_pgsizes = vfio_pgsize_bitmap(iommu);
 
 		ret = vfio_iommu_iova_build_caps(iommu, &caps);
+		if (ret)
+			return ret;
+
+		ret = vfio_iommu_info_add_nesting_cap(iommu, &caps);
 		if (ret)
 			return ret;
 
