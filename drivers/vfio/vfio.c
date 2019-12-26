@@ -2337,6 +2337,7 @@ static struct vfio_mm *vfio_create_mm(struct mm_struct *mm)
 	vmm->pasid_quota = VFIO_DEFAULT_PASID_QUOTA;
 	vmm->pasid_count = 0;
 	mutex_init(&vmm->pasid_lock);
+	INIT_LIST_HEAD(&vmm->pasid_list);
 
 	mutex_lock(&vfio.vfio_mm_lock);
 	list_add(&vmm->vfio_next, &vfio.vfio_mm_list);
@@ -2345,9 +2346,24 @@ static struct vfio_mm *vfio_create_mm(struct mm_struct *mm)
 	return vmm;
 }
 
+static void vfio_mm_reclaim_pasid(struct vfio_mm *vmm)
+{
+	struct pasid_node *pnode, *tmp;
+
+	mutex_lock(&vmm->pasid_lock);
+	list_for_each_entry_safe(pnode, tmp, &vmm->pasid_list, next) {
+		pr_info("%s, reclaim pasid: %u\n", __func__, pnode->pasid);
+		list_del(&pnode->next);
+		ioasid_free(pnode->pasid);
+		kfree(pnode);
+	}
+	mutex_unlock(&vmm->pasid_lock);
+}
+
 static void vfio_mm_unlock_and_free(struct vfio_mm *vmm)
 {
 	mutex_unlock(&vfio.vfio_mm_lock);
+	vfio_mm_reclaim_pasid(vmm);
 	kfree(vmm);
 }
 
@@ -2400,6 +2416,43 @@ struct vfio_mm *vfio_mm_get_from_task(struct task_struct *task)
 }
 EXPORT_SYMBOL_GPL(vfio_mm_get_from_task);
 
+/**
+ * Caller should hold vmm->pasid_lock
+ */
+static int vfio_mm_insert_pasid_node(struct vfio_mm *vmm, u32 pasid)
+{
+	struct pasid_node *pnode;
+
+	pnode = kzalloc(sizeof(*pnode), GFP_KERNEL);
+	if (!pnode)
+		return -ENOMEM;
+	pnode->pasid = pasid;
+	list_add(&pnode->next, &vmm->pasid_list);
+
+	return 0;
+}
+
+/**
+ * Caller should hold vmm->pasid_lock
+ */
+static void vfio_mm_remove_pasid_node(struct vfio_mm *vmm, u32 pasid)
+{
+	struct pasid_node *pnode;
+	bool found = false;
+
+	list_for_each_entry(pnode, &vmm->pasid_list, next) {
+		if (pnode->pasid == pasid) {
+			found = true;
+			break;
+		}
+	}
+
+	if (found) {
+		list_del(&pnode->next);
+		kfree(pnode);
+	}
+}
+
 int vfio_mm_pasid_alloc(struct vfio_mm *vmm, int min, int max)
 {
 	ioasid_t pasid;
@@ -2417,9 +2470,15 @@ int vfio_mm_pasid_alloc(struct vfio_mm *vmm, int min, int max)
 		ret = -ENOSPC;
 		goto out_unlock;
 	}
-	vmm->pasid_count++;
 
-	ret = pasid;
+	if (vfio_mm_insert_pasid_node(vmm, pasid)) {
+		ret = -ENOSPC;
+		ioasid_free(pasid);
+	} else {
+		ret = pasid;
+		vmm->pasid_count++;
+	}
+
 out_unlock:
 	mutex_unlock(&vmm->pasid_lock);
 	return ret;
@@ -2438,7 +2497,7 @@ int vfio_mm_pasid_free(struct vfio_mm *vmm, ioasid_t pasid)
 		goto out_unlock;
 	}
 	ioasid_free(pasid);
-
+	vfio_mm_remove_pasid_node(vmm, pasid);
 	vmm->pasid_count--;
 out_unlock:
 	mutex_unlock(&vmm->pasid_lock);
