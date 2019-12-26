@@ -2223,6 +2223,27 @@ out_unlock:
 	return ret;
 }
 
+static int vfio_iommu_type1_set_pasid_quota(struct vfio_iommu *iommu,
+					    u32 quota)
+{
+	struct vfio_mm *vmm = iommu->vmm;
+	int ret = 0;
+
+	mutex_lock(&iommu->lock);
+	mutex_lock(&vmm->pasid_lock);
+	if (vmm->pasid_count > quota) {
+		ret = -EINVAL;
+		goto out_unlock;
+	}
+	vmm->pasid_quota = quota;
+	ret = quota;
+
+out_unlock:
+	mutex_unlock(&iommu->lock);
+	mutex_unlock(&vmm->pasid_lock);
+	return ret;
+}
+
 static long vfio_iommu_type1_ioctl(void *iommu_data,
 				   unsigned int cmd, unsigned long arg)
 {
@@ -2369,6 +2390,18 @@ static long vfio_iommu_type1_ioctl(void *iommu_data,
 		default:
 			return -EINVAL;
 		}
+	} else if (cmd == VFIO_IOMMU_SET_PASID_QUOTA) {
+		struct vfio_iommu_type1_pasid_quota quota;
+
+		minsz = offsetofend(struct vfio_iommu_type1_pasid_quota,
+				    quota);
+
+		if (copy_from_user(&quota, (void __user *)arg, minsz))
+			return -EFAULT;
+
+		if (quota.argsz < minsz)
+			return -EINVAL;
+		return vfio_iommu_type1_set_pasid_quota(iommu, quota.quota);
 	}
 
 	return -ENOTTY;
