@@ -89,12 +89,18 @@ extern int vfio_register_iommu_driver(const struct vfio_iommu_driver_ops *ops);
 extern void vfio_unregister_iommu_driver(
 				const struct vfio_iommu_driver_ops *ops);
 
+struct pasid_node {
+	u32			pasid;
+	struct list_head	next;
+};
+
 #define VFIO_DEFAULT_PASID_QUOTA	1000
 struct vfio_mm {
 	struct kref			kref;
 	struct mutex			pasid_lock;
 	int				pasid_quota;
 	int				pasid_count;
+	struct list_head		pasid_list;
 	struct mm_struct		*mm;
 	struct list_head		vfio_next;
 };
