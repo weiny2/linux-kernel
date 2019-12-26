@@ -794,6 +794,47 @@ struct vfio_iommu_type1_dma_unmap {
 #define VFIO_IOMMU_ENABLE	_IO(VFIO_TYPE, VFIO_BASE + 15)
 #define VFIO_IOMMU_DISABLE	_IO(VFIO_TYPE, VFIO_BASE + 16)
 
+/*
+ * PASID (Process Address Space ID) is a PCIe concept which
+ * has been extended to support DMA isolation in fine-grain.
+ * With device assigned to user space (e.g. VMs), PASID alloc
+ * and free need to be system wide. This structure defines
+ * the info for pasid alloc/free between user space and kernel
+ * space.
+ *
+ * @flag=VFIO_IOMMU_PASID_ALLOC, refer to the @alloc_pasid
+ * @flag=VFIO_IOMMU_PASID_FREE, refer to @free_pasid
+ */
+struct vfio_iommu_type1_pasid_request {
+	__u32	argsz;
+#define VFIO_IOMMU_PASID_ALLOC	(1 << 0)
+#define VFIO_IOMMU_PASID_FREE	(1 << 1)
+	__u32	flags;
+	union {
+		struct {
+			__u32 min;
+			__u32 max;
+			__u32 result;
+		} alloc_pasid;
+		__u32 free_pasid;
+	};
+};
+
+#define VFIO_PASID_REQUEST_MASK	(VFIO_IOMMU_PASID_ALLOC | \
+					 VFIO_IOMMU_PASID_FREE)
+
+/**
+ * VFIO_IOMMU_PASID_REQUEST - _IOWR(VFIO_TYPE, VFIO_BASE + 22,
+ *				struct vfio_iommu_type1_pasid_request)
+ *
+ * Availability of this feature depends on PASID support in the device,
+ * its bus, the underlying IOMMU and the CPU architecture. In VFIO, it
+ * is available after VFIO_SET_IOMMU.
+ *
+ * returns: 0 on success, -errno on failure.
+ */
+#define VFIO_IOMMU_PASID_REQUEST	_IO(VFIO_TYPE, VFIO_BASE + 22)
+
 /* -------- Additional API for SPAPR TCE (Server POWERPC) IOMMU -------- */
 
 /*
