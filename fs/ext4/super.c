@@ -43,6 +43,7 @@
 #include <linux/uaccess.h>
 #include <linux/iversion.h>
 #include <linux/unicode.h>
+#include <linux/sched/mm.h>
 
 #include <linux/kthread.h>
 #include <linux/freezer.h>
@@ -206,11 +207,13 @@ void ext4_superblock_csum_set(struct super_block *sb)
 
 void *ext4_kvmalloc_nofs(size_t size)
 {
+	unsigned int nofs_flag;
 	void *ret;
 
-	ret = kmalloc(size, GFP_NOFS | __GFP_NOWARN);
-	if (!ret)
-		ret = __vmalloc(size, GFP_NOFS, PAGE_KERNEL);
+	/* kvmalloc() does not support GFP_NOFS */
+	nofs_flag = memalloc_nofs_save();
+	ret = kvmalloc(size, GFP_KERNEL);
+	memalloc_nofs_restore(nofs_flag);
 	return ret;
 }
 
