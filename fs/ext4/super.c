@@ -204,13 +204,13 @@ void ext4_superblock_csum_set(struct super_block *sb)
 	es->s_checksum = ext4_superblock_csum(sb, es);
 }
 
-void *ext4_kvmalloc(size_t size, gfp_t flags)
+void *ext4_kvmalloc_nofs(size_t size)
 {
 	void *ret;
 
-	ret = kmalloc(size, flags | __GFP_NOWARN);
+	ret = kmalloc(size, GFP_NOFS | __GFP_NOWARN);
 	if (!ret)
-		ret = __vmalloc(size, flags, PAGE_KERNEL);
+		ret = __vmalloc(size, GFP_NOFS, PAGE_KERNEL);
 	return ret;
 }
 
