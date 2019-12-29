@@ -124,6 +124,7 @@ extern struct file *do_filp_open(int dfd, struct filename *pathname,
 		const struct open_flags *op);
 extern struct file *do_file_open_root(struct dentry *, struct vfsmount *,
 		const char *, const struct open_flags *);
+extern int build_open_flags(int flags, umode_t mode, struct open_flags *op);
 
 long do_sys_ftruncate(unsigned int fd, loff_t length, int small);
 long do_faccessat(int dfd, const char __user *filename, int mode);
@@ -188,3 +189,9 @@ extern int do_vfs_ioctl(struct file *file, unsigned int fd, unsigned int cmd,
 
 /* direct-io.c: */
 int sb_init_dio_done_wq(struct super_block *sb);
+
+/*
+ * fs/stat.c:
+ */
+unsigned vfs_stat_set_lookup_flags(unsigned *lookup_flags, int flags);
+int cp_statx(const struct kstat *stat, struct statx __user *buffer);

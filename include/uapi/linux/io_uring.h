@@ -34,6 +34,9 @@ struct io_uring_sqe {
 		__u32		timeout_flags;
 		__u32		accept_flags;
 		__u32		cancel_flags;
+		__u32		open_flags;
+		__u32		statx_flags;
+		__u32		fadvise_advice;
 	};
 	__u64	user_data;	/* data to be passed back at completion time */
 	union {
@@ -49,6 +52,7 @@ struct io_uring_sqe {
 #define IOSQE_IO_DRAIN		(1U << 1)	/* issue after inflight IO */
 #define IOSQE_IO_LINK		(1U << 2)	/* links next sqe */
 #define IOSQE_IO_HARDLINK	(1U << 3)	/* like LINK, but stronger */
+#define IOSQE_ASYNC		(1U << 4)	/* always go async */
 
 /*
  * io_uring_setup() flags
@@ -57,6 +61,7 @@ struct io_uring_sqe {
 #define IORING_SETUP_SQPOLL	(1U << 1)	/* SQ poll thread */
 #define IORING_SETUP_SQ_AFF	(1U << 2)	/* sq_thread_cpu is valid */
 #define IORING_SETUP_CQSIZE	(1U << 3)	/* app defines CQ size */
+#define IORING_SETUP_CLAMP	(1U << 4)	/* clamp SQ/CQ ring sizes */
 
 enum {
 	IORING_OP_NOP,
@@ -76,6 +81,15 @@ enum {
 	IORING_OP_ASYNC_CANCEL,
 	IORING_OP_LINK_TIMEOUT,
 	IORING_OP_CONNECT,
+	IORING_OP_FALLOCATE,
+	IORING_OP_OPENAT,
+	IORING_OP_CLOSE,
+	IORING_OP_FILES_UPDATE,
+	IORING_OP_STATX,
+	IORING_OP_READ,
+	IORING_OP_WRITE,
+	IORING_OP_FADVISE,
+	IORING_OP_MADVISE,
 
 	/* this goes last, obviously */
 	IORING_OP_LAST,
@@ -164,6 +178,7 @@ struct io_uring_params {
 #define IORING_FEAT_SINGLE_MMAP		(1U << 0)
 #define IORING_FEAT_NODROP		(1U << 1)
 #define IORING_FEAT_SUBMIT_STABLE	(1U << 2)
+#define IORING_FEAT_RW_CUR_POS		(1U << 3)
 
 /*
  * io_uring_register(2) opcodes and arguments

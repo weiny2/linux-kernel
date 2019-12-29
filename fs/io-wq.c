@@ -92,7 +92,6 @@ struct io_wqe {
 	struct io_wqe_acct acct[2];
 
 	struct hlist_nulls_head free_list;
-	struct hlist_nulls_head busy_list;
 	struct list_head all_list;
 
 	struct io_wq *wq;
@@ -327,7 +326,6 @@ static void __io_worker_busy(struct io_wqe *wqe, struct io_worker *worker,
 	if (worker->flags & IO_WORKER_F_FREE) {
 		worker->flags &= ~IO_WORKER_F_FREE;
 		hlist_nulls_del_init_rcu(&worker->nulls_node);
-		hlist_nulls_add_head_rcu(&worker->nulls_node, &wqe->busy_list);
 	}
 
 	/*
@@ -365,7 +363,6 @@ static bool __io_worker_idle(struct io_wqe *wqe, struct io_worker *worker)
 {
 	if (!(worker->flags & IO_WORKER_F_FREE)) {
 		worker->flags |= IO_WORKER_F_FREE;
-		hlist_nulls_del_init_rcu(&worker->nulls_node);
 		hlist_nulls_add_head_rcu(&worker->nulls_node, &wqe->free_list);
 	}
 
@@ -453,6 +450,10 @@ next:
 		}
 		if (!worker->creds)
 			worker->creds = override_creds(wq->creds);
+		/*
+		 * OK to set IO_WQ_WORK_CANCEL even for uncancellable work,
+		 * the worker function will do the right thing.
+		 */
 		if (test_bit(IO_WQ_BIT_CANCEL, &wq->state))
 			work->flags |= IO_WQ_WORK_CANCEL;
 		if (worker->mm)
@@ -717,6 +718,7 @@ static bool io_wq_can_queue(struct io_wqe *wqe, struct io_wqe_acct *acct,
 static void io_wqe_enqueue(struct io_wqe *wqe, struct io_wq_work *work)
 {
 	struct io_wqe_acct *acct = io_work_get_acct(wqe, work);
+	int work_flags;
 	unsigned long flags;
 
 	/*
@@ -731,12 +733,14 @@ static void io_wqe_enqueue(struct io_wqe *wqe, struct io_wq_work *work)
 		return;
 	}
 
+	work_flags = work->flags;
 	spin_lock_irqsave(&wqe->lock, flags);
 	wq_list_add_tail(&work->list, &wqe->work_list);
 	wqe->flags &= ~IO_WQE_FLAG_STALLED;
 	spin_unlock_irqrestore(&wqe->lock, flags);
 
-	if (!atomic_read(&acct->nr_running))
+	if ((work_flags & IO_WQ_WORK_CONCURRENT) ||
+	    !atomic_read(&acct->nr_running))
 		io_wqe_wake_worker(wqe, acct);
 }
 
@@ -798,10 +802,6 @@ void io_wq_cancel_all(struct io_wq *wq)
 
 	set_bit(IO_WQ_BIT_CANCEL, &wq->state);
 
-	/*
-	 * Browse both lists, as there's a gap between handing work off
-	 * to a worker and the worker putting itself on the busy_list
-	 */
 	rcu_read_lock();
 	for_each_node(node) {
 		struct io_wqe *wqe = wq->wqes[node];
@@ -829,6 +829,7 @@ static bool io_work_cancel(struct io_worker *worker, void *cancel_data)
 	 */
 	spin_lock_irqsave(&worker->lock, flags);
 	if (worker->cur_work &&
+	    !(worker->cur_work->flags & IO_WQ_WORK_NO_CANCEL) &&
 	    data->cancel(worker->cur_work, data->caller_data)) {
 		send_sig(SIGINT, worker->task, 1);
 		ret = true;
@@ -903,7 +904,8 @@ static bool io_wq_worker_cancel(struct io_worker *worker, void *data)
 		return false;
 
 	spin_lock_irqsave(&worker->lock, flags);
-	if (worker->cur_work == work) {
+	if (worker->cur_work == work &&
+	    !(worker->cur_work->flags & IO_WQ_WORK_NO_CANCEL)) {
 		send_sig(SIGINT, worker->task, 1);
 		ret = true;
 	}
@@ -1049,7 +1051,6 @@ struct io_wq *io_wq_create(unsigned bounded, struct io_wq_data *data)
 		spin_lock_init(&wqe->lock);
 		INIT_WQ_LIST(&wqe->work_list);
 		INIT_HLIST_NULLS_HEAD(&wqe->free_list, 0);
-		INIT_HLIST_NULLS_HEAD(&wqe->busy_list, 1);
 		INIT_LIST_HEAD(&wqe->all_list);
 	}
 
