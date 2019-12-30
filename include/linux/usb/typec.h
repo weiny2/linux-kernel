@@ -192,6 +192,7 @@ struct typec_partner_desc {
  * @vconn_set: Source VCONN
  * @port_type_set: Set port type
  * @usb_mode_set: Set the USB Mode to be used with Enter_USB message
+ * @data_reset: Set new USB mode by using the Data Reset message
  */
 struct typec_operations {
 	int (*try_role)(struct typec_port *port, int role);
@@ -201,6 +202,7 @@ struct typec_operations {
 	int (*port_type_set)(struct typec_port *port,
 			     enum typec_port_type type);
 	int (*usb_mode_set)(struct typec_port *port, enum usb_mode mode);
+	int (*data_reset)(struct typec_port *port, enum usb_mode mode);
 };
 
 /*
