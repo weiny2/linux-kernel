@@ -4376,8 +4376,7 @@ static void io_queue_sqe(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 			req_set_fail_links(req);
 			io_double_put_req(req);
 		}
-	} else if ((req->flags & REQ_F_FORCE_ASYNC) &&
-		   !io_wq_current_is_worker()) {
+	} else if (req->flags & REQ_F_FORCE_ASYNC) {
 		/*
 		 * Never try inline submit of IOSQE_ASYNC is set, go straight
 		 * to async execution.
@@ -4506,14 +4505,12 @@ static void io_commit_sqring(struct io_ring_ctx *ctx)
 {
 	struct io_rings *rings = ctx->rings;
 
-	if (ctx->cached_sq_head != READ_ONCE(rings->sq.head)) {
-		/*
-		 * Ensure any loads from the SQEs are done at this point,
-		 * since once we write the new head, the application could
-		 * write new data to them.
-		 */
-		smp_store_release(&rings->sq.head, ctx->cached_sq_head);
-	}
+	/*
+	 * Ensure any loads from the SQEs are done at this point,
+	 * since once we write the new head, the application could
+	 * write new data to them.
+	 */
+	smp_store_release(&rings->sq.head, ctx->cached_sq_head);
 }
 
 /*
@@ -4527,7 +4524,6 @@ static void io_commit_sqring(struct io_ring_ctx *ctx)
 static bool io_get_sqring(struct io_ring_ctx *ctx, struct io_kiocb *req,
 			  const struct io_uring_sqe **sqe_ptr)
 {
-	struct io_rings *rings = ctx->rings;
 	u32 *sq_array = ctx->sq_array;
 	unsigned head;
 
@@ -4539,12 +4535,7 @@ static bool io_get_sqring(struct io_ring_ctx *ctx, struct io_kiocb *req,
 	 * 2) allows the kernel side to track the head on its own, even
 	 *    though the application is the one updating it.
 	 */
-	head = ctx->cached_sq_head;
-	/* make sure SQ entry isn't read before tail */
-	if (unlikely(head == smp_load_acquire(&rings->sq.tail)))
-		return false;
-
-	head = READ_ONCE(sq_array[head & ctx->sq_mask]);
+	head = READ_ONCE(sq_array[ctx->cached_sq_head & ctx->sq_mask]);
 	if (likely(head < ctx->sq_entries)) {
 		/*
 		 * All io need record the previous position, if LINK vs DARIN,
@@ -4562,7 +4553,7 @@ static bool io_get_sqring(struct io_ring_ctx *ctx, struct io_kiocb *req,
 	/* drop invalid entries */
 	ctx->cached_sq_head++;
 	ctx->cached_sq_dropped++;
-	WRITE_ONCE(rings->sq_dropped, ctx->cached_sq_dropped);
+	WRITE_ONCE(ctx->rings->sq_dropped, ctx->cached_sq_dropped);
 	return false;
 }
 
@@ -4581,6 +4572,9 @@ static int io_submit_sqes(struct io_ring_ctx *ctx, unsigned int nr,
 		    !io_cqring_overflow_flush(ctx, false))
 			return -EBUSY;
 	}
+
+	/* make sure SQ entry isn't read before tail */
+	nr = min3(nr, ctx->sq_entries, io_sqring_entries(ctx));
 
 	if (!percpu_ref_tryget_many(&ctx->refs, nr))
 		return -EAGAIN;
@@ -4756,7 +4750,6 @@ static int io_sq_thread(void *data)
 			ctx->rings->sq_flags &= ~IORING_SQ_NEED_WAKEUP;
 		}
 
-		to_submit = min(to_submit, ctx->sq_entries);
 		mutex_lock(&ctx->uring_lock);
 		ret = io_submit_sqes(ctx, to_submit, NULL, -1, &cur_mm, true);
 		mutex_unlock(&ctx->uring_lock);
@@ -6094,7 +6087,6 @@ SYSCALL_DEFINE6(io_uring_enter, unsigned int, fd, u32, to_submit,
 	} else if (to_submit) {
 		struct mm_struct *cur_mm;
 
-		to_submit = min(to_submit, ctx->sq_entries);
 		mutex_lock(&ctx->uring_lock);
 		/* already have mm, so io_submit_sqes() won't try to grab it */
 		cur_mm = ctx->sqo_mm;
