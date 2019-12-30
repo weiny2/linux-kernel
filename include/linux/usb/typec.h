@@ -72,6 +72,13 @@ enum typec_orientation {
 	TYPEC_ORIENTATION_REVERSE,
 };
 
+enum usb_mode {
+	USB_MODE_NONE,
+	USB_MODE_USB2,
+	USB_MODE_USB3,
+	USB_MODE_USB4
+};
+
 #define USB_CAPABILITY_USB2	BIT(0)
 #define USB_CAPABILITY_USB3	BIT(1)
 #define USB_CAPABILITY_USB4	BIT(2)
@@ -184,6 +191,7 @@ struct typec_partner_desc {
  * @pr_set: Set Power Role
  * @vconn_set: Source VCONN
  * @port_type_set: Set port type
+ * @usb_mode_set: Set the USB Mode to be used with Enter_USB message
  */
 struct typec_operations {
 	int (*try_role)(struct typec_port *port, int role);
@@ -192,6 +200,7 @@ struct typec_operations {
 	int (*vconn_set)(struct typec_port *port, enum typec_role role);
 	int (*port_type_set)(struct typec_port *port,
 			     enum typec_port_type type);
+	int (*usb_mode_set)(struct typec_port *port, enum usb_mode mode);
 };
 
 /*
