@@ -72,6 +72,10 @@ enum typec_orientation {
 	TYPEC_ORIENTATION_REVERSE,
 };
 
+#define USB_CAPABILITY_USB2	BIT(0)
+#define USB_CAPABILITY_USB3	BIT(1)
+#define USB_CAPABILITY_USB4	BIT(2)
+
 /*
  * struct usb_pd_identity - USB Power Delivery identity data
  * @id_header: ID Header VDO
@@ -198,6 +202,7 @@ struct typec_operations {
  * @pd_revision: USB Power Delivery Specification revision if supported
  * @prefer_role: Initial role preference (DRP ports).
  * @accessory: Supported Accessory Modes
+ * @usb: Supported USB Modes
  * @fwnode: Optional fwnode of the port
  * @driver_data: Private pointer for driver specific info
  * @ops: Port operations vector
@@ -212,6 +217,7 @@ struct typec_capability {
 	int			prefer_role;
 	enum typec_accessory	accessory[TYPEC_MAX_ACCESSORY];
 	unsigned int		orientation_aware:1;
+	u8			usb;
 
 	struct fwnode_handle	*fwnode;
 	void			*driver_data;
