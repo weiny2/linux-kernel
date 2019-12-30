@@ -11,6 +11,7 @@
 #include <linux/mutex.h>
 #include <linux/property.h>
 #include <linux/slab.h>
+#include <linux/usb/pd_vdo.h>
 
 #include "bus.h"
 
@@ -30,6 +31,7 @@ struct typec_cable {
 struct typec_partner {
 	struct device			dev;
 	unsigned int			usb_pd:1;
+	enum usb_mode			usb_mode;
 	struct usb_pd_identity		*identity;
 	enum typec_accessory		accessory;
 	struct ida			mode_ids;
@@ -154,13 +156,44 @@ static const char * const usb_modes[] = {
 	[USB_MODE_USB4] = "usb4"
 };
 
+static u8 typec_partner_mode(struct typec_partner *partner)
+{
+	struct typec_port *port = to_typec_port(partner->dev.parent);
+	struct usb_pd_identity *id = partner->identity;
+	u32 dev_cap;
+	u8 cap = 0;
+
+	if (port->data_role == TYPEC_HOST) {
+		dev_cap = PD_VDO1_UFP_DEVCAP(id->vdo[0]);
+
+		if (dev_cap & (DEV_USB2_CAPABLE | DEV_USB2_BILLBOARD))
+			cap |= USB_CAPABILITY_USB2;
+		if (dev_cap & DEV_USB3_CAPABLE)
+			cap |= USB_CAPABILITY_USB3;
+		if (dev_cap & DEV_USB4_CAPABLE)
+			cap |= USB_CAPABILITY_USB4;
+	} else {
+		cap = PD_VDO_DFP_HOSTCAP(id->vdo[0]);
+	}
+
+	return cap;
+}
+
 static ssize_t
 usb_mode_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
-	enum usb_mode mode = to_typec_port(dev)->usb_mode;
-	u8 cap = to_typec_port(dev)->cap->usb;
+	enum usb_mode mode = 0;
 	int len = 0;
+	u8 cap = 0;
 	int i;
+
+	if (is_typec_port(dev)) {
+		cap = to_typec_port(dev)->cap->usb;
+		mode = to_typec_port(dev)->usb_mode;
+	} else if (is_typec_partner(dev)) {
+		cap = typec_partner_mode(to_typec_partner(dev));
+		mode = to_typec_partner(dev)->usb_mode;
+	}
 
 	for (i = USB_MODE_USB2; i < USB_MODE_USB4 + 1; i++) {
 		if (!(BIT(i - 1) & cap))
@@ -179,7 +212,7 @@ usb_mode_show(struct device *dev, struct device_attribute *attr, char *buf)
 static ssize_t usb_mode_store(struct device *dev, struct device_attribute *attr,
 			      const char *buf, size_t size)
 {
-	struct typec_port *port = to_typec_port(dev);
+	struct typec_port *port;
 	int ret = 0;
 	int mode;
 
@@ -187,7 +220,19 @@ static ssize_t usb_mode_store(struct device *dev, struct device_attribute *attr,
 	if (mode < 0)
 		return mode;
 
-	ret = port->ops->usb_mode_set(port, mode);
+	if (is_typec_port(dev)) {
+		port = to_typec_port(dev);
+		ret = port->ops->usb_mode_set(port, mode);
+	} else if (is_typec_partner(dev)) {
+		port = to_typec_port(dev->parent);
+
+		/* Checking does the port support the mode */
+		if (mode && !(BIT(mode - 1) & port->cap->usb))
+			return -EINVAL;
+
+		ret = port->ops->data_reset(port, mode);
+	}
+
 	if (ret)
 		return ret;
 
@@ -587,7 +632,32 @@ static struct attribute *typec_partner_attrs[] = {
 	&dev_attr_usb_mode.attr,
 	NULL
 };
-ATTRIBUTE_GROUPS(typec_partner);
+
+static umode_t typec_partner_attr_is_visible(struct kobject *kobj,
+					     struct attribute *attr, int n)
+{
+	struct typec_partner *partner = to_typec_partner(kobj_to_dev(kobj));
+	struct typec_port *port = to_typec_port(partner->dev.parent);
+
+	if (attr == &dev_attr_usb_mode.attr) {
+		if (!partner->identity)
+			return 0;
+		if (!port->ops || !port->ops->data_reset)
+			return 0444;
+	}
+
+	return attr->mode;
+}
+
+static struct attribute_group typec_partner_group = {
+	.is_visible = typec_partner_attr_is_visible,
+	.attrs = typec_partner_attrs
+};
+
+static const struct attribute_group *typec_partner_groups[] = {
+	&typec_partner_group,
+	NULL
+};
 
 static void typec_partner_release(struct device *dev)
 {
