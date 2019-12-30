@@ -152,18 +152,21 @@ struct efi_setup_data {
 extern u64 efi_setup;
 
 #ifdef CONFIG_EFI
+extern efi_status_t efi64_thunk(u32, ...);
 
-static inline bool efi_is_native(void)
+static inline bool efi_is_mixed(void)
 {
-	return IS_ENABLED(CONFIG_X86_64) == efi_enabled(EFI_64BIT);
+	if (!IS_ENABLED(CONFIG_EFI_MIXED))
+		return false;
+	return IS_ENABLED(CONFIG_X86_64) && !efi_enabled(EFI_64BIT);
 }
 
 static inline bool efi_runtime_supported(void)
 {
-	if (efi_is_native())
+	if (!efi_is_mixed())
 		return true;
 
-	if (IS_ENABLED(CONFIG_EFI_MIXED) && !efi_enabled(EFI_OLD_MEMMAP))
+	if (!efi_enabled(EFI_OLD_MEMMAP))
 		return true;
 
 	return false;
@@ -197,48 +200,44 @@ static inline efi_status_t efi_thunk_set_virtual_address_map(
 
 /* arch specific definitions used by the stub code */
 
-struct efi_config {
-	u64 image_handle;
-	u64 table;
-	u64 runtime_services;
-	u64 boot_services;
-	u64 text_output;
-	efi_status_t (*call)(unsigned long, ...);
-	bool is64;
-} __packed;
+__pure bool efi_is_64bit(void);
 
-__pure const struct efi_config *__efi_early(void);
-
-static inline bool efi_is_64bit(void)
+static inline bool efi_is_native(void)
 {
 	if (!IS_ENABLED(CONFIG_X86_64))
-		return false;
-
+		return true;
 	if (!IS_ENABLED(CONFIG_EFI_MIXED))
 		return true;
-
-	return __efi_early()->is64;
+	return efi_is_64bit();
 }
 
-#define efi_table_attr(table, attr, instance)				\
-	(efi_is_64bit() ?						\
-		((table##_64_t *)(unsigned long)instance)->attr :	\
-		((table##_32_t *)(unsigned long)instance)->attr)
+#define efi_mixed_mode_cast(attr)					\
+	__builtin_choose_expr(						\
+		__builtin_types_compatible_p(u32, __typeof__(attr)),	\
+			(unsigned long)(attr), (attr))
 
-#define efi_call_proto(protocol, f, instance, ...)			\
-	__efi_early()->call(efi_table_attr(protocol, f, instance),	\
-		instance, ##__VA_ARGS__)
+#define efi_table_attr(inst, attr)					\
+	(efi_is_native()						\
+		? inst->attr						\
+		: (__typeof__(inst->attr))				\
+			efi_mixed_mode_cast(inst->mixed_mode.attr))
 
-#define efi_call_early(f, ...)						\
-	__efi_early()->call(efi_table_attr(efi_boot_services, f,	\
-		__efi_early()->boot_services), __VA_ARGS__)
+#define efi_call_proto(inst, func, ...)					\
+	(efi_is_native()						\
+		? inst->func(inst, ##__VA_ARGS__)			\
+		: efi64_thunk(inst->mixed_mode.func, inst, ##__VA_ARGS__))
 
-#define __efi_call_early(f, ...)					\
-	__efi_early()->call((unsigned long)f, __VA_ARGS__);
+#define efi_bs_call(func, ...)						\
+	(efi_is_native()						\
+		? efi_system_table()->boottime->func(__VA_ARGS__)	\
+		: efi64_thunk(efi_table_attr(efi_system_table(),	\
+				boottime)->mixed_mode.func, __VA_ARGS__))
 
-#define efi_call_runtime(f, ...)					\
-	__efi_early()->call(efi_table_attr(efi_runtime_services, f,	\
-		__efi_early()->runtime_services), __VA_ARGS__)
+#define efi_rt_call(func, ...)						\
+	(efi_is_native()						\
+		? efi_system_table()->runtime->func(__VA_ARGS__)	\
+		: efi64_thunk(efi_table_attr(efi_system_table(),	\
+				runtime)->mixed_mode.func, __VA_ARGS__))
 
 extern bool efi_reboot_required(void);
 extern bool efi_is_table_address(unsigned long phys_addr);

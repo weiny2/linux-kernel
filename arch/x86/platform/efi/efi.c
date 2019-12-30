@@ -385,7 +385,7 @@ static int __init efi_systab_init(void *phys)
 		tmp |= systab64->con_in;
 		efi_systab.con_out_handle = systab64->con_out_handle;
 		tmp |= systab64->con_out_handle;
-		efi_systab.con_out = systab64->con_out;
+		efi_systab.con_out = (void *)(unsigned long)systab64->con_out;
 		tmp |= systab64->con_out;
 		efi_systab.stderr_handle = systab64->stderr_handle;
 		tmp |= systab64->stderr_handle;
@@ -427,7 +427,7 @@ static int __init efi_systab_init(void *phys)
 		efi_systab.con_in_handle = systab32->con_in_handle;
 		efi_systab.con_in = systab32->con_in;
 		efi_systab.con_out_handle = systab32->con_out_handle;
-		efi_systab.con_out = systab32->con_out;
+		efi_systab.con_out = (void *)(unsigned long)systab32->con_out;
 		efi_systab.stderr_handle = systab32->stderr_handle;
 		efi_systab.stderr = systab32->stderr;
 		efi_systab.runtime = (void *)(unsigned long)systab32->runtime;
@@ -828,7 +828,7 @@ static bool should_map_region(efi_memory_desc_t *md)
 	 * Map all of RAM so that we can access arguments in the 1:1
 	 * mapping when making EFI runtime calls.
 	 */
-	if (IS_ENABLED(CONFIG_EFI_MIXED) && !efi_is_native()) {
+	if (efi_is_mixed()) {
 		if (md->type == EFI_CONVENTIONAL_MEMORY ||
 		    md->type == EFI_LOADER_DATA ||
 		    md->type == EFI_LOADER_CODE)
@@ -903,7 +903,7 @@ static void __init kexec_enter_virtual_mode(void)
 	 * kexec kernel because in the initial boot something else might
 	 * have been mapped at these virtual addresses.
 	 */
-	if (!efi_is_native() || efi_enabled(EFI_OLD_MEMMAP)) {
+	if (efi_is_mixed() || efi_enabled(EFI_OLD_MEMMAP)) {
 		efi_memmap_unmap();
 		clear_bit(EFI_RUNTIME_SERVICES, &efi.flags);
 		return;
@@ -1040,7 +1040,7 @@ static void __init __efi_enter_virtual_mode(void)
 
 	efi_sync_low_kernel_mappings();
 
-	if (efi_is_native()) {
+	if (!efi_is_mixed()) {
 		status = phys_efi_set_virtual_address_map(
 				efi.memmap.desc_size * count,
 				efi.memmap.desc_size,
@@ -1071,7 +1071,7 @@ static void __init __efi_enter_virtual_mode(void)
 	 */
 	efi.runtime_version = efi_systab.hdr.revision;
 
-	if (efi_is_native())
+	if (!efi_is_mixed())
 		efi_native_runtime_setup();
 	else
 		efi_thunk_runtime_setup();
