@@ -2643,7 +2643,6 @@ EXPORT_SYMBOL(user_path_at_empty);
 static int
 mountpoint_last(struct nameidata *nd)
 {
-	int error = 0;
 	struct dentry *dir = nd->path.dentry;
 	struct path path;
 
@@ -2656,10 +2655,7 @@ mountpoint_last(struct nameidata *nd)
 	nd->flags &= ~LOOKUP_PARENT;
 
 	if (unlikely(nd->last_type != LAST_NORM)) {
-		error = handle_dots(nd, nd->last_type);
-		if (error)
-			return error;
-		path.dentry = dget(nd->path.dentry);
+		return handle_dots(nd, nd->last_type);
 	} else {
 		path.dentry = d_lookup(dir, &nd->last);
 		if (!path.dentry) {
