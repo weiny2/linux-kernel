@@ -857,6 +857,16 @@ struct vfio_iommu_type1_pasid_quota {
  */
 #define VFIO_IOMMU_SET_PASID_QUOTA	_IO(VFIO_TYPE, VFIO_BASE + 23)
 
+/**
+ * VFIO_NESTING_GET_IOMMU_UAPI_VERSION - _IO(VFIO_TYPE, VFIO_BASE + 24)
+ *
+ * Report the version of the IOMMU UAPI when dual stage IOMMU is supported.
+ * In VFIO, it is needed for VFIO_TYPE1_NESTING_IOMMU.
+ * Availability: Always.
+ * Return: IOMMU UAPI version
+ */
+#define VFIO_NESTING_GET_IOMMU_UAPI_VERSION	_IO(VFIO_TYPE, VFIO_BASE + 24)
+
 /* -------- Additional API for SPAPR TCE (Server POWERPC) IOMMU -------- */
 
 /*
