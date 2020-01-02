@@ -265,22 +265,26 @@ static void __init setup_xstate_features(void)
 
 		cpuid_count(XSTATE_CPUID, i, &eax, &ebx, &ecx, &edx);
 
+		xstate_sizes[i] = eax;
+
 		/*
 		 * If an xfeature is supervisor state, the offset
 		 * in EBX is invalid. We leave it to -1.
 		 */
-		if (xfeature_is_user(i))
+		if (xfeature_is_user(i)) {
 			xstate_offsets[i] = ebx;
 
-		xstate_sizes[i] = eax;
-		/*
-		 * In our xstate size checks, we assume that the
-		 * highest-numbered xstate feature has the
-		 * highest offset in the buffer.  Ensure it does.
-		 */
-		WARN_ONCE(last_good_offset > xstate_offsets[i],
-			"x86/fpu: misordered xstate at %d\n", last_good_offset);
-		last_good_offset = xstate_offsets[i];
+			/*
+			 * In our xstate size checks, we assume that the
+			 * highest-numbered xstate feature has the
+			 * highest offset in the buffer.  Ensure it does.
+			 */
+			WARN_ONCE(last_good_offset > xstate_offsets[i],
+				"x86/fpu: misordered xstate at %d\n",
+				last_good_offset);
+
+			last_good_offset = xstate_offsets[i];
+		}
 	}
 }
 
