@@ -1182,6 +1182,10 @@ static long vfio_fops_unl_ioctl(struct file *filep,
 	case VFIO_GET_API_VERSION:
 		ret = VFIO_API_VERSION;
 		break;
+	case VFIO_NESTING_GET_IOMMU_UAPI_VERSION:
+		ret = iommu_get_uapi_version();
+		pr_debug("IOMMU UAPI version: %ld\n", ret);
+		break;
 	case VFIO_CHECK_EXTENSION:
 		ret = vfio_ioctl_check_extension(container, arg);
 		break;
