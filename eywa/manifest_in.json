@@ -870,14 +870,14 @@
                 }
             ],
             "description": "Support for AES key hiding from memory during encryption and decryption process",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
-                    "name": "Shanbhogue Vedvyas",
-                    "email": "vedvyas.shanbhogue@intel.com"
+                    "name": "Jason W Brandt",
+                    "email": "jason.w.brandt@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1738",
             "name": "keylocker",
             "repourl": "ssh://git-amr-4.devtools.intel.com:29418/linux_cbae1_share-kl.git",
             "sdl_contact": [
