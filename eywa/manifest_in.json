@@ -3256,7 +3256,7 @@
             "branch_type": "expiring",
             "config_options": [
                 {
-                    "name": "CONFIG_INTEL_USER_INTERRUPT",
+                    "name": "CONFIG_X86_INTEL_USER_INTERRUPT",
                     "value": "y"
                 }
             ],
