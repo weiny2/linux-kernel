@@ -1533,8 +1533,8 @@
             "stuck_at_ref": ""
         },
         {
-            "branch": "sep_socwatch_linux_5_4",
-            "branch_type": "expiring",
+            "branch": "sep_socwatch_linux_5_5",
+            "branch_type": "public",
             "config_options": [
                 {
                     "name": "CONFIG_INTEL_SOCPERF",
@@ -1584,14 +1584,14 @@
                 }
             ],
             "description": "SoCWatch and SEP drivers for both native and ACRN hypervisor",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Gautam Upadhyaya",
                     "email": "gautam.upadhyaya@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1740",
             "name": "socwatch",
             "repourl": "git://github.com/mchinth/linux.git",
             "sdl_contact": [
