@@ -2338,7 +2338,7 @@
                     "email": "chang.seok.bae@intel.com"
                 }
             ],
-            "description": "Advanced Matrix Extension (AMX/TMUL)",
+            "description": "Advanced Matrix Extension (AMX/TMUL), including cet, xsaves and pasid code",
             "enabled": true,
             "ip_owner": [
                 {
@@ -2347,7 +2347,7 @@
                 }
             ],
             "jira": "NEXT-1734",
-            "name": "AMX/TMUL",
+            "name": "amx_xsaves_cet_pasid",
             "repourl": "ssh://git-amr-4.devtools.intel.com:29418/enabling_cldemote_in_linux_kerne-linux_git.git",
             "sdl_contact": [
                 {
