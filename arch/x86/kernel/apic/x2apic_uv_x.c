@@ -1527,17 +1527,17 @@ static int proc_oemid_open(struct inode *inode, struct file *file)
 }
 
 /* (struct is "non-const" as open function is set at runtime) */
-static struct file_operations proc_version_fops = {
-	.read		= seq_read,
-	.llseek		= seq_lseek,
-	.release	= single_release,
+static struct proc_ops version_proc_ops = {
+	.proc_read	= seq_read,
+	.proc_lseek	= seq_lseek,
+	.proc_release	= single_release,
 };
 
-static const struct file_operations proc_oemid_fops = {
-	.open		= proc_oemid_open,
-	.read		= seq_read,
-	.llseek		= seq_lseek,
-	.release	= single_release,
+static const struct proc_ops oemid_proc_ops = {
+	.proc_open	= proc_oemid_open,
+	.proc_read	= seq_read,
+	.proc_lseek	= seq_lseek,
+	.proc_release	= single_release,
 };
 
 static __init void uv_setup_proc_files(int hubless)
@@ -1546,12 +1546,12 @@ static __init void uv_setup_proc_files(int hubless)
 	char *name = hubless ? "hubless" : "hubbed";
 
 	pde = proc_mkdir(UV_PROC_NODE, NULL);
-	proc_create("oemid", 0, pde, &proc_oemid_fops);
-	proc_create(name, 0, pde, &proc_version_fops);
+	proc_create("oemid", 0, pde, &oemid_proc_ops);
+	proc_create(name, 0, pde, &version_proc_ops);
 	if (hubless)
-		proc_version_fops.open = proc_hubless_open;
+		version_proc_ops.proc_open = proc_hubless_open;
 	else
-		proc_version_fops.open = proc_hubbed_open;
+		version_proc_ops.proc_open = proc_hubbed_open;
 }
 
 /* Initialize UV hubless systems */
