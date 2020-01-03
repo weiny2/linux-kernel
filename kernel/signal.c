@@ -427,11 +427,10 @@ __sigqueue_alloc(int sig, struct task_struct *t, gfp_t flags, int override_rlimi
 	    atomic_read(&user->sigpending) <=
 			task_rlimit(t, RLIMIT_SIGPENDING)) {
 		q = kmem_cache_alloc(sigqueue_cachep, flags);
-	} else {
-		print_dropped_signal(sig);
 	}
 
 	if (unlikely(q == NULL)) {
+		print_dropped_signal(sig);
 		atomic_dec(&user->sigpending);
 		free_uid(user);
 	} else {
