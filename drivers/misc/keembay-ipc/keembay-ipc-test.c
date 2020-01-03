@@ -308,7 +308,7 @@ static ssize_t recv_wr(struct file *filp, const char __user *buf, size_t count,
 	if (rc)
 		pr_info("recv(chan_id=%lu) failed: %d\n", chan_id, rc);
 	else
-		pr_info("recv(chan_id=%lu) paddr: %u\tsize: %ld\n", chan_id,
+		pr_info("recv(chan_id=%lu) paddr: %u\tsize: %zu\n", chan_id,
 			paddr, size);
 
 	return count;
