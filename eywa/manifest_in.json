@@ -3344,6 +3344,36 @@
             ],
             "status": "intel confidential",
             "stuck_at_ref": ""
+        },
+        {
+            "branch": "next",
+            "branch_type": "expiring",
+            "config_options": [],
+            "contributor": [
+                {
+                    "name": "Kirill A. Shutemov",
+                    "email": "kirill.shutemov@linux.intel.com"
+                }
+            ],
+            "description": "For validation purposes BIOS can create large holes (up to 2PiB) in the memory map. Kernel doesn't handle the situation well. This is a fix for it.",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Kirill A. Shutemov",
+                    "email": "kirill.shutemov@linux.intel.com"
+                }
+            ],
+            "jira": "NEXT-1742",
+            "name": "boot_sparse_memory",
+            "repourl": "git://git.kernel.org/pub/scm/linux/kernel/git/kas/linux.git",
+            "sdl_contact": [
+                {
+                    "name": "Kirill A. Shutemov",
+                    "email": "kirill.shutemov@linux.intel.com"
+                }
+            ],
+            "status": "public",
+            "stuck_at_ref": ""
         }
     ]
 }
