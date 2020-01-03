@@ -8,6 +8,54 @@
 
 #include <linux/types.h>
 
+/**
+ * Current version of the IOMMU user API. This is intended for query
+ * between user and kernel to determine compatible data structures.
+ *
+ * UAPI version can be bumped up with the following rules:
+ * 1. All data structures passed between user and kernel space share
+ *    the same version number. i.e. any extension to any structure
+ *    results in version number increment.
+ *
+ * 2. Data structures are open to extension but closed to modification.
+ *    Extension should leverage the padding bytes first where a new
+ *    flag bit is required to indicate the validity of each new member.
+ *    The above rule for padding bytes also applies to adding new union
+ *    members.
+ *    After padding bytes are exhausted, new fields must be added at the
+ *    end of each data structure with 64bit alignment. Flag bits can be
+ *    added without size change but existing ones cannot be altered.
+ *
+ * 3. Versions are backward compatible.
+ *
+ * 4. Version to size lookup is supported by kernel internal API for each
+ *    API function type. @version is mandatory for new data structures
+ *    and must be at the beginning with type of __u32.
+ */
+#define IOMMU_UAPI_VERSION	1
+static inline int iommu_get_uapi_version(void)
+{
+	return IOMMU_UAPI_VERSION;
+}
+
+/*
+ * Supported UAPI features that can be reported to user space.
+ * These types represent the capability available in the kernel.
+ *
+ * REVISIT: UAPI version also implies the capabilities. Should we
+ * report them explicitly?
+ */
+enum IOMMU_UAPI_DATA_TYPES {
+	IOMMU_UAPI_BIND_GPASID,
+	IOMMU_UAPI_CACHE_INVAL,
+	IOMMU_UAPI_PAGE_RESP,
+	NR_IOMMU_UAPI_TYPE,
+};
+
+#define IOMMU_UAPI_CAP_MASK ((1 << IOMMU_UAPI_BIND_GPASID) |	\
+				(1 << IOMMU_UAPI_CACHE_INVAL) |	\
+				(1 << IOMMU_UAPI_PAGE_RESP))
+
 #define IOMMU_FAULT_PERM_READ	(1 << 0) /* read */
 #define IOMMU_FAULT_PERM_WRITE	(1 << 1) /* write */
 #define IOMMU_FAULT_PERM_EXEC	(1 << 2) /* exec */
@@ -298,6 +346,11 @@ struct iommu_gpasid_bind_data_vtd {
  * @gpasid:	Process address space ID used for the guest mm in guest IOMMU
  * @addr_width:	Guest virtual address width
  * @padding:	Reserved for future use (should be zero)
+ * @dummy	Reserve space for vendor specific data in the union. New
+ *		members added to the union cannot exceed the size of dummy.
+ *		The fixed size union is needed to allow further expansion
+ *		after the end of the union while still maintain backward
+ *		compatibility.
  * @vtd:	Intel VT-d specific data
  *
  * Guest to host PASID mapping can be an identity or non-identity, where guest
@@ -320,6 +373,7 @@ struct iommu_gpasid_bind_data {
 	__u8  padding[12];
 	/* Vendor specific data */
 	union {
+		__u8 dummy[128];
 		struct iommu_gpasid_bind_data_vtd vtd;
 	};
 };
