@@ -239,7 +239,7 @@ int intel_svm_bind_gpasid(struct iommu_domain *domain,
 	if (WARN_ON(!iommu) || !data)
 		return -EINVAL;
 
-	if (data->version != IOMMU_GPASID_BIND_VERSION_1 ||
+	if (data->version > IOMMU_UAPI_VERSION ||
 	    data->format != IOMMU_PASID_FORMAT_INTEL_VTD)
 		return -EINVAL;
 

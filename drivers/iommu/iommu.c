@@ -1113,7 +1113,8 @@ int iommu_page_response(struct device *dev,
 	if (!param || !param->fault_param)
 		return -EINVAL;
 
-	if (msg->version != IOMMU_PAGE_RESP_VERSION_1 ||
+	/* Support current or older UAPI versions */
+	if (msg->version > IOMMU_UAPI_VERSION ||
 	    msg->flags & ~IOMMU_PAGE_RESP_PASID_VALID)
 		return -EINVAL;
 
