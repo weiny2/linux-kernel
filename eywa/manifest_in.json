@@ -3387,6 +3387,41 @@
             ],
             "status": "public",
             "stuck_at_ref": ""
+        },
+        {
+            "branch": "thb/dev",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "CONFIG_VPUSMM",
+                    "value": "y"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Wang Jue",
+                    "email": "wang.jue@intel.com"
+                }
+            ],
+            "description": "VPUSMM kernel module",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Yu Xu",
+                    "email": "yu.xu@intel.com"
+                }
+            ],
+            "jira": "NEXT-1745",
+            "name": "vpusmm",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/kmb_integration/vpusmm_driver.git",
+            "sdl_contact": [
+                {
+                    "name": "Peter Chen",
+                    "email": "peter.chan@intel.com"
+                }
+            ],
+            "status": "public",
+            "stuck_at_ref": ""
         }
     ]
 }
