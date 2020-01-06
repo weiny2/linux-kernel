@@ -14,6 +14,7 @@
 #include "sysfs.h"
 #include "tree-log.h"
 #include "delalloc-space.h"
+#include "discard.h"
 
 /*
  * Return target flags in extended format or 0 if restripe for this chunk_type
@@ -95,7 +96,7 @@ static u64 btrfs_reduce_alloc_profile(struct btrfs_fs_info *fs_info, u64 flags)
 	return extended_to_chunk(flags | allowed);
 }
 
-static u64 get_alloc_profile(struct btrfs_fs_info *fs_info, u64 orig_flags)
+u64 btrfs_get_alloc_profile(struct btrfs_fs_info *fs_info, u64 orig_flags)
 {
 	unsigned seq;
 	u64 flags;
@@ -115,11 +116,6 @@ static u64 get_alloc_profile(struct btrfs_fs_info *fs_info, u64 orig_flags)
 	return btrfs_reduce_alloc_profile(fs_info, flags);
 }
 
-u64 btrfs_get_alloc_profile(struct btrfs_fs_info *fs_info, u64 orig_flags)
-{
-	return get_alloc_profile(fs_info, orig_flags);
-}
-
 void btrfs_get_block_group(struct btrfs_block_group *cache)
 {
 	atomic_inc(&cache->count);
@@ -130,6 +126,15 @@ void btrfs_put_block_group(struct btrfs_block_group *cache)
 	if (atomic_dec_and_test(&cache->count)) {
 		WARN_ON(cache->pinned > 0);
 		WARN_ON(cache->reserved > 0);
+
+		/*
+		 * A block_group shouldn't be on the discard_list anymore.
+		 * Remove the block_group from the discard_list to prevent us
+		 * from causing a panic due to NULL pointer dereference.
+		 */
+		if (WARN_ON(!list_empty(&cache->discard_list)))
+			btrfs_discard_cancel_work(&cache->fs_info->discard_ctl,
+						  cache);
 
 		/*
 		 * If not empty, someone is still holding mutex of
@@ -466,8 +471,8 @@ u64 add_new_free_space(struct btrfs_block_group *block_group, u64 start, u64 end
 		} else if (extent_start > start && extent_start < end) {
 			size = extent_start - start;
 			total_added += size;
-			ret = btrfs_add_free_space(block_group, start,
-						   size);
+			ret = btrfs_add_free_space_async_trimmed(block_group,
+								 start, size);
 			BUG_ON(ret); /* -ENOMEM or logic error */
 			start = extent_end + 1;
 		} else {
@@ -478,7 +483,8 @@ u64 add_new_free_space(struct btrfs_block_group *block_group, u64 start, u64 end
 	if (start < end) {
 		size = end - start;
 		total_added += size;
-		ret = btrfs_add_free_space(block_group, start, size);
+		ret = btrfs_add_free_space_async_trimmed(block_group, start,
+							 size);
 		BUG_ON(ret); /* -ENOMEM or logic error */
 	}
 
@@ -1185,20 +1191,7 @@ static int inc_block_group_ro(struct btrfs_block_group *cache, int force)
 	struct btrfs_space_info *sinfo = cache->space_info;
 	u64 num_bytes;
 	u64 sinfo_used;
-	u64 min_allocable_bytes;
 	int ret = -ENOSPC;
-
-	/*
-	 * We need some metadata space and system metadata space for
-	 * allocating chunks in some corner cases until we force to set
-	 * it to be readonly.
-	 */
-	if ((sinfo->flags &
-	     (BTRFS_BLOCK_GROUP_SYSTEM | BTRFS_BLOCK_GROUP_METADATA)) &&
-	    !force)
-		min_allocable_bytes = SZ_1M;
-	else
-		min_allocable_bytes = 0;
 
 	spin_lock(&sinfo->lock);
 	spin_lock(&cache->lock);
@@ -1217,10 +1210,9 @@ static int inc_block_group_ro(struct btrfs_block_group *cache, int force)
 	 * sinfo_used + num_bytes should always <= sinfo->total_bytes.
 	 *
 	 * Here we make sure if we mark this bg RO, we still have enough
-	 * free space as buffer (if min_allocable_bytes is not 0).
+	 * free space as buffer.
 	 */
-	if (sinfo_used + num_bytes + min_allocable_bytes <=
-	    sinfo->total_bytes) {
+	if (sinfo_used + num_bytes <= sinfo->total_bytes) {
 		sinfo->bytes_readonly += num_bytes;
 		cache->ro++;
 		list_add_tail(&cache->ro_list, &sinfo->ro_bgs);
@@ -1233,8 +1225,8 @@ out:
 		btrfs_info(cache->fs_info,
 			"unable to make block group %llu ro", cache->start);
 		btrfs_info(cache->fs_info,
-			"sinfo_used=%llu bg_num_bytes=%llu min_allocable=%llu",
-			sinfo_used, num_bytes, min_allocable_bytes);
+			"sinfo_used=%llu bg_num_bytes=%llu",
+			sinfo_used, num_bytes);
 		btrfs_dump_space_info(cache->fs_info, cache->space_info, 0, 0);
 	}
 	return ret;
@@ -1249,6 +1241,7 @@ void btrfs_delete_unused_bgs(struct btrfs_fs_info *fs_info)
 	struct btrfs_block_group *block_group;
 	struct btrfs_space_info *space_info;
 	struct btrfs_trans_handle *trans;
+	const bool async_trim_enabled = btrfs_test_opt(fs_info, DISCARD_ASYNC);
 	int ret = 0;
 
 	if (!test_bit(BTRFS_FS_OPEN, &fs_info->flags))
@@ -1272,10 +1265,28 @@ void btrfs_delete_unused_bgs(struct btrfs_fs_info *fs_info)
 		}
 		spin_unlock(&fs_info->unused_bgs_lock);
 
+		btrfs_discard_cancel_work(&fs_info->discard_ctl, block_group);
+
 		mutex_lock(&fs_info->delete_unused_bgs_mutex);
 
 		/* Don't want to race with allocators so take the groups_sem */
 		down_write(&space_info->groups_sem);
+
+		/*
+		 * Async discard moves the final block group discard to be prior
+		 * to the unused_bgs code path.  Therefore, if it's not fully
+		 * trimmed, punt it back to the async discard lists.
+		 */
+		if (btrfs_test_opt(fs_info, DISCARD_ASYNC) &&
+		    !btrfs_is_free_space_trimmed(block_group)) {
+			trace_btrfs_skip_unused_block_group(block_group);
+			up_write(&space_info->groups_sem);
+			/* Requeue if we failed because of async discard */
+			btrfs_discard_queue_work(&fs_info->discard_ctl,
+						 block_group);
+			goto next;
+		}
+
 		spin_lock(&block_group->lock);
 		if (block_group->reserved || block_group->pinned ||
 		    block_group->used || block_group->ro ||
@@ -1347,6 +1358,23 @@ void btrfs_delete_unused_bgs(struct btrfs_fs_info *fs_info)
 		}
 		mutex_unlock(&fs_info->unused_bg_unpin_mutex);
 
+		/*
+		 * At this point, the block_group is read only and should fail
+		 * new allocations.  However, btrfs_finish_extent_commit() can
+		 * cause this block_group to be placed back on the discard
+		 * lists because now the block_group isn't fully discarded.
+		 * Bail here and try again later after discarding everything.
+		 */
+		spin_lock(&fs_info->discard_ctl.lock);
+		if (!list_empty(&block_group->discard_list)) {
+			spin_unlock(&fs_info->discard_ctl.lock);
+			btrfs_dec_block_group_ro(block_group);
+			btrfs_discard_queue_work(&fs_info->discard_ctl,
+						 block_group);
+			goto end_trans;
+		}
+		spin_unlock(&fs_info->discard_ctl.lock);
+
 		/* Reset pinned so btrfs_put_block_group doesn't complain */
 		spin_lock(&space_info->lock);
 		spin_lock(&block_group->lock);
@@ -1362,8 +1390,18 @@ void btrfs_delete_unused_bgs(struct btrfs_fs_info *fs_info)
 		spin_unlock(&block_group->lock);
 		spin_unlock(&space_info->lock);
 
+		/*
+		 * The normal path here is an unused block group is passed here,
+		 * then trimming is handled in the transaction commit path.
+		 * Async discard interposes before this to do the trimming
+		 * before coming down the unused block group path as trimming
+		 * will no longer be done later in the transaction commit path.
+		 */
+		if (!async_trim_enabled && btrfs_test_opt(fs_info, DISCARD_ASYNC))
+			goto flip_async;
+
 		/* DISCARD can flip during remount */
-		trimming = btrfs_test_opt(fs_info, DISCARD);
+		trimming = btrfs_test_opt(fs_info, DISCARD_SYNC);
 
 		/* Implicit trim during transaction commit. */
 		if (trimming)
@@ -1406,6 +1444,13 @@ next:
 		spin_lock(&fs_info->unused_bgs_lock);
 	}
 	spin_unlock(&fs_info->unused_bgs_lock);
+	return;
+
+flip_async:
+	btrfs_end_transaction(trans);
+	mutex_unlock(&fs_info->delete_unused_bgs_mutex);
+	btrfs_put_block_group(block_group);
+	btrfs_discard_punt_unused_bgs_list(fs_info);
 }
 
 void btrfs_mark_bg_unused(struct btrfs_block_group *bg)
@@ -1610,6 +1655,8 @@ static struct btrfs_block_group *btrfs_create_block_group_cache(
 	cache->full_stripe_len = btrfs_full_stripe_len(fs_info, start);
 	set_free_space_tree_thresholds(cache);
 
+	cache->discard_index = BTRFS_DISCARD_INDEX_UNUSED;
+
 	atomic_set(&cache->count, 1);
 	spin_lock_init(&cache->lock);
 	init_rwsem(&cache->data_rwsem);
@@ -1617,6 +1664,7 @@ static struct btrfs_block_group *btrfs_create_block_group_cache(
 	INIT_LIST_HEAD(&cache->cluster_list);
 	INIT_LIST_HEAD(&cache->bg_list);
 	INIT_LIST_HEAD(&cache->ro_list);
+	INIT_LIST_HEAD(&cache->discard_list);
 	INIT_LIST_HEAD(&cache->dirty_list);
 	INIT_LIST_HEAD(&cache->io_list);
 	btrfs_init_free_space_ctl(cache);
@@ -1775,7 +1823,10 @@ static int read_one_block_group(struct btrfs_fs_info *info,
 		inc_block_group_ro(cache, 1);
 	} else if (cache->used == 0) {
 		ASSERT(list_empty(&cache->bg_list));
-		btrfs_mark_bg_unused(cache);
+		if (btrfs_test_opt(info, DISCARD_ASYNC))
+			btrfs_discard_queue_work(&info->discard_ctl, cache);
+		else
+			btrfs_mark_bg_unused(cache);
 	}
 	return 0;
 error:
@@ -2738,8 +2789,10 @@ int btrfs_update_block_group(struct btrfs_trans_handle *trans,
 		 * dirty list to avoid races between cleaner kthread and space
 		 * cache writeout.
 		 */
-		if (!alloc && old_val == 0)
-			btrfs_mark_bg_unused(cache);
+		if (!alloc && old_val == 0) {
+			if (!btrfs_test_opt(info, DISCARD_ASYNC))
+				btrfs_mark_bg_unused(cache);
+		}
 
 		btrfs_put_block_group(cache);
 		total -= num_bytes;
