@@ -9014,13 +9014,11 @@ vm_fault_t btrfs_page_mkwrite(struct vm_fault *vmf)
 	ret = VM_FAULT_NOPAGE; /* make the VM retry the fault */
 again:
 	lock_page(page);
-	size = i_size_read(inode);
 
-	if ((page->mapping != inode->i_mapping) ||
-	    (page_start >= size)) {
-		/* page got truncated out from underneath us */
+	ret2 = page_mkwrite_check_truncate(page, inode);
+	if (ret2 < 0)
 		goto out_unlock;
-	}
+	zero_start = ret2;
 	wait_on_page_writeback(page);
 
 	lock_extent_bits(io_tree, page_start, page_end, &cached_state);
@@ -9041,6 +9039,7 @@ again:
 		goto again;
 	}
 
+	size = i_size_read(inode);
 	if (page->index == ((size - 1) >> PAGE_SHIFT)) {
 		reserved_space = round_up(size - page_start,
 					  fs_info->sectorsize);
@@ -9072,12 +9071,6 @@ again:
 		goto out_unlock;
 	}
 	ret2 = 0;
-
-	/* page is wholly or partially inside EOF */
-	if (page_start + PAGE_SIZE > size)
-		zero_start = offset_in_page(size);
-	else
-		zero_start = PAGE_SIZE;
 
 	if (zero_start != PAGE_SIZE) {
 		kaddr = kmap(page);
