@@ -1512,15 +1512,15 @@
                     "email": "wei.meng@intel.com"
                 }
             ],
-            "description": "IPU driver 19WW29 release to intel-next",
-            "enabled": false,
+            "description": "IPU driver 19WW52",
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Cao Bingbu",
                     "email": "bingbu.cao@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1744",
             "name": "camera",
             "repourl": "ssh://git-ccr-1.devtools.intel.com:29418/icg_camera-kernel",
             "sdl_contact": [
@@ -1529,7 +1529,7 @@
                     "email": "shengquan.yuan@intel.com"
                 }
             ],
-            "status": "intel confidential",
+            "status": "public",
             "stuck_at_ref": ""
         },
         {
