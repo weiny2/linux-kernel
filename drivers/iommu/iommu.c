@@ -1724,6 +1724,80 @@ int iommu_sva_unbind_gpasid(struct iommu_domain *domain, struct device *dev,
 }
 EXPORT_SYMBOL_GPL(iommu_sva_unbind_gpasid);
 
+
+/**
+ * Maintain a UAPI version to user data structure size lookup for each
+ * API function types we support. e.g. bind guest pasid, cache invalidation.
+ * As data structures being extended with new members, offsetofend() is
+ * used to identify the size. In case of adding a new member to a union,
+ * offsetofend() applies to the largest member which may not be the newest.
+ *
+ * When new types are introduced with new versions, the new types for older
+ * version must be filled with -EINVAL.
+ *
+ * The table below documents UAPI revision history with the name of the
+ * newest member of each data structure. The largest member of a union was
+ * used for the initial version of each type.
+ *
+ * +--------------+---------------+
+ * | Type /       |       V1      |
+ * | UAPI Version |               |
+ * +==============+===============+
+ * | BIND_GPASID  |       vtd     |
+ * +--------------+---------------+
+ * | CACHE_INVAL  |  addr_info    |
+ * +--------------+---------------+
+ * | PAGE_RESP    |  code         |
+ * +--------------+---------------+
+ *
+ * Example of future extensions:
+ * V2 addes new members
+ * +--------------+---------------+---------------+
+ * | Type /       |       V1      |      V2       |
+ * | UAPI Version |               |               |
+ * +==============+===============+===============+
+ * | BIND_GPASID  |       vtd     |      smmu_v3  |
+ * +--------------+---------------+---------------+
+ * | CACHE_INVAL  |  addr_info    |     new_info  |
+ * +--------------+---------------+---------------+
+ * | PAGE_RESP    |  code         |     N/A       |
+ * +--------------+---------------+---------------+
+ *
+ * V3 introduces a new UAPI data type: NEW_TYPE but with no new members
+ * added to the existing types.
+ * +--------------+---------------+---------------+---------------+
+ * | Type /       |       V1      |      V2       |      V3       |
+ * | UAPI Version |               |               |               |
+ * +==============+===============+===============+===============+
+ * | BIND_GPASID  |       vtd     |      smmu_v3  |       N/A     |
+ * +--------------+---------------+---------------+---------------+
+ * | CACHE_INVAL  |  addr_info    |    new_info   |       N/A     |
+ * +--------------+---------------+---------------+---------------+
+ * | PAGE_RESP    |  code         |    N/A        |       N/A     |
+ * +--------------+---------------+---------------+---------------+
+ * | NEW_TYPE     |  -EINVAL      |     -EINVAL   | largest_member|
+ * +--------------+---------------+---------------+---------------+
+ *
+ *
+ */
+const static int iommu_uapi_data_size[NR_IOMMU_UAPI_TYPE][IOMMU_UAPI_VERSION] = {
+	/* IOMMU_UAPI_BIND_GPASID */
+	{offsetofend(struct iommu_gpasid_bind_data, vtd)},
+	/* IOMMU_UAPI_CACHE_INVAL */
+	{offsetofend(struct iommu_cache_invalidate_info, addr_info)},
+	/* IOMMU_UAPI_PAGE_RESP */
+	{offsetofend(struct iommu_page_response, code)},
+};
+
+int iommu_uapi_get_data_size(int type, int version)
+{
+	if (type >= NR_IOMMU_UAPI_TYPE || version > IOMMU_UAPI_VERSION)
+		return -EINVAL;
+
+	return iommu_uapi_data_size[type][version - 1];
+}
+EXPORT_SYMBOL_GPL(iommu_uapi_get_data_size);
+
 static void __iommu_detach_device(struct iommu_domain *domain,
 				  struct device *dev)
 {

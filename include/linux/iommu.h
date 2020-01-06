@@ -510,6 +510,7 @@ extern int iommu_report_device_fault(struct device *dev,
 				     struct iommu_fault_event *evt);
 extern int iommu_page_response(struct device *dev,
 			       struct iommu_page_response *msg);
+extern int iommu_uapi_get_data_size(int type, int version);
 
 extern int iommu_group_id(struct iommu_group *group);
 extern struct iommu_group *iommu_group_get_for_dev(struct device *dev);
@@ -893,6 +894,11 @@ int iommu_report_device_fault(struct device *dev, struct iommu_fault_event *evt)
 
 static inline int iommu_page_response(struct device *dev,
 				      struct iommu_page_response *msg)
+{
+	return -ENODEV;
+}
+
+static inline int iommu_uapi_get_data_size(int type, int version)
 {
 	return -ENODEV;
 }
