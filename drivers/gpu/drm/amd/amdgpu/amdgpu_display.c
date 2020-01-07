@@ -519,6 +519,7 @@ uint32_t amdgpu_display_supported_domains(struct amdgpu_device *adev,
 		switch (adev->asic_type) {
 		case CHIP_CARRIZO:
 		case CHIP_STONEY:
+		case CHIP_RENOIR:
 			domain |= AMDGPU_GEM_DOMAIN_GTT;
 			break;
 		case CHIP_RAVEN:
