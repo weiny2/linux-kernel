@@ -2845,7 +2845,7 @@
                 },
                 {
                     "name": "CONFIG_INTEL_CTA_WATCHER",
-                    "value": "y"
+                    "value": "n"
                 }
             ],
             "contributor": [
@@ -2855,7 +2855,7 @@
                 }
             ],
             "description": "Intel Converged Telemetry Architecture support for TGL",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Van De Groenendaal, Johan",
@@ -2870,7 +2870,7 @@
                     "email": "ramamurthy.krithivas@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1751",
             "name": "cta",
             "repourl": "ssh://git-amr-3.devtools.intel.com:29418/otc_linux_debox1-dev.git",
             "sdl_contact": [
