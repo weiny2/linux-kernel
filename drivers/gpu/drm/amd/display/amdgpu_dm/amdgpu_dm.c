@@ -906,13 +906,19 @@ static int amdgpu_dm_init(struct amdgpu_device *adev)
 
 	init_data.dce_environment = DCE_ENV_PRODUCTION_DRV;
 
-	/*
-	 * TODO debug why this doesn't work on Raven
-	 */
-	if (adev->flags & AMD_IS_APU &&
-	    adev->asic_type >= CHIP_CARRIZO &&
-	    adev->asic_type < CHIP_RAVEN)
+	switch (adev->asic_type) {
+	case CHIP_CARRIZO:
+	case CHIP_STONEY:
 		init_data.flags.gpu_vm_support = true;
+		break;
+	case CHIP_RAVEN:
+		/* enable S/G on PCO and RV2 */
+		if (adev->rev_id >= 0x8 || adev->pdev->device == 0x15d8)
+			init_data.flags.gpu_vm_support = true;
+		break;
+	default:
+		break;
+	}
 
 	if (amdgpu_dc_feature_mask & DC_FBC_MASK)
 		init_data.flags.fbc_support = true;
