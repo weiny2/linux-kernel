@@ -2855,7 +2855,7 @@
                 }
             ],
             "description": "Intel Converged Telemetry Architecture support for TGL",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Van De Groenendaal, Johan",
