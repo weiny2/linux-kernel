@@ -3404,7 +3404,7 @@
                 }
             ],
             "description": "VPUSMM kernel module",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Yu Xu",
