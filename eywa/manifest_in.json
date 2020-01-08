@@ -3395,6 +3395,10 @@
                 {
                     "name": "CONFIG_VPUSMM",
                     "value": "y"
+                },
+                {
+                    "name": "CONFIG_DMA_CMA",
+                    "value": "y"
                 }
             ],
             "contributor": [
