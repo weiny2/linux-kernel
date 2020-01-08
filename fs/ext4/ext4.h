@@ -1343,7 +1343,8 @@ struct ext4_super_block {
 	__u8	s_lastcheck_hi;
 	__u8	s_first_error_time_hi;
 	__u8	s_last_error_time_hi;
-	__u8	s_pad[2];
+	__u8	s_first_error_errcode;
+	__u8    s_last_error_errcode;
 	__le16  s_encoding;		/* Filename charset encoding */
 	__le16  s_encoding_flags;	/* Filename charset encoding flags */
 	__le32	s_reserved[95];		/* Padding to the end of the block */
@@ -1556,6 +1557,9 @@ struct ext4_sb_info {
 	/* Barrier between changing inodes' journal flags and writepages ops. */
 	struct percpu_rw_semaphore s_journal_flag_rwsem;
 	struct dax_device *s_daxdev;
+#ifdef CONFIG_EXT4_DEBUG
+	unsigned long s_simulate_fail;
+#endif
 };
 
 static inline struct ext4_sb_info *EXT4_SB(struct super_block *sb)
@@ -1573,6 +1577,66 @@ static inline int ext4_valid_inum(struct super_block *sb, unsigned long ino)
 		(ino >= EXT4_FIRST_INO(sb) &&
 		 ino <= le32_to_cpu(EXT4_SB(sb)->s_es->s_inodes_count));
 }
+
+/*
+ * Simulate_fail codes
+ */
+#define EXT4_SIM_BBITMAP_EIO	1
+#define EXT4_SIM_BBITMAP_CRC	2
+#define EXT4_SIM_IBITMAP_EIO	3
+#define EXT4_SIM_IBITMAP_CRC	4
+#define EXT4_SIM_INODE_EIO	5
+#define EXT4_SIM_INODE_CRC	6
+#define EXT4_SIM_DIRBLOCK_EIO	7
+#define EXT4_SIM_DIRBLOCK_CRC	8
+
+static inline bool ext4_simulate_fail(struct super_block *sb,
+				     unsigned long code)
+{
+#ifdef CONFIG_EXT4_DEBUG
+	struct ext4_sb_info *sbi = EXT4_SB(sb);
+
+	if (unlikely(sbi->s_simulate_fail == code)) {
+		sbi->s_simulate_fail = 0;
+		return true;
+	}
+#endif
+	return false;
+}
+
+static inline void ext4_simulate_fail_bh(struct super_block *sb,
+					 struct buffer_head *bh,
+					 unsigned long code)
+{
+	if (!IS_ERR(bh) && ext4_simulate_fail(sb, code))
+		clear_buffer_uptodate(bh);
+}
+
+/*
+ * Error number codes for s_{first,last}_error_errno
+ *
+ * Linux errno numbers are architecture specific, so we need to translate
+ * them into something which is architecture independent.   We don't define
+ * codes for all errno's; just the ones which are most likely to be the cause
+ * of an ext4_error() call.
+ */
+#define EXT4_ERR_UNKNOWN	 1
+#define EXT4_ERR_EIO		 2
+#define EXT4_ERR_ENOMEM		 3
+#define EXT4_ERR_EFSBADCRC	 4
+#define EXT4_ERR_EFSCORRUPTED	 5
+#define EXT4_ERR_ENOSPC		 6
+#define EXT4_ERR_ENOKEY		 7
+#define EXT4_ERR_EROFS		 8
+#define EXT4_ERR_EFBIG		 9
+#define EXT4_ERR_EEXIST		10
+#define EXT4_ERR_ERANGE		11
+#define EXT4_ERR_EOVERFLOW	12
+#define EXT4_ERR_EBUSY		13
+#define EXT4_ERR_ENOTDIR	14
+#define EXT4_ERR_ENOTEMPTY	15
+#define EXT4_ERR_ESHUTDOWN	16
+#define EXT4_ERR_EFAULT		17
 
 /*
  * Inode dynamic state flags
@@ -2688,6 +2752,7 @@ extern const char *ext4_decode_error(struct super_block *sb, int errno,
 extern void ext4_mark_group_bitmap_corrupted(struct super_block *sb,
 					     ext4_group_t block_group,
 					     unsigned int flags);
+extern void ext4_set_errno(struct super_block *sb, int err);
 
 extern __printf(4, 5)
 void __ext4_error(struct super_block *, const char *, unsigned int,
@@ -3390,6 +3455,7 @@ static inline void ext4_clear_io_unwritten_flag(ext4_io_end_t *io_end)
 }
 
 extern const struct iomap_ops ext4_iomap_ops;
+extern const struct iomap_ops ext4_iomap_overwrite_ops;
 extern const struct iomap_ops ext4_iomap_report_ops;
 
 static inline int ext4_buffer_uptodate(struct buffer_head *bh)
