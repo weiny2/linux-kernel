@@ -3338,6 +3338,26 @@ static int __clk_core_init(struct clk_core *core)
 		goto out;
 	}
 
+	/*
+	 * optional platform-specific magic
+	 *
+	 * The .init callback is not used by any of the basic clock types, but
+	 * exists for weird hardware that must perform initialization magic for
+	 * CCF to get an accurate view of clock for any other callbacks. It may
+	 * also be used needs to perform dynamic allocations. Such allocation
+	 * must be freed in the terminate() callback.
+	 * This callback shall not be used to initialize the parameters state,
+	 * such as rate, parent, etc ...
+	 *
+	 * If it exist, this callback should called before any other callback of
+	 * the clock
+	 */
+	if (core->ops->init) {
+		ret = core->ops->init(core->hw);
+		if (ret)
+			goto out;
+	}
+
 	core->parent = __clk_init_parent(core);
 
 	/*
@@ -3361,17 +3381,6 @@ static int __clk_core_init(struct clk_core *core)
 		hlist_add_head(&core->child_node, &clk_orphan_list);
 		core->orphan = true;
 	}
-
-	/*
-	 * optional platform-specific magic
-	 *
-	 * The .init callback is not used by any of the basic clock types, but
-	 * exists for weird hardware that must perform initialization magic.
-	 * Please consider other ways of solving initialization problems before
-	 * using this callback, as its use is discouraged.
-	 */
-	if (core->ops->init)
-		core->ops->init(core->hw);
 
 	/*
 	 * Set clk's accuracy.  The preferred method is to use
@@ -3426,11 +3435,17 @@ static int __clk_core_init(struct clk_core *core)
 	if (core->flags & CLK_IS_CRITICAL) {
 		unsigned long flags;
 
-		clk_core_prepare(core);
+		ret = clk_core_prepare(core);
+		if (ret)
+			goto out;
 
 		flags = clk_enable_lock();
-		clk_core_enable(core);
+		ret = clk_core_enable(core);
 		clk_enable_unlock(flags);
+		if (ret) {
+			clk_core_unprepare(core);
+			goto out;
+		}
 	}
 
 	clk_core_reparent_orphans_nolock();
@@ -3860,6 +3875,7 @@ static void clk_core_evict_parent_cache(struct clk_core *core)
 void clk_unregister(struct clk *clk)
 {
 	unsigned long flags;
+	const struct clk_ops *ops;
 
 	if (!clk || WARN_ON_ONCE(IS_ERR(clk)))
 		return;
@@ -3868,7 +3884,8 @@ void clk_unregister(struct clk *clk)
 
 	clk_prepare_lock();
 
-	if (clk->core->ops == &clk_nodrv_ops) {
+	ops = clk->core->ops;
+	if (ops == &clk_nodrv_ops) {
 		pr_err("%s: unregistered clock: %s\n", __func__,
 		       clk->core->name);
 		goto unlock;
@@ -3880,6 +3897,9 @@ void clk_unregister(struct clk *clk)
 	flags = clk_enable_lock();
 	clk->core->ops = &clk_nodrv_ops;
 	clk_enable_unlock(flags);
+
+	if (ops->terminate)
+		ops->terminate(clk->core->hw);
 
 	if (!hlist_empty(&clk->core->children)) {
 		struct clk_core *child;
