@@ -31,7 +31,13 @@
 
 	mfcr	lr, epsr
 	stw	lr, (sp, 12)
+	btsti   lr, 31
+	bf      1f
+	addi    lr, sp, 152
+	br	2f
+1:
 	mfcr	lr, usp
+2:
 	stw	lr, (sp, 16)
 
 	stw     a0, (sp, 20)
@@ -64,8 +70,10 @@
 	mtcr	a0, epc
 	ldw	a0, (sp, 12)
 	mtcr	a0, epsr
+	btsti   a0, 31
 	ldw	a0, (sp, 16)
 	mtcr	a0, usp
+	mtcr	a0, ss0
 
 #ifdef CONFIG_CPU_HAS_HILO
 	ldw	a0, (sp, 140)
@@ -86,7 +94,66 @@
 	addi    sp, 40
 	ldm     r16-r30, (sp)
 	addi    sp, 72
+	bf	1f
+	mfcr	sp, ss0
+1:
 	rte
+.endm
+
+.macro SAVE_ALL_KRETPROBE epc_inc
+	subi    sp, 152
+	stw	tls, (sp, 0)
+	stw	lr, (sp, 4)
+	addi    lr, sp, 152
+	stw	lr, (sp, 16)
+
+	stw     a0, (sp, 20)
+	stw     a0, (sp, 24)
+	stw     a1, (sp, 28)
+	stw     a2, (sp, 32)
+	stw     a3, (sp, 36)
+
+	addi	sp, 40
+	stm	r4-r13, (sp)
+
+	addi    sp, 40
+	stm     r16-r30, (sp)
+#ifdef CONFIG_CPU_HAS_HILO
+	mfhi	lr
+	stw	lr, (sp, 60)
+	mflo	lr
+	stw	lr, (sp, 64)
+	mfcr	lr, cr14
+	stw	lr, (sp, 68)
+#endif
+	subi	sp, 80
+.endm
+
+.macro	RESTORE_ALL_KRETPROBE
+	ldw	tls, (sp, 0)
+	ldw	a0, (sp, 16)
+	mtcr	a0, ss0
+
+#ifdef CONFIG_CPU_HAS_HILO
+	ldw	a0, (sp, 140)
+	mthi	a0
+	ldw	a0, (sp, 144)
+	mtlo	a0
+	ldw	a0, (sp, 148)
+	mtcr	a0, cr14
+#endif
+
+	ldw     a0, (sp, 24)
+	ldw     a1, (sp, 28)
+	ldw     a2, (sp, 32)
+	ldw     a3, (sp, 36)
+
+	addi	sp, 40
+	ldm	r4-r13, (sp)
+	addi    sp, 40
+	ldm     r16-r30, (sp)
+	addi    sp, 72
+	mfcr	sp, ss0
 .endm
 
 .macro SAVE_SWITCH_STACK

@@ -14,6 +14,7 @@
 #include <linux/kallsyms.h>
 #include <linux/rtc.h>
 #include <linux/uaccess.h>
+#include <linux/kprobes.h>
 
 #include <asm/setup.h>
 #include <asm/traps.h>
@@ -129,6 +130,10 @@ asmlinkage void trap_c(struct pt_regs *regs)
 		sig = SIGTRAP;
 		break;
 	case VEC_ILLEGAL:
+#ifdef CONFIG_KPROBES
+		if (kprobe_breakpoint_handler(regs))
+			return;
+#endif
 		die_if_kernel("Kernel mode ILLEGAL", regs, vector);
 #ifndef CONFIG_CPU_NO_USER_BKPT
 		if (*(uint16_t *)instruction_pointer(regs) != USR_BKPT)
