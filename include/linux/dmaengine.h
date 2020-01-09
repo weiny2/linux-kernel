@@ -481,7 +481,7 @@ struct dmaengine_unmap_data {
  * @cookie: tracking cookie for this transaction, set to -EBUSY if
  *	this tx is sitting on a dependency list
  * @flags: flags to augment operation preparation, control completion, and
- * 	communicate status
+ *	communicate status
  * @phys: physical address of the descriptor
  * @chan: target channel for this operation
  * @tx_submit: accept the descriptor, assign ordered cookie and mark the
@@ -674,6 +674,7 @@ struct dma_filter {
  * @fill_align: alignment shift for memset operations
  * @dev_id: unique device ID
  * @dev: struct device reference for dma mapping api
+ * @owner: owner module (automatically set based on the provided dev)
  * @src_addr_widths: bit mask of src addr widths the device supports
  *	Width is specified in bytes, e.g. for a device supporting
  *	a width of 4 the mask should have BIT(4) set.
@@ -718,9 +719,14 @@ struct dma_filter {
  *	will just return a simple status code
  * @device_issue_pending: push pending transactions to hardware
  * @descriptor_reuse: a submitted transfer can be resubmitted after completion
+ * @device_release: called sometime atfer dma_async_device_unregister() is
+ *     called and there are no further references to this structure. This
+ *     must be implemented to free resources however many existing drivers
+ *     do not and are therefore not safe to unbind while in use.
+ *
  */
 struct dma_device {
-
+	struct kref ref;
 	unsigned int chancnt;
 	unsigned int privatecnt;
 	struct list_head channels;
@@ -737,6 +743,7 @@ struct dma_device {
 
 	int dev_id;
 	struct device *dev;
+	struct module *owner;
 
 	u32 src_addr_widths;
 	u32 dst_addr_widths;
@@ -800,6 +807,7 @@ struct dma_device {
 					    dma_cookie_t cookie,
 					    struct dma_tx_state *txstate);
 	void (*device_issue_pending)(struct dma_chan *chan);
+	void (*device_release)(struct dma_device *dev);
 };
 
 static inline int dmaengine_slave_config(struct dma_chan *chan,
