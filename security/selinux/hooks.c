@@ -109,7 +109,7 @@ struct selinux_state selinux_state;
 static atomic_t selinux_secmark_refcount = ATOMIC_INIT(0);
 
 #ifdef CONFIG_SECURITY_SELINUX_DEVELOP
-static int selinux_enforcing_boot;
+static int selinux_enforcing_boot __initdata;
 
 static int __init enforcing_setup(char *str)
 {
@@ -123,13 +123,13 @@ __setup("enforcing=", enforcing_setup);
 #define selinux_enforcing_boot 1
 #endif
 
-int selinux_enabled __lsm_ro_after_init = 1;
+int selinux_enabled_boot __initdata = 1;
 #ifdef CONFIG_SECURITY_SELINUX_BOOTPARAM
 static int __init selinux_enabled_setup(char *str)
 {
 	unsigned long enabled;
 	if (!kstrtoul(str, 0, &enabled))
-		selinux_enabled = enabled ? 1 : 0;
+		selinux_enabled_boot = enabled ? 1 : 0;
 	return 1;
 }
 __setup("selinux=", selinux_enabled_setup);
@@ -752,6 +752,7 @@ static int selinux_set_mnt_opts(struct super_block *sb,
 
 	if (!strcmp(sb->s_type->name, "debugfs") ||
 	    !strcmp(sb->s_type->name, "tracefs") ||
+	    !strcmp(sb->s_type->name, "binderfs") ||
 	    !strcmp(sb->s_type->name, "pstore"))
 		sbsec->flags |= SE_SBGENFS;
 
@@ -1833,8 +1834,8 @@ static int may_create(struct inode *dir,
 	if (rc)
 		return rc;
 
-	rc = selinux_determine_inode_label(selinux_cred(current_cred()), dir,
-					   &dentry->d_name, tclass, &newsid);
+	rc = selinux_determine_inode_label(tsec, dir, &dentry->d_name, tclass,
+					   &newsid);
 	if (rc)
 		return rc;
 
@@ -2906,8 +2907,7 @@ static int selinux_inode_init_security(struct inode *inode, struct inode *dir,
 
 	newsid = tsec->create_sid;
 
-	rc = selinux_determine_inode_label(selinux_cred(current_cred()),
-		dir, qstr,
+	rc = selinux_determine_inode_label(tsec, dir, qstr,
 		inode_mode_to_security_class(inode->i_mode),
 		&newsid);
 	if (rc)
@@ -3004,14 +3004,14 @@ static int selinux_inode_follow_link(struct dentry *dentry, struct inode *inode,
 	if (IS_ERR(isec))
 		return PTR_ERR(isec);
 
-	return avc_has_perm(&selinux_state,
-			    sid, isec->sid, isec->sclass, FILE__READ, &ad);
+	return avc_has_perm_flags(&selinux_state,
+				  sid, isec->sid, isec->sclass, FILE__READ, &ad,
+				  rcu ? MAY_NOT_BLOCK : 0);
 }
 
 static noinline int audit_inode_permission(struct inode *inode,
 					   u32 perms, u32 audited, u32 denied,
-					   int result,
-					   unsigned flags)
+					   int result)
 {
 	struct common_audit_data ad;
 	struct inode_security_struct *isec = selinux_inode(inode);
@@ -3022,7 +3022,7 @@ static noinline int audit_inode_permission(struct inode *inode,
 
 	rc = slow_avc_audit(&selinux_state,
 			    current_sid(), isec->sid, isec->sclass, perms,
-			    audited, denied, result, &ad, flags);
+			    audited, denied, result, &ad);
 	if (rc)
 		return rc;
 	return 0;
@@ -3033,7 +3033,7 @@ static int selinux_inode_permission(struct inode *inode, int mask)
 	const struct cred *cred = current_cred();
 	u32 perms;
 	bool from_access;
-	unsigned flags = mask & MAY_NOT_BLOCK;
+	bool no_block = mask & MAY_NOT_BLOCK;
 	struct inode_security_struct *isec;
 	u32 sid;
 	struct av_decision avd;
@@ -3055,13 +3055,13 @@ static int selinux_inode_permission(struct inode *inode, int mask)
 	perms = file_mask_to_av(inode->i_mode, mask);
 
 	sid = cred_sid(cred);
-	isec = inode_security_rcu(inode, flags & MAY_NOT_BLOCK);
+	isec = inode_security_rcu(inode, no_block);
 	if (IS_ERR(isec))
 		return PTR_ERR(isec);
 
 	rc = avc_has_perm_noaudit(&selinux_state,
 				  sid, isec->sid, isec->sclass, perms,
-				  (flags & MAY_NOT_BLOCK) ? AVC_NONBLOCKING : 0,
+				  no_block ? AVC_NONBLOCKING : 0,
 				  &avd);
 	audited = avc_audit_required(perms, &avd, rc,
 				     from_access ? FILE__AUDIT_ACCESS : 0,
@@ -3069,7 +3069,11 @@ static int selinux_inode_permission(struct inode *inode, int mask)
 	if (likely(!audited))
 		return rc;
 
-	rc2 = audit_inode_permission(inode, perms, audited, denied, rc, flags);
+	/* fall back to ref-walk if we have to generate audit */
+	if (no_block)
+		return -ECHILD;
+
+	rc2 = audit_inode_permission(inode, perms, audited, denied, rc);
 	if (rc2)
 		return rc2;
 	return rc;
@@ -6806,6 +6810,34 @@ static void selinux_bpf_prog_free(struct bpf_prog_aux *aux)
 }
 #endif
 
+static int selinux_lockdown(enum lockdown_reason what)
+{
+	struct common_audit_data ad;
+	u32 sid = current_sid();
+	int invalid_reason = (what <= LOCKDOWN_NONE) ||
+			     (what == LOCKDOWN_INTEGRITY_MAX) ||
+			     (what >= LOCKDOWN_CONFIDENTIALITY_MAX);
+
+	if (WARN(invalid_reason, "Invalid lockdown reason")) {
+		audit_log(audit_context(),
+			  GFP_ATOMIC, AUDIT_SELINUX_ERR,
+			  "lockdown_reason=invalid");
+		return -EINVAL;
+	}
+
+	ad.type = LSM_AUDIT_DATA_LOCKDOWN;
+	ad.u.reason = what;
+
+	if (what <= LOCKDOWN_INTEGRITY_MAX)
+		return avc_has_perm(&selinux_state,
+				    sid, sid, SECCLASS_LOCKDOWN,
+				    LOCKDOWN__INTEGRITY, &ad);
+	else
+		return avc_has_perm(&selinux_state,
+				    sid, sid, SECCLASS_LOCKDOWN,
+				    LOCKDOWN__CONFIDENTIALITY, &ad);
+}
+
 struct lsm_blob_sizes selinux_blob_sizes __lsm_ro_after_init = {
 	.lbs_cred = sizeof(struct task_security_struct),
 	.lbs_file = sizeof(struct file_security_struct),
@@ -7121,6 +7153,8 @@ static struct security_hook_list selinux_hooks[] __lsm_ro_after_init = {
 	LSM_HOOK_INIT(perf_event_read, selinux_perf_event_read),
 	LSM_HOOK_INIT(perf_event_write, selinux_perf_event_write),
 #endif
+
+	LSM_HOOK_INIT(locked_down, selinux_lockdown),
 };
 
 static __init int selinux_init(void)
@@ -7183,7 +7217,7 @@ void selinux_complete_init(void)
 DEFINE_LSM(selinux) = {
 	.name = "selinux",
 	.flags = LSM_FLAG_LEGACY_MAJOR | LSM_FLAG_EXCLUSIVE,
-	.enabled = &selinux_enabled,
+	.enabled = &selinux_enabled_boot,
 	.blobs = &selinux_blob_sizes,
 	.init = selinux_init,
 };
@@ -7252,7 +7286,7 @@ static int __init selinux_nf_ip_init(void)
 {
 	int err;
 
-	if (!selinux_enabled)
+	if (!selinux_enabled_boot)
 		return 0;
 
 	pr_debug("SELinux:  Registering netfilter hooks\n");
@@ -7298,8 +7332,6 @@ int selinux_disable(struct selinux_state *state)
 	state->disabled = 1;
 
 	pr_info("SELinux:  Disabled at runtime.\n");
-
-	selinux_enabled = 0;
 
 	security_delete_hooks(selinux_hooks, ARRAY_SIZE(selinux_hooks));
 

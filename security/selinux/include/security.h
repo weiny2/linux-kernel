@@ -69,7 +69,7 @@
 
 struct netlbl_lsm_secattr;
 
-extern int selinux_enabled;
+extern int selinux_enabled_boot;
 
 /* Policy capabilities */
 enum {
@@ -99,7 +99,9 @@ struct selinux_avc;
 struct selinux_ss;
 
 struct selinux_state {
+#ifdef CONFIG_SECURITY_SELINUX_DISABLE
 	bool disabled;
+#endif
 #ifdef CONFIG_SECURITY_SELINUX_DEVELOP
 	bool enforcing;
 #endif
@@ -108,7 +110,7 @@ struct selinux_state {
 	bool policycap[__POLICYDB_CAPABILITY_MAX];
 	struct selinux_avc *avc;
 	struct selinux_ss *ss;
-};
+} __randomize_layout;
 
 void selinux_ss_init(struct selinux_ss **ss);
 void selinux_avc_init(struct selinux_avc **avc);
@@ -395,5 +397,6 @@ extern int selinux_nlmsg_lookup(u16 sclass, u16 nlmsg_type, u32 *perm);
 extern void avtab_cache_init(void);
 extern void ebitmap_cache_init(void);
 extern void hashtab_cache_init(void);
+extern int security_sidtab_hash_stats(struct selinux_state *state, char *page);
 
 #endif /* _SELINUX_SECURITY_H_ */
