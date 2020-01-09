@@ -313,23 +313,44 @@ def print_manifest_log(manifest):
                 f.write("#DISABLED {} {}\n\n".format(branch["repourl"],branch["branch"]))
 
 
-def gen_manifest(skip_fetch,fetch_single,fetch_all,blacklist,whitelist):
+def gen_manifest(skip_fetch,fetch_single,fetch_all,blacklist,whitelist,enable_list):
  
     manifest=read_manifest(manifest_in_path)
     #Process whitelist
     #Don't check to make sure each argument passed it was valid. The user can figure that out
     if whitelist != None:
-       for branch in manifest["topic_branches"]:
-           branch["enabled"] = False
-           if branch["name"] in whitelist:
-               print_and_log("Exclusively enabled {} due to -w option".format(branch["name"]))
-               branch["enabled"] = True
+        topic_branches =[]
+        #Do it in this order so we can re-order the manifest based on cmdline
+        for name in whitelist:
+            for branch in manifest["topic_branches"]:
+               if name == branch["name"]:
+                   print_and_log("Exclusively enabled {} due to -w option".format(branch["name"]))
+                   branch["enabled"] = True
+                   topic_branches.append(branch)
+                   break
+        #overwrite the topic branches with our new list
+        manifest["topic_branches"] = topic_branches
+
     #Proccess blacklist
     #Don't check to make sure each argument passed it was valid. The user can figure that out
     for branch in manifest["topic_branches"]:
         if branch["name"] in blacklist:
            branch["enabled"] = False
            print_and_log("Disabling {} due to -b option".format(branch["name"]))
+
+    #Process enable_list
+    for branch in manifest["topic_branches"]:
+        if branch["name"] in enable_list:
+           branch["enabled"] = True
+           print_and_log("Enabling {} due to -e option".format(branch["name"]))
+
+
+    #clear out manifest.json to show only enabled branches
+    final_topic_branches=[]
+    for branch in manifest["topic_branches"]:
+        if branch["enabled"] == True or fetch_all == True:
+            final_topic_branches.append(branch)
+    manifest["topic_branches"] = final_topic_branches
     
     #Add repos as remotes
     add_remotes(manifest)
@@ -450,6 +471,7 @@ def main():
     parser.add_argument('-r','--regen_config', help='regen config options after merge is completed or if -n is passed', action='store_true')
     parser.add_argument('-d','--run_describe', help='run git describe on all enabled branches (unless -a is passed )', action='store_true')
     parser.add_argument('-b','--blacklist', help='comma seperated list of branches not to merge even if enabled',type=str)
+    parser.add_argument('-e','--enable_list', help='comma seperated list of branches to enable if disabled in manifest_in.json',type=str)
     parser.add_argument('-w','--whitelist', help='comma seperated list of branches to exclusively merge (eywa branch is required; configs is required for -r option)',type=str)
     parser.add_argument('-a','--all', help='merge or run git discribe even if branch is disabled', action='store_true')
     args = parser.parse_args()
@@ -468,12 +490,16 @@ def main():
     whitelist = None
     if args.whitelist != None:
         whitelist = args.whitelist.split(",")
+    enable_list = []
+    if args.enable_list != None:
+        enable_list = args.enable_list.split(",")
+
 
     global verbose_mode
     verbose_mode = args.verbose_mode
    
     if continue_merge == False:
-        manifest = gen_manifest(skip_fetch,fetch_single,fetch_all,blacklist,whitelist)
+        manifest = gen_manifest(skip_fetch,fetch_single,fetch_all,blacklist,whitelist,enable_list)
         if run_gen_manifest:
             print("Manifest generation has completed")
             return
