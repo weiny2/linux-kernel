@@ -50,8 +50,7 @@ static int shash_setkey_unaligned(struct crypto_shash *tfm, const u8 *key,
 
 static void shash_set_needkey(struct crypto_shash *tfm, struct shash_alg *alg)
 {
-	if (crypto_shash_alg_has_setkey(alg) &&
-	    !(alg->base.cra_flags & CRYPTO_ALG_OPTIONAL_KEY))
+	if (crypto_shash_alg_needs_key(alg))
 		crypto_shash_set_flags(tfm, CRYPTO_TFM_NEED_KEY);
 }
 
@@ -386,14 +385,40 @@ int crypto_init_shash_ops_async(struct crypto_tfm *tfm)
 	return 0;
 }
 
-static int crypto_shash_init_tfm(struct crypto_tfm *tfm)
+static void crypto_shash_exit_tfm(struct crypto_tfm *tfm)
 {
 	struct crypto_shash *hash = __crypto_shash_cast(tfm);
 	struct shash_alg *alg = crypto_shash_alg(hash);
 
+	alg->exit_tfm(hash);
+}
+
+static int crypto_shash_init_tfm(struct crypto_tfm *tfm)
+{
+	struct crypto_shash *hash = __crypto_shash_cast(tfm);
+	struct shash_alg *alg = crypto_shash_alg(hash);
+	int err;
+
 	hash->descsize = alg->descsize;
 
 	shash_set_needkey(hash, alg);
+
+	if (alg->exit_tfm)
+		tfm->exit = crypto_shash_exit_tfm;
+
+	if (!alg->init_tfm)
+		return 0;
+
+	err = alg->init_tfm(hash);
+	if (err)
+		return err;
+
+	/* ->init_tfm() may have increased the descsize. */
+	if (WARN_ON_ONCE(hash->descsize > HASH_MAX_DESCSIZE)) {
+		if (alg->exit_tfm)
+			alg->exit_tfm(hash);
+		return -EINVAL;
+	}
 
 	return 0;
 }
@@ -495,9 +520,9 @@ int crypto_register_shash(struct shash_alg *alg)
 }
 EXPORT_SYMBOL_GPL(crypto_register_shash);
 
-int crypto_unregister_shash(struct shash_alg *alg)
+void crypto_unregister_shash(struct shash_alg *alg)
 {
-	return crypto_unregister_alg(&alg->base);
+	crypto_unregister_alg(&alg->base);
 }
 EXPORT_SYMBOL_GPL(crypto_unregister_shash);
 
@@ -521,19 +546,12 @@ err:
 }
 EXPORT_SYMBOL_GPL(crypto_register_shashes);
 
-int crypto_unregister_shashes(struct shash_alg *algs, int count)
+void crypto_unregister_shashes(struct shash_alg *algs, int count)
 {
-	int i, ret;
+	int i;
 
-	for (i = count - 1; i >= 0; --i) {
-		ret = crypto_unregister_shash(&algs[i]);
-		if (ret)
-			pr_err("Failed to unregister %s %s: %d\n",
-			       algs[i].base.cra_driver_name,
-			       algs[i].base.cra_name, ret);
-	}
-
-	return 0;
+	for (i = count - 1; i >= 0; --i)
+		crypto_unregister_shash(&algs[i]);
 }
 EXPORT_SYMBOL_GPL(crypto_unregister_shashes);
 
