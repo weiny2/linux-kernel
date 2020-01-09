@@ -367,12 +367,16 @@ static void print_context_stats(struct seq_file *m,
 static int i915_gem_object_info(struct seq_file *m, void *data)
 {
 	struct drm_i915_private *i915 = node_to_i915(m->private);
+	struct intel_memory_region *mr;
+	enum intel_region_id id;
 
 	seq_printf(m, "%u shrinkable [%u free] objects, %llu bytes\n",
 		   i915->mm.shrink_count,
 		   atomic_read(&i915->mm.free_count),
 		   i915->mm.shrink_memory);
-
+	for_each_memory_region(mr, i915, id)
+		seq_printf(m, "%s: total:%pa, available:%pa bytes\n",
+			   mr->name, &mr->total, &mr->avail);
 	seq_putc(m, '\n');
 
 	print_context_stats(m, i915);
@@ -1001,7 +1005,7 @@ static int i915_frequency_info(struct seq_file *m, void *unused)
 	return ret;
 }
 
-static int ironlake_drpc_info(struct seq_file *m)
+static int ilk_drpc_info(struct seq_file *m)
 {
 	struct drm_i915_private *i915 = node_to_i915(m->private);
 	struct intel_uncore *uncore = &i915->uncore;
@@ -1209,7 +1213,7 @@ static int i915_drpc_info(struct seq_file *m, void *unused)
 		else if (INTEL_GEN(dev_priv) >= 6)
 			err = gen6_drpc_info(m);
 		else
-			err = ironlake_drpc_info(m);
+			err = ilk_drpc_info(m);
 	}
 
 	return err;
@@ -3815,8 +3819,8 @@ static void gen9_sseu_device_status(struct drm_i915_private *dev_priv,
 #undef SS_MAX
 }
 
-static void broadwell_sseu_device_status(struct drm_i915_private *dev_priv,
-					 struct sseu_dev_info *sseu)
+static void bdw_sseu_device_status(struct drm_i915_private *dev_priv,
+				   struct sseu_dev_info *sseu)
 {
 	const struct intel_runtime_info *info = RUNTIME_INFO(dev_priv);
 	u32 slice_info = I915_READ(GEN8_GT_SLICE_INFO);
@@ -3901,7 +3905,7 @@ static int i915_sseu_status(struct seq_file *m, void *unused)
 		if (IS_CHERRYVIEW(dev_priv))
 			cherryview_sseu_device_status(dev_priv, &sseu);
 		else if (IS_BROADWELL(dev_priv))
-			broadwell_sseu_device_status(dev_priv, &sseu);
+			bdw_sseu_device_status(dev_priv, &sseu);
 		else if (IS_GEN(dev_priv, 9))
 			gen9_sseu_device_status(dev_priv, &sseu);
 		else if (INTEL_GEN(dev_priv) >= 10)
