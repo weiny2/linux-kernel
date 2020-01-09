@@ -5,6 +5,7 @@
  * Copyright (c) 2018-2019 Paulo Alcantara <palcantara@suse.de>
  */
 
+#include <linux/proc_fs.h>
 #include <linux/rcupdate.h>
 #include <linux/rculist.h>
 #include <linux/jhash.h>
@@ -217,12 +218,12 @@ static int dfscache_proc_open(struct inode *inode, struct file *file)
 	return single_open(file, dfscache_proc_show, NULL);
 }
 
-const struct file_operations dfscache_proc_fops = {
-	.open		= dfscache_proc_open,
-	.read		= seq_read,
-	.llseek		= seq_lseek,
-	.release	= single_release,
-	.write		= dfscache_proc_write,
+const struct proc_ops dfscache_proc_ops = {
+	.proc_open	= dfscache_proc_open,
+	.proc_read	= seq_read,
+	.proc_lseek	= seq_lseek,
+	.proc_release	= single_release,
+	.proc_write	= dfscache_proc_write,
 };
 
 #ifdef CONFIG_CIFS_DEBUG2

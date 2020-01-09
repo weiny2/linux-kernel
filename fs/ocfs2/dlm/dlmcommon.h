@@ -11,6 +11,7 @@
 #define DLMCOMMON_H
 
 #include <linux/kref.h>
+#include <linux/bitops.h>
 
 #define DLM_HB_NODE_DOWN_PRI     (0xf000000)
 #define DLM_HB_NODE_UP_PRI       (0x8000000)
@@ -688,9 +689,6 @@ struct dlm_begin_reco
 	__be32 pad2;
 };
 
-
-#define BITS_PER_BYTE 8
-#define BITS_TO_BYTES(bits) (((bits)+BITS_PER_BYTE-1)/BITS_PER_BYTE)
 
 struct dlm_query_join_request
 {
