@@ -433,26 +433,50 @@ period_us_store(struct device *dev, struct device_attribute *attr,
 static DEVICE_ATTR_RW(period_us);
 
 static ssize_t
-vector_show(struct device *dev, struct device_attribute *attr, char *buf)
+enable_list_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	struct watcher_endpoint *ep;
 	int err;
 
 	ep = dev_get_drvdata(dev);
 
-	err = bitmap_print_to_pagebuf(false, buf, ep->config.vector,
+	err = bitmap_print_to_pagebuf(true, buf, ep->config.vector,
 				      ep->config.vector_size);
 
 	return err ?: strlen(buf);
 }
 
+static int
+cta_watcher_write_vector(struct device *dev, struct watcher_endpoint *ep,
+			 unsigned long *bit_vector)
+{
+	/*
+	 * Sampler vector select is limited by the size of the sampler
+	 * result buffer. Determine if we're exceeding the limit.
+	 */
+	if (ep->header.watcher_type == TYPE_SAMPLER) {
+		int hw = bitmap_weight(bit_vector, ep->config.vector_size);
+
+		if (hw > ep->config.select_limit) {
+			dev_err(dev, "Too many bits(%d) selected. Maximum is %d\n",
+				hw, ep->config.select_limit);
+			return -EINVAL;
+		}
+	}
+
+	/* Save the vector */
+	bitmap_copy(ep->config.vector, bit_vector, ep->config.vector_size);
+
+	return 0;
+}
+
 static ssize_t
-vector_store(struct device *dev, struct device_attribute *attr,
-	     const char *buf, size_t count)
+enable_list_store(struct device *dev, struct device_attribute *attr,
+		    const char *buf, size_t count)
 {
 	struct watcher_endpoint *ep;
 	unsigned long *temp;
-	int err, hw = 0;
+	int err;
 
 	ep = dev_get_drvdata(dev);
 
@@ -471,43 +495,80 @@ vector_store(struct device *dev, struct device_attribute *attr,
 	 * Convert and store hexademical input string values into the
 	 * temp buffer.
 	 */
-	err = __bitmap_parse(buf, count, false, temp, ep->config.vector_size);
-	if (err)
-		return err;
+	err = bitmap_parselist(buf, temp, ep->config.vector_size);
 
-	/*
-	 * Sampler vector select is limited by the size of the sampler
-	 * result buffer. Determine if we're exceeding the limit.
-	 */
-	if (ep->header.watcher_type == TYPE_SAMPLER) {
-		hw = bitmap_weight(temp, ep->config.vector_size);
-		if (hw > ep->config.select_limit) {
-			dev_err(dev, "Too many bits(%d) selected. Maximum is %d\n",
-				hw, ep->config.select_limit);
-			return -EINVAL;
-		}
-	}
-
-	/* Save the temp vector */
-	bitmap_copy(ep->config.vector, temp, ep->config.vector_size);
+	/* Write new vector to watcher endpoint */
+	if (!err)
+		err = cta_watcher_write_vector(dev, ep, temp);
 
 	kfree(temp);
 
-	return count;
+	return err ?: count;
 }
-static DEVICE_ATTR_RW(vector);
+static DEVICE_ATTR_RW(enable_list);
 
 static ssize_t
-vector_length_show(struct device *dev, struct device_attribute *attr,
+enable_vector_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct watcher_endpoint *ep;
+	int err;
+
+	ep = dev_get_drvdata(dev);
+
+	err = bitmap_print_to_pagebuf(false, buf, ep->config.vector,
+				      ep->config.vector_size);
+
+	return err ?: strlen(buf);
+}
+
+static ssize_t
+enable_vector_store(struct device *dev, struct device_attribute *attr,
+		    const char *buf, size_t count)
+{
+	struct watcher_endpoint *ep;
+	unsigned long *temp;
+	int err;
+
+	ep = dev_get_drvdata(dev);
+
+	if (ep->mode_lock)
+		return -EPERM;
+
+	/*
+	 * Create a temp buffer to store the incoming selection for
+	 * validation before saving.
+	 */
+	temp = bitmap_zalloc(ep->config.vector_size, GFP_KERNEL);
+	if (!temp)
+		return -ENOMEM;
+
+	/*
+	 * Convert and store hexademical input string values into the
+	 * temp buffer.
+	 */
+	err = bitmap_parse(buf, count, temp, ep->config.vector_size);
+
+	/* Write new vector to watcher endpoint */
+	if (!err)
+		err = cta_watcher_write_vector(dev, ep, temp);
+
+	kfree(temp);
+
+	return err ?: count;
+}
+static DEVICE_ATTR_RW(enable_vector);
+
+static ssize_t
+enable_id_limit_show(struct device *dev, struct device_attribute *attr,
 			char *buf)
 {
 	struct watcher_endpoint *ep;
 
 	ep = dev_get_drvdata(dev);
 
-	return sprintf(buf, "%u\n", ep->config.vector_size);
+	return sprintf(buf, "%d\n", ep->config.vector_size - 1);
 }
-static DEVICE_ATTR_RO(vector_length);
+static DEVICE_ATTR_RO(enable_id_limit);
 
 static ssize_t
 select_limit_show(struct device *dev, struct device_attribute *attr, char *buf)
@@ -652,8 +713,9 @@ static struct attribute *cta_watcher_attrs[] = {
 	&dev_attr_guid.attr,
 	&dev_attr_mode.attr,
 	&dev_attr_period_us.attr,
-	&dev_attr_vector.attr,
-	&dev_attr_vector_length.attr,
+	&dev_attr_enable_list.attr,
+	&dev_attr_enable_vector.attr,
+	&dev_attr_enable_id_limit.attr,
 	&dev_attr_select_limit.attr,
 	&dev_attr_size.attr,
 	&dev_attr_offset.attr,
@@ -735,6 +797,9 @@ cta_watcher_create_endpoint(struct cta_watcher_priv *priv)
 	 */
 	ep->config.vector_size = (ep->header.size - ep->vector_start) *
 				 BITS_PER_BYTE;
+
+	if (!ep->config.vector_size)
+		return -EINVAL;
 
 	ep->config.vector = bitmap_zalloc(ep->config.vector_size, GFP_KERNEL);
 	if (!ep->config.vector)

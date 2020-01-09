@@ -83,14 +83,15 @@ Description:
 		to 'periodic' mode only. This file is only writable when mode
 		is set to 'Disabled'.
 
-What:		/sys/class/cta_telem/.../vector_length
+What:		/sys/class/cta_telem/.../enable_id_limit
 Date:		September 2019
 KernelVersion:	5.5
 Contact:	David Box <david.e.box@linux.intel.com>
 Description:
-		(RO) The length of the select vector in bits.
+		(RO) This value represents the upper limit on ID values that
+		can be accepted by the sampler or tracer.
 
-What:		/sys/class/cta_telem/.../vector
+What:		/sys/class/cta_telem/.../enable_vector
 Date:		September 2019
 KernelVersion:	5.5
 Contact:	David Box <david.e.box@linux.intel.com>
@@ -100,6 +101,16 @@ Description:
 		bit position by using the XML file. Each bit represents a 64 bit
 		register to sample. This file is only writable when mode is set
 		to 'Disabled'
+
+What:		/sys/class/cta_telem/.../enable_list
+Date:		September 2019
+KernelVersion:	5.5
+Contact:	David Box <david.e.box@linux.intel.com>
+Description:
+		(RW) Comma separated list representing the selected metrics to
+		be sampled or traced. Sample IDs are matched to registers based
+		on the XML file. Each ID represents a 64 bit register to sample.
+		This file is only writable when mode is set to 'Disabled'
 
 What:		/sys/class/cta_watcher/trcrX/destination
 Date:		September 2019
