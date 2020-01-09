@@ -128,6 +128,7 @@ struct vfio_regions {
 
 struct domain_capsule {
 	struct iommu_domain *domain;
+	struct vfio_group *group;
 	void *data;
 };
 
@@ -144,6 +145,7 @@ static int vfio_iommu_for_each_dev(struct vfio_iommu *iommu,
 	list_for_each_entry(d, &iommu->domain_list, next) {
 		dc.domain = d->domain;
 		list_for_each_entry(g, &d->group_list, next) {
+			dc.group = g;
 			ret = iommu_group_for_each_dev(g->iommu_group,
 						       &dc, fn);
 			if (ret)
@@ -2346,7 +2348,12 @@ static int vfio_bind_gpasid_fn(struct device *dev, void *data)
 	struct iommu_gpasid_bind_data *gbind_data =
 		(struct iommu_gpasid_bind_data *) dc->data;
 
-	return iommu_sva_bind_gpasid(dc->domain, dev, gbind_data);
+	if (dc->group->mdev_group)
+		return iommu_sva_bind_gpasid(dc->domain,
+			vfio_mdev_get_iommu_device(dev), gbind_data);
+	else
+		return iommu_sva_bind_gpasid(dc->domain,
+						dev, gbind_data);
 }
 
 static int vfio_unbind_gpasid_fn(struct device *dev, void *data)
@@ -2355,7 +2362,12 @@ static int vfio_unbind_gpasid_fn(struct device *dev, void *data)
 	struct iommu_gpasid_bind_data *gbind_data =
 		(struct iommu_gpasid_bind_data *) dc->data;
 
-	return iommu_sva_unbind_gpasid(dc->domain, dev,
+	if (dc->group->mdev_group)
+		return iommu_sva_unbind_gpasid(dc->domain,
+					vfio_mdev_get_iommu_device(dev),
+					gbind_data->hpasid);
+	else
+		return iommu_sva_unbind_gpasid(dc->domain, dev,
 						gbind_data->hpasid);
 }
 
@@ -2428,7 +2440,12 @@ static int vfio_cache_inv_fn(struct device *dev, void *data)
 	struct iommu_cache_invalidate_info *cache_inv_info =
 		(struct iommu_cache_invalidate_info *) dc->data;
 
-	return iommu_cache_invalidate(dc->domain, dev, cache_inv_info);
+	if (dc->group->mdev_group)
+		return iommu_cache_invalidate(dc->domain,
+			vfio_mdev_get_iommu_device(dev), cache_inv_info);
+	else
+		return iommu_cache_invalidate(dc->domain,
+						dev, cache_inv_info);
 }
 
 static long vfio_iommu_type1_ioctl(void *iommu_data,
