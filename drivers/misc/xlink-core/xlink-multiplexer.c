@@ -14,6 +14,7 @@
 #include <linux/dma-mapping.h>
 #include <linux/dma-direct.h>
 #include <linux/of_address.h>
+#include <linux/of_device.h>
 #include <linux/of_reserved_mem.h>
 #include <linux/uaccess.h>
 #include <linux/slab.h>
@@ -185,8 +186,10 @@ static struct device *init_xlink_reserved_mem_dev(struct device *dev,
 	dev_set_name(child, "%s:%s", dev_name(dev), name);
 	dev_err(dev, " dev_name %s, name %s\n", dev_name(dev), name);
 	child->parent = dev;
-	child->coherent_dma_mask = dev->coherent_dma_mask;
 	child->dma_mask = dev->dma_mask;
+	child->coherent_dma_mask = dev->coherent_dma_mask;
+	/* Set up DMA configuration using information from parent's DT node. */
+	rc = of_dma_configure(child, dev->of_node, true);
 	child->release = xlink_reserved_mem_release;
 
 	rc = device_add(child);
