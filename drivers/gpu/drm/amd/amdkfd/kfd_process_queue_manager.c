@@ -374,7 +374,7 @@ int pqm_destroy_queue(struct process_queue_manager *pqm, unsigned int qid)
 		/* destroy kernel queue (DIQ) */
 		dqm = pqn->kq->dev->dqm;
 		dqm->ops.destroy_kernel_queue(dqm, pqn->kq, &pdd->qpd);
-		kernel_queue_uninit(pqn->kq);
+		kernel_queue_uninit(pqn->kq, false);
 	}
 
 	if (pqn->q) {
@@ -475,6 +475,15 @@ struct kernel_queue *pqm_get_kernel_queue(
 		return pqn->kq;
 
 	return NULL;
+}
+
+struct queue *pqm_get_user_queue(struct process_queue_manager *pqm,
+					unsigned int qid)
+{
+	struct process_queue_node *pqn;
+
+	pqn = get_queue_by_qid(pqm, qid);
+	return pqn ? pqn->q : NULL;
 }
 
 int pqm_get_wave_state(struct process_queue_manager *pqm,

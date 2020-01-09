@@ -255,7 +255,8 @@ static int gfx_v10_0_rlc_backdoor_autoload_enable(struct amdgpu_device *adev);
 static int gfx_v10_0_wait_for_rlc_autoload_complete(struct amdgpu_device *adev);
 static void gfx_v10_0_ring_emit_ce_meta(struct amdgpu_ring *ring, bool resume);
 static void gfx_v10_0_ring_emit_de_meta(struct amdgpu_ring *ring, bool resume);
-static void gfx_v10_0_ring_emit_tmz(struct amdgpu_ring *ring, bool start);
+static void gfx_v10_0_ring_emit_tmz(struct amdgpu_ring *ring, bool start,
+				    bool trusted);
 
 static void gfx10_kiq_set_resources(struct amdgpu_ring *kiq_ring, uint64_t queue_mask)
 {
@@ -471,18 +472,10 @@ static int gfx_v10_0_ring_test_ring(struct amdgpu_ring *ring)
 		else
 			udelay(1);
 	}
-	if (i < adev->usec_timeout) {
-		if (amdgpu_emu_mode == 1)
-			DRM_INFO("ring test on %d succeeded in %d msecs\n",
-				 ring->idx, i);
-		else
-			DRM_INFO("ring test on %d succeeded in %d usecs\n",
-				 ring->idx, i);
-	} else {
-		DRM_ERROR("amdgpu: ring %d test failed (scratch(0x%04X)=0x%08X)\n",
-			  ring->idx, scratch, tmp);
-		r = -EINVAL;
-	}
+
+	if (i >= adev->usec_timeout)
+		r = -ETIMEDOUT;
+
 	amdgpu_gfx_scratch_free(adev, scratch);
 
 	return r;
@@ -532,14 +525,10 @@ static int gfx_v10_0_ring_test_ib(struct amdgpu_ring *ring, long timeout)
 	}
 
 	tmp = RREG32(scratch);
-	if (tmp == 0xDEADBEEF) {
-		DRM_INFO("ib test on ring %d succeeded\n", ring->idx);
+	if (tmp == 0xDEADBEEF)
 		r = 0;
-	} else {
-		DRM_ERROR("amdgpu: ib test failed (scratch(0x%04X)=0x%08X)\n",
-			  scratch, tmp);
+	else
 		r = -EINVAL;
-	}
 err2:
 	amdgpu_ib_free(adev, &ib, NULL);
 	dma_fence_put(f);
@@ -588,8 +577,7 @@ static void gfx_v10_0_check_fw_write_wait(struct amdgpu_device *adev)
 	}
 
 	if (adev->gfx.cp_fw_write_wait == false)
-		DRM_WARN_ONCE("Warning: check cp_fw_version and update it to realize \
-			      GRBM requires 1-cycle delay in cp firmware\n");
+		DRM_WARN_ONCE("CP firmware version too old, please update!");
 }
 
 
@@ -1963,7 +1951,7 @@ static int gfx_v10_0_parse_rlc_toc(struct amdgpu_device *adev)
 		rlc_autoload_info[rlc_toc->id].size = rlc_toc->size * 4;
 
 		rlc_toc++;
-	};
+	}
 
 	return 0;
 }
@@ -3606,23 +3594,16 @@ static int gfx_v10_0_cp_resume(struct amdgpu_device *adev)
 
 	for (i = 0; i < adev->gfx.num_gfx_rings; i++) {
 		ring = &adev->gfx.gfx_ring[i];
-		DRM_INFO("gfx %d ring me %d pipe %d q %d\n",
-			 i, ring->me, ring->pipe, ring->queue);
-		r = amdgpu_ring_test_ring(ring);
-		if (r) {
-			ring->sched.ready = false;
+		r = amdgpu_ring_test_helper(ring);
+		if (r)
 			return r;
-		}
 	}
 
 	for (i = 0; i < adev->gfx.num_compute_rings; i++) {
 		ring = &adev->gfx.compute_ring[i];
-		ring->sched.ready = true;
-		DRM_INFO("compute ring %d mec %d pipe %d q %d\n",
-			 i, ring->me, ring->pipe, ring->queue);
-		r = amdgpu_ring_test_ring(ring);
+		r = amdgpu_ring_test_helper(ring);
 		if (r)
-			ring->sched.ready = false;
+			return r;
 	}
 
 	return 0;
@@ -4563,7 +4544,9 @@ static void gfx_v10_0_ring_emit_sb(struct amdgpu_ring *ring)
 	amdgpu_ring_write(ring, 0);
 }
 
-static void gfx_v10_0_ring_emit_cntxcntl(struct amdgpu_ring *ring, uint32_t flags)
+static void gfx_v10_0_ring_emit_cntxcntl(struct amdgpu_ring *ring,
+					 uint32_t flags,
+					 bool trusted)
 {
 	uint32_t dw2 = 0;
 
@@ -4571,7 +4554,7 @@ static void gfx_v10_0_ring_emit_cntxcntl(struct amdgpu_ring *ring, uint32_t flag
 		gfx_v10_0_ring_emit_ce_meta(ring,
 				    flags & AMDGPU_IB_PREEMPTED ? true : false);
 
-	gfx_v10_0_ring_emit_tmz(ring, true);
+	gfx_v10_0_ring_emit_tmz(ring, true, trusted);
 
 	dw2 |= 0x80000000; /* set load_enable otherwise this package is just NOPs */
 	if (flags & AMDGPU_HAVE_CTX_SWITCH) {
@@ -4729,10 +4712,17 @@ static void gfx_v10_0_ring_emit_de_meta(struct amdgpu_ring *ring, bool resume)
 					   sizeof(de_payload) >> 2);
 }
 
-static void gfx_v10_0_ring_emit_tmz(struct amdgpu_ring *ring, bool start)
+static void gfx_v10_0_ring_emit_tmz(struct amdgpu_ring *ring, bool start,
+				    bool trusted)
 {
 	amdgpu_ring_write(ring, PACKET3(PACKET3_FRAME_CONTROL, 0));
-	amdgpu_ring_write(ring, FRAME_CMD(start ? 0 : 1)); /* frame_end */
+	/*
+	 * cmd = 0: frame begin
+	 * cmd = 1: frame end
+	 */
+	amdgpu_ring_write(ring,
+			  ((ring->adev->tmz.enabled && trusted) ? FRAME_TMZ : 0)
+			  | FRAME_CMD(start ? 0 : 1));
 }
 
 static void gfx_v10_0_ring_emit_rreg(struct amdgpu_ring *ring, uint32_t reg)

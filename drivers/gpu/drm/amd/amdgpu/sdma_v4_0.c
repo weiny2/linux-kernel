@@ -698,7 +698,7 @@ static void sdma_v4_0_ring_emit_ib(struct amdgpu_ring *ring,
 	unsigned vmid = AMDGPU_JOB_GET_VMID(job);
 
 	/* IB packet must end on a 8 DW boundary */
-	sdma_v4_0_ring_insert_nop(ring, (10 - (lower_32_bits(ring->wptr) & 7)) % 8);
+	sdma_v4_0_ring_insert_nop(ring, (2 - lower_32_bits(ring->wptr)) & 7);
 
 	amdgpu_ring_write(ring, SDMA_PKT_HEADER_OP(SDMA_OP_INDIRECT) |
 			  SDMA_PKT_INDIRECT_HEADER_VMID(vmid & 0xf));
@@ -962,6 +962,7 @@ static uint32_t sdma_v4_0_rb_cntl(struct amdgpu_ring *ring, uint32_t rb_cntl)
 	/* Set ring buffer size in dwords */
 	uint32_t rb_bufsz = order_base_2(ring->ring_size / 4);
 
+	barrier(); /* work around https://bugs.llvm.org/show_bug.cgi?id=42576 */
 	rb_cntl = REG_SET_FIELD(rb_cntl, SDMA0_GFX_RB_CNTL, RB_SIZE, rb_bufsz);
 #ifdef __BIG_ENDIAN
 	rb_cntl = REG_SET_FIELD(rb_cntl, SDMA0_GFX_RB_CNTL, RB_SWAP_ENABLE, 1);
@@ -1579,7 +1580,7 @@ static void sdma_v4_0_ring_pad_ib(struct amdgpu_ring *ring, struct amdgpu_ib *ib
 	u32 pad_count;
 	int i;
 
-	pad_count = (8 - (ib->length_dw & 0x7)) % 8;
+	pad_count = (-ib->length_dw) & 7;
 	for (i = 0; i < pad_count; i++)
 		if (sdma && sdma->burst_nop && (i == 0))
 			ib->ptr[ib->length_dw++] =
@@ -2337,10 +2338,12 @@ static void sdma_v4_0_set_irq_funcs(struct amdgpu_device *adev)
 static void sdma_v4_0_emit_copy_buffer(struct amdgpu_ib *ib,
 				       uint64_t src_offset,
 				       uint64_t dst_offset,
-				       uint32_t byte_count)
+				       uint32_t byte_count,
+				       bool tmz)
 {
 	ib->ptr[ib->length_dw++] = SDMA_PKT_HEADER_OP(SDMA_OP_COPY) |
-		SDMA_PKT_HEADER_SUB_OP(SDMA_SUBOP_COPY_LINEAR);
+		SDMA_PKT_HEADER_SUB_OP(SDMA_SUBOP_COPY_LINEAR) |
+		SDMA_PKT_COPY_LINEAR_HEADER_TMZ(tmz ? 1 : 0);
 	ib->ptr[ib->length_dw++] = byte_count - 1;
 	ib->ptr[ib->length_dw++] = 0; /* src/dst endian swap */
 	ib->ptr[ib->length_dw++] = lower_32_bits(src_offset);
@@ -2409,10 +2412,9 @@ static void sdma_v4_0_set_vm_pte_funcs(struct amdgpu_device *adev)
 			sched = &adev->sdma.instance[i].page.sched;
 		else
 			sched = &adev->sdma.instance[i].ring.sched;
-		adev->vm_manager.vm_pte_rqs[i] =
-			&sched->sched_rq[DRM_SCHED_PRIORITY_KERNEL];
+		adev->vm_manager.vm_pte_scheds[i] = sched;
 	}
-	adev->vm_manager.vm_pte_num_rqs = adev->sdma.num_instances;
+	adev->vm_manager.vm_pte_num_scheds = adev->sdma.num_instances;
 }
 
 const struct amdgpu_ip_block_version sdma_v4_0_ip_block = {

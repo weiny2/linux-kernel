@@ -378,7 +378,7 @@ int amdgpu_ttm_copy_mem_to_mem(struct amdgpu_device *adev,
 		}
 
 		r = amdgpu_copy_buffer(ring, from, to, cur_size,
-				       resv, &next, false, true);
+				       resv, &next, false, true, false);
 		if (r)
 			goto error;
 
@@ -1714,10 +1714,15 @@ static int amdgpu_ttm_training_reserve_vram_fini(struct amdgpu_device *adev)
 	amdgpu_bo_free_kernel(&ctx->c2p_bo, NULL, NULL);
 	ctx->c2p_bo = NULL;
 
-	amdgpu_bo_free_kernel(&ctx->p2c_bo, NULL, NULL);
-	ctx->p2c_bo = NULL;
-
 	return 0;
+}
+
+static u64 amdgpu_ttm_training_get_c2p_offset(u64 vram_size)
+{
+       if ((vram_size & (SZ_1M - 1)) < (SZ_4K + 1) )
+               vram_size -= SZ_1M;
+
+       return ALIGN(vram_size, SZ_1M);
 }
 
 /**
@@ -1738,7 +1743,7 @@ static int amdgpu_ttm_training_reserve_vram_init(struct amdgpu_device *adev)
 		return 0;
 	}
 
-	ctx->c2p_train_data_offset = adev->fw_vram_usage.mem_train_fb_loc;
+	ctx->c2p_train_data_offset = amdgpu_ttm_training_get_c2p_offset(adev->gmc.mc_vram_size);
 	ctx->p2c_train_data_offset = (adev->gmc.mc_vram_size - GDDR6_MEM_TRAINING_OFFSET);
 	ctx->train_data_size = GDDR6_MEM_TRAINING_DATA_SIZE_IN_BYTES;
 
@@ -1748,17 +1753,6 @@ static int amdgpu_ttm_training_reserve_vram_init(struct amdgpu_device *adev)
 		  ctx->c2p_train_data_offset);
 
 	ret = amdgpu_bo_create_kernel_at(adev,
-					 ctx->p2c_train_data_offset,
-					 ctx->train_data_size,
-					 AMDGPU_GEM_DOMAIN_VRAM,
-					 &ctx->p2c_bo,
-					 NULL);
-	if (ret) {
-		DRM_ERROR("alloc p2c_bo failed(%d)!\n", ret);
-		goto Err_out;
-	}
-
-	ret = amdgpu_bo_create_kernel_at(adev,
 					 ctx->c2p_train_data_offset,
 					 ctx->train_data_size,
 					 AMDGPU_GEM_DOMAIN_VRAM,
@@ -1766,15 +1760,12 @@ static int amdgpu_ttm_training_reserve_vram_init(struct amdgpu_device *adev)
 					 NULL);
 	if (ret) {
 		DRM_ERROR("alloc c2p_bo failed(%d)!\n", ret);
-		goto Err_out;
+		amdgpu_ttm_training_reserve_vram_fini(adev);
+		return ret;
 	}
 
 	ctx->init = PSP_MEM_TRAIN_RESERVE_SUCCESS;
 	return 0;
-
-Err_out:
-	amdgpu_ttm_training_reserve_vram_fini(adev);
-	return ret;
 }
 
 /**
@@ -1987,11 +1978,13 @@ void amdgpu_ttm_set_buffer_funcs_status(struct amdgpu_device *adev, bool enable)
 
 	if (enable) {
 		struct amdgpu_ring *ring;
-		struct drm_sched_rq *rq;
+		struct drm_gpu_scheduler *sched;
 
 		ring = adev->mman.buffer_funcs_ring;
-		rq = &ring->sched.sched_rq[DRM_SCHED_PRIORITY_KERNEL];
-		r = drm_sched_entity_init(&adev->mman.entity, &rq, 1, NULL);
+		sched = &ring->sched;
+		r = drm_sched_entity_init(&adev->mman.entity,
+				          DRM_SCHED_PRIORITY_KERNEL, &sched,
+					  1, NULL);
 		if (r) {
 			DRM_ERROR("Failed setting up TTM BO move entity (%d)\n",
 				  r);
@@ -2060,7 +2053,7 @@ static int amdgpu_map_buffer(struct ttm_buffer_object *bo,
 	dst_addr = amdgpu_bo_gpu_offset(adev->gart.bo);
 	dst_addr += window * AMDGPU_GTT_MAX_TRANSFER_SIZE * 8;
 	amdgpu_emit_copy_buffer(adev, &job->ibs[0], src_addr,
-				dst_addr, num_bytes);
+				dst_addr, num_bytes, false);
 
 	amdgpu_ring_pad_ib(ring, &job->ibs[0]);
 	WARN_ON(job->ibs[0].length_dw > num_dw);
@@ -2090,7 +2083,7 @@ int amdgpu_copy_buffer(struct amdgpu_ring *ring, uint64_t src_offset,
 		       uint64_t dst_offset, uint32_t byte_count,
 		       struct dma_resv *resv,
 		       struct dma_fence **fence, bool direct_submit,
-		       bool vm_needs_flush)
+		       bool vm_needs_flush, bool tmz)
 {
 	struct amdgpu_device *adev = ring->adev;
 	struct amdgpu_job *job;
@@ -2131,7 +2124,7 @@ int amdgpu_copy_buffer(struct amdgpu_ring *ring, uint64_t src_offset,
 		uint32_t cur_size_in_bytes = min(byte_count, max_bytes);
 
 		amdgpu_emit_copy_buffer(adev, &job->ibs[0], src_offset,
-					dst_offset, cur_size_in_bytes);
+					dst_offset, cur_size_in_bytes, tmz);
 
 		src_offset += cur_size_in_bytes;
 		dst_offset += cur_size_in_bytes;
