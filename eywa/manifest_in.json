@@ -1513,7 +1513,7 @@
                 }
             ],
             "description": "IPU driver 19WW52",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Cao Bingbu",
