@@ -135,6 +135,7 @@ static const struct ieee80211_ops wfx_ops = {
 	.tx			= wfx_tx,
 	.conf_tx		= wfx_conf_tx,
 	.hw_scan		= wfx_hw_scan,
+	.cancel_hw_scan		= wfx_cancel_hw_scan,
 	.sta_add		= wfx_sta_add,
 	.sta_remove		= wfx_sta_remove,
 	.sta_notify		= wfx_sta_notify,
@@ -182,7 +183,7 @@ struct gpio_desc *wfx_get_gpio(struct device *dev, int override,
 	} else {
 		ret = devm_gpiod_get(dev, label, GPIOD_OUT_LOW);
 	}
-	if (IS_ERR(ret) || !ret) {
+	if (IS_ERR_OR_NULL(ret)) {
 		if (!ret || PTR_ERR(ret) == -ENOENT)
 			dev_warn(dev, "gpio %s is not defined\n", label);
 		else

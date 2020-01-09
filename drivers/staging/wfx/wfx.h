@@ -26,6 +26,9 @@
 #include "hif_tx.h"
 #include "hif_api_general.h"
 
+#define USEC_PER_TXOP 32 // see struct ieee80211_tx_queue_params
+#define USEC_PER_TU 1024
+
 struct hwbus_ops;
 
 struct wfx_dev {
@@ -58,7 +61,6 @@ struct wfx_dev {
 	struct mutex		rx_stats_lock;
 
 	int			output_power;
-	atomic_t		scan_in_progress;
 };
 
 struct wfx_vif {
@@ -68,7 +70,6 @@ struct wfx_vif {
 	int			id;
 	enum wfx_state		state;
 
-	int			delayed_link_loss;
 	int			bss_loss_state;
 	u32			bss_loss_confirm_id;
 	struct mutex		bss_loss_lock;
@@ -113,19 +114,22 @@ struct wfx_vif {
 	int			cqm_rssi_thold;
 	bool			setbssparams_done;
 	struct wfx_ht_info	ht_info;
-	struct wfx_edca_params	edca;
-	struct hif_mib_set_uapsd_information uapsd_info;
+	unsigned long		uapsd_mask;
+	struct ieee80211_tx_queue_params edca_params[IEEE80211_NUM_ACS];
 	struct hif_req_set_bss_params bss_params;
 	struct work_struct	bss_params_work;
 	struct work_struct	set_cts_work;
 
 	int			join_complete_status;
-	bool			delayed_unjoin;
 	struct work_struct	unjoin_work;
 
-	struct wfx_scan		scan;
+	/* avoid some operations in parallel with scan */
+	struct mutex		scan_lock;
+	struct work_struct	scan_work;
+	struct completion	scan_complete;
+	bool			scan_abort;
+	struct ieee80211_scan_request *scan_req;
 
-	struct hif_req_set_pm_mode powersave_mode;
 	struct completion	set_pm_mode_complete;
 
 	struct list_head	event_queue;

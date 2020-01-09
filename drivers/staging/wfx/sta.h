@@ -34,12 +34,6 @@ struct wfx_hif_event {
 	struct hif_ind_event evt;
 };
 
-struct wfx_edca_params {
-	/* NOTE: index is a linux queue id. */
-	struct hif_req_edca_queue_params params[IEEE80211_NUM_ACS];
-	bool uapsd_enable[IEEE80211_NUM_ACS];
-};
-
 struct wfx_grp_addr_table {
 	bool enable;
 	int num_addresses;
@@ -92,12 +86,11 @@ void wfx_unassign_vif_chanctx(struct ieee80211_hw *hw,
 
 // WSM Callbacks
 void wfx_suspend_resume(struct wfx_vif *wvif,
-			struct hif_ind_suspend_resume_tx *arg);
+			const struct hif_ind_suspend_resume_tx *arg);
 
 // Other Helpers
 void wfx_cqm_bssloss_sm(struct wfx_vif *wvif, int init, int good, int bad);
 void wfx_update_filtering(struct wfx_vif *wvif);
-int wfx_set_pm(struct wfx_vif *wvif, const struct hif_req_set_pm_mode *arg);
 int wfx_fwd_probe_req(struct wfx_vif *wvif, bool enable);
 
 #endif /* WFX_STA_H */

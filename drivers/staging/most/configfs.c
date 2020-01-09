@@ -10,7 +10,9 @@
 #include <linux/slab.h>
 #include <linux/init.h>
 #include <linux/configfs.h>
-#include <most/core.h>
+#include <most/most.h>
+
+#define MAX_STRING_SIZE 80
 
 struct mdev_link {
 	struct config_item item;
@@ -22,13 +24,13 @@ struct mdev_link {
 	u16 subbuffer_size;
 	u16 packets_per_xact;
 	u16 dbr_size;
-	char datatype[PAGE_SIZE];
-	char direction[PAGE_SIZE];
-	char name[PAGE_SIZE];
-	char device[PAGE_SIZE];
-	char channel[PAGE_SIZE];
-	char comp[PAGE_SIZE];
-	char comp_params[PAGE_SIZE];
+	char datatype[MAX_STRING_SIZE];
+	char direction[MAX_STRING_SIZE];
+	char name[MAX_STRING_SIZE];
+	char device[MAX_STRING_SIZE];
+	char channel[MAX_STRING_SIZE];
+	char comp[MAX_STRING_SIZE];
+	char comp_params[MAX_STRING_SIZE];
 };
 
 static struct list_head mdev_link_list;
@@ -197,7 +199,7 @@ static ssize_t mdev_link_device_store(struct config_item *item,
 {
 	struct mdev_link *mdev_link = to_mdev_link(item);
 
-	strcpy(mdev_link->device, page);
+	strlcpy(mdev_link->device, page, sizeof(mdev_link->device));
 	strim(mdev_link->device);
 	return count;
 }
@@ -212,7 +214,7 @@ static ssize_t mdev_link_channel_store(struct config_item *item,
 {
 	struct mdev_link *mdev_link = to_mdev_link(item);
 
-	strcpy(mdev_link->channel, page);
+	strlcpy(mdev_link->channel, page, sizeof(mdev_link->channel));
 	strim(mdev_link->channel);
 	return count;
 }
@@ -227,7 +229,8 @@ static ssize_t mdev_link_comp_store(struct config_item *item,
 {
 	struct mdev_link *mdev_link = to_mdev_link(item);
 
-	strcpy(mdev_link->comp, page);
+	strlcpy(mdev_link->comp, page, sizeof(mdev_link->comp));
+	strim(mdev_link->comp);
 	return count;
 }
 
@@ -242,7 +245,8 @@ static ssize_t mdev_link_comp_params_store(struct config_item *item,
 {
 	struct mdev_link *mdev_link = to_mdev_link(item);
 
-	strcpy(mdev_link->comp_params, page);
+	strlcpy(mdev_link->comp_params, page, sizeof(mdev_link->comp_params));
+	strim(mdev_link->comp_params);
 	return count;
 }
 
@@ -630,7 +634,7 @@ static struct most_sound most_sound_subsys = {
 	},
 };
 
-int most_register_configfs_subsys(struct core_component *c)
+int most_register_configfs_subsys(struct most_component *c)
 {
 	int ret;
 
@@ -674,7 +678,7 @@ void most_interface_register_notify(const char *mdev)
 		most_cfg_complete("sound");
 }
 
-void most_deregister_configfs_subsys(struct core_component *c)
+void most_deregister_configfs_subsys(struct most_component *c)
 {
 	if (!strcmp(c->name, "cdev"))
 		configfs_unregister_subsystem(&most_cdev.subsys);

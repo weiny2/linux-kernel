@@ -395,11 +395,6 @@ struct hif_mib_non_erp_protection {
 	u8   reserved2[3];
 } __packed;
 
-enum hif_tx_mode {
-	HIF_TX_MODE_MIXED                        = 0x0,
-	HIF_TX_MODE_GREENFIELD                   = 0x1
-};
-
 enum hif_tmplt {
 	HIF_TMPLT_PRBREQ                           = 0x0,
 	HIF_TMPLT_BCN                              = 0x1,
@@ -471,9 +466,11 @@ struct hif_mib_set_association_mode {
 	u8    mode:1;
 	u8    rateset:1;
 	u8    spacing:1;
-	u8    reserved:4;
-	u8    preamble_type;
-	u8    mixed_or_greenfield_type;
+	u8    reserved1:4;
+	u8    short_preamble:1;
+	u8    reserved2:7;
+	u8    greenfield:1;
+	u8    reserved3:7;
 	u8    mpdu_start_spacing;
 	u32   basic_rate_set;
 } __packed;

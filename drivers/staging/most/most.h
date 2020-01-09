@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0
+/* SPDX-License-Identifier: GPL-2.0 */
 /*
  * most.h - API for component and adapter drivers
  *
@@ -47,7 +47,7 @@ enum most_channel_data_type {
 	MOST_CH_SYNC = 1 << 5,
 };
 
-enum mbo_status_flags {
+enum most_status_flags {
 	/* MBO was processed successfully (data was send or received )*/
 	MBO_SUCCESS = 0,
 	/* The MBO contains wrong or missing information.  */
@@ -184,7 +184,7 @@ struct mbo {
 	dma_addr_t bus_address;
 	u16 buffer_length;
 	u16 processed_length;
-	enum mbo_status_flags status;
+	enum most_status_flags status;
 	void (*complete)(struct mbo *mbo);
 };
 
@@ -254,7 +254,7 @@ struct most_interface {
 #define to_most_interface(d) container_of(d, struct most_interface, dev)
 
 /**
- * struct core_component - identifies a loadable component for the mostcore
+ * struct most_component - identifies a loadable component for the mostcore
  * @list: list_head
  * @name: component name
  * @probe_channel: function for core to notify driver about channel connection
@@ -262,7 +262,7 @@ struct most_interface {
  * @rx_completion: completion handler for received packets
  * @tx_completion: completion handler for transmitted packets
  */
-struct core_component {
+struct most_component {
 	struct list_head list;
 	const char *name;
 	struct module *mod;
@@ -310,20 +310,20 @@ void most_stop_enqueue(struct most_interface *iface, int channel_idx);
  * in wait fifo.
  */
 void most_resume_enqueue(struct most_interface *iface, int channel_idx);
-int most_register_component(struct core_component *comp);
-int most_deregister_component(struct core_component *comp);
+int most_register_component(struct most_component *comp);
+int most_deregister_component(struct most_component *comp);
 struct mbo *most_get_mbo(struct most_interface *iface, int channel_idx,
-			 struct core_component *comp);
+			 struct most_component *comp);
 void most_put_mbo(struct mbo *mbo);
 int channel_has_mbo(struct most_interface *iface, int channel_idx,
-		    struct core_component *comp);
+		    struct most_component *comp);
 int most_start_channel(struct most_interface *iface, int channel_idx,
-		       struct core_component *comp);
+		       struct most_component *comp);
 int most_stop_channel(struct most_interface *iface, int channel_idx,
-		      struct core_component *comp);
+		      struct most_component *comp);
 int __init configfs_init(void);
-int most_register_configfs_subsys(struct core_component *comp);
-void most_deregister_configfs_subsys(struct core_component *comp);
+int most_register_configfs_subsys(struct most_component *comp);
+void most_deregister_configfs_subsys(struct most_component *comp);
 int most_add_link(char *mdev, char *mdev_ch, char *comp_name, char *link_name,
 		  char *comp_param);
 int most_remove_link(char *mdev, char *mdev_ch, char *comp_name);
