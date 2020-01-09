@@ -9975,7 +9975,7 @@ static void bnxt_reset_task(struct bnxt *bp, bool silent)
 	}
 }
 
-static void bnxt_tx_timeout(struct net_device *dev)
+static void bnxt_tx_timeout(struct net_device *dev, unsigned int txqueue)
 {
 	struct bnxt *bp = netdev_priv(dev);
 
@@ -10822,6 +10822,7 @@ static void bnxt_fw_reset_task(struct work_struct *work)
 		smp_mb__before_atomic();
 		clear_bit(BNXT_STATE_IN_FW_RESET, &bp->state);
 		bnxt_ulp_start(bp, rc);
+		bnxt_dl_health_recovery_done(bp);
 		bnxt_dl_health_status_update(bp, true);
 		rtnl_unlock();
 		break;

@@ -26,6 +26,9 @@
 #include <net/devlink.h>
 #include <net/xdp_sock.h>
 #include <net/flow_offload.h>
+#include <linux/ethtool_netlink.h>
+
+#include "common.h"
 
 /*
  * Some useful ethtool_ops methods that're device independent.
@@ -53,88 +56,6 @@ EXPORT_SYMBOL(ethtool_op_get_ts_info);
 /* Handlers for each ethtool command */
 
 #define ETHTOOL_DEV_FEATURE_WORDS	((NETDEV_FEATURE_COUNT + 31) / 32)
-
-static const char netdev_features_strings[NETDEV_FEATURE_COUNT][ETH_GSTRING_LEN] = {
-	[NETIF_F_SG_BIT] =               "tx-scatter-gather",
-	[NETIF_F_IP_CSUM_BIT] =          "tx-checksum-ipv4",
-	[NETIF_F_HW_CSUM_BIT] =          "tx-checksum-ip-generic",
-	[NETIF_F_IPV6_CSUM_BIT] =        "tx-checksum-ipv6",
-	[NETIF_F_HIGHDMA_BIT] =          "highdma",
-	[NETIF_F_FRAGLIST_BIT] =         "tx-scatter-gather-fraglist",
-	[NETIF_F_HW_VLAN_CTAG_TX_BIT] =  "tx-vlan-hw-insert",
-
-	[NETIF_F_HW_VLAN_CTAG_RX_BIT] =  "rx-vlan-hw-parse",
-	[NETIF_F_HW_VLAN_CTAG_FILTER_BIT] = "rx-vlan-filter",
-	[NETIF_F_HW_VLAN_STAG_TX_BIT] =  "tx-vlan-stag-hw-insert",
-	[NETIF_F_HW_VLAN_STAG_RX_BIT] =  "rx-vlan-stag-hw-parse",
-	[NETIF_F_HW_VLAN_STAG_FILTER_BIT] = "rx-vlan-stag-filter",
-	[NETIF_F_VLAN_CHALLENGED_BIT] =  "vlan-challenged",
-	[NETIF_F_GSO_BIT] =              "tx-generic-segmentation",
-	[NETIF_F_LLTX_BIT] =             "tx-lockless",
-	[NETIF_F_NETNS_LOCAL_BIT] =      "netns-local",
-	[NETIF_F_GRO_BIT] =              "rx-gro",
-	[NETIF_F_GRO_HW_BIT] =           "rx-gro-hw",
-	[NETIF_F_LRO_BIT] =              "rx-lro",
-
-	[NETIF_F_TSO_BIT] =              "tx-tcp-segmentation",
-	[NETIF_F_GSO_ROBUST_BIT] =       "tx-gso-robust",
-	[NETIF_F_TSO_ECN_BIT] =          "tx-tcp-ecn-segmentation",
-	[NETIF_F_TSO_MANGLEID_BIT] =	 "tx-tcp-mangleid-segmentation",
-	[NETIF_F_TSO6_BIT] =             "tx-tcp6-segmentation",
-	[NETIF_F_FSO_BIT] =              "tx-fcoe-segmentation",
-	[NETIF_F_GSO_GRE_BIT] =		 "tx-gre-segmentation",
-	[NETIF_F_GSO_GRE_CSUM_BIT] =	 "tx-gre-csum-segmentation",
-	[NETIF_F_GSO_IPXIP4_BIT] =	 "tx-ipxip4-segmentation",
-	[NETIF_F_GSO_IPXIP6_BIT] =	 "tx-ipxip6-segmentation",
-	[NETIF_F_GSO_UDP_TUNNEL_BIT] =	 "tx-udp_tnl-segmentation",
-	[NETIF_F_GSO_UDP_TUNNEL_CSUM_BIT] = "tx-udp_tnl-csum-segmentation",
-	[NETIF_F_GSO_PARTIAL_BIT] =	 "tx-gso-partial",
-	[NETIF_F_GSO_SCTP_BIT] =	 "tx-sctp-segmentation",
-	[NETIF_F_GSO_ESP_BIT] =		 "tx-esp-segmentation",
-	[NETIF_F_GSO_UDP_L4_BIT] =	 "tx-udp-segmentation",
-
-	[NETIF_F_FCOE_CRC_BIT] =         "tx-checksum-fcoe-crc",
-	[NETIF_F_SCTP_CRC_BIT] =        "tx-checksum-sctp",
-	[NETIF_F_FCOE_MTU_BIT] =         "fcoe-mtu",
-	[NETIF_F_NTUPLE_BIT] =           "rx-ntuple-filter",
-	[NETIF_F_RXHASH_BIT] =           "rx-hashing",
-	[NETIF_F_RXCSUM_BIT] =           "rx-checksum",
-	[NETIF_F_NOCACHE_COPY_BIT] =     "tx-nocache-copy",
-	[NETIF_F_LOOPBACK_BIT] =         "loopback",
-	[NETIF_F_RXFCS_BIT] =            "rx-fcs",
-	[NETIF_F_RXALL_BIT] =            "rx-all",
-	[NETIF_F_HW_L2FW_DOFFLOAD_BIT] = "l2-fwd-offload",
-	[NETIF_F_HW_TC_BIT] =		 "hw-tc-offload",
-	[NETIF_F_HW_ESP_BIT] =		 "esp-hw-offload",
-	[NETIF_F_HW_ESP_TX_CSUM_BIT] =	 "esp-tx-csum-hw-offload",
-	[NETIF_F_RX_UDP_TUNNEL_PORT_BIT] =	 "rx-udp_tunnel-port-offload",
-	[NETIF_F_HW_TLS_RECORD_BIT] =	"tls-hw-record",
-	[NETIF_F_HW_TLS_TX_BIT] =	 "tls-hw-tx-offload",
-	[NETIF_F_HW_TLS_RX_BIT] =	 "tls-hw-rx-offload",
-};
-
-static const char
-rss_hash_func_strings[ETH_RSS_HASH_FUNCS_COUNT][ETH_GSTRING_LEN] = {
-	[ETH_RSS_HASH_TOP_BIT] =	"toeplitz",
-	[ETH_RSS_HASH_XOR_BIT] =	"xor",
-	[ETH_RSS_HASH_CRC32_BIT] =	"crc32",
-};
-
-static const char
-tunable_strings[__ETHTOOL_TUNABLE_COUNT][ETH_GSTRING_LEN] = {
-	[ETHTOOL_ID_UNSPEC]     = "Unspec",
-	[ETHTOOL_RX_COPYBREAK]	= "rx-copybreak",
-	[ETHTOOL_TX_COPYBREAK]	= "tx-copybreak",
-	[ETHTOOL_PFC_PREVENTION_TOUT] = "pfc-prevention-tout",
-};
-
-static const char
-phy_tunable_strings[__ETHTOOL_PHY_TUNABLE_COUNT][ETH_GSTRING_LEN] = {
-	[ETHTOOL_ID_UNSPEC]     = "Unspec",
-	[ETHTOOL_PHY_DOWNSHIFT]	= "phy-downshift",
-	[ETHTOOL_PHY_FAST_LINK_DOWN] = "phy-fast-link-down",
-	[ETHTOOL_PHY_EDPD]	= "phy-energy-detect-power-down",
-};
 
 static int ethtool_get_features(struct net_device *dev, void __user *useraddr)
 {
@@ -234,6 +155,9 @@ static int __ethtool_get_sset_count(struct net_device *dev, int sset)
 	    !ops->get_ethtool_phy_stats)
 		return phy_ethtool_get_sset_count(dev->phydev);
 
+	if (sset == ETH_SS_LINK_MODES)
+		return __ETHTOOL_LINK_MODE_MASK_NBITS;
+
 	if (ops->get_sset_count && ops->get_strings)
 		return ops->get_sset_count(dev, sset);
 	else
@@ -258,6 +182,9 @@ static void __ethtool_get_strings(struct net_device *dev,
 	else if (stringset == ETH_SS_PHY_STATS && dev->phydev &&
 		 !ops->get_ethtool_phy_stats)
 		phy_ethtool_get_strings(dev->phydev, data);
+	else if (stringset == ETH_SS_LINK_MODES)
+		memcpy(data, link_mode_names,
+		       __ETHTOOL_LINK_MODE_MASK_NBITS * ETH_GSTRING_LEN);
 	else
 		/* ops->get_strings is valid because checked earlier */
 		ops->get_strings(dev, stringset, data);
@@ -431,54 +358,6 @@ bool ethtool_convert_link_mode_to_legacy_u32(u32 *legacy_u32,
 	return retval;
 }
 EXPORT_SYMBOL(ethtool_convert_link_mode_to_legacy_u32);
-
-/* return false if legacy contained non-0 deprecated fields
- * maxtxpkt/maxrxpkt. rest of ksettings always updated
- */
-static bool
-convert_legacy_settings_to_link_ksettings(
-	struct ethtool_link_ksettings *link_ksettings,
-	const struct ethtool_cmd *legacy_settings)
-{
-	bool retval = true;
-
-	memset(link_ksettings, 0, sizeof(*link_ksettings));
-
-	/* This is used to tell users that driver is still using these
-	 * deprecated legacy fields, and they should not use
-	 * %ETHTOOL_GLINKSETTINGS/%ETHTOOL_SLINKSETTINGS
-	 */
-	if (legacy_settings->maxtxpkt ||
-	    legacy_settings->maxrxpkt)
-		retval = false;
-
-	ethtool_convert_legacy_u32_to_link_mode(
-		link_ksettings->link_modes.supported,
-		legacy_settings->supported);
-	ethtool_convert_legacy_u32_to_link_mode(
-		link_ksettings->link_modes.advertising,
-		legacy_settings->advertising);
-	ethtool_convert_legacy_u32_to_link_mode(
-		link_ksettings->link_modes.lp_advertising,
-		legacy_settings->lp_advertising);
-	link_ksettings->base.speed
-		= ethtool_cmd_speed(legacy_settings);
-	link_ksettings->base.duplex
-		= legacy_settings->duplex;
-	link_ksettings->base.port
-		= legacy_settings->port;
-	link_ksettings->base.phy_address
-		= legacy_settings->phy_address;
-	link_ksettings->base.autoneg
-		= legacy_settings->autoneg;
-	link_ksettings->base.mdio_support
-		= legacy_settings->mdio_support;
-	link_ksettings->base.eth_tp_mdix
-		= legacy_settings->eth_tp_mdix;
-	link_ksettings->base.eth_tp_mdix_ctrl
-		= legacy_settings->eth_tp_mdix_ctrl;
-	return retval;
-}
 
 /* return false if ksettings link modes had higher bits
  * set. legacy_settings always updated (best effort)
@@ -693,7 +572,12 @@ static int ethtool_set_link_ksettings(struct net_device *dev,
 	    != link_ksettings.base.link_mode_masks_nwords)
 		return -EINVAL;
 
-	return dev->ethtool_ops->set_link_ksettings(dev, &link_ksettings);
+	err = dev->ethtool_ops->set_link_ksettings(dev, &link_ksettings);
+	if (err >= 0) {
+		ethtool_notify(dev, ETHTOOL_MSG_LINKINFO_NTF, NULL);
+		ethtool_notify(dev, ETHTOOL_MSG_LINKMODES_NTF, NULL);
+	}
+	return err;
 }
 
 /* Query device for its ethtool_cmd settings.
@@ -742,6 +626,7 @@ static int ethtool_set_settings(struct net_device *dev, void __user *useraddr)
 {
 	struct ethtool_link_ksettings link_ksettings;
 	struct ethtool_cmd cmd;
+	int ret;
 
 	ASSERT_RTNL();
 
@@ -754,7 +639,12 @@ static int ethtool_set_settings(struct net_device *dev, void __user *useraddr)
 		return -EINVAL;
 	link_ksettings.base.link_mode_masks_nwords =
 		__ETHTOOL_LINK_MODE_MASK_NU32;
-	return dev->ethtool_ops->set_link_ksettings(dev, &link_ksettings);
+	ret = dev->ethtool_ops->set_link_ksettings(dev, &link_ksettings);
+	if (ret >= 0) {
+		ethtool_notify(dev, ETHTOOL_MSG_LINKINFO_NTF, NULL);
+		ethtool_notify(dev, ETHTOOL_MSG_LINKMODES_NTF, NULL);
+	}
+	return ret;
 }
 
 static noinline_for_stack int ethtool_get_drvinfo(struct net_device *dev,
@@ -1475,12 +1365,12 @@ static int ethtool_nway_reset(struct net_device *dev)
 static int ethtool_get_link(struct net_device *dev, char __user *useraddr)
 {
 	struct ethtool_value edata = { .cmd = ETHTOOL_GLINK };
+	int link = __ethtool_get_link(dev);
 
-	if (!dev->ethtool_ops->get_link)
-		return -EOPNOTSUPP;
+	if (link < 0)
+		return link;
 
-	edata.data = netif_running(dev) && dev->ethtool_ops->get_link(dev);
-
+	edata.data = link;
 	if (copy_to_user(useraddr, &edata, sizeof(edata)))
 		return -EFAULT;
 	return 0;
@@ -2170,8 +2060,8 @@ static int ethtool_get_ts_info(struct net_device *dev, void __user *useraddr)
 	memset(&info, 0, sizeof(info));
 	info.cmd = ETHTOOL_GET_TS_INFO;
 
-	if (phydev && phydev->drv && phydev->drv->ts_info) {
-		err = phydev->drv->ts_info(phydev, &info);
+	if (phy_has_tsinfo(phydev)) {
+		err = phy_ts_info(phydev, &info);
 	} else if (ops->get_ts_info) {
 		err = ops->get_ts_info(dev, &info);
 	} else {
