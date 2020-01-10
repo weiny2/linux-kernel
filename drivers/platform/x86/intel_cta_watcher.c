@@ -69,32 +69,14 @@
 #define TRCR_TOKEN_MAX_SIZE	255
 
 /* Tracer Config Offsets */
-#define TRCR_CONTROL_OFFSET	0x0
-#define TRCR_PERIOD_OFFSET	0x4
-#define TRCR_VECTOR_OFFSET	0x8
-/*
- * Tracer enable vector size in bytes
- * s - size of the tracer config space given
- *     in the discovery header
- *
- * Subtract 8 bytes for the size of control and period
- */
-#define TRCR_NUM_VECTORS(s)	((s) - 8)
+#define TRCR_CONTROL_OFFSET	0x4
+#define TRCR_VECTOR_OFFSET	0x10
 
 /* Sampler Config Offsets */
 #define SMPLR_BUFFER_SIZE_OFFSET	0x4
-#define SMPLR_CONTROL_OFFSET		0x8
-#define SMPLR_PERIOD_OFFSET		0xC
+#define SMPLR_CONTROL_OFFSET		0xC
 #define SMPLR_VECTOR_OFFSET		0x10
-/*
- * Sampler select vector size in bytes
- * s - size of the sampler config space given
- *     in the discovery header
- *
- * Subtract 16 bytes for the size of pointer(64),
- * control(32) and period(32)
- */
-#define SMPLR_NUM_VECTORS(s)		((s) - 16)
+
 /*
  * Sampler data size in bytes.
  * s - the size of the sampler data buffer space
@@ -149,6 +131,8 @@ struct watcher_endpoint {
 	int			devid;
 	struct ida		*ida;
 	bool			mode_lock;
+	u8			ctrl_offset;
+	u8			vector_start;
 
 	/* Samplers only */
 	unsigned long		smplr_data_start;
@@ -168,56 +152,38 @@ struct cta_watcher_priv {
  */
 static u32 cta_watcher_get_ctrl_reg(struct watcher_endpoint *ep)
 {
-	u32 offset = ep->header.watcher_type == TYPE_TRACER ?
-			TRCR_CONTROL_OFFSET : SMPLR_CONTROL_OFFSET;
-
-	return readl(ep->cfg_base + offset);
-}
-
-static void cta_watcher_read_period(struct watcher_endpoint *ep)
-{
-	u32 offset = ep->header.watcher_type == TYPE_TRACER ?
-			TRCR_PERIOD_OFFSET : SMPLR_PERIOD_OFFSET;
-
-	ep->config.period = readl(ep->cfg_base + offset);
+	return readl(ep->cfg_base + ep->ctrl_offset);
 }
 
 static void cta_watcher_write_ctrl_to_dev(struct watcher_endpoint *ep)
 {
-	u32 offset = ep->header.watcher_type == TYPE_TRACER ?
-			TRCR_CONTROL_OFFSET : SMPLR_CONTROL_OFFSET;
+	writel(ep->config.control, ep->cfg_base + ep->ctrl_offset);
+}
 
-	writel(ep->config.control, ep->cfg_base + offset);
+static void cta_watcher_read_period(struct watcher_endpoint *ep)
+{
+	/* The period exists on the DWORD opposite the control register */
+	ep->config.period = readl(ep->cfg_base + (ep->ctrl_offset ^ 0x4));
 }
 
 static void cta_watcher_write_period_to_dev(struct watcher_endpoint *ep)
 {
-	u32 offset = ep->header.watcher_type == TYPE_TRACER ?
-			TRCR_PERIOD_OFFSET : SMPLR_PERIOD_OFFSET;
-
-	writel(ep->config.period, ep->cfg_base + offset);
+	/* The period exists on the DWORD opposite the control register */
+	writel(ep->config.period, ep->cfg_base + (ep->ctrl_offset ^ 0x4));
 }
 
 void
 cta_watcher_read_vector(struct watcher_endpoint *ep)
 {
-	u32 offset = ep->header.watcher_type == TYPE_TRACER ?
-			TRCR_VECTOR_OFFSET : SMPLR_VECTOR_OFFSET;
-
-	memcpy_fromio(ep->config.vector, ep->cfg_base + offset,
-		      DIV_ROUND_UP(ep->config.vector_size,
-				   BITS_PER_BYTE));
+	memcpy_fromio(ep->config.vector, ep->cfg_base + ep->vector_start,
+		      DIV_ROUND_UP(ep->config.vector_size, BITS_PER_BYTE));
 }
 
 void
 cta_watcher_write_vector_to_dev(struct watcher_endpoint *ep)
 {
-	u32 offset = ep->header.watcher_type == TYPE_TRACER ?
-			TRCR_VECTOR_OFFSET : SMPLR_VECTOR_OFFSET;
-
-	memcpy_toio(ep->cfg_base + offset, ep->config.vector,
-		    DIV_ROUND_UP(ep->config.vector_size,
-				 BITS_PER_BYTE));
+	memcpy_toio(ep->cfg_base + ep->vector_start, ep->config.vector,
+		    DIV_ROUND_UP(ep->config.vector_size, BITS_PER_BYTE));
 }
 
 /*
@@ -485,7 +451,6 @@ vector_store(struct device *dev, struct device_attribute *attr,
 	     const char *buf, size_t count)
 {
 	struct watcher_endpoint *ep;
-	u32 offset;
 	unsigned long *temp;
 	int err, hw = 0;
 
@@ -493,9 +458,6 @@ vector_store(struct device *dev, struct device_attribute *attr,
 
 	if (ep->mode_lock)
 		return -EPERM;
-
-	offset = ep->header.watcher_type == TYPE_TRACER ?
-		TRCR_VECTOR_OFFSET : SMPLR_VECTOR_OFFSET;
 
 	/*
 	 * Create a temp buffer to store the incoming selection for
@@ -771,12 +733,8 @@ cta_watcher_create_endpoint(struct cta_watcher_priv *priv)
 	 * Determine the appropriate size of the vector in bits so that
 	 * the bitmap can be allocated.
 	 */
-	if (ep->header.watcher_type == TYPE_TRACER)
-		ep->config.vector_size = TRCR_NUM_VECTORS(ep->header.size) *
-					 BITS_PER_BYTE;
-	else
-		ep->config.vector_size = SMPLR_NUM_VECTORS(ep->header.size) *
-					 BITS_PER_BYTE;
+	ep->config.vector_size = (ep->header.size - ep->vector_start) *
+				 BITS_PER_BYTE;
 
 	ep->config.vector = bitmap_zalloc(ep->config.vector_size, GFP_KERNEL);
 	if (!ep->config.vector)
@@ -851,6 +809,8 @@ static int cta_watcher_probe(struct platform_device *pdev)
 	if (!priv)
 		return -ENOMEM;
 
+	ep = &priv->ep;
+
 	platform_set_drvdata(pdev, priv);
 	priv->dev = &pdev->dev;
 	priv->parent  = to_pci_dev(priv->dev->parent);
@@ -885,16 +845,28 @@ static int cta_watcher_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
+	if (ep->header.watcher_type == TYPE_TRACER) {
+		ep->ida = &tracer_devid_ida;
+		ep->ctrl_offset = TRCR_CONTROL_OFFSET;
+		ep->vector_start = TRCR_VECTOR_OFFSET;
+	} else {
+		ep->ida = &sampler_devid_ida;
+		ep->ctrl_offset = SMPLR_CONTROL_OFFSET;
+		ep->vector_start = SMPLR_VECTOR_OFFSET;
+	}
+
+	/* Add quirks related to TGL part */
+	if (priv->parent->device == 0x9a0d) {
+		/* strip section that would have been stream UID */
+		if (ep->header.watcher_type == TYPE_TRACER)
+			ep->vector_start -= 8;
+		/* account for period and control being swapped */
+		ep->ctrl_offset -= 4;
+	}
+
 	err = cta_watcher_create_endpoint(priv);
 	if (err)
 		return err;
-
-	ep = &priv->ep;
-
-	if (ep->header.watcher_type == TYPE_SAMPLER)
-		ep->ida = &sampler_devid_ida;
-	else
-		ep->ida = &tracer_devid_ida;
 
 	ep->devid = ida_simple_get(ep->ida, 0, 0, GFP_KERNEL);
 	if (ep->devid < 0)
