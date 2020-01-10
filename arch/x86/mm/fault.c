@@ -876,15 +876,6 @@ show_signal_msg(struct pt_regs *regs, unsigned long error_code,
 	show_opcodes(regs, loglvl);
 }
 
-/*
- * The (legacy) vsyscall page is the long page in the kernel portion
- * of the address space that has user-accessible permissions.
- */
-static bool is_vsyscall_vaddr(unsigned long vaddr)
-{
-	return unlikely((vaddr & PAGE_MASK) == VSYSCALL_ADDR);
-}
-
 static void
 __bad_area_nosemaphore(struct pt_regs *regs, unsigned long error_code,
 		       unsigned long address, u32 pkey, int si_code)
@@ -1384,8 +1375,9 @@ void do_user_addr_fault(struct pt_regs *regs,
 	 * PKRU never rejects instruction fetches, so we don't need
 	 * to consider the PF_PK bit.
 	 */
-	if (is_vsyscall_vaddr(address)) {
-		if (emulate_vsyscall(hw_error_code, regs, address))
+	if (is_vsyscall_vaddr(address) &&
+	    vsyscall_emulate_ok(hw_error_code, regs)) {
+		if (emulate_vsyscall(regs, address))
 			return;
 	}
 #endif
