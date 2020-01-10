@@ -851,7 +851,11 @@ static void *__text_poke(void *addr, const void *opcode, size_t len)
 	prev = use_temporary_mm(poking_mm);
 
 	kasan_disable_current();
+
+	stac();
 	memcpy((u8 *)poking_addr + offset_in_page(addr), opcode, len);
+	clac();
+
 	kasan_enable_current();
 
 	/*
