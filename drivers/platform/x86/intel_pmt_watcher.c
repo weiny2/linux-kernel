@@ -31,6 +31,7 @@
 #define MODE_OFF		0
 #define MODE_PERIODIC		1
 #define MODE_ONESHOT		2
+#define MODE_SHARED		3
 
 /* Watcher access types */
 #define ACCESS_FUTURE		1
@@ -92,7 +93,8 @@
 static const char * const sample_mode[] = {
 	[MODE_OFF] = "off",
 	[MODE_PERIODIC] = "periodic",
-	[MODE_ONESHOT] = "oneshot"
+	[MODE_ONESHOT] = "oneshot",
+	[MODE_SHARED] = "shared"
 };
 
 static const char * const tracer_destination[] = {
@@ -150,33 +152,45 @@ struct pmt_watcher_priv {
 /*
  * I/O
  */
-static u32 pmt_watcher_get_ctrl_reg(struct watcher_endpoint *ep)
+static bool pmt_watcher_request_pending(struct watcher_endpoint *ep)
 {
-	return readl(ep->cfg_base + ep->ctrl_offset);
+	/*
+	 * Read request pending bit into temporary location so we can read the
+	 * pending bit without overwriting other settings. If a collection is
+	 * still in progress we can't start a new one.
+	 */
+	u32 control = readl(ep->cfg_base + ep->ctrl_offset);
+
+	return GET_REQ(control) == REQUEST_PENDING;
+}
+
+static bool pmt_watcher_in_use(struct watcher_endpoint *ep)
+{
+	/*
+	 * Read request pending bit into temporary location so we can read the
+	 * pending bit without overwriting other settings. If a collection is
+	 * still in progress we can't start a new one.
+	 */
+	u32 control = readl(ep->cfg_base + ep->ctrl_offset);
+
+	return GET_MODE(control) != MODE_OFF;
 }
 
 static void pmt_watcher_write_ctrl_to_dev(struct watcher_endpoint *ep)
 {
-	writel(ep->config.control, ep->cfg_base + ep->ctrl_offset);
-}
+	/*
+	 * Set the request pending bit and write the control register to
+	 * start the collection.
+	 */
+	u32 control = SET_REQ_BIT(ep->config.control);
 
-static void pmt_watcher_read_period(struct watcher_endpoint *ep)
-{
-	/* The period exists on the DWORD opposite the control register */
-	ep->config.period = readl(ep->cfg_base + (ep->ctrl_offset ^ 0x4));
+	writel(control, ep->cfg_base + ep->ctrl_offset);
 }
 
 static void pmt_watcher_write_period_to_dev(struct watcher_endpoint *ep)
 {
 	/* The period exists on the DWORD opposite the control register */
 	writel(ep->config.period, ep->cfg_base + (ep->ctrl_offset ^ 0x4));
-}
-
-void
-pmt_watcher_read_vector(struct watcher_endpoint *ep)
-{
-	memcpy_fromio(ep->config.vector, ep->cfg_base + ep->vector_start,
-		      DIV_ROUND_UP(ep->config.vector_size, BITS_PER_BYTE));
 }
 
 void
@@ -310,84 +324,59 @@ mode_show(struct device *dev, struct device_attribute *attr, char *buf)
 	return cnt;
 }
 
-static int
-pmt_watcher_start(struct watcher_endpoint *ep)
-{
-	u32 control;
-
-	/*
-	 * Read request pending bit into temporary location so we can read the
-	 * pending bit without overwriting other settings. If a collection is
-	 * still in progress we can't start a new one.
-	 */
-	control = pmt_watcher_get_ctrl_reg(ep);
-
-	if (!!GET_REQ(control) == REQUEST_PENDING)
-		return -EBUSY;
-
-	/* Write the period and vector registers to the device */
-	pmt_watcher_write_period_to_dev(ep);
-	pmt_watcher_write_vector_to_dev(ep);
-
-	/*
-	 * Set the request pending bit and write the control register to
-	 * start the collection.
-	 */
-	ep->config.control = SET_REQ_BIT(ep->config.control);
-	pmt_watcher_write_ctrl_to_dev(ep);
-
-	return 0;
-}
-
 static ssize_t
 mode_store(struct device *dev, struct device_attribute *attr,
 	   const char *buf, size_t count)
 {
 	struct watcher_endpoint *ep;
-	int ret;
+	int mode;
 
 	ep = dev_get_drvdata(dev);
 
-	ret = sysfs_match_string(sample_mode, buf);
-	if (ret < 0)
-		return ret;
+	mode = sysfs_match_string(sample_mode, buf);
+	if (mode < 0)
+		return mode;
 
 	/*
 	 * Allowable transitions:
 	 * Current State     Requested State
 	 * -------------     ---------------
-	 * DISABLED          ANY MODE
+	 * DISABLED          PERIODIC or ONESHOT
 	 * PERIODIC          DISABLED
 	 * ONESHOT           DISABLED
+	 * SHARED            DISABLED
 	 */
 	if ((GET_MODE(ep->config.control) != MODE_OFF) &&
-	    (GET_MODE((u32)ret) != MODE_OFF))
+	    (mode != MODE_OFF))
 		return -EPERM;
+
+	/* Do not allow user to put device in shared state */
+	if (mode == MODE_SHARED)
+		return -EPERM;
+
+	/* We cannot change state if there is a request already pending */
+	if (pmt_watcher_request_pending(ep))
+		return -EBUSY;
 
 	/*
 	 * Transition request is valid. Set mode, mode_lock
 	 * and execute request.
 	 */
 	ep->config.control &= ~MODE_MASK;
-	ep->config.control |= (u32)ret;
+	ep->config.control |= mode;
 
-	if (GET_MODE((u32)ret) == MODE_OFF) {
+	ep->mode_lock = false;
 
-		/* Disable - write control register only */
-		pmt_watcher_write_ctrl_to_dev(ep);
-		ep->mode_lock = false;
-
-	} else {
-
+	if (mode != MODE_OFF) {
 		ep->mode_lock = true;
 
-		/* Collect - write all registers now */
-		ret = pmt_watcher_start(ep);
-		if (ret) {
-			ep->mode_lock = false;
-			return ret;
-		}
+		/* Write the period and vector registers to the device */
+		pmt_watcher_write_period_to_dev(ep);
+		pmt_watcher_write_vector_to_dev(ep);
 	}
+
+	/* Submit requested changes to device */
+	pmt_watcher_write_ctrl_to_dev(ep);
 
 	return strnlen(buf, count);
 }
@@ -787,9 +776,13 @@ pmt_watcher_create_endpoint(struct pmt_watcher_priv *priv)
 	if (IS_ERR(ep->cfg_base))
 		return PTR_ERR(ep->cfg_base);
 
-	/* Get control and period registers */
-	ep->config.control = pmt_watcher_get_ctrl_reg(ep);
-	pmt_watcher_read_period(ep);
+	/*
+	 * If there is already some request that is stuck in the hardware
+	 * then we will need to wait for it to be cleared before we can
+	 * bring up the device.
+	 */
+	if (pmt_watcher_request_pending(ep))
+		return -EBUSY;
 
 	/*
 	 * Determine the appropriate size of the vector in bits so that
@@ -804,8 +797,6 @@ pmt_watcher_create_endpoint(struct pmt_watcher_priv *priv)
 	ep->config.vector = bitmap_zalloc(ep->config.vector_size, GFP_KERNEL);
 	if (!ep->config.vector)
 		return -ENOMEM;
-
-	pmt_watcher_read_vector(ep);
 
 	/*
 	 * For sampler only, get the physical address and size of the
@@ -834,12 +825,15 @@ pmt_watcher_create_endpoint(struct pmt_watcher_priv *priv)
 	}
 
 	/*
-	 * Set mode lock if mode is not "Disabled" to prevent configuration
-	 * from changing if sampling or tracing is in progress.
+	 * Set mode to "Disabled" to clean up any state that may still be
+	 * floating around in the registers. If it looks like an out-of-band
+	 * entity might be using the part set the mode to shared to indicate
+	 * that we have not taken full control of the device yet.
 	 */
-	ep->config.control = pmt_watcher_get_ctrl_reg(ep);
-	if (GET_MODE(ep->config.control) != MODE_OFF)
-		ep->mode_lock = true;
+	if (!pmt_watcher_in_use(ep))
+		pmt_watcher_write_ctrl_to_dev(ep);
+	else
+		ep->config.control = MODE_SHARED;
 
 	return 0;
 }
