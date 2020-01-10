@@ -422,7 +422,7 @@ static void __init setup_cr_pinning(void)
 {
 	unsigned long mask;
 
-	mask = (X86_CR4_SMEP | X86_CR4_SMAP | X86_CR4_UMIP);
+	mask = (X86_CR4_SMEP | X86_CR4_SMAP | X86_CR4_UMIP | X86_CR4_LASS);
 	cr4_pinned_bits = this_cpu_read(cpu_tlbstate.cr4) & mask;
 	static_key_enable(&cr_pinning.key);
 }
