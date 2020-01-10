@@ -205,6 +205,23 @@ extern const char *const func_tokens[];
 
 struct modsig;
 
+#ifdef CONFIG_IMA_MEASURE_ASYMMETRIC_KEYS
+/*
+ * To track keys that need to be measured.
+ */
+struct ima_key_entry {
+	struct list_head list;
+	void *payload;
+	size_t payload_len;
+	char *keyring_name;
+};
+void ima_process_queued_keys(void);
+void ima_init_key_queue(void);
+#else
+static inline void ima_process_queued_keys(void) {}
+static inline void ima_init_key_queue(void) {}
+#endif /* CONFIG_IMA_MEASURE_ASYMMETRIC_KEYS */
+
 /* LIM API function definitions */
 int ima_get_action(struct inode *inode, const struct cred *cred, u32 secid,
 		   int mask, enum ima_hooks func, int *pcr,
