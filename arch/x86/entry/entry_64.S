@@ -835,6 +835,10 @@ apicinterrupt3 POSTED_INTR_WAKEUP_VECTOR	kvm_posted_intr_wakeup_ipi	smp_kvm_post
 apicinterrupt3 POSTED_INTR_NESTED_VECTOR	kvm_posted_intr_nested_ipi	smp_kvm_posted_intr_nested_ipi
 #endif
 
+#ifdef CONFIG_X86_INTEL_USER_INTERRUPT
+apicinterrupt3 UINTR_NOTIFICATION_VECTOR	uintr_notification_interrupt	smp_uintr_notification_interrupt
+#endif
+
 #ifdef CONFIG_X86_MCE_THRESHOLD
 apicinterrupt THRESHOLD_APIC_VECTOR		threshold_interrupt		smp_threshold_interrupt
 #endif

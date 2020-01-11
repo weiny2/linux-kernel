@@ -359,6 +359,8 @@
 435	common	clone3			__x64_sys_clone3/ptregs
 437	common	openat2			__x64_sys_openat2
 438	common	pidfd_getfd		__x64_sys_pidfd_getfd
+439	common	uintr_receive		__x64_sys_uintr_receive
+440	common	uipi_send		__x64_sys_uipi_send
 
 #
 # x32-specific system call numbers start at 512 to avoid cache impact

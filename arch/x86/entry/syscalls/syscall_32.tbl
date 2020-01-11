@@ -442,3 +442,5 @@
 435	i386	clone3			sys_clone3			__ia32_sys_clone3
 437	i386	openat2			sys_openat2			__ia32_sys_openat2
 438	i386	pidfd_getfd		sys_pidfd_getfd			__ia32_sys_pidfd_getfd
+439	i386	uintr_receive		sys_uintr_receive		__ia32_sys_uintr_receive
+440	i386	uipi_send		sys_uipi_send			__ia32_sys_uipi_send

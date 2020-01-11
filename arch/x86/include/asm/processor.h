@@ -9,6 +9,8 @@ struct task_struct;
 struct mm_struct;
 struct io_bitmap;
 struct vm86;
+/* Can we do without this? */
+struct uintr;
 
 #include <asm/math_emu.h>
 #include <asm/segment.h>
@@ -34,6 +36,7 @@ struct vm86;
 #include <linux/err.h>
 #include <linux/irqflags.h>
 #include <linux/mem_encrypt.h>
+#include <linux/uintr.h>
 
 /*
  * We handle most unaligned accesses in hardware.  On the other hand
@@ -542,6 +545,12 @@ struct thread_struct {
 
 	unsigned int		sig_on_uaccess_err:1;
 	unsigned int		uaccess_err:1;	/* uaccess failed */
+
+#ifdef CONFIG_X86_INTEL_USER_INTERRUPT
+	/* User Interrupt state*/
+	struct uintr_receiver	*ui_recv;
+	struct uintr_sender	*ui_send;
+#endif
 
 	/* Floating point and extended processor state */
 	struct fpu		fpu;
