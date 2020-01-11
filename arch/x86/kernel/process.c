@@ -26,6 +26,7 @@
 #include <linux/elf-randomize.h>
 #include <trace/events/power.h>
 #include <linux/hw_breakpoint.h>
+#include <linux/uintr.h>
 #include <asm/cpu.h>
 #include <asm/apic.h>
 #include <linux/uaccess.h>
@@ -92,6 +93,12 @@ int arch_dup_task_struct(struct task_struct *dst, struct task_struct *src)
 	dst->thread.vm86 = NULL;
 #endif
 
+#ifdef CONFIG_X86_INTEL_USER_INTERRUPT
+	/* User Interrupt state is unique for each task */
+	dst->thread.ui_recv = NULL;
+	dst->thread.ui_send = NULL;
+#endif
+
 	return fpu__copy(dst, src);
 }
 
@@ -107,6 +114,8 @@ void exit_thread(struct task_struct *tsk)
 		io_bitmap_exit();
 
 	free_vm86(t);
+
+	uintr_free(tsk);
 
 	fpu__drop(fpu);
 }

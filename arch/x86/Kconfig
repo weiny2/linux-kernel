@@ -2903,6 +2903,13 @@ config X86_X32
 	  elf32_x86_64 support enabled to compile a kernel with this
 	  option set.
 
+config X86_INTEL_USER_INTERRUPT
+	bool "Support Intel User Interrupt"
+	depends on X86_LOCAL_APIC && X86_64
+	select ARCH_HAS_UINTR
+	help
+	  This enables user interrupt support on Intel CPUs with feature.
+
 config COMPAT_32
 	def_bool y
 	depends on IA32_EMULATION || X86_32

@@ -136,6 +136,9 @@ static const __initconst struct idt_data apic_idts[] = {
 	INTG(POSTED_INTR_WAKEUP_VECTOR, kvm_posted_intr_wakeup_ipi),
 	INTG(POSTED_INTR_NESTED_VECTOR, kvm_posted_intr_nested_ipi),
 # endif
+# ifdef CONFIG_X86_INTEL_USER_INTERRUPT
+	INTG(UINTR_NOTIFICATION_VECTOR, uintr_notification_interrupt),
+# endif
 # ifdef CONFIG_IRQ_WORK
 	INTG(IRQ_WORK_VECTOR,		irq_work_interrupt),
 # endif

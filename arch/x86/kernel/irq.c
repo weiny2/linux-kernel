@@ -340,6 +340,21 @@ __visible void smp_kvm_posted_intr_nested_ipi(struct pt_regs *regs)
 }
 #endif
 
+#ifdef CONFIG_X86_INTEL_USER_INTERRUPT
+/*
+ * Handler for UINTR_NOTIFICATION_VECTOR.
+ */
+__visible void smp_uintr_notification_interrupt(struct pt_regs *regs)
+{
+	struct pt_regs *old_regs = set_irq_regs(regs);
+
+	entering_ack_irq();
+	inc_irq_stat(uintr_kernel_notification_count);
+	exiting_irq();
+	set_irq_regs(old_regs);
+}
+#endif
+
 
 #ifdef CONFIG_HOTPLUG_CPU
 /* A cpu has been removed from cpu_online_mask.  Reset irq affinities. */

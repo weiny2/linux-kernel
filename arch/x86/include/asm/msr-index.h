@@ -341,6 +341,14 @@
 #define MSR_HWP_REQUEST 		0x00000774
 #define MSR_HWP_STATUS			0x00000777
 
+/* User Interrupt interface */
+#define MSR_IA32_UINT_RR		0x985
+#define MSR_IA32_UINT_HANDLER		0x986
+#define MSR_IA32_UINT_STACKADJUST	0x987
+#define MSR_IA32_UINT_MISC		0x988 // 39:32-UINV, 31:0-UITTSZ
+#define MSR_IA32_UINT_PD		0x989
+#define MSR_IA32_UINT_TT		0x98a
+
 /* CPUID.6.EAX */
 #define HWP_BASE_BIT			(1<<7)
 #define HWP_NOTIFICATIONS_BIT		(1<<8)

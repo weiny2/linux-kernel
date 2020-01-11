@@ -300,6 +300,25 @@ static __always_inline void setup_smep(struct cpuinfo_x86 *c)
 		cr4_set_bits(X86_CR4_SMEP);
 }
 
+static __init int setup_disable_uintr(char *arg)
+{
+	setup_clear_cpu_cap(X86_FEATURE_UINTR);
+	return 1;
+}
+__setup("nouintr", setup_disable_uintr);
+
+static __always_inline void setup_uintr(struct cpuinfo_x86 *c)
+{
+	if (cpu_feature_enabled(X86_FEATURE_UINTR) &&
+	    cpu_has(c, X86_FEATURE_UINTR)) {
+		cr4_set_bits(X86_CR4_UINT);
+		pr_info_once("uintr: feature supported and enabled\n");
+	} else {
+		cr4_clear_bits(X86_CR4_UINT);
+		pr_info_once("uintr: feature disabled or not supported\n");
+	}
+}
+
 static __init int setup_disable_smap(char *arg)
 {
 	setup_clear_cpu_cap(X86_FEATURE_SMAP);
@@ -1477,6 +1496,9 @@ static void identify_cpu(struct cpuinfo_x86 *c)
 	setup_smep(c);
 	setup_smap(c);
 	setup_umip(c);
+
+	/* Set up User mode Interrupts */
+	setup_uintr(c);
 
 	/*
 	 * The vendor-specific functions might have changed features.
