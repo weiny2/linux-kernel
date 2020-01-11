@@ -17692,6 +17692,13 @@ F:	Documentation/driver-api/uio-howto.rst
 F:	drivers/uio/
 F:	include/linux/uio_driver.h
 
+USERSPACE INTERRUPTS (UINTR)
+M:	Sohil Mehta <sohil.mehta@intel.com>
+M:	Jacob Pan <jacob.jun.pan@linux.intel.com>
+S:	Maintained
+F:	fs/uintr.c
+F:	include/linux/uintr.h
+
 UTIL-LINUX PACKAGE
 M:	Karel Zak <kzak@redhat.com>
 L:	util-linux@vger.kernel.org
