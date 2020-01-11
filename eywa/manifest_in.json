@@ -3150,7 +3150,7 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "c811a3c746c471b24855d0c9642f1948a1562fe9"
         },
         {
             "branch": "perf-aux-dev",
