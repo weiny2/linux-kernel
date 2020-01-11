@@ -86,8 +86,8 @@
 #define INTEL_FAM6_COMETLAKE		0xA5
 #define INTEL_FAM6_COMETLAKE_L		0xA6
 
-#define INTEL_FAM6_ROCKETLAKE_L		0xA7
-#define INTEL_FAM6_ROCKETLAKE		0xA8
+#define INTEL_FAM6_ROCKETLAKE		0xA7
+#define INTEL_FAM6_ROCKETLAKE_L 	0xA8
 
 /* "Small Core" Processors (Atom) */
 
