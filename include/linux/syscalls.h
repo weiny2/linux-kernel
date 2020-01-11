@@ -542,6 +542,10 @@ asmlinkage long sys_timerfd_settime32(int ufd, int flags,
 				   const struct old_itimerspec32 __user *utmr,
 				   struct old_itimerspec32 __user *otmr);
 
+/* fs/uintr.c */
+asmlinkage long sys_uintr_receive(void __user *handler, unsigned int flags);
+asmlinkage long sys_uipi_send(unsigned int uintrfd, unsigned int flags);
+
 /* fs/utimes.c */
 asmlinkage long sys_utimensat(int dfd, const char __user *filename,
 				struct __kernel_timespec __user *utimes,
