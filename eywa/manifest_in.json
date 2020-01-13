@@ -1938,45 +1938,6 @@
             "stuck_at_ref": ""
         },
         {
-            "branch": "svos-next-pull-5.4",
-            "branch_type": "expiring",
-            "config_options": [
-                {
-                    "name": "CONFIG_SVOS",
-                    "value": "n"
-                },
-                {
-                    "name": "CONFIG_SVFS_ACPI",
-                    "value": "n"
-                }
-            ],
-            "contributor": [
-                {
-                    "name": "Thomas Stonechypher",
-                    "email": "thomas.edwardx.stonecypher@intel.com"
-                }
-            ],
-            "description": "SVOS Kernel/Driver",
-            "enabled": false,
-            "ip_owner": [
-                {
-                    "name": "Thomas Edward Stonecypher",
-                    "email": "thomas.edwardx.stonecypher@intel.com"
-                }
-            ],
-            "jira": "",
-            "name": "svos",
-            "repourl": "ssh://git-amr-1.devtools.intel.com:29418/svos_kernel-next.git",
-            "sdl_contact": [
-                {
-                    "name": "Thomas Edward Stonecypher",
-                    "email": "thomas.edwardx.stonecypher@intel.com"
-                }
-            ],
-            "status": "intel confidential",
-            "stuck_at_ref": ""
-        },
-        {
             "branch": "to_eywa_thermal",
             "branch_type": "expiring",
             "config_options": [
@@ -2158,41 +2119,6 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": ""
-        },
-        {
-            "branch": "for-intel-next",
-            "branch_type": "expiring",
-            "config_options": [
-                {
-                    "name": "CONFIG_VPUSMM",
-                    "value": "y"
-                }
-            ],
-            "contributor": [
-                {
-                    "name": "Tingqian Li",
-                    "email": "tingqian.li@intel.com"
-                }
-            ],
-            "description": "Add kernel module into intel-Next for Keembay SOC project",
-            "enabled": false,
-            "ip_owner": [
-                {
-                    "name": "Yu Xu",
-                    "email": "yu.xu@intel.com"
-                }
-            ],
-            "jira": "",
-            "name": "vpusmm",
-            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/kmb_integration/vpusmm_driver.git",
-            "sdl_contact": [
-                {
-                    "name": "Peter Chen",
-                    "email": "peter.chen@intel.com"
-                }
-            ],
-            "status": "public",
             "stuck_at_ref": ""
         },
         {
