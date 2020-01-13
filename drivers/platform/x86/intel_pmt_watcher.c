@@ -24,8 +24,10 @@
 #define SMPLR_DEV_PREFIX	"smplr"
 #define TRCR_DEV_PREFIX		"trcr"
 
-#define TYPE_TRACER		0
-#define TYPE_SAMPLER		1
+#define TYPE_TRACER2		0
+#define TYPE_SAMPLER2		1
+#define TYPE_TRACER1		2
+#define TYPE_SAMPLER1		3
 
 /* Watcher sampler mods */
 #define MODE_OFF		0
@@ -71,6 +73,7 @@
 
 /* Tracer Config Offsets */
 #define TRCR_CONTROL_OFFSET	0x4
+#define TRCR_STREAM_UID_OFFSET	0x8
 #define TRCR_VECTOR_OFFSET	0x10
 
 /* Sampler Config Offsets */
@@ -119,6 +122,7 @@ struct watcher_header {
 struct watcher_config {
 	u32		control;
 	u32		period;
+	u32		stream_uid;
 	unsigned long	*vector;
 	unsigned int	vector_size;
 	unsigned int	select_limit;
@@ -133,8 +137,9 @@ struct watcher_endpoint {
 	int			devid;
 	struct ida		*ida;
 	bool			mode_lock;
-	u8			ctrl_offset;
-	u8			vector_start;
+	s8			ctrl_offset;
+	s8			stream_uid_offset;
+	s8			vector_start;
 
 	/* Samplers only */
 	unsigned long		smplr_data_start;
@@ -148,6 +153,30 @@ struct pmt_watcher_priv {
 	struct watcher_endpoint		ep;
 	void __iomem			*disc_table;
 };
+
+static inline bool pmt_watcher_is_sampler(struct watcher_endpoint *ep)
+{
+	return ep->header.watcher_type == TYPE_SAMPLER1 ||
+	       ep->header.watcher_type == TYPE_SAMPLER2;
+}
+
+static inline bool pmt_watcher_is_tracer(struct watcher_endpoint *ep)
+{
+	return ep->header.watcher_type == TYPE_TRACER1 ||
+	       ep->header.watcher_type == TYPE_TRACER2;
+}
+
+static inline bool pmt_watcher_select_limited(struct watcher_endpoint *ep)
+{
+	return pmt_watcher_is_sampler(ep) ||
+	       ep->header.watcher_type == TYPE_TRACER2;
+}
+
+static inline bool pmt_watcher_is_type2(struct watcher_endpoint *ep)
+{
+	return ep->header.watcher_type == TYPE_SAMPLER2 ||
+	       ep->header.watcher_type == TYPE_TRACER2;
+}
 
 /*
  * I/O
@@ -193,13 +222,55 @@ static void pmt_watcher_write_period_to_dev(struct watcher_endpoint *ep)
 	writel(ep->config.period, ep->cfg_base + (ep->ctrl_offset ^ 0x4));
 }
 
+static void pmt_watcher_write_stream_uid_to_dev(struct watcher_endpoint *ep)
+{
+	/* nothing to write if stream_uid_offset is negative */
+	if (ep->stream_uid_offset < 0)
+		return;
+
+	/*
+	 * The stream UUID occupies a 64b value, however the second DWORD
+	 * is reserved 0 so just write the value as such.
+	 */
+	writel(ep->config.period, ep->cfg_base + ep->stream_uid_offset);
+	writel(0, ep->cfg_base + ep->stream_uid_offset + 4);
+}
 void
-pmt_watcher_write_vector_to_dev(struct watcher_endpoint *ep)
+pmt_watcher_write_vector_to_dev_type1(struct watcher_endpoint *ep)
 {
 	memcpy_toio(ep->cfg_base + ep->vector_start, ep->config.vector,
 		    DIV_ROUND_UP(ep->config.vector_size, BITS_PER_BYTE));
 }
 
+void
+pmt_watcher_write_vector_to_dev_type2(struct watcher_endpoint *ep)
+{
+	unsigned int index, offset = 0;
+	u32 temp;
+
+	for_each_set_bit(index, ep->config.vector, ep->config.vector_size) {
+		if (offset & 2) {
+			temp |= index << 16;
+			writel(temp, ep->cfg_base + ep->vector_start + offset);
+		} else {
+			temp = index;
+		}
+
+		offset += 2;
+	}
+
+	if (offset & 2)
+		writel(temp, ep->cfg_base + ep->vector_start + offset);
+}
+
+void
+pmt_watcher_write_vector_to_dev(struct watcher_endpoint *ep)
+{
+	if (pmt_watcher_is_type2(ep))
+		pmt_watcher_write_vector_to_dev_type2(ep);
+	else
+		pmt_watcher_write_vector_to_dev_type1(ep);
+}
 /*
  * devfs
  */
@@ -372,6 +443,7 @@ mode_store(struct device *dev, struct device_attribute *attr,
 
 		/* Write the period and vector registers to the device */
 		pmt_watcher_write_period_to_dev(ep);
+		pmt_watcher_write_stream_uid_to_dev(ep);
 		pmt_watcher_write_vector_to_dev(ep);
 	}
 
@@ -436,14 +508,14 @@ enable_list_show(struct device *dev, struct device_attribute *attr, char *buf)
 }
 
 static int
-cta_watcher_write_vector(struct device *dev, struct watcher_endpoint *ep,
+pmt_watcher_write_vector(struct device *dev, struct watcher_endpoint *ep,
 			 unsigned long *bit_vector)
 {
 	/*
 	 * Sampler vector select is limited by the size of the sampler
 	 * result buffer. Determine if we're exceeding the limit.
 	 */
-	if (ep->header.watcher_type == TYPE_SAMPLER) {
+	if (pmt_watcher_select_limited(ep)) {
 		int hw = bitmap_weight(bit_vector, ep->config.vector_size);
 
 		if (hw > ep->config.select_limit) {
@@ -488,7 +560,7 @@ enable_list_store(struct device *dev, struct device_attribute *attr,
 
 	/* Write new vector to watcher endpoint */
 	if (!err)
-		err = cta_watcher_write_vector(dev, ep, temp);
+		err = pmt_watcher_write_vector(dev, ep, temp);
 
 	kfree(temp);
 
@@ -539,7 +611,7 @@ enable_vector_store(struct device *dev, struct device_attribute *attr,
 
 	/* Write new vector to watcher endpoint */
 	if (!err)
-		err = cta_watcher_write_vector(dev, ep, temp);
+		err = pmt_watcher_write_vector(dev, ep, temp);
 
 	kfree(temp);
 
@@ -567,7 +639,7 @@ select_limit_show(struct device *dev, struct device_attribute *attr, char *buf)
 	ep = dev_get_drvdata(dev);
 
 	/* vector limit only applies to sampler */
-	if (ep->header.watcher_type != TYPE_SAMPLER)
+	if (!pmt_watcher_select_limited(ep))
 		return sprintf(buf, "%d\n", -1);
 
 	return sprintf(buf, "%u\n", ep->config.select_limit);
@@ -581,7 +653,7 @@ size_show(struct device *dev, struct device_attribute *attr, char *buf)
 
 	ep = dev_get_drvdata(dev);
 
-	if (ep->header.watcher_type != TYPE_SAMPLER)
+	if (!pmt_watcher_is_sampler(ep))
 		return sprintf(buf, "%d\n", -1);
 
 	return sprintf(buf, "%d\n", ep->smplr_data_size);
@@ -595,7 +667,7 @@ offset_show(struct device *dev, struct device_attribute *attr, char *buf)
 
 	ep = dev_get_drvdata(dev);
 
-	if (ep->header.watcher_type != TYPE_SAMPLER)
+	if (!pmt_watcher_is_sampler(ep))
 		return sprintf(buf, "%d\n", -1);
 
 	return sprintf(buf, "%lu\n", offset_in_page(ep->smplr_data_start));
@@ -610,7 +682,7 @@ destination_show(struct device *dev, struct device_attribute *attr, char *buf)
 
 	ep = dev_get_drvdata(dev);
 
-	if (ep->header.watcher_type != TYPE_TRACER)
+	if (!pmt_watcher_is_tracer(ep))
 		return sprintf(buf, "%d\n", -1);
 
 	for (i = 0; i < ARRAY_SIZE(tracer_destination); i++) {
@@ -638,7 +710,7 @@ destination_store(struct device *dev, struct device_attribute *attr,
 
 	ep = dev_get_drvdata(dev);
 
-	if (ep->header.watcher_type != TYPE_TRACER)
+	if (!pmt_watcher_is_tracer(ep))
 		return -EINVAL;
 
 	if (ep->mode_lock)
@@ -662,7 +734,7 @@ token_show(struct device *dev, struct device_attribute *attr, char *buf)
 
 	ep = dev_get_drvdata(dev);
 
-	if (ep->header.watcher_type != TYPE_TRACER)
+	if (!pmt_watcher_is_tracer(ep))
 		return sprintf(buf, "%d\n", -1);
 
 	return sprintf(buf, "%lu\n", GET_TRCR_DEST(ep->config.control));
@@ -678,7 +750,7 @@ token_store(struct device *dev, struct device_attribute *attr,
 
 	ep = dev_get_drvdata(dev);
 
-	if (ep->header.watcher_type != TYPE_TRACER)
+	if (!pmt_watcher_is_tracer(ep))
 		return -EINVAL;
 
 	if (ep->mode_lock)
@@ -698,6 +770,45 @@ token_store(struct device *dev, struct device_attribute *attr,
 }
 static DEVICE_ATTR_RW(token);
 
+static ssize_t
+stream_uid_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct watcher_endpoint *ep;
+
+	ep = dev_get_drvdata(dev);
+
+	if (!pmt_watcher_is_tracer(ep) || ep->stream_uid_offset < 0)
+		return sprintf(buf, "%d\n", -1);
+
+	return sprintf(buf, "0x%08x\n", ep->config.stream_uid);
+}
+
+static ssize_t
+stream_uid_store(struct device *dev, struct device_attribute *attr,
+	    const char *buf, size_t count)
+{
+	struct watcher_endpoint *ep;
+	u32 stream_uid;
+	int result;
+
+	ep = dev_get_drvdata(dev);
+
+	if (!pmt_watcher_is_tracer(ep) || ep->stream_uid_offset < 0)
+		return -EINVAL;
+
+	if (ep->mode_lock)
+		return -EPERM;
+
+	result = kstrtouint(buf, 0, &stream_uid);
+	if (result)
+		return result;
+
+	ep->config.stream_uid = stream_uid;
+
+	return strnlen(buf, count);
+}
+static DEVICE_ATTR_RW(stream_uid);
+
 static struct attribute *pmt_watcher_attrs[] = {
 	&dev_attr_guid.attr,
 	&dev_attr_mode.attr,
@@ -710,6 +821,7 @@ static struct attribute *pmt_watcher_attrs[] = {
 	&dev_attr_offset.attr,
 	&dev_attr_destination.attr,
 	&dev_attr_token.attr,
+	&dev_attr_stream_uid.attr,
 	NULL
 };
 ATTRIBUTE_GROUPS(pmt_watcher);
@@ -737,7 +849,7 @@ static int pmt_watcher_make_dev(struct pmt_watcher_priv *priv)
 	}
 
 	/* Create a character device for Samplers */
-	if (ep->header.watcher_type == TYPE_SAMPLER) {
+	if (pmt_watcher_is_sampler(ep)) {
 		cdev_init(&ep->cdev, &pmt_watcher_sampler_fops);
 
 		err = cdev_add(&ep->cdev, ep->devt, 1);
@@ -765,6 +877,7 @@ static int
 pmt_watcher_create_endpoint(struct pmt_watcher_priv *priv)
 {
 	struct watcher_endpoint *ep = &priv->ep;
+	int vector_sz_in_bytes = ep->header.size - ep->vector_start;
 	struct resource res;
 
 	res.start = pci_resource_start(priv->parent, ep->header.bir) +
@@ -785,27 +898,32 @@ pmt_watcher_create_endpoint(struct pmt_watcher_priv *priv)
 		return -EBUSY;
 
 	/*
+	 * Verify we have sufficient space to store the sample IDs or
+	 * bit vector needed to select sample IDs.
+	 */
+	if (vector_sz_in_bytes < 2 || vector_sz_in_bytes > ep->header.size)
+		return -EINVAL;
+
+	/*
 	 * Determine the appropriate size of the vector in bits so that
 	 * the bitmap can be allocated.
 	 */
-	ep->config.vector_size = (ep->header.size - ep->vector_start) *
-				 BITS_PER_BYTE;
+	if (pmt_watcher_is_type2(ep)) {
+		ep->config.vector_size = 1UL << 16;
+		ep->config.select_limit = vector_sz_in_bytes / 2;
+	} else {
+		ep->config.vector_size = vector_sz_in_bytes * BITS_PER_BYTE;
+		ep->config.select_limit = UINT_MAX;
+	}
 
-	if (!ep->config.vector_size)
-		return -EINVAL;
+	if (pmt_watcher_is_sampler(ep)) {
+		unsigned int sample_limit;
 
-	ep->config.vector = bitmap_zalloc(ep->config.vector_size, GFP_KERNEL);
-	if (!ep->config.vector)
-		return -ENOMEM;
-
-	/*
-	 * For sampler only, get the physical address and size of the
-	 * result buffer for the mmap as well as the vector select limit
-	 * for bounds checking.
-	 */
-	if (ep->header.watcher_type == TYPE_SAMPLER) {
-		int vector_sz_in_bytes = ep->config.vector_size / BITS_PER_BYTE;
-
+		/*
+		 * For sampler only, get the physical address and size of
+		 * the result buffer for the mmap as well as the vector
+		 * select limit for bounds checking.
+		 */
 		ep->smplr_data_start =
 			pci_resource_start(priv->parent, ep->header.bir) +
 					   readl(ep->cfg_base);
@@ -815,14 +933,19 @@ pmt_watcher_create_endpoint(struct pmt_watcher_priv *priv)
 
 		/*
 		 * SMPLR_NUM_SAMPLES returns bytes divided by 8 to get number
-		 * of qwords which is the unit of sampling. select_limit is
+		 * of qwords which is the unit of sampling. Select_limit is
 		 * the maximum allowable hweight for the select vector
 		 */
-		ep->config.select_limit =
-			SMPLR_NUM_SAMPLES(ep->smplr_data_size,
-					  vector_sz_in_bytes);
+		sample_limit = SMPLR_NUM_SAMPLES(ep->smplr_data_size,
+				                 vector_sz_in_bytes);
 
+		if (sample_limit < ep->config.select_limit)
+			ep->config.select_limit = sample_limit;
 	}
+
+	ep->config.vector = bitmap_zalloc(ep->config.vector_size, GFP_KERNEL);
+	if (!ep->config.vector)
+		return -ENOMEM;
 
 	/*
 	 * Set mode to "Disabled" to clean up any state that may still be
@@ -906,23 +1029,33 @@ static int pmt_watcher_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
-	if (ep->header.watcher_type == TYPE_TRACER) {
+	if (pmt_watcher_is_tracer(ep)) {
 		ep->ida = &tracer_devid_ida;
 		ep->ctrl_offset = TRCR_CONTROL_OFFSET;
 		ep->vector_start = TRCR_VECTOR_OFFSET;
+		ep->stream_uid_offset = TRCR_STREAM_UID_OFFSET;
 	} else {
 		ep->ida = &sampler_devid_ida;
 		ep->ctrl_offset = SMPLR_CONTROL_OFFSET;
 		ep->vector_start = SMPLR_VECTOR_OFFSET;
+		ep->stream_uid_offset = -1;
 	}
 
 	/* Add quirks related to TGL part */
 	if (priv->parent->device == 0x9a0d) {
+		/* tracer for TGL does not have support for stream UID */
+		ep->stream_uid_offset = -1;
 		/* strip section that would have been stream UID */
-		if (ep->header.watcher_type == TYPE_TRACER)
+		if (pmt_watcher_is_tracer(ep))
 			ep->vector_start -= 8;
 		/* account for period and control being swapped */
 		ep->ctrl_offset -= 4;
+
+		/*
+		 * Add offset for watcher type to account for type1 vs
+		 * type2 values.
+		 */
+		ep->header.watcher_type += TYPE_TRACER1;
 	}
 
 	err = pmt_watcher_create_endpoint(priv);
@@ -951,7 +1084,7 @@ static int pmt_watcher_remove(struct platform_device *pdev)
 	ep = &priv->ep;
 
 	device_destroy(&pmt_watcher_class, ep->devt);
-	if (ep->header.watcher_type == TYPE_SAMPLER)
+	if (pmt_watcher_is_sampler(ep))
 		cdev_del(&ep->cdev);
 
 	unregister_chrdev_region(ep->devt, 1);
