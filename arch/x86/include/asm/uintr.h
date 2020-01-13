@@ -14,4 +14,6 @@ int uintr_register_sender(struct task_struct *r_task, int uvec_no);
 void uintr_unregister_sender(struct task_struct *task, unsigned int entry);
 void uintr_notify_receiver_exit(struct task_struct *task, unsigned int entry);
 
+void uintr_print_debug_info(void);
+
 #endif /* _ASM_X86_UINTR_H */
