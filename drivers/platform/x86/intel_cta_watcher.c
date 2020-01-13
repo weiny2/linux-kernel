@@ -42,7 +42,7 @@
 #define GUID_OFFSET		0x4
 #define BASE_OFFSET		0x8
 #define GET_ACCESS(v)		((v) & GENMASK(3, 0))
-#define GET_TYPE(v)		(((v) & GENMASK(7, 4)) >> 4)
+#define GET_TYPE(v)		(((v) & GENMASK(11, 4)) >> 4)
 #define GET_SIZE(v)		(((v) & GENMASK(27, 12)) >> 10)
 #define GET_IRQ_EN(v)		((v) & BIT(23))
 #define GET_BIR(v)		((v) & 0x7)
