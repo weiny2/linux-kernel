@@ -76,8 +76,10 @@ struct rapl_power_limit {
 
 struct rapl_package;
 
+#define RAPL_DOMAIN_NAME_LENGTH 16
+
 struct rapl_domain {
-	const char *name;
+	char name[RAPL_DOMAIN_NAME_LENGTH];
 	enum rapl_domain_type id;
 	u64 regs[RAPL_DOMAIN_REG_MAX];
 	struct powercap_zone power_zone;

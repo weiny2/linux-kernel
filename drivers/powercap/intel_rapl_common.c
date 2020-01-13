@@ -523,7 +523,14 @@ static void rapl_init_domains(struct rapl_package *rp)
 			continue;
 
 		rd->rp = rp;
-		rd->name = rapl_domain_names[i];
+
+		if (i == RAPL_DOMAIN_PLATFORM && rp->id > 0) {
+			snprintf(rd->name, RAPL_DOMAIN_NAME_LENGTH, "psys-%d",
+				cpu_data(rp->lead_cpu).phys_proc_id);
+		} else
+			snprintf(rd->name, RAPL_DOMAIN_NAME_LENGTH, "%s",
+				rapl_domain_names[i]);
+
 		rd->id = i;
 		rd->rpl[0].prim_id = PL1_ENABLE;
 		rd->rpl[0].name = pl1_name;
@@ -1054,13 +1061,17 @@ static int rapl_package_register_powercap(struct rapl_package *rp)
 	}
 	/* now register domains as children of the socket/package */
 	for (rd = rp->domains; rd < rp->domains + rp->nr_domains; rd++) {
+		struct powercap_zone *parent = rp->power_zone;
+
 		if (rd->id == RAPL_DOMAIN_PACKAGE)
 			continue;
+		if (rd->id == RAPL_DOMAIN_PLATFORM)
+			parent = NULL;
 		/* number of power limits per domain varies */
 		nr_pl = find_nr_power_limit(rd);
 		power_zone = powercap_register_zone(&rd->power_zone,
 						    rp->priv->control_type,
-						    rd->name, rp->power_zone,
+						    rd->name, parent,
 						    &zone_ops[rd->id], nr_pl,
 						    &constraint_ops);
 
