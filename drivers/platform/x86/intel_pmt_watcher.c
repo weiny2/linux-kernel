@@ -84,9 +84,9 @@
  *     given in the config header (pointer field)
  * n - is the number of select vectors
  *
- * Subtract 4 bytes for the size of the timestamp
+ * Subtract 8 bytes for the size of the timestamp
  */
-#define SMPLR_NUM_SAMPLES(s, n)		((s) - (n) - 4)
+#define SMPLR_NUM_SAMPLES(s, n)		(((s) - (n) - 8) / 8)
 
 #define NUM_BYTES_DWORD(v)		((v) << 2)
 
@@ -814,13 +814,13 @@ pmt_watcher_create_endpoint(struct pmt_watcher_priv *priv)
 					SMPLR_BUFFER_SIZE_OFFSET));
 
 		/*
-		 * SMPLR_NUM_SAMPLES returns bytes. Divide by 8 to get number
+		 * SMPLR_NUM_SAMPLES returns bytes divided by 8 to get number
 		 * of qwords which is the unit of sampling. select_limit is
 		 * the maximum allowable hweight for the select vector
 		 */
 		ep->config.select_limit =
 			SMPLR_NUM_SAMPLES(ep->smplr_data_size,
-					  vector_sz_in_bytes) / 8;
+					  vector_sz_in_bytes);
 
 	}
 
