@@ -170,6 +170,23 @@ inline void uintr_switch(struct task_struct *prev, struct task_struct *next)
 	}
 }
 
+static void dump_uitt(struct uintr_uitte *uitt, int nr)
+{
+	int i;
+	u64 *buf = (u64 *)uitt;
+
+	if (nr > UINTR_MAX_UITT_NR)
+		return;
+	pr_debug("debug: UITT for task=%d entries=%d at address=%llx\n",
+		 current->pid, nr, (u64)uitt);
+	/* 2 u64 in each UITTE */
+	for (i = 0; i < (nr << 1); i = i+2) {
+		if ((buf[i] == 0) && (buf[i+1] == 0))
+			continue;
+		pr_debug("%d: %llx %llx\n", i/2, buf[i], buf[i+1]);
+	}
+}
+
 /* Replace with self managed memory allocater */
 static int uintr_alloc_uitt(struct task_struct *task, unsigned int nr_entries)
 {
@@ -234,6 +251,7 @@ static int uintr_sender_init(struct task_struct *t)
 		return -ENOSPC;
 
 	if (uintr_alloc_uitt(t, UINTR_MAX_UITT_NR)) {
+		pr_debug("send: alloc uitt failed for task=%d\n", t->pid);
 		kfree(t->thread.ui_send);
 		t->thread.ui_send = NULL;
 		return -ENOSPC;
@@ -243,14 +261,19 @@ static int uintr_sender_init(struct task_struct *t)
 	if (!msr64) {
 		wrmsrl_safe(MSR_IA32_UINT_TT, ((u64)t->thread.ui_send->uitt_uaddr) |
 						1);
+		pr_debug("send: set UITT address for task=%d\n", t->pid);
 	} else {
+		pr_debug("send: ERROR: UITT for task=%d already set as %llx\n\n",
+			 t->pid, (u64)msr64);
 		return -EINVAL;
 	}
 
 	rdmsrl_safe(MSR_IA32_UINT_MISC, &msr64);
+	pr_debug("send: old UINT_MISC MSR=%llx\n", msr64);
 	msr64 &= ~0xFFFFFFFF;
 	msr64 |= UINTR_MAX_UITT_NR;
 	wrmsrl_safe(MSR_IA32_UINT_MISC, msr64);
+	pr_debug("send: new UINT_MISC MSR=%llx\n", msr64);
 
 	return 0;
 
@@ -276,6 +299,8 @@ int uintr_register_sender(struct task_struct *recv_task, int uvec_no)
 
 	ui_send = current->thread.ui_send;
 
+	dump_uitt(ui_send->uitt_kaddr, UINTR_MAX_UITT_NR);
+
 	//Assert uitt is not NULL?
 	// UITT is always allocated and deallocated with ui_send
 
@@ -284,11 +309,15 @@ int uintr_register_sender(struct task_struct *recv_task, int uvec_no)
 
 	// TODO: Check if no uitt entries left
 	ui_send->uitt_mask |= BIT(entry);
+	pr_debug("send: use UITT entry %d, mask %llx\n", entry,
+		 ui_send->uitt_mask);
 
 	uitte = &ui_send->uitt_kaddr[entry];
 	uitte->valid = 1;
 	uitte->user_vec = uvec_no;
 	uitte->target_upid_addr = (u64)recv_task->thread.ui_recv->upid_uaddr;
+
+	dump_uitt(ui_send->uitt_kaddr, UINTR_MAX_UITT_NR);
 
 	return entry;
 }
@@ -333,6 +362,7 @@ static int uintr_register_handler(u64 handler)
 	ui_recv->handler = handler;
 
 	if (uintr_alloc_upid(t)) {
+		pr_debug("recv: alloc upid failed for task=%d\n", t->pid);
 		kfree(t->thread.ui_recv);
 		t->thread.ui_recv = NULL;
 		return -ENOSPC;
@@ -354,6 +384,10 @@ static int uintr_register_handler(u64 handler)
 	rdmsrl_safe(MSR_IA32_UINT_MISC, &misc_msr);
 	misc_msr |= (u64)UINTR_NOTIFICATION_VECTOR << 32;
 	wrmsrl_safe(MSR_IA32_UINT_MISC, misc_msr);
+	pr_debug("recv: UINT_MISC_MSR=%llx\n", misc_msr);
+
+	pr_debug("recv: task=%d register handler=%llx upid %llx\n",
+		 t->pid, (u64)handler, (u64)upid);
 
 	return 0;
 }
@@ -388,6 +422,8 @@ int uintr_alloc_uvec(u64 handler)
 		return -ENOSPC;
 
 	ui_recv->uvec_mask |= BIT(uvec);
+	pr_debug("recv: task %d new uvec=%d, new mask %llx\n",
+		 current->pid, uvec, ui_recv->uvec_mask);
 
 	return uvec;
 }
@@ -401,6 +437,8 @@ void uintr_free_uvec(struct task_struct *t, int uvec)
 
 	if (t->thread.ui_recv->uvec_mask)
 		return;
+
+	pr_debug("recv: task=%d unregistered all user vectors\n", t->pid);
 
 	if (t == current) {
 		rdmsrl_safe(MSR_IA32_UINT_MISC, &msr64);
@@ -444,5 +482,32 @@ void uintr_free(struct task_struct *t)
 		kfree(t->thread.ui_recv);
 		t->thread.ui_recv = NULL;
 	}
+}
+
+void uintr_print_debug_info(void)
+{
+
+	u64 msr64_1, msr64_2, msr64_3, msr64_4, msr64_5;
+	u64 sc = 0;
+	u64 puir = 0;
+
+	if (current->thread.ui_send)
+		dump_uitt(current->thread.ui_send->uitt_kaddr, UINTR_MAX_UITT_NR);
+
+	if (current->thread.ui_recv) {
+		sc = current->thread.ui_recv->upid_kaddr->sc.raw;
+		puir = current->thread.ui_recv->upid_kaddr->puir;
+	}
+
+	rdmsrl_safe(MSR_IA32_UINT_MISC, &msr64_1);
+	rdmsrl_safe(MSR_IA32_UINT_RR, &msr64_2);
+	rdmsrl_safe(MSR_IA32_UINT_PD, &msr64_3);
+	rdmsrl_safe(MSR_IA32_UINT_HANDLER, &msr64_4);
+	rdmsrl_safe(MSR_IA32_UINT_TT, &msr64_5);
+
+	pr_debug("debug: task=%d upid.l=%llx puir=%llx uirr=%llx misc=%llx pd=%llx handler=%llx uitt=%llx\n",
+			 current->pid, sc, puir,
+			 msr64_2, msr64_1, msr64_3, msr64_4, msr64_5);
+
 }
 

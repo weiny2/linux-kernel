@@ -1,10 +1,16 @@
 // SPDX-License-Identifier: GPL-2.0+
+#define pr_fmt(fmt)	"uintr: " fmt
 
 #include <linux/anon_inodes.h>
 #include <linux/fdtable.h>
 #include <linux/sched.h>
 #include <linux/syscalls.h>
 #include <linux/uintr.h>
+
+#define	UINTR_RECEIVER_DEBUG_INFO	(1 << 10)
+#define	UINTR_SENDER_SET_UVEC		(1 << 20)
+#define	UINTR_SENDER_DEBUG_INFO		(1 << 21)
+
 
 struct uintr_receiver_ctx {
 	int uvec_no;
@@ -51,6 +57,9 @@ static __poll_t uipifd_poll(struct file *file, poll_table *pt)
 	struct uipi_sender_ctx *send_ctx = file->private_data;
 	int poll_flags = 0;
 
+	//pr_debug("send: task=%d called poll for uipi id=%d\n",
+	//	   current->pid, send_ctx->uipi_id);
+
 	poll_wait(file, &send_ctx->wait_uipifd, pt);
 
 	if (!send_ctx->recv_ctx)
@@ -65,6 +74,9 @@ static int uipifd_release(struct inode *inode, struct file *file)
 	unsigned long flags;
 
 	send_ctx = (struct uipi_sender_ctx *)file->private_data;
+
+	pr_debug("send: releasing uipi id %d for task=%d\n",
+		 send_ctx->uipi_id, send_ctx->s_task->pid);
 
 	// TODO: Handle the case when s_task has already exited
 	uintr_unregister_sender(send_ctx->s_task, send_ctx->uipi_id);
@@ -114,6 +126,14 @@ static int do_uipi_send(unsigned int uintrfd, unsigned int flags)
 	if (!uintr_arch_enabled())
 		return -EINVAL;
 
+	if (flags & UINTR_SENDER_DEBUG_INFO) {
+		uintr_print_debug_info();
+		return 0;
+	}
+
+	pr_debug("send: task=%d uintrfd %d flags %d",
+			current->pid, uintrfd, flags);
+
 	if (!uintrfd)
 		return -EINVAL;
 
@@ -127,6 +147,20 @@ static int do_uipi_send(unsigned int uintrfd, unsigned int flags)
 
 	if (!recv_ctx)
 		return -EINVAL;
+
+
+
+	if (flags & UINTR_SENDER_SET_UVEC) {
+		/* Generating some other vector instead of the registered one */
+		// User recv_ctx->uvec_no for registered vector
+		uintr_set_uvec(recv_ctx->r_task, 0x10);
+		return 0;
+	}
+
+	pr_debug("send: recv_task_addr=%llx and recv_task_id=%d fd private data=%llx\n",
+			(u64)recv_ctx->r_task,
+			recv_ctx->r_task->pid,
+			(u64)file_recv->private_data);
 
 	send_ctx = kzalloc(sizeof(*send_ctx), GFP_KERNEL);
 	if (!send_ctx)
@@ -150,12 +184,15 @@ static int do_uipi_send(unsigned int uintrfd, unsigned int flags)
 
 	spin_unlock_irqrestore(&recv_ctx->sender_lock, lock_flags);
 
+	pr_debug("send: uipi id index=%d", send_ctx->uipi_id);
+
 	fd = anon_inode_getfd("[uipifd]", &uipifd_fops, NULL,
 			      O_RDONLY | O_CLOEXEC);
 
 	file_send = fcheck(fd);
 	file_send->private_data = (void *)send_ctx;
 
+	pr_debug("send: registered successfully\n");
 	return fd;
 }
 
@@ -197,11 +234,16 @@ static int uintrfd_release(struct inode *inode, struct file *file)
 
 	recv_ctx = (struct uintr_receiver_ctx *)file->private_data;
 	task = recv_ctx->r_task;
+	pr_debug("recv: releasing uvec=%d for task=%d\n",
+		 recv_ctx->uvec_no, task->pid);
+
 
 	spin_lock_irqsave(&recv_ctx->sender_lock, flags);
 
 	// TODO: Check closing of all the sender uipi fds for this receiver
 	list_for_each_entry(send_ctx, &recv_ctx->sender_list, node) {
+		pr_debug("recv: waking up sender task=%d uipi id %d\n",
+			 send_ctx->s_task->pid, send_ctx->uipi_id);
 		send_ctx->recv_ctx = NULL;
 		uintr_notify_receiver_exit(send_ctx->s_task, send_ctx->uipi_id);
 		wake_up_all(&send_ctx->wait_uipifd);
@@ -222,6 +264,18 @@ static __poll_t uintrfd_poll(struct file *file, struct poll_table_struct *pts)
 	struct uipi_sender_ctx *send_ctx;
 	int poll_flags = 0;
 	unsigned long flags;
+
+
+	spin_lock_irqsave(&recv_ctx->sender_lock, flags);
+
+	pr_debug("recv: task=%d called poll for uvec no=%d\n",
+		 current->pid, recv_ctx->uvec_no);
+	list_for_each_entry(send_ctx, &recv_ctx->sender_list, node)
+		pr_debug("recv: task=%d uvec=%d sender uipi id=%d\n",
+			 recv_ctx->r_task->pid, recv_ctx->uvec_no,
+			 send_ctx->uipi_id);
+
+	spin_unlock_irqrestore(&recv_ctx->sender_lock, flags);
 
 	return poll_flags;
 }
@@ -255,6 +309,14 @@ static int do_uintr_receive(void __user *handler, unsigned int flags)
 	if (!uintr_arch_enabled())
 		return -EINVAL;
 
+	if (flags & UINTR_RECEIVER_DEBUG_INFO) {
+		uintr_print_debug_info();
+		return 0;
+	}
+
+	pr_debug("recv: task=%d flags %d handler %lx",
+		 current->pid, flags, (unsigned long) handler);
+
 	if (!handler)
 		return -EINVAL;
 
@@ -276,6 +338,13 @@ static int do_uintr_receive(void __user *handler, unsigned int flags)
 	file = fcheck(fd);
 
 	file->private_data = (void *)recv_ctx;
+
+	pr_debug("recv: recv_task=%llx task=%d fd private data %llx\n",
+			(u64)recv_ctx->r_task,
+			recv_ctx->r_task->pid,
+			(u64)file->private_data);
+
+	pr_debug("recv: assigned uvecfd=%d", fd);
 
 	return fd;
 }
