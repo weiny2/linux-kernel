@@ -988,6 +988,8 @@ static const struct x86_cpu_id rapl_ids[] __initconst = {
 	INTEL_CPU_FAM6(COMETLAKE_L, rapl_defaults_core),
 	INTEL_CPU_FAM6(COMETLAKE, rapl_defaults_core),
 	INTEL_CPU_FAM6(TIGERLAKE_L, rapl_defaults_core),
+	INTEL_CPU_FAM6(ROCKETLAKE_L, rapl_defaults_core),
+	INTEL_CPU_FAM6(ROCKETLAKE, rapl_defaults_core),
 	INTEL_CPU_FAM6(ALDERLAKE_X, rapl_defaults_hsw_server),
 
 	INTEL_CPU_FAM6(ATOM_SILVERMONT, rapl_defaults_byt),
