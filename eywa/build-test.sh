@@ -8,6 +8,18 @@ rule()
 CPUS=$(nproc)
 LOGFILE=$(mktemp)
 BUILDDIR=$1
+SKIP_ALLMOD=false
+SKIP_ALLYES=false
+if [ "$2" = "allyesconfig" ]; then
+     SKIP_ALLMOD=true
+     echo "skipping allmodconfig"
+fi
+
+if [ "$2" = "allmodconfig" ]; then
+     SKIP_ALLYES=true
+     echo "skipping allyesconfig"
+fi
+
 
 cleanup() {
 	date
@@ -68,9 +80,13 @@ if [ "z$BUILDDIR" != "z" ]; then
 fi
 
 echo "Build test...(can be followed in $LOGFILE)"
-date
-allyesconfig
-date
-allmodconfig
+if [ "$SKIP_ALLYES" = false ]; then
+	date
+	allyesconfig
+fi
+if [ "$SKIP_ALLMOD" = false ]; then
+	date
+	allmodconfig
+fi
 echo "ALL TESTS PASSED"
 cleanup 0

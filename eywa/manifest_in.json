@@ -206,7 +206,7 @@
                 }
             ],
             "description": "Drm embargo branch",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Rodrigio Vivi",
@@ -1512,8 +1512,8 @@
                     "email": "wei.meng@intel.com"
                 }
             ],
-            "description": "IPU driver 19WW52",
-            "enabled": false,
+            "description": "IPU driver 20WW03 release to intel-next/mainline-tracking",
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Cao Bingbu",
@@ -2131,8 +2131,8 @@
                     "email": "kyle.d.pelton@intel.com"
                 }
             ],
-            "description": "Fix up branch to solve root mounting problem",
-            "enabled": false,
+            "description": "Fix up branch to revert a dma-buf patch from GFX",
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Kyle Pelton",
@@ -3076,7 +3076,7 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": "c811a3c746c471b24855d0c9642f1948a1562fe9"
+            "stuck_at_ref": ""
         },
         {
             "branch": "perf-aux-dev",
@@ -3334,7 +3334,7 @@
                 }
             ],
             "description": "VPUSMM kernel module",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Yu Xu",
@@ -3351,6 +3351,75 @@
                 }
             ],
             "status": "public",
+            "stuck_at_ref": ""
+        },
+        {
+            "branch": "dwc3",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "CONFIG_USB_DWC3",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_USB_DWC3_PCI",
+                    "value": "y"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Heikki Krogerus",
+                    "email": "heikki.krogerus@linux.intel.com"
+                }
+            ],
+            "description": "USB DWC3 branch",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Ismail, Abdul Rahman",
+                    "email": "abdul.r.ismail@intel.com"
+                }
+            ],
+            "jira": "NEXT-1758",
+            "name": "usb dwc3",
+            "repourl": "ssh://git-amr-4.devtools.intel.com:29418/otc_usb-typec.git",
+            "sdl_contact": [
+                {
+                    "name": "Svahn, Kai",
+                    "email": "kai.svahn@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": ""
+        },
+        {
+            "branch": "intel-next-5.5",
+            "branch_type": "expiring",
+            "config_options": [],
+            "contributor": [
+                {
+                    "name": "Yi Liu",
+                    "email": "yi.l.liu@intel.com"
+                }
+            ],
+            "description": "IOMMU VSVA patches",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Vakharwala, Rupin H",
+                    "email": "rupin.h.vakharwala@intel.com"
+                }
+            ],
+            "jira": "",
+            "name": "linux_iommu",
+            "repourl": "ssh://git-amr-4.devtools.intel.com:29418/linux_iommu-iommu.git",
+            "sdl_contact": [
+                {
+                    "name": "Ashok Raj",
+                    "email": "ashok.raj@intel.com"
+                }
+            ],
+            "status": "intel confidential",
             "stuck_at_ref": ""
         }
     ]

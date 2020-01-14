@@ -32,8 +32,9 @@ config_files_to_val = ["intel_next_clear_generic_defconfig",
 config_files = [config_fragments] + config_files_to_val
 #if verbose mode is set output all cmds to stdout            
 verbose_mode=False
-log = open(log_file_name,"a")
-patch = open(patch_manifest,"a")
+#Global log file objs
+log = None
+patch = None
 
 def run_shell_cmd(cmd):
    
@@ -356,10 +357,6 @@ def gen_manifest(skip_fetch,fetch_single,fetch_all,blacklist,whitelist,enable_li
     add_remotes(manifest)
     #fetch repos
     manifest=fetch_remotes(manifest,skip_fetch,fetch_single,fetch_all)
-    manifest=setup_linus_branch(manifest,skip_fetch)
-    s=json.dumps(manifest,indent=4)
-    open(manifest_out_path,"w").write(s)
-    print_manifest_log(manifest)
     return manifest
 
 
@@ -461,6 +458,19 @@ def run_git_describe(manifest,fetch_all):
             tag = run_shell_cmd("git describe {}/{}".format(remote_name,branch["branch"])).split("\n")[0]
             print("{} {}".format(branch["name"],tag))
 
+def write_manifest_files(manifest):
+    s=json.dumps(manifest,indent=4)
+    open(manifest_out_path,"w").write(s)
+    print_manifest_log(manifest)
+
+def open_logs(mode):
+    if mode not in ["a","w"]:
+        raise Exception("mode must be 'a' or 'w'")
+    global log
+    global patch
+    log = open(log_file_name,mode)
+    patch = open(patch_manifest,mode)
+
 def main():
     parser = argparse.ArgumentParser(description=script_name)
     parser.add_argument('-s','--skip_fetch', help='skip git fetch',action='store_true')
@@ -499,20 +509,24 @@ def main():
     verbose_mode = args.verbose_mode
    
     if continue_merge == False:
+        open_logs("w")
         manifest = gen_manifest(skip_fetch,fetch_single,fetch_all,blacklist,whitelist,enable_list)
-        if run_gen_manifest:
-            print("Manifest generation has completed")
-            return
         if run_describe:
            run_git_describe(manifest,fetch_all)
            return
-        #We are starting a new merge so reset the repo
-        #manifest=read_manifest(manifest_out_path)
+        manifest=setup_linus_branch(manifest,skip_fetch)
+        #write manifest files
+        write_manifest_files(manifest)
+        if run_gen_manifest:
+            print("Manifest generation has completed")
+            return
         if regen_config:
            pre_kconfig_validation(manifest["topic_branches"])
         reset_repo(manifest)
     else:
         #Continue merge
+        open_logs("a")
+        print_and_log("continuing merge with -c option")
         manifest=read_manifest("manifest.json")
         print_manifest_log(manifest)
     
