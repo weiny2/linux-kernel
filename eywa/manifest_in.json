@@ -292,7 +292,7 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "c3eea50394b30e6905fc6e79d6684defe068dab8"
         },
         {
             "branch": "for-eywa",
