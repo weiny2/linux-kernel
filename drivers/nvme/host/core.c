@@ -2416,7 +2416,17 @@ static const struct nvme_core_quirk_entry core_quirks[] = {
 		.vid = 0x14a4,
 		.fr = "22301111",
 		.quirks = NVME_QUIRK_SIMPLE_SUSPEND,
-	}
+	},
+	{
+                /* TODO: Need to look for other alternatives.
+                 * Some of the controllers while using APST states.  one of those is
+                 * See: https://bugs.launchpad.net/ubuntu/+source/linux/+bug/1678184
+                 */
+                .vid = 0x144d,
+                .fr = "3L1QEXF7",
+                .quirks = NVME_QUIRK_NO_APST,
+        }
+
 };
 
 /* match is null-terminated but idstr is space-padded. */
