@@ -648,9 +648,8 @@ static int acx565akm_probe(struct spi_device *spi)
 			return ret;
 	}
 
-	drm_panel_init(&lcd->panel);
-	lcd->panel.dev = &lcd->spi->dev;
-	lcd->panel.funcs = &acx565akm_funcs;
+	drm_panel_init(&lcd->panel, &lcd->spi->dev, &acx565akm_funcs,
+		       DRM_MODE_CONNECTOR_DPI);
 
 	ret = drm_panel_add(&lcd->panel);
 	if (ret < 0) {
@@ -684,9 +683,17 @@ static const struct of_device_id acx565akm_of_match[] = {
 
 MODULE_DEVICE_TABLE(of, acx565akm_of_match);
 
+static const struct spi_device_id acx565akm_ids[] = {
+	{ "acx565akm", 0 },
+	{ /* sentinel */ }
+};
+
+MODULE_DEVICE_TABLE(spi, acx565akm_ids);
+
 static struct spi_driver acx565akm_driver = {
 	.probe		= acx565akm_probe,
 	.remove		= acx565akm_remove,
+	.id_table	= acx565akm_ids,
 	.driver		= {
 		.name	= "panel-sony-acx565akm",
 		.of_match_table = acx565akm_of_match,
@@ -695,7 +702,6 @@ static struct spi_driver acx565akm_driver = {
 
 module_spi_driver(acx565akm_driver);
 
-MODULE_ALIAS("spi:sony,acx565akm");
 MODULE_AUTHOR("Nokia Corporation");
 MODULE_DESCRIPTION("Sony ACX565AKM LCD Panel Driver");
 MODULE_LICENSE("GPL");

@@ -347,9 +347,8 @@ static int td028ttec1_probe(struct spi_device *spi)
 		return ret;
 	}
 
-	drm_panel_init(&lcd->panel);
-	lcd->panel.dev = &lcd->spi->dev;
-	lcd->panel.funcs = &td028ttec1_funcs;
+	drm_panel_init(&lcd->panel, &lcd->spi->dev, &td028ttec1_funcs,
+		       DRM_MODE_CONNECTOR_DPI);
 
 	return drm_panel_add(&lcd->panel);
 }
@@ -375,8 +374,7 @@ static const struct of_device_id td028ttec1_of_match[] = {
 MODULE_DEVICE_TABLE(of, td028ttec1_of_match);
 
 static const struct spi_device_id td028ttec1_ids[] = {
-	{ "tpo,td028ttec1", 0},
-	{ "toppoly,td028ttec1", 0 },
+	{ "td028ttec1", 0 },
 	{ /* sentinel */ }
 };
 
