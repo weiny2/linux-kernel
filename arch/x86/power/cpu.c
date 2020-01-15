@@ -474,6 +474,21 @@ static int msr_save_cpuid_features(const struct x86_cpu_id *c)
 	return msr_build_context(cpuid_msr_id, ARRAY_SIZE(cpuid_msr_id));
 }
 
+static int msr_save_rar_features(const struct x86_cpu_id *c)
+{
+	u32 cpuid_msr_id[] = {
+		MSR_IA32_RAR_CTRL,
+		MSR_IA32_RAR_ACT_VEC,
+		MSR_IA32_RAR_PAYLOAD_BASE,
+		MSR_IA32_RAR_INFO,
+	};
+
+	pr_info("x86/pm: family %#hx cpu detected, MSR saving is needed during suspending.\n",
+		c->family);
+
+	return msr_build_context(cpuid_msr_id, ARRAY_SIZE(cpuid_msr_id));
+}
+
 static const struct x86_cpu_id msr_save_cpu_table[] = {
 	{
 		.vendor = X86_VENDOR_AMD,
@@ -488,6 +503,13 @@ static const struct x86_cpu_id msr_save_cpu_table[] = {
 		.model = X86_MODEL_ANY,
 		.feature = X86_FEATURE_ANY,
 		.driver_data = (kernel_ulong_t)msr_save_cpuid_features,
+	},
+	{
+		.vendor = X86_VENDOR_INTEL,
+		.family = 0x06,
+		.model = 0x8c,
+		.feature = X86_FEATURE_RAR,
+		.driver_data = (kernel_ulong_t)msr_save_rar_features,
 	},
 	{}
 };
