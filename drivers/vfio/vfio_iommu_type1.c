@@ -2498,7 +2498,13 @@ static int vfio_page_resp_fn(struct device *dev, void *data)
 	struct iommu_page_response *pgresp =
 		(struct iommu_page_response *) dc->data;
 
-	return iommu_page_response(dev, dc->domain, pgresp);
+	if (dc->group->mdev_group)
+		return iommu_page_response(
+			vfio_mdev_get_iommu_device(dev),
+			dc->domain,
+			pgresp);
+	else
+		return iommu_page_response(dev, dc->domain, pgresp);
 }
 
 static long vfio_iommu_type1_ioctl(void *iommu_data,
