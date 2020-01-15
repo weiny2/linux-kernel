@@ -2110,6 +2110,9 @@ static int io_setup_async_rw(struct io_kiocb *req, ssize_t io_size,
 			     struct iovec *iovec, struct iovec *fast_iov,
 			     struct iov_iter *iter)
 {
+	if (req->opcode == IORING_OP_READ_FIXED ||
+	    req->opcode == IORING_OP_WRITE_FIXED)
+		return 0;
 	if (!req->io && io_alloc_async_ctx(req))
 		return -ENOMEM;
 
@@ -2187,18 +2190,6 @@ static int io_read(struct io_kiocb *req, struct io_kiocb **nxt,
 		else
 			ret2 = loop_rw_iter(READ, req->file, kiocb, &iter);
 
-		/*
-		 * In case of a short read, punt to async. This can happen
-		 * if we have data partially cached. Alternatively we can
-		 * return the short read, in which case the application will
-		 * need to issue another SQE and wait for it. That SQE will
-		 * need async punt anyway, so it's more efficient to do it
-		 * here.
-		 */
-		if (force_nonblock && !(req->flags & REQ_F_NOWAIT) &&
-		    (req->flags & REQ_F_ISREG) &&
-		    ret2 > 0 && ret2 < io_size)
-			ret2 = -EAGAIN;
 		/* Catch -EAGAIN return for forced non-blocking submission */
 		if (!force_nonblock || ret2 != -EAGAIN) {
 			kiocb_done(kiocb, ret2, nxt, req->in_async);
@@ -2370,6 +2361,28 @@ static bool io_req_cancelled(struct io_kiocb *req)
 	return false;
 }
 
+static void io_link_work_cb(struct io_wq_work **workptr)
+{
+	struct io_wq_work *work = *workptr;
+	struct io_kiocb *link = work->data;
+
+	io_queue_linked_timeout(link);
+	work->func = io_wq_submit_work;
+}
+
+static void io_wq_assign_next(struct io_wq_work **workptr, struct io_kiocb *nxt)
+{
+	struct io_kiocb *link;
+
+	io_prep_async_work(nxt, &link);
+	*workptr = &nxt->work;
+	if (link) {
+		nxt->work.flags |= IO_WQ_WORK_CB;
+		nxt->work.func = io_link_work_cb;
+		nxt->work.data = link;
+	}
+}
+
 static void io_fsync_finish(struct io_wq_work **workptr)
 {
 	struct io_kiocb *req = container_of(*workptr, struct io_kiocb, work);
@@ -2388,7 +2401,7 @@ static void io_fsync_finish(struct io_wq_work **workptr)
 	io_cqring_add_event(req, ret);
 	io_put_req_find_next(req, &nxt);
 	if (nxt)
-		*workptr = &nxt->work;
+		io_wq_assign_next(workptr, nxt);
 }
 
 static int io_fsync(struct io_kiocb *req, struct io_kiocb **nxt,
@@ -2423,7 +2436,7 @@ static void io_fallocate_finish(struct io_wq_work **workptr)
 	io_cqring_add_event(req, ret);
 	io_put_req_find_next(req, &nxt);
 	if (nxt)
-		*workptr = &nxt->work;
+		io_wq_assign_next(workptr, nxt);
 }
 
 static int io_fallocate_prep(struct io_kiocb *req,
@@ -3187,7 +3200,7 @@ static void io_accept_finish(struct io_wq_work **workptr)
 		return;
 	__io_accept(req, &nxt, false);
 	if (nxt)
-		*workptr = &nxt->work;
+		io_wq_assign_next(workptr, nxt);
 }
 #endif
 
@@ -3418,7 +3431,7 @@ static void io_poll_complete_work(struct io_wq_work **workptr)
 		req_set_fail_links(req);
 	io_put_req_find_next(req, &nxt);
 	if (nxt)
-		*workptr = &nxt->work;
+		io_wq_assign_next(workptr, nxt);
 }
 
 static void __io_poll_flush(struct io_ring_ctx *ctx, struct llist_node *nodes)
@@ -4268,15 +4281,6 @@ static int io_issue_sqe(struct io_kiocb *req, const struct io_uring_sqe *sqe,
 	return 0;
 }
 
-static void io_link_work_cb(struct io_wq_work **workptr)
-{
-	struct io_wq_work *work = *workptr;
-	struct io_kiocb *link = work->data;
-
-	io_queue_linked_timeout(link);
-	work->func = io_wq_submit_work;
-}
-
 static void io_wq_submit_work(struct io_wq_work **workptr)
 {
 	struct io_wq_work *work = *workptr;
@@ -4316,17 +4320,8 @@ static void io_wq_submit_work(struct io_wq_work **workptr)
 	}
 
 	/* if a dependent link is ready, pass it back */
-	if (!ret && nxt) {
-		struct io_kiocb *link;
-
-		io_prep_async_work(nxt, &link);
-		*workptr = &nxt->work;
-		if (link) {
-			nxt->work.flags |= IO_WQ_WORK_CB;
-			nxt->work.func = io_link_work_cb;
-			nxt->work.data = link;
-		}
-	}
+	if (!ret && nxt)
+		io_wq_assign_next(workptr, nxt);
 }
 
 static int io_req_needs_file(struct io_kiocb *req, int fd)
