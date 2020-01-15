@@ -656,9 +656,10 @@ static int queue_pages_test_walk(unsigned long start, unsigned long end,
 		return 1;
 	}
 
-	/* MPOL_MF_STRICT is ignored for huge page, skip checking
-	*  misplaced pages
-	*/
+	/*
+	 * MPOL_MF_STRICT is ignored for huge page, skip checking
+	 * misplaced pages
+	 */
 	if ((flags & MPOL_MF_VALID) == MPOL_MF_STRICT &&
 		is_vm_hugetlb_page(vma))
 		return 1;
