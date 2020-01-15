@@ -2392,12 +2392,18 @@ static int vfio_bind_gpasid_fn(struct device *dev, void *data)
 	struct iommu_gpasid_bind_data *gbind_data =
 		(struct iommu_gpasid_bind_data *) dc->data;
 
-	if (dc->group->mdev_group)
+	if (dc->group->mdev_group) {
+		dev_dbg(dev, "%s: data: %llx\n", __func__, (u64)data);
+		/* save mdev host PASID for fault reporting */
+		iommu_add_device_fault_data(vfio_mdev_get_iommu_device(dev),
+						gbind_data->hpasid, dev);
+
 		return iommu_sva_bind_gpasid(dc->domain,
 			vfio_mdev_get_iommu_device(dev), gbind_data);
-	else
+	} else {
 		return iommu_sva_bind_gpasid(dc->domain,
 						dev, gbind_data);
+	}
 }
 
 static int vfio_unbind_gpasid_fn(struct device *dev, void *data)
@@ -2406,13 +2412,19 @@ static int vfio_unbind_gpasid_fn(struct device *dev, void *data)
 	struct iommu_gpasid_bind_data *gbind_data =
 		(struct iommu_gpasid_bind_data *) dc->data;
 
-	if (dc->group->mdev_group)
+	if (dc->group->mdev_group) {
+		dev_dbg(dev, "%s: data: %llx\n", __func__, (u64)data);
+		iommu_delete_device_fault_data(
+					vfio_mdev_get_iommu_device(dev),
+					gbind_data->hpasid);
+
 		return iommu_sva_unbind_gpasid(dc->domain,
 					vfio_mdev_get_iommu_device(dev),
 					gbind_data->hpasid);
-	else
+	} else {
 		return iommu_sva_unbind_gpasid(dc->domain, dev,
 						gbind_data->hpasid);
+	}
 }
 
 /**
