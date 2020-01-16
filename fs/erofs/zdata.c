@@ -345,9 +345,8 @@ static int z_erofs_lookup_collection(struct z_erofs_collector *clt,
 	struct z_erofs_pcluster *pcl;
 	struct z_erofs_collection *cl;
 	unsigned int length;
-	bool tag;
 
-	grp = erofs_find_workgroup(inode->i_sb, map->m_pa >> PAGE_SHIFT, &tag);
+	grp = erofs_find_workgroup(inode->i_sb, map->m_pa >> PAGE_SHIFT);
 	if (!grp)
 		return -ENOENT;
 
@@ -438,7 +437,7 @@ static int z_erofs_register_collection(struct z_erofs_collector *clt,
 	 */
 	mutex_trylock(&cl->lock);
 
-	err = erofs_register_workgroup(inode->i_sb, &pcl->obj, 0);
+	err = erofs_register_workgroup(inode->i_sb, &pcl->obj);
 	if (err) {
 		mutex_unlock(&cl->lock);
 		kmem_cache_free(pcluster_cachep, pcl);
