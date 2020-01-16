@@ -5902,13 +5902,11 @@ vm_fault_t ext4_page_mkwrite(struct vm_fault *vmf)
 {
 	struct vm_area_struct *vma = vmf->vma;
 	struct page *page = vmf->page;
-	loff_t size;
 	unsigned long len;
 	int err;
 	vm_fault_t ret;
 	struct file *file = vma->vm_file;
 	struct inode *inode = file_inode(file);
-	struct address_space *mapping = inode->i_mapping;
 	handle_t *handle;
 	get_block_t *get_block;
 	int retries = 0;
@@ -5938,18 +5936,13 @@ vm_fault_t ext4_page_mkwrite(struct vm_fault *vmf)
 	}
 
 	lock_page(page);
-	size = i_size_read(inode);
-	/* Page got truncated from under us? */
-	if (page->mapping != mapping || page_offset(page) > size) {
+	err = page_mkwrite_check_truncate(page, inode);
+	if (err < 0) {
 		unlock_page(page);
-		ret = VM_FAULT_NOPAGE;
-		goto out;
+		goto out_ret;
 	}
+	len = err;
 
-	if (page->index == size >> PAGE_SHIFT)
-		len = size & ~PAGE_MASK;
-	else
-		len = PAGE_SIZE;
 	/*
 	 * Return if we have all the buffers mapped. This avoids the need to do
 	 * journal_start/journal_stop which can block and take a long time
