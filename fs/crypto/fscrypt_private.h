@@ -136,12 +136,6 @@ fscrypt_policy_flags(const union fscrypt_policy *policy)
 	BUG();
 }
 
-static inline bool
-fscrypt_is_direct_key_policy(const union fscrypt_policy *policy)
-{
-	return fscrypt_policy_flags(policy) & FSCRYPT_POLICY_FLAG_DIRECT_KEY;
-}
-
 /**
  * For encrypted symlinks, the ciphertext length is stored at the beginning
  * of the string in little-endian format.
@@ -206,24 +200,6 @@ typedef enum {
 	FS_ENCRYPT,
 } fscrypt_direction_t;
 
-static inline bool fscrypt_valid_enc_modes(u32 contents_mode,
-					   u32 filenames_mode)
-{
-	if (contents_mode == FSCRYPT_MODE_AES_128_CBC &&
-	    filenames_mode == FSCRYPT_MODE_AES_128_CTS)
-		return true;
-
-	if (contents_mode == FSCRYPT_MODE_AES_256_XTS &&
-	    filenames_mode == FSCRYPT_MODE_AES_256_CTS)
-		return true;
-
-	if (contents_mode == FSCRYPT_MODE_ADIANTUM &&
-	    filenames_mode == FSCRYPT_MODE_ADIANTUM)
-		return true;
-
-	return false;
-}
-
 /* crypto.c */
 extern struct kmem_cache *fscrypt_info_cachep;
 extern int fscrypt_initialize(unsigned int cop_flags);
@@ -233,7 +209,6 @@ extern int fscrypt_crypt_block(const struct inode *inode,
 			       unsigned int len, unsigned int offs,
 			       gfp_t gfp_flags);
 extern struct page *fscrypt_alloc_bounce_page(gfp_t gfp_flags);
-extern const struct dentry_operations fscrypt_d_ops;
 
 extern void __printf(3, 4) __cold
 fscrypt_msg(const struct inode *inode, const char *level, const char *fmt, ...);
@@ -260,11 +235,12 @@ void fscrypt_generate_iv(union fscrypt_iv *iv, u64 lblk_num,
 			 const struct fscrypt_info *ci);
 
 /* fname.c */
-extern int fname_encrypt(struct inode *inode, const struct qstr *iname,
+extern int fname_encrypt(const struct inode *inode, const struct qstr *iname,
 			 u8 *out, unsigned int olen);
 extern bool fscrypt_fname_encrypted_size(const struct inode *inode,
 					 u32 orig_len, u32 max_len,
 					 u32 *encrypted_len_ret);
+extern const struct dentry_operations fscrypt_d_ops;
 
 /* hkdf.c */
 
@@ -287,7 +263,7 @@ extern int fscrypt_init_hkdf(struct fscrypt_hkdf *hkdf, const u8 *master_key,
 #define HKDF_CONTEXT_DIRECT_KEY		3
 #define HKDF_CONTEXT_IV_INO_LBLK_64_KEY	4
 
-extern int fscrypt_hkdf_expand(struct fscrypt_hkdf *hkdf, u8 context,
+extern int fscrypt_hkdf_expand(const struct fscrypt_hkdf *hkdf, u8 context,
 			       const u8 *info, unsigned int infolen,
 			       u8 *okm, unsigned int okmlen);
 
@@ -448,11 +424,7 @@ struct fscrypt_mode {
 	int logged_impl_name;
 };
 
-static inline bool
-fscrypt_mode_supports_direct_key(const struct fscrypt_mode *mode)
-{
-	return mode->ivsize >= offsetofend(union fscrypt_iv, nonce);
-}
+extern struct fscrypt_mode fscrypt_modes[];
 
 extern struct crypto_skcipher *
 fscrypt_allocate_skcipher(struct fscrypt_mode *mode, const u8 *raw_key,
