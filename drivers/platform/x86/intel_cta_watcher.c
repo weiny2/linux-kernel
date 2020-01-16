@@ -73,6 +73,7 @@
 
 /* Tracer Config Offsets */
 #define TRCR_CONTROL_OFFSET	0x4
+#define TRCR_STREAM_UID_OFFSET	0x8
 #define TRCR_VECTOR_OFFSET	0x10
 
 /* Sampler Config Offsets */
@@ -121,6 +122,7 @@ struct watcher_header {
 struct watcher_config {
 	u32		control;
 	u32		period;
+	u32		stream_uid;
 	unsigned long	*vector;
 	unsigned int	vector_size;
 	unsigned int	select_limit;
@@ -135,8 +137,9 @@ struct watcher_endpoint {
 	int			devid;
 	struct ida		*ida;
 	bool			mode_lock;
-	u8			ctrl_offset;
-	u8			vector_start;
+	s8			ctrl_offset;
+	s8			stream_uid_offset;
+	s8			vector_start;
 
 	/* Samplers only */
 	unsigned long		smplr_data_start;
@@ -219,6 +222,19 @@ static void cta_watcher_write_period_to_dev(struct watcher_endpoint *ep)
 	writel(ep->config.period, ep->cfg_base + (ep->ctrl_offset ^ 0x4));
 }
 
+static void cta_watcher_write_stream_uid_to_dev(struct watcher_endpoint *ep)
+{
+	/* nothing to write if stream_uid_offset is negative */
+	if (ep->stream_uid_offset < 0)
+		return;
+
+	/*
+	 * The stream UUID occupies a 64b value, however the second DWORD
+	 * is reserved 0 so just write the value as such.
+	 */
+	writel(ep->config.period, ep->cfg_base + ep->stream_uid_offset);
+	writel(0, ep->cfg_base + ep->stream_uid_offset + 4);
+}
 void
 cta_watcher_write_vector_to_dev_type1(struct watcher_endpoint *ep)
 {
@@ -427,6 +443,7 @@ mode_store(struct device *dev, struct device_attribute *attr,
 
 		/* Write the period and vector registers to the device */
 		cta_watcher_write_period_to_dev(ep);
+		cta_watcher_write_stream_uid_to_dev(ep);
 		cta_watcher_write_vector_to_dev(ep);
 	}
 
@@ -753,6 +770,45 @@ token_store(struct device *dev, struct device_attribute *attr,
 }
 static DEVICE_ATTR_RW(token);
 
+static ssize_t
+stream_uid_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct watcher_endpoint *ep;
+
+	ep = dev_get_drvdata(dev);
+
+	if (!cta_watcher_is_tracer(ep) || ep->stream_uid_offset < 0)
+		return sprintf(buf, "%d\n", -1);
+
+	return sprintf(buf, "0x%08x\n", ep->config.stream_uid);
+}
+
+static ssize_t
+stream_uid_store(struct device *dev, struct device_attribute *attr,
+	    const char *buf, size_t count)
+{
+	struct watcher_endpoint *ep;
+	u32 stream_uid;
+	int result;
+
+	ep = dev_get_drvdata(dev);
+
+	if (!cta_watcher_is_tracer(ep) || ep->stream_uid_offset < 0)
+		return -EINVAL;
+
+	if (ep->mode_lock)
+		return -EPERM;
+
+	result = kstrtouint(buf, 0, &stream_uid);
+	if (result)
+		return result;
+
+	ep->config.stream_uid = stream_uid;
+
+	return strnlen(buf, count);
+}
+static DEVICE_ATTR_RW(stream_uid);
+
 static struct attribute *cta_watcher_attrs[] = {
 	&dev_attr_guid.attr,
 	&dev_attr_mode.attr,
@@ -765,6 +821,7 @@ static struct attribute *cta_watcher_attrs[] = {
 	&dev_attr_offset.attr,
 	&dev_attr_destination.attr,
 	&dev_attr_token.attr,
+	&dev_attr_stream_uid.attr,
 	NULL
 };
 ATTRIBUTE_GROUPS(cta_watcher);
@@ -974,14 +1031,18 @@ static int cta_watcher_probe(struct platform_device *pdev)
 		ep->ida = &tracer_devid_ida;
 		ep->ctrl_offset = TRCR_CONTROL_OFFSET;
 		ep->vector_start = TRCR_VECTOR_OFFSET;
+		ep->stream_uid_offset = TRCR_STREAM_UID_OFFSET;
 	} else {
 		ep->ida = &sampler_devid_ida;
 		ep->ctrl_offset = SMPLR_CONTROL_OFFSET;
 		ep->vector_start = SMPLR_VECTOR_OFFSET;
+		ep->stream_uid_offset = -1;
 	}
 
 	/* Add quirks related to TGL part */
 	if (priv->parent->device == 0x9a0d) {
+		/* tracer for TGL does not have support for stream UID */
+		ep->stream_uid_offset = -1;
 		/* strip section that would have been stream UID */
 		if (cta_watcher_is_tracer(ep))
 			ep->vector_start -= 8;

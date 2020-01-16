@@ -127,6 +127,22 @@ Contact:	David Box <david.e.box@linux.intel.com>
 Description:
 		(RO) Not applicable. Set to -1.
 
+What:		/sys/class/cta_watcher/trcrX/stream_uid
+Date:		September 2019
+KernelVersion:	5.5
+Contact:	David Box <david.e.box@linux.intel.com>
+Description:
+		(RW) The unique stream ID for the trace data. This value is
+		not writable when mode is 'Disabled'. If the tracer does not
+		support stream UID the value will be set to -1.
+
+What:		/sys/class/cta_watcher/smplrX/stream_uid
+Date:		September 2019
+KernelVersion:	5.5
+Contact:	David Box <david.e.box@linux.intel.com>
+Description:
+		(RO) Not applicable. Set to -1.
+
 What:		/sys/class/cta_telem/smplrX/size
 Date:		September 2019
 KernelVersion:	5.5
