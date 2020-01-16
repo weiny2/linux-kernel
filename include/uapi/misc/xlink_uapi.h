@@ -26,6 +26,11 @@
 #define XL_WRITE_CONTROL_DATA		_IOW(XLINK_MAGIC, 13, void*)
 #define XL_DATA_READY_CALLBACK		_IOW(XLINK_MAGIC, 14, void*)
 #define XL_DATA_CONSUMED_CALLBACK	_IOW(XLINK_MAGIC, 15, void*)
+#define XL_GET_DEVICE_NAME			_IOW(XLINK_MAGIC, 16, void*)
+#define XL_GET_DEVICE_LIST			_IOW(XLINK_MAGIC, 17, void*)
+#define XL_GET_DEVICE_STATUS		_IOW(XLINK_MAGIC, 18, void*)
+#define XL_BOOT_DEVICE				_IOW(XLINK_MAGIC, 19, void*)
+#define XL_RESET_DEVICE				_IOW(XLINK_MAGIC, 20, void*)
 
 struct xlinkopenchannel {
 	void *handle;
@@ -86,6 +91,39 @@ struct xlinkstartvpu {
 };
 
 struct xlinkstopvpu {
+	__u32 *return_code;
+};
+
+struct xlinkgetdevicename {
+	__u32 sw_device_id;
+	char *name;
+	__u32 name_size;
+	__u32 *return_code;
+};
+
+struct xlinkgetdevicelist {
+	__u32 *sw_device_id_list;
+	__u32 *num_devices;
+	int pid;
+	__u32 *return_code;
+};
+
+struct xlinkgetdevicestatus {
+	__u32 sw_device_id;
+	__u32 *device_status;
+	int pid;
+	__u32 *return_code;
+};
+
+struct xlinkbootdevice {
+	void *handle;
+	int operating_frequency;
+	__u32 *return_code;
+};
+
+struct xlinkresetdevice {
+	void *handle;
+	int operating_frequency;
 	__u32 *return_code;
 };
 

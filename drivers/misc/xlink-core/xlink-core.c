@@ -13,6 +13,7 @@
 #include <linux/mod_devicetable.h>
 #include <linux/uaccess.h>
 #include <linux/slab.h>
+#include <linux/kref.h>
 
 #ifdef CONFIG_XLINK_LOCAL_HOST
 #include <linux/keembay-vpu-ipc.h>
@@ -23,34 +24,45 @@
 #include "xlink-dispatcher.h"
 #include "xlink-platform.h"
 
+// xlink version number
 #define XLINK_VERSION_MAJOR	0
-#define XLINK_VERSION_MINOR	93
+#define XLINK_VERSION_MINOR	94
 
 #define XLINK_VPU_WAIT_FOR_READY (3000000)
 
+// device, class, and driver names
 #define DEVICE_NAME "xlnk"
 #define CLASS_NAME 	"xlkcore"
-
 #define DRV_NAME	"xlink-driver"
 
-#define XLINK_IPC_MAX_CHANNELS	1024
+// these are used to determine if an API was called from user or kernel space
+#define CHANNEL_SET_USER_BIT(chan) (chan |= (1 << 15))
+#define CHANNEL_USER_BIT_IS_SET(chan) (chan & (1 << 15))
+#define CHANNEL_CLEAR_USER_BIT(chan) (chan &= ~(1 << 15))
 
 static dev_t xdev;
 static struct class *dev_class;
 static struct cdev xlink_cdev;
 
-
 static long xlink_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
+static enum xlink_error xlink_write_data_user(struct xlink_handle *handle,
+		uint16_t chan, uint8_t const *pmessage, uint32_t size);
+
 static const struct file_operations fops = {
 		.owner 			= THIS_MODULE,
 		.unlocked_ioctl = xlink_ioctl,
 };
 
+struct xlink_handle_prv
+{
+	struct xlink_handle handle;
+	struct kref refcount;
+};
+
 struct keembay_xlink_dev {
 	struct platform_device *pdev;
-	struct xlink_global_handle gl_handle;
-	struct xlink_handle links[XLINK_MAX_CONNECTIONS];
-	int nmb_connected_links;
+	struct xlink_handle_prv links[XLINK_MAX_CONNECTIONS];
+	uint32_t nmb_connected_links;
 	struct mutex lock;
 };
 
@@ -62,17 +74,15 @@ struct keembay_xlink_dev {
  */
 static struct keembay_xlink_dev *xlink;
 
-struct xlink_event *xlink_create_event(enum xlink_error type,
+struct xlink_event *xlink_create_event(enum xlink_event_type type,
 		struct xlink_handle *handle, uint16_t chan,
 		uint32_t size, uint32_t timeout)
 {
 	struct xlink_event *new_event = NULL;
 	new_event = kzalloc(sizeof(*new_event), GFP_KERNEL);
-	if (new_event == NULL)
-	{
-		printk(KERN_INFO "Failed to allocate memory for new event\n");
+	if (!new_event)
 		return NULL;
-	}
+
 	new_event->handle = handle;
 	new_event->header.magic = XLINK_EVENT_HEADER_MAGIC;
 	new_event->header.id = XLINK_INVALID_EVENT_ID;
@@ -86,44 +96,48 @@ struct xlink_event *xlink_create_event(enum xlink_error type,
 
 void xlink_destroy_event(struct xlink_event *event)
 {
-	kfree(event);
+	if (event)
+		kfree(event);
 }
 
-static int get_next_link_id(void)
+static uint32_t get_next_link_id(void)
 {
-	int i = 0;
+	uint32_t i = 0;
 	if (xlink->nmb_connected_links == XLINK_MAX_CONNECTIONS)
-		return -1;
+		return XLINK_MAX_CONNECTIONS;
 	for (i = 0; i < XLINK_MAX_CONNECTIONS; i++)
-		if (xlink->links[i].link_id == -1)
+		if (xlink->links[i].handle.link_id == XLINK_INVALID_LINK_ID)
 			break;
 	return i;
 }
 
-static struct xlink_handle *get_link(int link_id)
+static struct xlink_handle *get_link(uint32_t link_id)
 {
 	struct xlink_handle *link = NULL;
-	mutex_lock(&xlink->lock);
-	if (xlink->links[link_id].link_id == link_id) {
-		link = &xlink->links[link_id];
+	if (link_id < XLINK_MAX_CONNECTIONS) {
+		mutex_lock(&xlink->lock);
+		if (xlink->links[link_id].handle.link_id == link_id) {
+			link = &xlink->links[link_id].handle;
+		}
+		mutex_unlock(&xlink->lock);
 	}
-	mutex_unlock(&xlink->lock);
 	return link;
 }
 static struct xlink_handle *get_link_by_device(enum xlink_dev_type dev_type)
 {
 	int i = 0;
 	struct xlink_handle *link = NULL;
-	mutex_lock(&xlink->lock);
-	for(i = 0; i < xlink->nmb_connected_links; i++){
-		if(xlink->links[i].dev_type == dev_type){
-			link = &xlink->links[i];
+	for (i = 0; i < xlink->nmb_connected_links; i++) {
+		if (xlink->links[i].handle.dev_type == dev_type) {
+			link = &xlink->links[i].handle;
 			break;
 		}
 	}
-	mutex_unlock(&xlink->lock);
 	return link;
 }
+
+// For now , do nothing and leave for further consideration
+static void release_after_kref_put(struct kref *ref) {}
 
 /* Driver probing. */
 static int kmb_xlink_probe(struct platform_device *pdev)
@@ -158,7 +172,7 @@ static int kmb_xlink_probe(struct platform_device *pdev)
 	xlink_dev->nmb_connected_links = 0;
 	mutex_init(&xlink_dev->lock);
 	for (i = 0; i < XLINK_MAX_CONNECTIONS; i++) {
-		xlink_dev->links[i].link_id = -1;
+		xlink_dev->links[i].handle.link_id = XLINK_INVALID_LINK_ID;
 	}
 
 	platform_set_drvdata(pdev, xlink_dev);
@@ -235,6 +249,7 @@ static int kmb_xlink_remove(struct platform_device *pdev)
 	device_destroy(dev_class, xdev);
 	cdev_del(&xlink_cdev);
 	class_destroy(dev_class);
+	printk(KERN_DEBUG "XLink Driver removed\n");
 	return 0;
 }
 
@@ -254,11 +269,21 @@ static long xlink_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	struct xlinkconnect con = {0};
 	struct xlinkrelease rel = {0};
 	struct xlinkstartvpu startvpu = {0};
+	struct xlinkcallback cb = {0};
+	struct xlinkgetdevicename devn = {0};
+	struct xlinkgetdevicelist devl = {0};
+	struct xlinkgetdevicestatus devs = {0};
+	struct xlinkbootdevice boot = {0};
+	struct xlinkresetdevice res = {0};
 	uint8_t *rdaddr;
 	uint32_t size;
 	uint8_t reladdr;
 	uint8_t volbuf[XLINK_MAX_BUF_SIZE];
 	char filename[64];
+	char name[XLINK_MAX_DEVICE_NAME_SIZE];
+	uint32_t sw_device_id_list[XLINK_MAX_DEVICE_LIST_SIZE];
+	uint32_t num_devices = 0;
+	uint32_t device_status = 0;
 
 	switch (cmd) {
 	case XL_CONNECT:
@@ -288,6 +313,30 @@ static long xlink_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		if (copy_to_user(op.return_code, (void *)&rc, sizeof(rc)))
 			return -EFAULT;
 		break;
+	case XL_DATA_READY_CALLBACK:
+		if (copy_from_user(&cb, (int32_t *)arg,
+				sizeof(struct xlinkcallback)))
+			return -EFAULT;
+		if (copy_from_user(&devH, (struct xlink_handle *)cb.handle,
+				sizeof(struct xlink_handle)))
+			return -EFAULT;
+		CHANNEL_SET_USER_BIT(cb.chan); // set top bit to indicate a user space call
+		rc = xlink_data_ready_callback(&devH, cb.chan, cb.callback);
+		if (copy_to_user(cb.return_code, (void *)&rc, sizeof(rc)))
+			return -EFAULT;
+		break;
+	case XL_DATA_CONSUMED_CALLBACK:
+		if (copy_from_user(&cb, (int32_t *)arg,
+				sizeof(struct xlinkcallback)))
+			return -EFAULT;
+		if (copy_from_user(&devH, (struct xlink_handle *)cb.handle,
+				sizeof(struct xlink_handle)))
+			return -EFAULT;
+		CHANNEL_SET_USER_BIT(cb.chan); // set top bit to indicate a user space call
+		rc = xlink_data_consumed_callback(&devH, cb.chan, cb.callback);
+		if (copy_to_user(cb.return_code, (void *)&rc, sizeof(rc)))
+			return -EFAULT;
+		break;
 	case XL_READ_DATA:
 		if (copy_from_user(&rd, (int32_t *)arg, sizeof(struct xlinkreaddata)))
 			return -EFAULT;
@@ -296,7 +345,7 @@ static long xlink_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			return -EFAULT;
 		rc = xlink_read_data(&devH, rd.chan, &rdaddr, &size);
 		if (!rc) {
-			if(devH.dev_type == IPC_DEVICE) {
+			if (devH.dev_type == IPC_DEVICE) {
 				if (copy_to_user(rd.pmessage, (void *)&rdaddr, sizeof(uint32_t)))
 				return -EFAULT;
 			} else {
@@ -334,9 +383,13 @@ static long xlink_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		if (copy_from_user(&devH, (struct xlink_handle *)wr.handle,
 				sizeof(struct xlink_handle)))
 			return -EFAULT;
-		rc = xlink_write_data(&devH, wr.chan, wr.pmessage, wr.size);
-		if (copy_to_user(wr.return_code, (void *)&rc, sizeof(rc)))
+		if (wr.size <= XLINK_MAX_DATA_SIZE) {
+			rc = xlink_write_data_user(&devH, wr.chan, wr.pmessage, wr.size);
+			if (copy_to_user(wr.return_code, (void *)&rc, sizeof(rc)))
+				return -EFAULT;
+		} else {
 			return -EFAULT;
+		}
 		break;
 	case XL_WRITE_VOLATILE:
 		if (copy_from_user(&wr, (int32_t *)arg, sizeof(struct xlinkwritedata)))
@@ -360,7 +413,7 @@ static long xlink_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		if (copy_from_user(&devH, (struct xlink_handle *)wr.handle,
 				sizeof(struct xlink_handle)))
 			return -EFAULT;
-		if (wr.size <= MAX_CONTROL_DATA_SIZE) {
+		if (wr.size <= XLINK_MAX_CONTROL_DATA_SIZE) {
 			if (copy_from_user(volbuf, (char *)wr.pmessage, wr.size))
 				return -EFAULT;
 			rc = xlink_write_control_data(&devH, wr.chan, volbuf, wr.size);
@@ -424,6 +477,74 @@ static long xlink_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			return -EFAULT;
 		rc = xlink_disconnect(&devH);
 		if (copy_to_user(con.return_code, (void *)&rc, sizeof(rc)))
+			return -EFAULT;
+		break;
+	case XL_GET_DEVICE_NAME:
+		if (copy_from_user(&devn, (int32_t *)arg,
+				sizeof(struct xlinkgetdevicename)))
+			return -EFAULT;
+		rc = xlink_get_device_name(devn.sw_device_id, name,
+				devn.name_size);
+		if (!rc) {
+			if (copy_to_user(devn.name, (void *)name, devn.name_size))
+				return -EFAULT;
+		}
+		if (copy_to_user(devn.return_code, (void *)&rc, sizeof(rc)))
+			return -EFAULT;
+		break;
+	case XL_GET_DEVICE_LIST:
+		if (copy_from_user(&devl, (int32_t *)arg,
+				sizeof(struct xlinkgetdevicelist)))
+			return -EFAULT;
+		rc = xlink_get_device_list(sw_device_id_list, &num_devices, devl.pid);
+		if (!rc && (num_devices <= XLINK_MAX_DEVICE_LIST_SIZE)) {
+			/* TODO: this next copy is dangerous! we have no idea how large
+			   the devl.sw_device_id_list buffer is provided by the user.
+			   if num_devices is too large, the copy will overflow the buffer.
+			 */
+			if (copy_to_user(devl.sw_device_id_list, (void *)sw_device_id_list,
+					(sizeof(*sw_device_id_list) * num_devices)))
+				return -EFAULT;
+			if (copy_to_user(devl.num_devices, (void *)&num_devices,
+					(sizeof(num_devices))))
+				return -EFAULT;
+		}
+		if (copy_to_user(devl.return_code, (void *)&rc, sizeof(rc)))
+			return -EFAULT;
+		break;
+	case XL_GET_DEVICE_STATUS:
+		if (copy_from_user(&devs, (int32_t *)arg,
+				sizeof(struct xlinkgetdevicestatus)))
+			return -EFAULT;
+		rc = xlink_get_device_status(devs.sw_device_id, &device_status);
+		if (!rc) {
+			if (copy_to_user(devs.device_status, (void *)&device_status,
+					sizeof(device_status)))
+				return -EFAULT;
+		}
+		if (copy_to_user(devs.return_code, (void *)&rc, sizeof(rc)))
+			return -EFAULT;
+		break;
+	case XL_BOOT_DEVICE:
+		if (copy_from_user(&boot, (int32_t *)arg,
+				sizeof(struct xlinkbootdevice)))
+			return -EFAULT;
+		if (copy_from_user(&devH, (struct xlink_handle *)boot.handle,
+				sizeof(struct xlink_handle)))
+			return -EFAULT;
+		rc = xlink_boot_device(&devH, boot.operating_frequency);
+		if (copy_to_user(boot.return_code, (void *)&rc, sizeof(rc)))
+			return -EFAULT;
+		break;
+	case XL_RESET_DEVICE:
+		if (copy_from_user(&res, (int32_t *)arg,
+				sizeof(struct xlinkresetdevice)))
+			return -EFAULT;
+		if (copy_from_user(&devH, (struct xlink_handle *)res.handle,
+				sizeof(struct xlink_handle)))
+			return -EFAULT;
+		rc = xlink_reset_device(&devH, res.operating_frequency);
+		if (copy_to_user(res.return_code, (void *)&rc, sizeof(rc)))
 			return -EFAULT;
 		break;
 	}
@@ -496,7 +617,7 @@ enum xlink_error xlink_start_vpu(char *filename)
 }
 EXPORT_SYMBOL(xlink_start_vpu);
 
-enum xlink_error xlink_initialize(struct xlink_global_handle *gl_handle)
+enum xlink_error xlink_initialize(void)
 {
 	return X_LINK_SUCCESS;
 }
@@ -506,43 +627,69 @@ enum xlink_error xlink_connect(struct xlink_handle *handle)
 {
 	enum xlink_error rc = 0;
 	struct xlink_handle *link = NULL;
-	int link_id = -1;
+	uint32_t link_id = XLINK_MAX_CONNECTIONS;
+	struct xlink_handle_prv* prv_ctx = NULL;
+	size_t name_size = XLINK_MAX_DEVICE_NAME_SIZE;
+	char *device_name = NULL;
 
-	if ((xlink == NULL) || (handle == NULL)) {
+	if (!xlink || !handle)
 		return X_LINK_ERROR;
-	}
-	link = get_link_by_device(handle->dev_type);
+	/*
+	 * Keep get_link_by_device also be protected considering multi
+	 * process need get same link id via same dev_type when invoking
+	 * xlink_connect cocurrently in user space
+	 */
 	mutex_lock(&xlink->lock);
-	if (link == NULL) {
+	link = get_link_by_device(handle->dev_type);
+	if (!link) {
 		link_id = get_next_link_id();
-		if (link_id < 0) {
-			printk(KERN_DEBUG "Maximum number of connections reached\n");
+		if (link_id >=  XLINK_MAX_CONNECTIONS) {
+			printk(KERN_DEBUG "xlink_connect - max number of connections\n");
 			mutex_unlock(&xlink->lock);
 			return X_LINK_ERROR;
 		}
-		// platform specific connect
-		rc = xlink_platform_connect(handle->dev_type,
-				handle->dev_path, handle->dev_path2,
-				&handle->fd);
+		device_name = kzalloc(sizeof(char) * name_size, GFP_KERNEL);
+		if (!device_name) {
+			mutex_unlock(&xlink->lock);
+			return X_LINK_ERROR;
+		}
+		rc = xlink_get_device_name(handle->sw_device_id, device_name, name_size);
 		if (rc) {
-			printk(KERN_DEBUG "Platform connect failed\n");
+			printk(KERN_DEBUG "xlink_connect - get device name failed\n");
+			mutex_unlock(&xlink->lock);
+			kfree(device_name);
+			return X_LINK_ERROR;
+		}
+		// platform specific connect
+		rc = xlink_platform_connect(handle->dev_type, device_name,
+				&handle->fd);
+		kfree(device_name);
+		if (rc) {
+			printk(KERN_DEBUG "xlink_connect - platform connect failed %d\n", rc);
 			mutex_unlock(&xlink->lock);
 			return X_LINK_ERROR;
 		}
 		// set link handler reference and link id
 		handle->link_id = link_id;
-		xlink->links[link_id] = *handle;
+		xlink->links[link_id].handle = *handle;
 		xlink->nmb_connected_links++;
+		kref_init(&xlink->links[link_id].refcount);
 		if (handle->dev_type != IPC_DEVICE) {
 			// start dispatcher
-			rc = xlink_dispatcher_start(&xlink->links[link_id]);
+			rc = xlink_dispatcher_start(&xlink->links[link_id].handle);
 			if (rc) {
-				printk(KERN_DEBUG "Dispatcher start failed\n");
+				printk(KERN_INFO "xlink_connect - dispatcher start failed\n");
 				rc = X_LINK_ERROR;
 			}
 		}
+		printk(KERN_INFO "dev= %d connected - link_id= %d nmb_connected_links= %d\n",
+				xlink->links[link_id].handle.dev_type, xlink->links[link_id].handle.link_id,
+				xlink->nmb_connected_links);
 	} else {
 		// already connected
+		printk(KERN_INFO "dev= %d ALREADY connected\n",handle->dev_type );
+		prv_ctx = container_of(link, struct xlink_handle_prv, handle);
+		kref_get(&prv_ctx->refcount);
 		*handle = *link;
 	}
 	mutex_unlock(&xlink->lock);
@@ -550,6 +697,87 @@ enum xlink_error xlink_connect(struct xlink_handle *handle)
 	return rc;
 }
 EXPORT_SYMBOL(xlink_connect);
+
+
+enum xlink_error xlink_data_ready_callback(struct xlink_handle *handle,
+		uint16_t chan, void *func)
+{
+	enum xlink_error rc = 0;
+	struct xlink_handle *link = NULL;
+	struct xlink_event *event = NULL;
+	int event_queued = 0;
+	char origin = 'K';
+
+	if(CHANNEL_USER_BIT_IS_SET(chan))
+		origin  ='U';     // function called from user space
+	CHANNEL_CLEAR_USER_BIT(chan);  // restore proper channel value
+
+	if (!xlink || !handle)
+		return X_LINK_ERROR;
+
+	link = get_link(handle->link_id);
+	if (!link)
+		return X_LINK_ERROR;
+
+	event = xlink_create_event(XLINK_DATA_READY_CALLBACK_REQ, link, chan,
+			0, 0);
+	if (!event)
+		return X_LINK_ERROR;
+
+	event->data = func;
+	event->callback_origin = origin;
+	if (!func)	// if func NULL we are disabling callbacks for this channel
+		event->calling_pid = NULL;
+	else
+		event->calling_pid = get_current();
+	rc = xlink_multiplexer_tx(event, &event_queued);
+	if (!event_queued) {
+		xlink_destroy_event(event);
+	}
+	return rc;
+}
+EXPORT_SYMBOL(xlink_data_ready_callback);
+
+enum xlink_error xlink_data_consumed_callback(struct xlink_handle *handle,
+		uint16_t chan, void *func)
+{
+	enum xlink_error rc = 0;
+	struct xlink_handle *link = NULL;
+	struct xlink_event *event = NULL;
+	int event_queued = 0;
+	char origin = 'K';
+
+	if (chan & (1 << 15))
+		origin  ='U';    // user space call
+	chan &= ~(1 << 15);  // c;ear top bit
+
+
+	if (!xlink || !handle)
+		return X_LINK_ERROR;
+
+	link = get_link(handle->link_id);
+	if (!link)
+		return X_LINK_ERROR;
+
+	event = xlink_create_event(XLINK_DATA_CONSUMED_CALLBACK_REQ, link, chan,
+			0, 0);
+	if (!event)
+		return X_LINK_ERROR;
+
+	event->data = func;
+	event->callback_origin = origin;
+	if (!func)	// if func NULL we are disabling callbacks for this channel
+		event->calling_pid = NULL;
+	else
+		event->calling_pid = get_current();
+
+	rc = xlink_multiplexer_tx(event, &event_queued);
+	if (!event_queued) {
+		xlink_destroy_event(event);
+	}
+	return rc;
+}
+EXPORT_SYMBOL(xlink_data_consumed_callback);
 
 enum xlink_error xlink_open_channel(struct xlink_handle *handle,
 		uint16_t chan, enum xlink_opmode mode, uint32_t data_size,
@@ -560,15 +788,18 @@ enum xlink_error xlink_open_channel(struct xlink_handle *handle,
 	struct xlink_event *event = NULL;
 	int event_queued = 0;
 
-	if ((xlink == NULL) || (handle == NULL)) {
+	if (!xlink || !handle)
 		return X_LINK_ERROR;
-	}
+
 	link = get_link(handle->link_id);
-	if (link == NULL) {
+	if (!link)
 		return X_LINK_ERROR;
-	}
+
 	event = xlink_create_event(XLINK_OPEN_CHANNEL_REQ, link, chan,
 			data_size, timeout);
+	if (!event)
+		return X_LINK_ERROR;
+
 	event->data = &mode;
 	rc = xlink_multiplexer_tx(event, &event_queued);
 	if (!event_queued) {
@@ -586,15 +817,18 @@ enum xlink_error xlink_close_channel(struct xlink_handle *handle,
 	struct xlink_event *event = NULL;
 	int event_queued = 0;
 
-	if ((xlink == NULL) || (handle == NULL)) {
+	if (!xlink || !handle)
 		return X_LINK_ERROR;
-	}
+
 	link = get_link(handle->link_id);
-	if (link == NULL) {
+	if (!link)
 		return X_LINK_ERROR;
-	}
+
 	event = xlink_create_event(XLINK_CLOSE_CHANNEL_REQ, link,
 			chan, 0, 0);
+	if (!event)
+		return X_LINK_ERROR;
+
 	rc = xlink_multiplexer_tx(event, &event_queued);
 	if (!event_queued) {
 		xlink_destroy_event(event);
@@ -610,20 +844,66 @@ enum xlink_error xlink_write_data(struct xlink_handle *handle,
 	struct xlink_handle *link = NULL;
 	struct xlink_event *event = NULL;
 	int event_queued = 0;
+
+	if (!xlink || !handle)
+		return X_LINK_ERROR;
+
+	if (size > XLINK_MAX_DATA_SIZE)
+		return X_LINK_ERROR;
+
+	link = get_link(handle->link_id);
+	if (!link)
+		return X_LINK_ERROR;
+
+	event = xlink_create_event(XLINK_WRITE_REQ, link, chan, size, 0);
+	if (!event)
+		return X_LINK_ERROR;
+
+	if (chan < XLINK_IPC_MAX_CHANNELS) {
+		/* only passing message address across IPC interface */
+		event->data = &pmessage;
+		rc = xlink_multiplexer_tx(event, &event_queued);
+		xlink_destroy_event(event);
+	} else {
+		event->data = (uint8_t *)pmessage;
+		event->paddr = 0;
+		rc = xlink_multiplexer_tx(event, &event_queued);
+		if (!event_queued) {
+			xlink_destroy_event(event);
+		}
+	}
+	return rc;
+}
+EXPORT_SYMBOL(xlink_write_data);
+
+static enum xlink_error xlink_write_data_user(struct xlink_handle *handle,
+		uint16_t chan, uint8_t const *pmessage, uint32_t size)
+{
+	enum xlink_error rc = 0;
+	struct xlink_handle *link = NULL;
+	struct xlink_event *event = NULL;
+	int event_queued = 0;
 	dma_addr_t paddr;
 	uint32_t addr;
 
-	if ((xlink == NULL) || (handle == NULL)) {
+	if (!xlink || !handle)
 		return X_LINK_ERROR;
-	}
+
+	if (size > XLINK_MAX_DATA_SIZE)
+		return X_LINK_ERROR;
+
 	link = get_link(handle->link_id);
-	if (link == NULL) {
+	if (!link)
 		return X_LINK_ERROR;
-	}
+
 	event = xlink_create_event(XLINK_WRITE_REQ, link, chan, size, 0);
-	if(chan < XLINK_IPC_MAX_CHANNELS) {
+	if (!event)
+		return X_LINK_ERROR;
+
+	if (chan < XLINK_IPC_MAX_CHANNELS) {
 		/* only passing message address across IPC interface */
-		if(get_user(addr, (uint32_t *)pmessage)){
+		if (get_user(addr, (uint32_t *)pmessage)) {
+			xlink_destroy_event(event);
 			return X_LINK_ERROR;
 		}
 		event->data = &addr;
@@ -638,20 +918,20 @@ enum xlink_error xlink_write_data(struct xlink_handle *handle,
 		}
 		if (copy_from_user(event->data, (char *)pmessage, size)) {
 			xlink_platform_deallocate(&xlink->pdev->dev, event->data, paddr, size,
-				XLINK_PACKET_ALIGNMENT);
+					XLINK_PACKET_ALIGNMENT);
+			xlink_destroy_event(event);
 			return X_LINK_ERROR;
 		}
 		event->paddr = paddr;
 		rc = xlink_multiplexer_tx(event, &event_queued);
 		if (!event_queued) {
 			xlink_platform_deallocate(&xlink->pdev->dev, event->data, paddr, size,
-				XLINK_PACKET_ALIGNMENT);
+					XLINK_PACKET_ALIGNMENT);
 			xlink_destroy_event(event);
 		}
 	}
 	return rc;
 }
-EXPORT_SYMBOL(xlink_write_data);
 
 
 enum xlink_error xlink_write_control_data(struct xlink_handle *handle,
@@ -662,18 +942,19 @@ enum xlink_error xlink_write_control_data(struct xlink_handle *handle,
 	struct xlink_event *event = NULL;
 	int event_queued = 0;
 
-	if(size > MAX_CONTROL_DATA_SIZE)
-		return X_LINK_ERROR;   // XLink Paramater Error ??
+	if (!xlink || !handle)
+		return X_LINK_ERROR;
 
-	if ((xlink == NULL) || (handle == NULL)) {
-		return X_LINK_ERROR;
-	}
+	if (size > XLINK_MAX_CONTROL_DATA_SIZE)
+		return X_LINK_ERROR; // TODO: XLink Paramater Error
+
 	link = get_link(handle->link_id);
-	if (link == NULL) {
+	if (!link)
 		return X_LINK_ERROR;
-	}
-	event = xlink_create_event(XLINK_WRITE_CONTROL_REQ, link, chan,
-			size, 0);
+
+	event = xlink_create_event(XLINK_WRITE_CONTROL_REQ, link, chan, size, 0);
+	if (!event)
+		return X_LINK_ERROR;
 
 	memcpy(event->header.control_data, pmessage, size);
 	rc = xlink_multiplexer_tx(event, &event_queued);
@@ -694,14 +975,20 @@ enum xlink_error xlink_write_volatile(struct xlink_handle *handle,
 	int event_queued = 0;
 	dma_addr_t paddr;
 
-	if ((xlink == NULL) || (handle == NULL)) {
+	if (!xlink || !handle)
 		return X_LINK_ERROR;
-	}
+
+	if (size > XLINK_MAX_BUF_SIZE)
+		return X_LINK_ERROR; // TODO: XLink Paramater Error
+
 	link = get_link(handle->link_id);
-	if (link == NULL) {
+	if (!link)
 		return X_LINK_ERROR;
-	}
+
 	event = xlink_create_event(XLINK_WRITE_VOLATILE_REQ, link, chan, size, 0);
+	if (!event)
+		return X_LINK_ERROR;
+
 	event->data = xlink_platform_allocate(&xlink->pdev->dev, &paddr, size,
 			XLINK_PACKET_ALIGNMENT);
 	if (!event->data) {
@@ -739,14 +1026,17 @@ enum xlink_error xlink_read_data(struct xlink_handle *handle,
 	struct xlink_event *event = NULL;
 	int event_queued = 0;
 
-	if ((xlink == NULL) || (handle == NULL)) {
+	if (!xlink || !handle)
 		return X_LINK_ERROR;
-	}
+
 	link = get_link(handle->link_id);
-	if (link == NULL) {
+	if (!link)
 		return X_LINK_ERROR;
-	}
+
 	event = xlink_create_event(XLINK_READ_REQ, link, chan, *size, 0);
+	if (!event)
+		return X_LINK_ERROR;
+
 	event->pdata = (void **)pmessage;
 	event->length = size;
 	rc = xlink_multiplexer_tx(event, &event_queued);
@@ -765,15 +1055,18 @@ enum xlink_error xlink_read_data_to_buffer(struct xlink_handle *handle,
 	struct xlink_event *event = NULL;
 	int event_queued = 0;
 
-	if ((xlink == NULL) || (handle == NULL)) {
+	if (!xlink || !handle)
 		return X_LINK_ERROR;
-	}
+
 	link = get_link(handle->link_id);
-	if (link == NULL) {
+	if (!link)
 		return X_LINK_ERROR;
-	}
+
 	event = xlink_create_event(XLINK_READ_TO_BUFFER_REQ, link, chan,
 			*size, 0);
+	if (!event)
+		return X_LINK_ERROR;
+
 	event->data = message;
 	event->length = size;
 	rc = xlink_multiplexer_tx(event, &event_queued);
@@ -801,14 +1094,17 @@ enum xlink_error xlink_release_data(struct xlink_handle *handle,
 	struct xlink_event *event = NULL;
 	int event_queued = 0;
 
-	if ((xlink == NULL) || (handle == NULL)) {
+	if (!xlink || !handle)
 		return X_LINK_ERROR;
-	}
+
 	link = get_link(handle->link_id);
-	if (link == NULL) {
+	if (!link)
 		return X_LINK_ERROR;
-	}
+
 	event = xlink_create_event(XLINK_RELEASE_REQ, link, chan, 0, 0);
+	if (!event)
+		return X_LINK_ERROR;
+
 	event->data = data_addr;
 	rc = xlink_multiplexer_tx(event, &event_queued);
 	if (!event_queued) {
@@ -818,86 +1114,160 @@ enum xlink_error xlink_release_data(struct xlink_handle *handle,
 }
 EXPORT_SYMBOL(xlink_release_data);
 
-uint32_t xlink_get_number_of_devices(void)
-{
-	/* To be implemented - needed ??*/
-	return 0;
-}
-
-enum xlink_error xlink_boot_remote(struct xlink_handle *handle)
-{
-	enum xlink_error rc = 0;
-	/* To be implemented */
-	return rc;
-}
-
-enum xlink_error xlink_reset_remote(struct xlink_handle *handle)
-{
-	enum xlink_error rc = 0;
-	struct xlink_handle *link = NULL;
-
-	if ((xlink == NULL) || (handle == NULL)) {
-		return X_LINK_ERROR;
-	}
-	link = get_link(handle->link_id);
-	if (link == NULL) {
-		return X_LINK_ERROR;
-	}
-	rc = xlink_platform_reset_remote(link->dev_type, link->fd, NULL);
-	return rc;
-}
-
 enum xlink_error xlink_disconnect(struct xlink_handle *handle)
 {
 	enum xlink_error rc = 0;
 	struct xlink_handle *link = NULL;
+	struct xlink_handle_prv* prv_ctx = NULL;
 
-	if ((xlink == NULL) || (handle == NULL)) {
+	if (!xlink || !handle)
 		return X_LINK_ERROR;
-	}
+
 	link = get_link(handle->link_id);
-	if (link == NULL) {
+	if (!link)
 		return X_LINK_ERROR;
-	}
-	// stop dispatcher
-	if (link->dev_type != IPC_DEVICE) {
-		rc = xlink_dispatcher_stop(link->link_id);
-		if (rc != X_LINK_SUCCESS) {
-			printk(KERN_DEBUG "Dispatcher stop failed\n");
-			return X_LINK_ERROR;
+	prv_ctx = container_of(link, struct xlink_handle_prv, handle);
+	// Decrease the refcount with mutex and release the connection if refcount is 0
+	if (kref_put_mutex(&prv_ctx->refcount, release_after_kref_put, &xlink->lock)) {
+		mutex_unlock(&xlink->lock);
+		// stop dispatcher
+		if (link->dev_type != IPC_DEVICE) {
+			rc = xlink_dispatcher_stop(link->link_id);
+			if (rc != X_LINK_SUCCESS) {
+				printk(KERN_DEBUG "Dispatcher stop failed\n");
+				return X_LINK_ERROR;
+			}
 		}
+		// TODO: reset device?
+		// set link handler reference
+		mutex_lock(&xlink->lock);
+		xlink->links[link->link_id].handle.link_id = XLINK_INVALID_LINK_ID;
+		xlink->nmb_connected_links--;
+		mutex_unlock(&xlink->lock);
 	}
-	// reset remote
-	xlink_reset_remote(link);
-	// set link handler reference
-	mutex_lock(&xlink->lock);
-	xlink->links[link->link_id].link_id = -1;
-	xlink->nmb_connected_links--;
-	mutex_unlock(&xlink->lock);
+
 	return rc;
 }
 EXPORT_SYMBOL(xlink_disconnect);
 
-enum xlink_error xlink_reset_all(void)
+enum xlink_error xlink_get_device_name(uint32_t sw_device_id, char *name,
+		size_t name_size)
 {
 	enum xlink_error rc = 0;
-	/* To be implemented */
-	return rc;
-}
 
-enum xlink_error xlink_prof_start(void)
-{
-	enum xlink_error rc = 0;
-	/* To be implemented */
-	return rc;
-}
+	if (!xlink)
+		return X_LINK_ERROR;
 
-enum xlink_error xlink_prof_stop(void)
-{
-	enum xlink_error rc = 0;
-	/* To be implemented */
+	if (!name || !name_size)
+		return X_LINK_ERROR;
+
+	rc = xlink_platform_get_device_name(sw_device_id, name, name_size);
+	if (rc)
+		rc = X_LINK_ERROR;
+	else
+		rc = X_LINK_SUCCESS;
+
 	return rc;
 }
+EXPORT_SYMBOL(xlink_get_device_name);
+
+enum xlink_error xlink_get_device_list(uint32_t *sw_device_id_list,
+		uint32_t *num_devices, int pid)
+{
+	enum xlink_error rc = 0;
+
+	if (!xlink)
+		return X_LINK_ERROR;
+
+	if (!sw_device_id_list || !num_devices)
+		return X_LINK_ERROR;
+
+	/* TODO: loop through each interface and sum the lists up */
+	rc = xlink_platform_get_device_list(sw_device_id_list, num_devices, pid);
+	if (rc)
+		rc = X_LINK_ERROR;
+	else
+		rc = X_LINK_SUCCESS;
+
+	return rc;
+}
+EXPORT_SYMBOL(xlink_get_device_list);
+
+enum xlink_error xlink_get_device_status(uint32_t sw_device_id,
+		uint32_t *device_status)
+{
+	enum xlink_error rc = 0;
+	size_t name_size = XLINK_MAX_DEVICE_NAME_SIZE;
+	char *device_name = NULL;
+
+	if (!xlink)
+		return X_LINK_ERROR;
+
+	if (!device_status)
+		return X_LINK_ERROR;
+
+	device_name = kzalloc(sizeof(char) * name_size, GFP_KERNEL);
+	if (!device_name)
+		return X_LINK_ERROR;
+
+	rc = xlink_get_device_name(sw_device_id, device_name, name_size);
+	if (rc == X_LINK_SUCCESS) {
+		rc = xlink_platform_get_device_status(device_name, device_status);
+		if (rc) {
+			rc = X_LINK_ERROR;
+		}
+		else {
+			rc = X_LINK_SUCCESS;
+		}
+	}
+	kfree(device_name);
+	return rc;
+}
+EXPORT_SYMBOL(xlink_get_device_status);
+
+enum xlink_error xlink_boot_device(struct xlink_handle *handle,
+		enum xlink_sys_freq operating_frequency)
+{
+	enum xlink_error rc = 0;
+	size_t name_size = XLINK_MAX_DEVICE_NAME_SIZE;
+	char *device_name = NULL;
+
+	if (!xlink || !handle)
+		return X_LINK_ERROR;
+
+	device_name = kzalloc(sizeof(char) * name_size, GFP_KERNEL);
+	if (!device_name)
+		return X_LINK_ERROR;
+
+	rc = xlink_get_device_name(handle->sw_device_id, device_name, name_size);
+	if (rc == X_LINK_SUCCESS) {
+		rc = xlink_platform_boot_device(device_name, NULL);
+		if (rc)
+			rc = X_LINK_ERROR;
+		else
+			rc = X_LINK_SUCCESS;
+	}
+
+	return rc;
+}
+EXPORT_SYMBOL(xlink_boot_device);
+
+enum xlink_error xlink_reset_device(struct xlink_handle *handle,
+		enum xlink_sys_freq operating_frequency)
+{
+	enum xlink_error rc = 0;
+
+	if (!xlink || !handle)
+		return X_LINK_ERROR;
+
+	rc = xlink_platform_reset_device(handle->fd, operating_frequency);
+	if (rc)
+		rc = X_LINK_ERROR;
+	else
+		rc = X_LINK_SUCCESS;
+	return rc;
+}
+EXPORT_SYMBOL(xlink_reset_device);
 
 /* Device tree driver match. */
 static const struct of_device_id kmb_xlink_of_match[] = {

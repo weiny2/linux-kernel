@@ -114,27 +114,30 @@ static int is_valid_event_header(struct xlink_event *event)
 static int dispatcher_event_send(struct xlink_event *event)
 {
 	int rc = 0;
+	size_t event_header_size = sizeof(event->header);
 
 	// write event header
 	// printk(KERN_DEBUG "Sending event: type = 0x%x, id = 0x%x\n",
 	// 		event->header.type, event->header.id);
 	rc = xlink_platform_write(event->handle->dev_type,
-			event->handle->fd, &event->header, sizeof(event->header),
+			event->handle->fd, &event->header, &event_header_size,
 			event->header.timeout);
-	if (rc) {
+	if (rc || (event_header_size != sizeof(event->header))) {
 		printk(KERN_DEBUG "Write header failed %d\n", rc);
 	} else {
 		if ((event->header.type == XLINK_WRITE_REQ) ||
 				(event->header.type == XLINK_WRITE_VOLATILE_REQ)) {
 			// write event data
 			rc = xlink_platform_write(event->handle->dev_type,
-					event->handle->fd, event->data, event->header.size,
+					event->handle->fd, event->data, &event->header.size,
 					event->header.timeout);
 			if (rc) {
 				printk(KERN_DEBUG "Write data failed %d\n", rc);
 			}
-			xlink_platform_deallocate(disp_dev, event->data, event->paddr,
-					event->header.size, XLINK_PACKET_ALIGNMENT);
+			if(event->paddr != 0){
+				xlink_platform_deallocate(disp_dev, event->data, event->paddr,
+						event->header.size, XLINK_PACKET_ALIGNMENT);
+			}
 		}
 	}
 	return rc;
@@ -149,6 +152,9 @@ static int xlink_dispatcher_rxthread(void* context)
 
 	// printk(KERN_DEBUG "dispatcher rxthread started\n");
 	event = xlink_create_event(0, handle, 0, 0, 0);
+	if (!event)
+		return -1;
+
 	allow_signal(SIGTERM); // allow thread termination while waiting on sem
 	complete(&disp[handle->link_id].rx_done);
 	while (!kthread_should_stop()) {
@@ -164,6 +170,8 @@ static int xlink_dispatcher_rxthread(void* context)
 			rc = xlink_multiplexer_rx(event);
 			if (!rc) {
 				event = xlink_create_event(0, handle, 0, 0, 0);
+				if (!event)
+					return -1;
 			}
 		}
 	}
@@ -183,9 +191,9 @@ static int xlink_dispatcher_txthread(void* context)
 	complete(&disp[handle->link_id].tx_done);
 	while (!kthread_should_stop()) {
 		event = dispatcher_event_get(handle->link_id);
-		if (event == NULL) {
+		if (!event)
 			continue;
-		}
+
 		dispatcher_event_send(event);
 		xlink_destroy_event(event); // event is handled and can now be freed
 	}

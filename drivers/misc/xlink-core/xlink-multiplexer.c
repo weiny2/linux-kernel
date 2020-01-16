@@ -9,6 +9,7 @@
 #include <linux/module.h>
 #include <linux/device.h>
 #include <linux/kernel.h>
+#include <linux/version.h>
 #include <linux/cdev.h>
 #include <linux/platform_device.h>
 #include <linux/dma-mapping.h>
@@ -20,6 +21,7 @@
 #include <linux/slab.h>
 #include <linux/list.h>
 #include <linux/completion.h>
+#include <linux/sched/signal.h>
 
 #ifdef CONFIG_XLINK_LOCAL_HOST
 #include <linux/keembay-vpu-ipc.h>
@@ -29,13 +31,10 @@
 #include "xlink-dispatcher.h"
 #include "xlink-platform.h"
 
-// Maximum number of channels per link.
-#define XLINK_IPC_MAX_CHANNELS	1024
-
-// Timeout used for open channel
+// timeout used for open channel
 #define OPEN_CHANNEL_TIMEOUT_MSEC 5000
 
-// This is used as index for retrieving reserved memory from the device tree.
+// the indices used for retrieving reserved memory from the device tree
 #define LOCAL_XLINK_IPC_BUFFER_IDX	0
 #define REMOTE_XLINK_IPC_BUFFER_IDX	1
 
@@ -81,6 +80,11 @@ struct channel {
 	struct xlink_handle	*handle;
 	enum xlink_opmode mode;
 	enum xlink_channel_status status;
+	struct task_struct *ready_calling_pid;
+	void *ready_callback;
+	struct task_struct *consumed_calling_pid;
+	void *consumed_callback;
+	char callback_origin;
 	uint32_t size;
 	uint32_t timeout;
 };
@@ -108,7 +112,6 @@ struct open_channel {
 	int32_t rx_fill_level;
 	int32_t tx_fill_level;
 	int32_t tx_packet_level;
-	uint8_t is_opened;
 	struct list_head list;
 	struct completion opened;
 	struct completion pkt_available;
@@ -328,6 +331,60 @@ static int get_next_xlink_buf(void **buf, int size)
  *
  */
 
+static enum xlink_error run_callback(const uint16_t chan, void *callback,
+		struct task_struct *pid)
+{
+	enum xlink_error rc = X_LINK_SUCCESS;
+	int ret;
+	void(*func)(int);
+#if KERNEL_VERSION(4, 20, 0) > LINUX_VERSION_CODE
+	struct siginfo info;
+	memset(&info, 0, sizeof(struct siginfo));
+#else
+	struct kernel_siginfo info;
+	memset(&info, 0, sizeof(struct kernel_siginfo));
+#endif
+
+	if (mux->channels[chan].callback_origin == 'U') { // user-space origin
+		if (pid != NULL) {
+			info.si_signo = SIGXLNK;
+			info.si_code = SI_QUEUE;
+			info.si_errno = chan;
+			info.si_ptr = callback;
+			if ((ret = send_sig_info(SIGXLNK, &info, pid)) < 0) {
+				printk(KERN_INFO "Unable to send signal %d\n", ret);
+				rc = X_LINK_ERROR;
+			}
+		}
+		else {
+			printk(KERN_DEBUG "CHAN %x -- calling_pid == NULL\n", chan);
+			rc = X_LINK_ERROR;
+		}
+	} else { // kernel origin
+		func = callback;
+		func(chan);
+	}
+	return rc;
+}
+
+static inline int chan_is_non_blocking_read(uint16_t chan)
+{
+	if ((mux->channels[chan].mode == RXN_TXN) ||
+			(mux->channels[chan].mode == RXN_TXB)) {
+		return 1;
+	}
+	return 0;
+}
+static inline int chan_is_non_blocking_write(uint16_t chan)
+{
+	if ((mux->channels[chan].mode == RXN_TXN) ||
+			(mux->channels[chan].mode == RXB_TXN)) {
+		return 1;
+	}
+	return 0;
+}
+
+
 static struct xlink_channel_type const *get_channel_type(uint16_t chan)
 {
 	int i = 0;
@@ -348,12 +405,14 @@ static int is_channel_for_device_type(uint16_t chan,
 		enum xlink_dev_type dev_type)
 {
 	struct xlink_channel_type const *chan_type = get_channel_type(chan);
-	if (dev_type == IPC_DEVICE) {
-		if (chan_type->local_to_ip == dev_type)
-			return 1;
-	} else {
-		if (chan_type->remote_to_local == dev_type)
-			return 1;
+	if (chan_type) {
+		if (dev_type == IPC_DEVICE) {
+			if (chan_type->local_to_ip == dev_type)
+				return 1;
+		} else {
+			if (chan_type->remote_to_local == dev_type)
+				return 1;
+		}
 	}
 	return 0; 
 }
@@ -411,10 +470,9 @@ static int add_packet_to_channel(struct open_channel *opchan,
 	mutex_lock(&queue->lock);
 	if (queue->count < queue->capacity) {
 		pkt = kzalloc(sizeof(*pkt), GFP_KERNEL);
-		if (pkt == NULL) {
-			printk(KERN_DEBUG "Failed to allocate memory for packet\n");
+		if (!pkt)
 			return X_LINK_ERROR;
-		}
+
 		pkt->data = buffer;
 		pkt->length = size;
 		pkt->paddr = paddr;
@@ -446,7 +504,7 @@ static int release_packet_from_channel(struct open_channel *opchan,
 	struct packet *pkt = NULL;
 
 	mutex_lock(&queue->lock);
-	if (addr == NULL) {
+	if (!addr) {
 		// address is null, release first packet in queue
 		if (!list_empty(&queue->head)) {
 			pkt = list_first_entry(&queue->head, struct packet, list);
@@ -471,7 +529,7 @@ static int release_packet_from_channel(struct open_channel *opchan,
 	list_del(&pkt->list);
 	queue->count--;
 	opchan->rx_fill_level -= pkt->length;
-	if(opchan->rx_fill_level < 0)
+	if (opchan->rx_fill_level < 0)
 		opchan->rx_fill_level = 0;
 	if (size) {
 		*size = pkt->length;
@@ -490,10 +548,9 @@ static int multiplexer_open_channel(uint16_t chan)
 
 	// allocate open channel
 	opchan = kzalloc(sizeof(*opchan), GFP_KERNEL);
-	if (opchan == NULL) {
-		printk(KERN_DEBUG "Failed to allocate memory for open channel\n");
+	if (!opchan)
 		return X_LINK_ERROR;
-	}
+
 	// initialize open channel
 	opchan->id = chan;
 	opchan->chan = &mux->channels[chan];
@@ -506,7 +563,6 @@ static int multiplexer_open_channel(uint16_t chan)
 	opchan->rx_fill_level = 0;
 	opchan->tx_fill_level = 0;
 	opchan->tx_packet_level = 0;
-	opchan->is_opened = 0;
 	init_completion(&opchan->opened);
 	init_completion(&opchan->pkt_available);
 	init_completion(&opchan->pkt_consumed);
@@ -521,9 +577,8 @@ static int multiplexer_open_channel(uint16_t chan)
 
 static int multiplexer_close_channel(struct open_channel *opchan)
 {
-	if (opchan == NULL) {
+	if (!opchan)
 		return X_LINK_ERROR;
-	}
 
 	// free remaining packets
 	while (!list_empty(&opchan->rx_queue.head)) {
@@ -557,17 +612,16 @@ enum xlink_error xlink_multiplexer_init(void *dev)
 	struct platform_device *plat_dev = (struct platform_device *) dev;
 
 	// only initialize multiplexer once
-	if (mux != NULL) {
+	if (mux) {
 		printk(KERN_DEBUG "Multiplexer already initialized\n");
 		return X_LINK_ERROR;
 	}
 
 	// allocate multiplexer data structure
 	mux_init = kzalloc(sizeof(*mux_init), GFP_KERNEL);
-	if (mux_init == NULL) {
-		printk(KERN_DEBUG "Failed to allocate memory for Multiplexer\n");
+	if (!mux_init)
 		return X_LINK_ERROR;
-	}
+
 	mux_init->dev = &plat_dev->dev;
 
 #ifdef CONFIG_XLINK_LOCAL_HOST
@@ -576,7 +630,7 @@ enum xlink_error xlink_multiplexer_init(void *dev)
 	if (rc < 0) {
 		dev_err(&plat_dev->dev,
 			"Failed to set up reserved memory regions.\n");
-		return rc;
+		goto r_cleanup;
 	}
 
 	/* Allocate memory from the reserved memory regions */
@@ -588,8 +642,8 @@ enum xlink_error xlink_multiplexer_init(void *dev)
 	if (!mux_init->local_xlink_mem.vaddr) {
 		dev_err(&plat_dev->dev,
 			"Failed to allocate from local reserved memory.\n");
-		xlink_reserved_memory_remove(mux_init);
-		return -ENOMEM;
+		rc = -ENOMEM;
+		goto r_cleanup;
 	}
 	mux_init->remote_xlink_mem.vaddr = dmam_alloc_coherent(
 			mux_init->remote_xlink_mem.dev,
@@ -599,8 +653,8 @@ enum xlink_error xlink_multiplexer_init(void *dev)
 	if (!mux_init->remote_xlink_mem.vaddr) {
 		dev_err(&plat_dev->dev,
 			"Failed to allocate from remote reserved memory.\n");
-		xlink_reserved_memory_remove(mux_init);
-		return -ENOMEM;
+		rc = -ENOMEM;
+		goto r_cleanup;
 	}
 
 	dev_info(&plat_dev->dev, "Local vaddr 0x%p paddr 0x%pad size 0x%zX\n",
@@ -630,7 +684,8 @@ enum xlink_error xlink_multiplexer_init(void *dev)
 	mux->channels[IP_CONTROL_CHANNEL].mode = CONTROL_CHANNEL_OPMODE;
 	rc = multiplexer_open_channel(IP_CONTROL_CHANNEL);
 	if (rc) {
-		return X_LINK_ERROR;
+		rc = X_LINK_ERROR;
+		goto r_cleanup;
 	} else {
 		mux->channels[IP_CONTROL_CHANNEL].status = CHAN_OPEN;
 	}
@@ -641,11 +696,16 @@ enum xlink_error xlink_multiplexer_init(void *dev)
 	mux->channels[VPU_CONTROL_CHANNEL].mode = CONTROL_CHANNEL_OPMODE;
 	rc = multiplexer_open_channel(VPU_CONTROL_CHANNEL);
 	if (rc) {
-		return X_LINK_ERROR;
+		goto r_cleanup;
 	} else {
 		mux->channels[VPU_CONTROL_CHANNEL].status = CHAN_OPEN;
 	}
 	return X_LINK_SUCCESS;
+
+r_cleanup:
+	mux = mux_init;
+	xlink_multiplexer_destroy();
+	return rc;
 }
 
 enum xlink_error xlink_multiplexer_tx(struct xlink_event *event, int *event_queued)
@@ -656,25 +716,22 @@ enum xlink_error xlink_multiplexer_tx(struct xlink_event *event, int *event_queu
 	uint32_t size = 0;
 	uint16_t chan;
 
-	if ((mux == NULL) || (event == NULL)) {
+	if (!mux || !event)
 		return X_LINK_ERROR;
-	}
+
 	chan = event->header.chan;
 
 	// verify channel ID is in range
-	if (chan >= NMB_CHANNELS) {
+	if (chan >= NMB_CHANNELS)
 		return X_LINK_ERROR;
-	}
 
 	// verify device type can communicate on channel ID
-	if (!is_channel_for_device_type(chan, event->handle->dev_type)) {
+	if (!is_channel_for_device_type(chan, event->handle->dev_type))
 		return X_LINK_ERROR;
-	}
 
 	// verify this is not a control channel
-	if (is_control_channel(chan)) {
+	if (is_control_channel(chan))
 		return X_LINK_ERROR;
-	}
 
 	if (chan < XLINK_IPC_MAX_CHANNELS &&
 			event->handle->dev_type == IPC_DEVICE) {
@@ -688,7 +745,7 @@ enum xlink_error xlink_multiplexer_tx(struct xlink_event *event, int *event_queu
 		case XLINK_WRITE_VOLATILE_REQ:
 		case XLINK_WRITE_CONTROL_REQ:
 			opchan = get_channel(chan);
-			if ((opchan == NULL) || (opchan->chan->status != CHAN_OPEN)) {
+			if (!opchan || (opchan->chan->status != CHAN_OPEN)) {
 				rc = X_LINK_COMMUNICATION_FAIL;
 			} else {
 				event->header.timeout = opchan->chan->timeout;
@@ -768,7 +825,7 @@ enum xlink_error xlink_multiplexer_tx(struct xlink_event *event, int *event_queu
 			break;
 		case XLINK_READ_REQ:
 			opchan = get_channel(chan);
-			if ((opchan == NULL) || (opchan->chan->status != CHAN_OPEN)) {
+			if (!opchan || (opchan->chan->status != CHAN_OPEN)) {
 				rc = X_LINK_COMMUNICATION_FAIL;
 			} else {
 				event->header.timeout = opchan->chan->timeout;
@@ -810,7 +867,7 @@ enum xlink_error xlink_multiplexer_tx(struct xlink_event *event, int *event_queu
 			break;
 		case XLINK_READ_TO_BUFFER_REQ:
 			opchan = get_channel(chan);
-			if ((opchan == NULL) || (opchan->chan->status != CHAN_OPEN)) {
+			if (!opchan || (opchan->chan->status != CHAN_OPEN)) {
 				rc = X_LINK_COMMUNICATION_FAIL;
 			} else {
 				event->header.timeout = opchan->chan->timeout;
@@ -852,7 +909,7 @@ enum xlink_error xlink_multiplexer_tx(struct xlink_event *event, int *event_queu
 			break;
 		case XLINK_RELEASE_REQ:
 			opchan = get_channel(chan);
-			if (opchan == NULL) {
+			if (!opchan) {
 				rc = X_LINK_COMMUNICATION_FAIL;
 			} else {
 				rc = release_packet_from_channel(opchan, &opchan->rx_queue,
@@ -878,7 +935,7 @@ enum xlink_error xlink_multiplexer_tx(struct xlink_event *event, int *event_queu
 					rc = X_LINK_ERROR;
 				} else {
 					opchan = get_channel(chan);
-					if (opchan == NULL) {
+					if (!opchan) {
 						rc = X_LINK_COMMUNICATION_FAIL;
 					} else {
 						xlink_dispatcher_event_add(EVENT_TX, event);
@@ -918,6 +975,18 @@ enum xlink_error xlink_multiplexer_tx(struct xlink_event *event, int *event_queu
 				rc = X_LINK_ALREADY_OPEN;
 			}
 			break;
+		case XLINK_DATA_READY_CALLBACK_REQ:
+				mux->channels[chan].ready_callback = event->data;
+				mux->channels[chan].ready_calling_pid = event->calling_pid;
+				mux->channels[chan].callback_origin = event->callback_origin;
+				printk(KERN_DEBUG "callback process registered - XLINK_DATA_READY_CALLBACK_REQ %lx chan %d\n",(uintptr_t)event->calling_pid, chan);
+			break;
+		case XLINK_DATA_CONSUMED_CALLBACK_REQ:
+				mux->channels[chan].consumed_callback = event->data;
+				mux->channels[chan].consumed_calling_pid = event->calling_pid;
+				mux->channels[chan].callback_origin = event->callback_origin;
+				printk(KERN_DEBUG "callback process registered - XLINK_DATA_CONSUMED_CALLBACK_REQ %lx chan %d\n",(uintptr_t)event->calling_pid, chan);
+			break;
 		case XLINK_CLOSE_CHANNEL_REQ:
 			if (mux->channels[chan].status == CHAN_OPEN) {
 				opchan = get_channel(chan);
@@ -926,8 +995,6 @@ enum xlink_error xlink_multiplexer_tx(struct xlink_event *event, int *event_queu
 					rc = X_LINK_ERROR;
 				} else {
 					mux->channels[chan].status = CHAN_CLOSED;
-					xlink_dispatcher_event_add(EVENT_TX, event);
-					*event_queued = 1;
 				}
 			} else {
 				/* can't close channel not open */
@@ -962,16 +1029,16 @@ enum xlink_error xlink_multiplexer_rx(struct xlink_event *event)
 	int interface;
 	dma_addr_t paddr;
 
-	if ((mux == NULL) || (event == NULL)) {
+	if (!mux || !event)
 		return X_LINK_ERROR;
-	}
+
 	chan = event->header.chan;
 
 	switch (event->header.type) {
 	case XLINK_WRITE_REQ:
 	case XLINK_WRITE_VOLATILE_REQ:
 		opchan = get_channel(chan);
-		if (opchan == NULL) {
+		if (!opchan) {
 			rc = X_LINK_COMMUNICATION_FAIL;
 		} else {
 			event->header.timeout = opchan->chan->timeout;
@@ -1005,6 +1072,15 @@ enum xlink_error xlink_multiplexer_rx(struct xlink_event *event)
 				xlink_dispatcher_event_add(EVENT_RX, event);
 				//complete regardless of mode/timeout
 				complete(&opchan->pkt_available);
+				// run callback
+				release_channel(opchan);
+				if (mux->channels[chan].status == CHAN_OPEN &&
+						chan_is_non_blocking_read(chan) &&
+						mux->channels[chan].ready_callback != NULL) {
+					rc = run_callback(chan, mux->channels[chan].ready_callback,
+							mux->channels[chan].ready_calling_pid);
+					break;
+				}
 			} else {
 				// failed to allocate buffer
 				rc = X_LINK_ERROR;
@@ -1014,7 +1090,7 @@ enum xlink_error xlink_multiplexer_rx(struct xlink_event *event)
 		break;
 	case XLINK_WRITE_CONTROL_REQ:
 		opchan = get_channel(chan);
-		if (opchan == NULL) {
+		if (!opchan) {
 			rc = X_LINK_COMMUNICATION_FAIL;
 		} else {
 			event->header.timeout = opchan->chan->timeout;
@@ -1050,7 +1126,7 @@ enum xlink_error xlink_multiplexer_rx(struct xlink_event *event)
 	case XLINK_READ_REQ:
 	case XLINK_READ_TO_BUFFER_REQ:
 		opchan = get_channel(chan);
-		if (opchan == NULL) {
+		if (!opchan) {
 			rc = X_LINK_COMMUNICATION_FAIL;
 		} else {
 			event->header.timeout = opchan->chan->timeout;
@@ -1059,19 +1135,26 @@ enum xlink_error xlink_multiplexer_rx(struct xlink_event *event)
 			//complete regardless of mode/timeout
 			complete(&opchan->pkt_consumed);
 		}
+		// run callback
+		if (mux->channels[chan].status == CHAN_OPEN &&
+				chan_is_non_blocking_write(chan) &&
+				mux->channels[chan].consumed_callback != NULL) {
+			rc = run_callback(chan, mux->channels[chan].consumed_callback,
+					mux->channels[chan].consumed_calling_pid);
+		}
 		release_channel(opchan);
 		break;
 	case XLINK_RELEASE_REQ:
 		opchan = get_channel(chan);
-		if (opchan == NULL) {
+		if (!opchan) {
 			rc = X_LINK_COMMUNICATION_FAIL;
 		} else {
 			event->header.timeout = opchan->chan->timeout;
 			opchan->tx_fill_level -= event->header.size;
-			if(opchan->tx_fill_level < 0)
+			if (opchan->tx_fill_level < 0)
 				opchan->tx_fill_level = 0;
 			opchan->tx_packet_level--;
-			if(opchan->tx_packet_level < 0)
+			if (opchan->tx_packet_level < 0)
 				opchan->tx_packet_level = 0;;
 			event->header.type = XLINK_RELEASE_RESP;
 			xlink_dispatcher_event_add(EVENT_RX, event);
@@ -1091,17 +1174,16 @@ enum xlink_error xlink_multiplexer_rx(struct xlink_event *event)
 				rc = X_LINK_ERROR;
 			} else {
 				opchan = get_channel(chan);
-				if (opchan == NULL) {
+				if (!opchan) {
 					rc = X_LINK_COMMUNICATION_FAIL;
 				} else {
 					mux->channels[chan].status = CHAN_OPEN_PEER;
 					complete(&opchan->opened);
-					opchan->is_opened = 1;
 					event->header.timeout = opchan->chan->timeout;
 					event->header.type = XLINK_OPEN_CHANNEL_RESP;
 					xlink_dispatcher_event_add(EVENT_RX, event);
-					release_channel(opchan);
 				}
+				release_channel(opchan);
 			}
 		} else {
 			/* channel already open */
@@ -1109,24 +1191,13 @@ enum xlink_error xlink_multiplexer_rx(struct xlink_event *event)
 		}
 		break;
 	case XLINK_CLOSE_CHANNEL_REQ:
-		opchan = get_channel(chan);
-		if (opchan == NULL) {
-			rc = X_LINK_COMMUNICATION_FAIL;
-		} else {
-			opchan->is_opened = 0;
-			event->header.timeout = opchan->chan->timeout;
-			event->header.type = XLINK_CLOSE_CHANNEL_RESP;
-			xlink_dispatcher_event_add(EVENT_RX, event);
-		}
-		release_channel(opchan);
-		break;
 	case XLINK_PING_REQ:
 		break;
 	case XLINK_WRITE_RESP:
 	case XLINK_WRITE_VOLATILE_RESP:
 	case XLINK_WRITE_CONTROL_RESP:
 		opchan = get_channel(chan);
-		if (opchan == NULL) {
+		if (!opchan) {
 			rc = X_LINK_COMMUNICATION_FAIL;
 		} else {
 			opchan->tx_fill_level += event->header.size;
@@ -1143,16 +1214,16 @@ enum xlink_error xlink_multiplexer_rx(struct xlink_event *event)
 		break;
 	case XLINK_OPEN_CHANNEL_RESP:
 		opchan = get_channel(chan);
-		if (opchan == NULL) {
+		if (!opchan) {
 			rc = X_LINK_COMMUNICATION_FAIL;
 		} else {
 			complete(&opchan->opened);
-			opchan->is_opened = 1;
 		}
 		release_channel(opchan);
 		break;
 	case XLINK_CLOSE_CHANNEL_RESP:
 	case XLINK_PING_RESP:
+		break;
 	default:
 		rc = X_LINK_ERROR;
 	}
@@ -1190,7 +1261,7 @@ enum xlink_error xlink_passthrough(struct xlink_event *event)
 			vpuaddr = phys_to_dma(mux->dev, *(uint32_t*)event->data);
 			event->data = &vpuaddr;
 			rc = xlink_platform_write(IPC_DEVICE, &ipc, event->data,
-					event->header.size, 0);
+					&event->header.size, 0);
 		} else {
 			/* channel not open */
 			rc = X_LINK_ERROR;
@@ -1207,7 +1278,7 @@ enum xlink_error xlink_passthrough(struct xlink_event *event)
 				rc = X_LINK_ERROR;
 			} else {
 				rc = xlink_platform_write(IPC_DEVICE, &ipc, &paddr,
-						event->header.size, 0);
+						&event->header.size, 0);
 			}
 		} else {
 			/* channel not open */
@@ -1225,7 +1296,7 @@ enum xlink_error xlink_passthrough(struct xlink_event *event)
 				rc = X_LINK_ERROR;
 			} else {
 				rc = xlink_platform_write(IPC_DEVICE, &ipc, &paddr,
-						event->header.size, 0);
+						&event->header.size, 0);
 			}
 		} else {
 			/* channel not open */
@@ -1340,9 +1411,8 @@ enum xlink_error xlink_multiplexer_destroy(void)
 {
 	struct open_channel *opchan, *tmp;
 
-	if (mux == NULL) {
+	if (!mux)
 		return X_LINK_ERROR;
-	}
 
 #ifdef CONFIG_XLINK_LOCAL_HOST
 	/*

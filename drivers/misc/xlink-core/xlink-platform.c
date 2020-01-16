@@ -15,7 +15,7 @@
 #include <linux/uaccess.h>
 #include <linux/slab.h>
 #include <linux/dma-mapping.h>
-#include <linux/mxlk_interface.h>
+#include <linux/xlink_drv_inf.h>
 
 #ifdef CONFIG_XLINK_LOCAL_HOST
 #include <linux/keembay-vpu-ipc.h>
@@ -24,82 +24,34 @@
 #include "xlink-platform.h"
 
 /*
- * IPC Functions
+ * IPC driver interface functions
  */
 
-static int ipc_write(void *fd, void *data, size_t size, unsigned int timeout)
+static int xlink_ipc_write(void *fd, void *data, size_t * const size, unsigned int timeout)
 {
 	int rc = 0;
 #ifdef CONFIG_XLINK_LOCAL_HOST
 	struct xlink_ipc_fd *ipc = (struct xlink_ipc_fd *)fd;
 	rc = intel_keembay_vpu_ipc_send(NULL, ipc->node, ipc->chan,
-					*(uint32_t *)data, size);
+			*(uint32_t *)data, *size);
 #endif
 	return rc;
 }
 
-static int ipc_read(void *fd, void *data, size_t *size, unsigned int timeout)
+static int xlink_ipc_read(void *fd, void *data, size_t * const size, unsigned int timeout)
 {
 	int rc = 0;
 #ifdef CONFIG_XLINK_LOCAL_HOST
 	int addr = 0;
 	struct xlink_ipc_fd *ipc = (struct xlink_ipc_fd *)fd;
 	rc = intel_keembay_vpu_ipc_recv(NULL, ipc->node, ipc->chan, &addr,
-					size, timeout);
+			size, timeout);
 	*(uint32_t*)data = addr;
 #endif
 	return rc;
 }
 
-static int ipc_open(const char *dev_path_read, const char *dev_path_write,
-		void **fd)
-{
-	/* To be implemented */
-	return 0;
-}
-
-static int ipc_close(void *f)
-{
-	/* To be implemented */
-	return 0;
-}
-
-static int ipc_devicename(int index, char *name, int nameSize , int pid)
-{
-	/* To be implemented */
-	return 0;
-}
-
-/*
- * USB Functions
- */
-
-static int usb_write(void *fd, void*data, size_t size, unsigned int timeout)
-{
-	/* To be implemented */
-	return 0;
-}
-
-static int usb_read(void *fd, void *data, size_t *size, unsigned int timeout)
-{
-	/* To be implemented */
-	return 0;
-}
-
-static int usb_open(const char *dev_path_read, const char *dev_path_write,
-		void **fd)
-{
-	/* To be implemented */
-	return 0;
-}
-
-static int usb_close(void *f)
-{
-	/* To be implemented */
-	return 0;
-}
-
-static int usb_devicename(int index, char *name, int nameSize , int pid)
+static int xlink_ipc_connect(const char *device_name, void **fd)
 {
 	/* To be implemented */
 	return 0;
@@ -110,65 +62,109 @@ static int usb_devicename(int index, char *name, int nameSize , int pid)
  *
  * note: array indices based on xlink_dev_type enum definition
  */
-int (*write_fcts[NMB_OF_DEVICE_TYPES])(void*, void*, size_t, unsigned int) = \
-		{NULL, NULL/* keembay_pcie_write*/, usb_write, NULL, ipc_write};
-int (*read_fcts[NMB_OF_DEVICE_TYPES])(void*, void*, size_t*, unsigned int) = \
-		{NULL,NULL /* keembay_pcie_read*/, usb_read, NULL, ipc_read};
-int (*open_fcts[NMB_OF_DEVICE_TYPES])(const char*, const char*, void**) = \
-		{NULL, NULL/*keembay_pcie_connect*/, usb_open, NULL, ipc_open};
-int (*close_fcts[NMB_OF_DEVICE_TYPES])(void*) = \
-		{NULL,NULL /*keembay_pcie_reset_remote*/, usb_close, NULL, ipc_close};
-int (*devicename_fcts[NMB_OF_DEVICE_TYPES])(int, char*, int, int) = \
-		{NULL, NULL/*keembay_pcie_get_devicename*/, usb_devicename, NULL,
-		ipc_devicename};
+
+int (*connect_fcts[NMB_OF_DEVICE_TYPES])(const char *, void **) = \
+		{NULL, xlink_pcie_connect, NULL, NULL, xlink_ipc_connect};
+int (*write_fcts[NMB_OF_DEVICE_TYPES])(void *, void *, size_t * const, uint32_t) = \
+		{NULL, xlink_pcie_write, NULL, NULL, xlink_ipc_write};
+int (*read_fcts[NMB_OF_DEVICE_TYPES])(void *, void *, size_t * const, uint32_t) = \
+		{NULL, xlink_pcie_read, NULL, NULL, xlink_ipc_read};
+int (*reset_fcts[NMB_OF_DEVICE_TYPES])(void *, uint32_t) = \
+		{NULL, xlink_pcie_reset_device, NULL, NULL, NULL};
+int (*boot_fcts[NMB_OF_DEVICE_TYPES])(const char *, const char *) = \
+		{NULL, xlink_pcie_boot_remote, NULL, NULL, NULL};
+int (*dev_name_fcts[NMB_OF_DEVICE_TYPES])(uint32_t, char *, size_t) = \
+		{NULL, xlink_pcie_get_device_name, NULL, NULL, NULL};
+int (*dev_list_fcts[NMB_OF_DEVICE_TYPES])(uint32_t *, uint32_t *, int) = \
+		{NULL, xlink_pcie_get_device_list, NULL, NULL, NULL};
+int (*dev_status_fcts[NMB_OF_DEVICE_TYPES])(const char *, uint32_t *) = \
+		{NULL, xlink_pcie_get_device_status, NULL, NULL, NULL};
 
 /*
  * xlink low-level driver interface
  */
 
-int xlink_platform_connect(int interface, const char *dev_path_read,
-		const char *dev_path_write, void **fd)
+int xlink_platform_connect(uint32_t interface, const char *device_name,
+		void **fd)
 {
-	return open_fcts[interface](dev_path_read, dev_path_write, fd);
+	if (interface >= NMB_OF_DEVICE_TYPES || !connect_fcts[interface])
+		return -1;
+	return connect_fcts[interface](device_name, fd);
 }
 
-int xlink_platform_write(int interface, void *fd, void *data, size_t size,
-		unsigned int timeout)
+int xlink_platform_write(uint32_t interface, void *fd, void *data,
+		size_t * const size, uint32_t timeout)
 {
+	if (interface >= NMB_OF_DEVICE_TYPES || !write_fcts[interface])
+		return -1;
+
 	return write_fcts[interface](fd, data, size, timeout);
 }
 
-int xlink_platform_read(int interface, void *fd, void *data, size_t *size,
-		unsigned int timeout)
+int xlink_platform_read(uint32_t interface, void *fd, void *data,
+		size_t * const size, uint32_t timeout)
 {
+	if (interface >= NMB_OF_DEVICE_TYPES || !read_fcts[interface])
+		return -1;
+
 	return read_fcts[interface](fd, data, size, timeout);
 }
 
-int xlink_platform_reset_remote(int interface, void *device, void *channel)
+int xlink_platform_reset_device(void *fd, uint32_t operating_frequency)
 {
-	return close_fcts[interface](device);
+	int interface = PCIE_DEVICE; // TODO: hard code interface for now
+
+	if (interface >= NMB_OF_DEVICE_TYPES || !reset_fcts[interface])
+		return -1;
+
+	return reset_fcts[interface](fd, operating_frequency);
 }
 
-int xlink_platform_get_device_name(int interface, int index, char *name,
-		int name_size)
+int xlink_platform_boot_device(const char *device_name,
+		const char *binary_path)
 {
-	return devicename_fcts[interface](index, name, name_size, 0);
+	int interface = PCIE_DEVICE; // TODO: hard code interface for now
+
+	if (interface >= NMB_OF_DEVICE_TYPES || !boot_fcts[interface])
+		return -1;
+
+	return boot_fcts[interface](device_name, binary_path);
 }
 
-int xlink_platform_get_device_name_extended(int interface, int index,
-		char *name, int name_size, int pid)
+int xlink_platform_get_device_name(uint32_t sw_device_id, char *device_name,
+		size_t name_size)
 {
-	return devicename_fcts[interface](index, name, name_size, pid);
+	int interface = PCIE_DEVICE; // TODO: hard code interface for now
+
+	if (interface >= NMB_OF_DEVICE_TYPES || !dev_name_fcts[interface])
+		return -1;
+
+	return dev_name_fcts[interface](sw_device_id, device_name, name_size);
 }
 
-int xlink_platform_boot_remote(int interface, const char *dev_name,
-		const char *bin_path)
+int xlink_platform_get_device_list(uint32_t *sw_device_id_list,
+		uint32_t *num_devices, int pid)
 {
-	/* To be implemented */
-	return 0;
+	int interface = PCIE_DEVICE; // TODO: hard code interface for now
+
+	if (interface >= NMB_OF_DEVICE_TYPES || !dev_list_fcts[interface])
+		return -1;
+
+	return dev_list_fcts[interface](sw_device_id_list, num_devices, pid);
 }
 
-void *xlink_platform_allocate(struct device *dev, dma_addr_t *handle,
+int xlink_platform_get_device_status(const char *device_name,
+		uint32_t *device_status)
+{
+	int interface = PCIE_DEVICE; // TODO: hard code interface for now
+
+	if (interface >= NMB_OF_DEVICE_TYPES || !dev_status_fcts[interface])
+		return -1;
+
+	return dev_status_fcts[interface](device_name, device_status);
+}
+
+void * xlink_platform_allocate(struct device *dev, dma_addr_t *handle,
 		uint32_t size, uint32_t alignment)
 {
 // #ifdef CONFIG_XLINK_LOCAL_HOST
@@ -178,8 +174,8 @@ void *xlink_platform_allocate(struct device *dev, dma_addr_t *handle,
 // #endif
 }
 
-void xlink_platform_deallocate(struct device *dev, void *buf, dma_addr_t handle,
-		uint32_t size, uint32_t alignment)
+void xlink_platform_deallocate(struct device *dev, void *buf,
+		dma_addr_t handle, uint32_t size, uint32_t alignment)
 {
 // #ifdef CONFIG_XLINK_LOCAL_HOST
 	// dma_free_coherent(dev, size, buf, handle);

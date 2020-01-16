@@ -17,11 +17,6 @@ enum xlink_prof_cfg {
 	PROFILE_ENABLE
 };
 
-struct xlink_global_handle {
-	int log_level;
-	enum xlink_prof_cfg prof_cfg;
-};
-
 enum xlink_dev_type {
 	VPU_DEVICE = 0,
 	PCIE_DEVICE,
@@ -32,12 +27,11 @@ enum xlink_dev_type {
 };
 
 struct xlink_handle {
-	char *dev_path;
-	char *dev_path2;
-	int link_id;
-	uint8_t node;
+	uint32_t link_id;
+	uint32_t sw_device_id;
 	enum xlink_dev_type dev_type;
 	void *fd;
+	uint8_t node;
 };
 
 enum xlink_opmode {
@@ -73,7 +67,15 @@ enum xlink_channel_status {
 	CHAN_OPEN_PEER		= 0x1000,
 };
 
-enum xlink_error xlink_initialize(struct xlink_global_handle *gl_handle);
+enum xlink_device_status {
+	XLINK_DEV_OFF,
+	XLINK_DEV_ERROR,
+	XLINK_DEV_BUSY,
+	XLINK_DEV_RECOVERY,
+	XLINK_DEV_READY
+};
+
+enum xlink_error xlink_initialize(void);
 
 enum xlink_error xlink_connect(struct xlink_handle *handle);
 
@@ -110,34 +112,37 @@ enum xlink_error xlink_release_data(struct xlink_handle *handle,
 
 enum xlink_error xlink_disconnect(struct xlink_handle *handle);
 
+enum xlink_error xlink_get_device_name(uint32_t sw_device_id, char *name,
+		size_t name_size);
+
+enum xlink_error xlink_get_device_list(uint32_t *sw_device_id_list,
+		uint32_t *num_devices, int pid);
+
+enum xlink_error xlink_get_device_status(uint32_t sw_device_id,
+		uint32_t *device_status);
+
+enum xlink_error xlink_boot_device(struct xlink_handle *handle,
+		enum xlink_sys_freq operating_frequency);
+
+enum xlink_error xlink_reset_device(struct xlink_handle *handle,
+		enum xlink_sys_freq operating_frequency);
+
 enum xlink_error xlink_start_vpu(char *filename);
 
 enum xlink_error xlink_stop_vpu(void);
 
 /* API functions to be implemented
 
-enum xlink_error xlink_write_data_crc(struct xlink_handle *handle,
-		uint16_t chan, uint8_t const *message, uint32_t size);
+enum xlink_error xlink_write_crc_data(struct xlink_handle *handle,
+		uint16_t chan, uint8_t const *message, size_t size);
 
-enum xlink_error xlink_read_data_crc(struct xlink_handle *handle,
-		uint16_t channelId, uint8_t * const message, uint32_t size);
+enum xlink_error xlink_read_crc_data(struct xlink_handle *handle,
+		uint16_t chan, uint8_t **message, size_t * const size);
 
-enum xlink_error xlink_read_data_to_buffer_crc(struct xlink_handle *handle,
-		uint16_t chan, uint8_t * const message, uint32_t *size);
+enum xlink_error xlink_read_crc_data_to_buffer(struct xlink_handle *handle,
+		uint16_t chan, uint8_t * const message, size_t * const size);
 
-enum xlink_error xlink_boot_remote(struct xlink_handle *handle,
-		enum xlink_sys_freq sys_freq);
-
-enum xlink_error xlink_reset_remote(xlink_handle *handle,
-		enum xlink_sys_freq sys_freq);
-
-enum xlink_error xlink_reset_all(enum xlink_sys_freq sys_freq);
-
-enum xlink_error xlink_prof_start(enum xlink_prof_cfg prof_cfg);
-
-enum xlink_error xlink_prof_stop(enum xlink_prof_cfg prof_cfg);
-
-uint32_t xlink_get_number_of_devices(void);
+enum xlink_error xlink_reset_all(enum xlink_sys_freq operating_frequency);
 
  */
 

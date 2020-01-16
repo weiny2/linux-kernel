@@ -12,12 +12,12 @@
 
 #include <linux/types.h>
 
-enum xlink_device_status {
-	XLINK_DEV_OFF,
-	XLINK_DEV_ERROR,
-	XLINK_DEV_BUSY,
-	XLINK_DEV_RECOVERY,
-	XLINK_DEV_READY
+enum _xlink_device_status {
+	_XLINK_DEV_OFF,
+	_XLINK_DEV_ERROR,
+	_XLINK_DEV_BUSY,
+	_XLINK_DEV_RECOVERY,
+	_XLINK_DEV_READY
 };
 
 int xlink_pcie_get_device_list(uint32_t *sw_device_id_list,
