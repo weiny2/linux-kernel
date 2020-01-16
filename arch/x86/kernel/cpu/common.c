@@ -856,6 +856,8 @@ static void init_speculation_control(struct cpuinfo_x86 *c)
 
 static void init_cqm(struct cpuinfo_x86 *c)
 {
+	c->x86_cache_mbm_width_offset = -1;
+
 	if (!cpu_has(c, X86_FEATURE_CQM_LLC)) {
 		c->x86_cache_max_rmid  = -1;
 		c->x86_cache_occ_scale = -1;
@@ -875,6 +877,9 @@ static void init_cqm(struct cpuinfo_x86 *c)
 
 		c->x86_cache_max_rmid  = ecx;
 		c->x86_cache_occ_scale = ebx;
+		/* EAX contents is only defined for Intel CPUs */
+		if (c->x86_vendor == X86_VENDOR_INTEL)
+			c->x86_cache_mbm_width_offset = eax & 0xff;
 	}
 }
 
