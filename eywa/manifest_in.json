@@ -3382,7 +3382,7 @@
             ],
             "jira": "NEXT-1758",
             "name": "usb dwc3",
-            "repourl": "git://git-amr-4.devtools.intel.com:29418/otc_usb-typec",
+            "repourl": "ssh://git-amr-4.devtools.intel.com:29418/otc_usb-typec.git",
             "sdl_contact": [
                 {
                     "name": "Svahn, Kai",
