@@ -3352,6 +3352,45 @@
             ],
             "status": "public",
             "stuck_at_ref": ""
+        },
+        {
+            "branch": "dwc3",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "CONFIG_USB_DWC3",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_USB_DWC3_PCI",
+                    "value": "y"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Heikki Krogerus",
+                    "email": "heikki.krogerus@linux.intel.com"
+                }
+            ],
+            "description": "USB DWC3 branch",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Ismail, Abdul Rahman",
+                    "email": "abdul.r.ismail@intel.com"
+                }
+            ],
+            "jira": "NEXT-1758",
+            "name": "usb dwc3",
+            "repourl": "git://git-amr-4.devtools.intel.com:29418/otc_usb-typec",
+            "sdl_contact": [
+                {
+                    "name": "Svahn, Kai",
+                    "email": "kai.svahn@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": ""
         }
     ]
 }
