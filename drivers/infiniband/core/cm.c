@@ -241,6 +241,7 @@ struct cm_id_private {
 	/* Number of clients sharing this ib_cm_id. Only valid for listeners.
 	 * Protected by the cm.lock spinlock. */
 	int listen_sharecount;
+	struct rcu_head rcu;
 
 	struct ib_mad_send_buf *msg;
 	struct cm_timewait_info *timewait_info;
@@ -593,28 +594,16 @@ static void cm_free_id(__be32 local_id)
 	xa_erase_irq(&cm.local_id_table, cm_local_id(local_id));
 }
 
-static struct cm_id_private * cm_get_id(__be32 local_id, __be32 remote_id)
+static struct cm_id_private *cm_acquire_id(__be32 local_id, __be32 remote_id)
 {
 	struct cm_id_private *cm_id_priv;
 
+	rcu_read_lock();
 	cm_id_priv = xa_load(&cm.local_id_table, cm_local_id(local_id));
-	if (cm_id_priv) {
-		if (cm_id_priv->id.remote_id == remote_id)
-			refcount_inc(&cm_id_priv->refcount);
-		else
-			cm_id_priv = NULL;
-	}
-
-	return cm_id_priv;
-}
-
-static struct cm_id_private * cm_acquire_id(__be32 local_id, __be32 remote_id)
-{
-	struct cm_id_private *cm_id_priv;
-
-	spin_lock_irq(&cm.lock);
-	cm_id_priv = cm_get_id(local_id, remote_id);
-	spin_unlock_irq(&cm.lock);
+	if (!cm_id_priv || cm_id_priv->id.remote_id != remote_id ||
+	    !refcount_inc_not_zero(&cm_id_priv->refcount))
+		cm_id_priv = NULL;
+	rcu_read_unlock();
 
 	return cm_id_priv;
 }
@@ -1089,7 +1078,7 @@ retest:
 	rdma_destroy_ah_attr(&cm_id_priv->av.ah_attr);
 	rdma_destroy_ah_attr(&cm_id_priv->alt_av.ah_attr);
 	kfree(cm_id_priv->private_data);
-	kfree(cm_id_priv);
+	kfree_rcu(cm_id_priv, rcu);
 }
 
 void ib_destroy_cm_id(struct ib_cm_id *cm_id)
@@ -1821,7 +1810,7 @@ static struct cm_id_private * cm_match_req(struct cm_work *work,
 	spin_lock_irq(&cm.lock);
 	timewait_info = cm_insert_remote_id(cm_id_priv->timewait_info);
 	if (timewait_info) {
-		cur_cm_id_priv = cm_get_id(timewait_info->work.local_id,
+		cur_cm_id_priv = cm_acquire_id(timewait_info->work.local_id,
 					   timewait_info->work.remote_id);
 		spin_unlock_irq(&cm.lock);
 		if (cur_cm_id_priv) {
@@ -1835,7 +1824,7 @@ static struct cm_id_private * cm_match_req(struct cm_work *work,
 	timewait_info = cm_insert_remote_qpn(cm_id_priv->timewait_info);
 	if (timewait_info) {
 		cm_cleanup_timewait(cm_id_priv->timewait_info);
-		cur_cm_id_priv = cm_get_id(timewait_info->work.local_id,
+		cur_cm_id_priv = cm_acquire_id(timewait_info->work.local_id,
 					   timewait_info->work.remote_id);
 
 		spin_unlock_irq(&cm.lock);
@@ -2293,7 +2282,7 @@ static int cm_rep_handler(struct cm_work *work)
 		rb_erase(&cm_id_priv->timewait_info->remote_id_node,
 			 &cm.remote_id_table);
 		cm_id_priv->timewait_info->inserted_remote_id = 0;
-		cur_cm_id_priv = cm_get_id(timewait_info->work.local_id,
+		cur_cm_id_priv = cm_acquire_id(timewait_info->work.local_id,
 					   timewait_info->work.remote_id);
 
 		spin_unlock(&cm.lock);
@@ -2788,14 +2777,8 @@ static struct cm_id_private * cm_acquire_rejected_id(struct cm_rej_msg *rej_msg)
 			spin_unlock_irq(&cm.lock);
 			return NULL;
 		}
-		cm_id_priv = xa_load(&cm.local_id_table,
-				cm_local_id(timewait_info->work.local_id));
-		if (cm_id_priv) {
-			if (cm_id_priv->id.remote_id == remote_id)
-				refcount_inc(&cm_id_priv->refcount);
-			else
-				cm_id_priv = NULL;
-		}
+		cm_id_priv =
+			cm_acquire_id(timewait_info->work.local_id, remote_id);
 		spin_unlock_irq(&cm.lock);
 	} else if (cm_rej_get_msg_rejected(rej_msg) == CM_MSG_RESPONSE_REQ)
 		cm_id_priv = cm_acquire_id(rej_msg->remote_comm_id, 0);
@@ -3046,104 +3029,6 @@ out:
 	return -EINVAL;
 }
 
-static void cm_format_lap(struct cm_lap_msg *lap_msg,
-			  struct cm_id_private *cm_id_priv,
-			  struct sa_path_rec *alternate_path,
-			  const void *private_data,
-			  u8 private_data_len)
-{
-	bool alt_ext = false;
-
-	if (alternate_path->rec_type == SA_PATH_REC_TYPE_OPA)
-		alt_ext = opa_is_extended_lid(alternate_path->opa.dlid,
-					      alternate_path->opa.slid);
-	cm_format_mad_hdr(&lap_msg->hdr, CM_LAP_ATTR_ID,
-			  cm_form_tid(cm_id_priv));
-	lap_msg->local_comm_id = cm_id_priv->id.local_id;
-	lap_msg->remote_comm_id = cm_id_priv->id.remote_id;
-	cm_lap_set_remote_qpn(lap_msg, cm_id_priv->remote_qpn);
-	/* todo: need remote CM response timeout */
-	cm_lap_set_remote_resp_timeout(lap_msg, 0x1F);
-	lap_msg->alt_local_lid =
-		htons(ntohl(sa_path_get_slid(alternate_path)));
-	lap_msg->alt_remote_lid =
-		htons(ntohl(sa_path_get_dlid(alternate_path)));
-	lap_msg->alt_local_gid = alternate_path->sgid;
-	lap_msg->alt_remote_gid = alternate_path->dgid;
-	if (alt_ext) {
-		lap_msg->alt_local_gid.global.interface_id
-			= OPA_MAKE_ID(be32_to_cpu(alternate_path->opa.slid));
-		lap_msg->alt_remote_gid.global.interface_id
-			= OPA_MAKE_ID(be32_to_cpu(alternate_path->opa.dlid));
-	}
-	cm_lap_set_flow_label(lap_msg, alternate_path->flow_label);
-	cm_lap_set_traffic_class(lap_msg, alternate_path->traffic_class);
-	lap_msg->alt_hop_limit = alternate_path->hop_limit;
-	cm_lap_set_packet_rate(lap_msg, alternate_path->rate);
-	cm_lap_set_sl(lap_msg, alternate_path->sl);
-	cm_lap_set_subnet_local(lap_msg, 1); /* local only... */
-	cm_lap_set_local_ack_timeout(lap_msg,
-		cm_ack_timeout(cm_id_priv->av.port->cm_dev->ack_delay,
-			       alternate_path->packet_life_time));
-
-	if (private_data && private_data_len)
-		memcpy(lap_msg->private_data, private_data, private_data_len);
-}
-
-int ib_send_cm_lap(struct ib_cm_id *cm_id,
-		   struct sa_path_rec *alternate_path,
-		   const void *private_data,
-		   u8 private_data_len)
-{
-	struct cm_id_private *cm_id_priv;
-	struct ib_mad_send_buf *msg;
-	unsigned long flags;
-	int ret;
-
-	if (private_data && private_data_len > IB_CM_LAP_PRIVATE_DATA_SIZE)
-		return -EINVAL;
-
-	cm_id_priv = container_of(cm_id, struct cm_id_private, id);
-	spin_lock_irqsave(&cm_id_priv->lock, flags);
-	if (cm_id->state != IB_CM_ESTABLISHED ||
-	    (cm_id->lap_state != IB_CM_LAP_UNINIT &&
-	     cm_id->lap_state != IB_CM_LAP_IDLE)) {
-		ret = -EINVAL;
-		goto out;
-	}
-
-	ret = cm_init_av_by_path(alternate_path, NULL, &cm_id_priv->alt_av,
-				 cm_id_priv);
-	if (ret)
-		goto out;
-	cm_id_priv->alt_av.timeout =
-			cm_ack_timeout(cm_id_priv->target_ack_delay,
-				       cm_id_priv->alt_av.timeout - 1);
-
-	ret = cm_alloc_msg(cm_id_priv, &msg);
-	if (ret)
-		goto out;
-
-	cm_format_lap((struct cm_lap_msg *) msg->mad, cm_id_priv,
-		      alternate_path, private_data, private_data_len);
-	msg->timeout_ms = cm_id_priv->timeout_ms;
-	msg->context[1] = (void *) (unsigned long) IB_CM_ESTABLISHED;
-
-	ret = ib_post_send_mad(msg, NULL);
-	if (ret) {
-		spin_unlock_irqrestore(&cm_id_priv->lock, flags);
-		cm_free_msg(msg);
-		return ret;
-	}
-
-	cm_id->lap_state = IB_CM_LAP_SENT;
-	cm_id_priv->msg = msg;
-
-out:	spin_unlock_irqrestore(&cm_id_priv->lock, flags);
-	return ret;
-}
-EXPORT_SYMBOL(ib_send_cm_lap);
-
 static void cm_format_path_lid_from_lap(struct cm_lap_msg *lap_msg,
 					struct sa_path_rec *path)
 {
@@ -3277,72 +3162,6 @@ unlock:	spin_unlock_irq(&cm_id_priv->lock);
 deref:	cm_deref_id(cm_id_priv);
 	return -EINVAL;
 }
-
-static void cm_format_apr(struct cm_apr_msg *apr_msg,
-			  struct cm_id_private *cm_id_priv,
-			  enum ib_cm_apr_status status,
-			  void *info,
-			  u8 info_length,
-			  const void *private_data,
-			  u8 private_data_len)
-{
-	cm_format_mad_hdr(&apr_msg->hdr, CM_APR_ATTR_ID, cm_id_priv->tid);
-	apr_msg->local_comm_id = cm_id_priv->id.local_id;
-	apr_msg->remote_comm_id = cm_id_priv->id.remote_id;
-	apr_msg->ap_status = (u8) status;
-
-	if (info && info_length) {
-		apr_msg->info_length = info_length;
-		memcpy(apr_msg->info, info, info_length);
-	}
-
-	if (private_data && private_data_len)
-		memcpy(apr_msg->private_data, private_data, private_data_len);
-}
-
-int ib_send_cm_apr(struct ib_cm_id *cm_id,
-		   enum ib_cm_apr_status status,
-		   void *info,
-		   u8 info_length,
-		   const void *private_data,
-		   u8 private_data_len)
-{
-	struct cm_id_private *cm_id_priv;
-	struct ib_mad_send_buf *msg;
-	unsigned long flags;
-	int ret;
-
-	if ((private_data && private_data_len > IB_CM_APR_PRIVATE_DATA_SIZE) ||
-	    (info && info_length > IB_CM_APR_INFO_LENGTH))
-		return -EINVAL;
-
-	cm_id_priv = container_of(cm_id, struct cm_id_private, id);
-	spin_lock_irqsave(&cm_id_priv->lock, flags);
-	if (cm_id->state != IB_CM_ESTABLISHED ||
-	    (cm_id->lap_state != IB_CM_LAP_RCVD &&
-	     cm_id->lap_state != IB_CM_MRA_LAP_SENT)) {
-		ret = -EINVAL;
-		goto out;
-	}
-
-	ret = cm_alloc_msg(cm_id_priv, &msg);
-	if (ret)
-		goto out;
-
-	cm_format_apr((struct cm_apr_msg *) msg->mad, cm_id_priv, status,
-		      info, info_length, private_data, private_data_len);
-	ret = ib_post_send_mad(msg, NULL);
-	if (ret) {
-		spin_unlock_irqrestore(&cm_id_priv->lock, flags);
-		cm_free_msg(msg);
-		return ret;
-	}
-
-	cm_id->lap_state = IB_CM_LAP_IDLE;
-out:	spin_unlock_irqrestore(&cm_id_priv->lock, flags);
-	return ret;
-}
-EXPORT_SYMBOL(ib_send_cm_apr);
 
 static int cm_apr_handler(struct cm_work *work)
 {

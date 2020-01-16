@@ -72,6 +72,11 @@
 #define MLX5_MKEY_PAGE_SHIFT_MASK __mlx5_mask(mkc, log_page_size)
 
 enum {
+	MLX5_IB_MMAP_OFFSET_START = 9,
+	MLX5_IB_MMAP_OFFSET_END = 255,
+};
+
+enum {
 	MLX5_IB_MMAP_CMD_SHIFT	= 8,
 	MLX5_IB_MMAP_CMD_MASK	= 0xff,
 };
@@ -120,6 +125,7 @@ enum {
 
 enum mlx5_ib_mmap_type {
 	MLX5_IB_MMAP_TYPE_MEMIC = 1,
+	MLX5_IB_MMAP_TYPE_VAR = 2,
 };
 
 #define MLX5_LOG_SW_ICM_BLOCK_SIZE(dev)                                        \
@@ -563,6 +569,7 @@ struct mlx5_user_mmap_entry {
 	struct rdma_user_mmap_entry rdma_entry;
 	u8 mmap_flag;
 	u64 address;
+	u32 page_idx;
 };
 
 struct mlx5_ib_dm {
@@ -959,6 +966,15 @@ struct mlx5_devx_event_table {
 	struct xarray event_xa;
 };
 
+struct mlx5_var_table {
+	/* serialize updating the bitmap */
+	struct mutex bitmap_lock;
+	unsigned long *bitmap;
+	u64 hw_start_addr;
+	u32 stride_size;
+	u64 num_var_hw_entries;
+};
+
 struct mlx5_ib_dev {
 	struct ib_device		ib_dev;
 	struct mlx5_core_dev		*mdev;
@@ -1013,6 +1029,7 @@ struct mlx5_ib_dev {
 	struct mlx5_srq_table   srq_table;
 	struct mlx5_async_ctx   async_ctx;
 	struct mlx5_devx_event_table devx_event_table;
+	struct mlx5_var_table var_table;
 
 	struct xarray sig_mrs;
 };
@@ -1276,8 +1293,8 @@ void mlx5_ib_odp_cleanup_one(struct mlx5_ib_dev *ibdev);
 int __init mlx5_ib_odp_init(void);
 void mlx5_ib_odp_cleanup(void);
 void mlx5_odp_init_mr_cache_entry(struct mlx5_cache_ent *ent);
-void mlx5_odp_populate_klm(struct mlx5_klm *pklm, size_t offset,
-			   size_t nentries, struct mlx5_ib_mr *mr, int flags);
+void mlx5_odp_populate_xlt(void *xlt, size_t idx, size_t nentries,
+			   struct mlx5_ib_mr *mr, int flags);
 
 int mlx5_ib_advise_mr_prefetch(struct ib_pd *pd,
 			       enum ib_uverbs_advise_mr_advice advice,
@@ -1293,9 +1310,8 @@ static inline void mlx5_ib_odp_cleanup_one(struct mlx5_ib_dev *ibdev) {}
 static inline int mlx5_ib_odp_init(void) { return 0; }
 static inline void mlx5_ib_odp_cleanup(void)				    {}
 static inline void mlx5_odp_init_mr_cache_entry(struct mlx5_cache_ent *ent) {}
-static inline void mlx5_odp_populate_klm(struct mlx5_klm *pklm, size_t offset,
-					 size_t nentries, struct mlx5_ib_mr *mr,
-					 int flags) {}
+static inline void mlx5_odp_populate_xlt(void *xlt, size_t idx, size_t nentries,
+					 struct mlx5_ib_mr *mr, int flags) {}
 
 static inline int
 mlx5_ib_advise_mr_prefetch(struct ib_pd *pd,
