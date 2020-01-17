@@ -90,6 +90,8 @@
 #include "amdgpu_mes.h"
 #include "amdgpu_umc.h"
 #include "amdgpu_mmhub.h"
+#include "amdgpu_df.h"
+#include "amdgpu_tmz.h"
 
 #define MAX_GPU_INSTANCE		16
 
@@ -175,6 +177,8 @@ extern int sched_policy;
 #else
 static const int sched_policy = KFD_SCHED_POLICY_HWS;
 #endif
+
+extern int amdgpu_tmz;
 
 #ifdef CONFIG_DRM_AMDGPU_SI
 extern int amdgpu_si_support;
@@ -664,29 +668,6 @@ struct amdgpu_mmio_remap {
 	resource_size_t bus_addr;
 };
 
-struct amdgpu_df_funcs {
-	void (*sw_init)(struct amdgpu_device *adev);
-	void (*sw_fini)(struct amdgpu_device *adev);
-	void (*enable_broadcast_mode)(struct amdgpu_device *adev,
-				      bool enable);
-	u32 (*get_fb_channel_number)(struct amdgpu_device *adev);
-	u32 (*get_hbm_channel_number)(struct amdgpu_device *adev);
-	void (*update_medium_grain_clock_gating)(struct amdgpu_device *adev,
-						 bool enable);
-	void (*get_clockgating_state)(struct amdgpu_device *adev,
-				      u32 *flags);
-	void (*enable_ecc_force_par_wr_rmw)(struct amdgpu_device *adev,
-					    bool enable);
-	int (*pmc_start)(struct amdgpu_device *adev, uint64_t config,
-					 int is_enable);
-	int (*pmc_stop)(struct amdgpu_device *adev, uint64_t config,
-					 int is_disable);
-	void (*pmc_get_count)(struct amdgpu_device *adev, uint64_t config,
-					 uint64_t *count);
-	uint64_t (*get_fica)(struct amdgpu_device *adev, uint32_t ficaa_val);
-	void (*set_fica)(struct amdgpu_device *adev, uint32_t ficaa_val,
-			 uint32_t ficadl_val, uint32_t ficadh_val);
-};
 /* Define the HW IP blocks will be used in driver , add more if necessary */
 enum amd_hw_ip_block_type {
 	GC_HWIP = 1,
@@ -930,6 +911,12 @@ struct amdgpu_device {
 	bool                            enable_mes;
 	struct amdgpu_mes               mes;
 
+	/* df */
+	struct amdgpu_df                df;
+
+	/* tmz */
+	struct amdgpu_tmz		tmz;
+
 	struct amdgpu_ip_block          ip_blocks[AMDGPU_MAX_IP_NUM];
 	int				num_ip_blocks;
 	struct mutex	mn_lock;
@@ -941,9 +928,7 @@ struct amdgpu_device {
 	atomic64_t gart_pin_size;
 
 	/* soc15 register offset based on ip, instance and  segment */
-	uint32_t 		*reg_offset[MAX_HWIP][HWIP_MAX_INSTANCE];
-
-	const struct amdgpu_df_funcs	*df_funcs;
+	uint32_t		*reg_offset[MAX_HWIP][HWIP_MAX_INSTANCE];
 
 	/* delayed work_func for deferring clockgating during resume */
 	struct delayed_work     delayed_init_work;
