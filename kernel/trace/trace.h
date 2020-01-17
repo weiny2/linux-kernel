@@ -175,9 +175,9 @@ struct trace_array_cpu {
 struct tracer;
 struct trace_option_dentry;
 
-struct trace_buffer {
+struct array_buffer {
 	struct trace_array		*tr;
-	struct ring_buffer		*buffer;
+	struct trace_buffer		*buffer;
 	struct trace_array_cpu __percpu	*data;
 	u64				time_start;
 	int				cpu;
@@ -248,7 +248,7 @@ struct cond_snapshot {
 struct trace_array {
 	struct list_head	list;
 	char			*name;
-	struct trace_buffer	trace_buffer;
+	struct array_buffer	array_buffer;
 #ifdef CONFIG_TRACER_MAX_TRACE
 	/*
 	 * The max_buffer is used to snapshot the trace when a maximum
@@ -256,12 +256,12 @@ struct trace_array {
 	 * Some tracers will use this to store a maximum trace while
 	 * it continues examining live traces.
 	 *
-	 * The buffers for the max_buffer are set up the same as the trace_buffer
+	 * The buffers for the max_buffer are set up the same as the array_buffer
 	 * When a snapshot is taken, the buffer of the max_buffer is swapped
-	 * with the buffer of the trace_buffer and the buffers are reset for
-	 * the trace_buffer so the tracing can continue.
+	 * with the buffer of the array_buffer and the buffers are reset for
+	 * the array_buffer so the tracing can continue.
 	 */
-	struct trace_buffer	max_buffer;
+	struct array_buffer	max_buffer;
 	bool			allocated_snapshot;
 #endif
 #if defined(CONFIG_TRACER_MAX_TRACE) || defined(CONFIG_HWLAT_TRACER)
@@ -684,7 +684,7 @@ trace_buffer_iter(struct trace_iterator *iter, int cpu)
 
 int tracer_init(struct tracer *t, struct trace_array *tr);
 int tracing_is_enabled(void);
-void tracing_reset_online_cpus(struct trace_buffer *buf);
+void tracing_reset_online_cpus(struct array_buffer *buf);
 void tracing_reset_current(int cpu);
 void tracing_reset_all_online_cpus(void);
 int tracing_open_generic(struct inode *inode, struct file *filp);
@@ -704,7 +704,7 @@ struct dentry *tracing_init_dentry(void);
 struct ring_buffer_event;
 
 struct ring_buffer_event *
-trace_buffer_lock_reserve(struct ring_buffer *buffer,
+trace_buffer_lock_reserve(struct trace_buffer *buffer,
 			  int type,
 			  unsigned long len,
 			  unsigned long flags,
@@ -716,7 +716,7 @@ struct trace_entry *tracing_get_trace_entry(struct trace_array *tr,
 struct trace_entry *trace_find_next_entry(struct trace_iterator *iter,
 					  int *ent_cpu, u64 *ent_ts);
 
-void trace_buffer_unlock_commit_nostack(struct ring_buffer *buffer,
+void trace_buffer_unlock_commit_nostack(struct trace_buffer *buffer,
 					struct ring_buffer_event *event);
 
 int trace_empty(struct trace_iterator *iter);
@@ -872,7 +872,7 @@ trace_vprintk(unsigned long ip, const char *fmt, va_list args);
 extern int
 trace_array_vprintk(struct trace_array *tr,
 		    unsigned long ip, const char *fmt, va_list args);
-int trace_array_printk_buf(struct ring_buffer *buffer,
+int trace_array_printk_buf(struct trace_buffer *buffer,
 			   unsigned long ip, const char *fmt, ...);
 void trace_printk_seq(struct trace_seq *s);
 enum print_line_t print_trace_line(struct trace_iterator *iter);
@@ -1056,7 +1056,7 @@ struct ftrace_func_command {
 extern bool ftrace_filter_param __initdata;
 static inline int ftrace_trace_task(struct trace_array *tr)
 {
-	return !this_cpu_read(tr->trace_buffer.data->ftrace_ignore_pid);
+	return !this_cpu_read(tr->array_buffer.data->ftrace_ignore_pid);
 }
 extern int ftrace_is_dead(void);
 int ftrace_create_function_files(struct trace_array *tr,
@@ -1366,17 +1366,17 @@ struct trace_subsystem_dir {
 };
 
 extern int call_filter_check_discard(struct trace_event_call *call, void *rec,
-				     struct ring_buffer *buffer,
+				     struct trace_buffer *buffer,
 				     struct ring_buffer_event *event);
 
 void trace_buffer_unlock_commit_regs(struct trace_array *tr,
-				     struct ring_buffer *buffer,
+				     struct trace_buffer *buffer,
 				     struct ring_buffer_event *event,
 				     unsigned long flags, int pc,
 				     struct pt_regs *regs);
 
 static inline void trace_buffer_unlock_commit(struct trace_array *tr,
-					      struct ring_buffer *buffer,
+					      struct trace_buffer *buffer,
 					      struct ring_buffer_event *event,
 					      unsigned long flags, int pc)
 {
@@ -1389,7 +1389,7 @@ void trace_buffered_event_disable(void);
 void trace_buffered_event_enable(void);
 
 static inline void
-__trace_event_discard_commit(struct ring_buffer *buffer,
+__trace_event_discard_commit(struct trace_buffer *buffer,
 			     struct ring_buffer_event *event)
 {
 	if (this_cpu_read(trace_buffered_event) == event) {
@@ -1415,7 +1415,7 @@ __trace_event_discard_commit(struct ring_buffer *buffer,
  */
 static inline bool
 __event_trigger_test_discard(struct trace_event_file *file,
-			     struct ring_buffer *buffer,
+			     struct trace_buffer *buffer,
 			     struct ring_buffer_event *event,
 			     void *entry,
 			     enum event_trigger_type *tt)
@@ -1450,7 +1450,7 @@ __event_trigger_test_discard(struct trace_event_file *file,
  */
 static inline void
 event_trigger_unlock_commit(struct trace_event_file *file,
-			    struct ring_buffer *buffer,
+			    struct trace_buffer *buffer,
 			    struct ring_buffer_event *event,
 			    void *entry, unsigned long irq_flags, int pc)
 {
@@ -1481,7 +1481,7 @@ event_trigger_unlock_commit(struct trace_event_file *file,
  */
 static inline void
 event_trigger_unlock_commit_regs(struct trace_event_file *file,
-				 struct ring_buffer *buffer,
+				 struct trace_buffer *buffer,
 				 struct ring_buffer_event *event,
 				 void *entry, unsigned long irq_flags, int pc,
 				 struct pt_regs *regs)
