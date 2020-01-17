@@ -3412,7 +3412,7 @@
             ],
             "jira": "",
             "name": "linux_iommu",
-            "repourl": "ssh://jpan9@git-amr-4.devtools.intel.com:29418/linux_iommu-iommu.git",
+            "repourl": "ssh://git-amr-4.devtools.intel.com:29418/linux_iommu-iommu.git",
             "sdl_contact": [
                 {
                     "name": "Ashok Raj",
