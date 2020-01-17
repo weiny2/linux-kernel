@@ -440,3 +440,4 @@
 # 435 reserved for clone3
 436	common	watch_devices			sys_watch_devices
 437	common	openat2				sys_openat2
+438	common	pidfd_getfd			sys_pidfd_getfd
