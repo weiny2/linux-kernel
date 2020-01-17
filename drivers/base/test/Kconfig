@@ -11,3 +11,4 @@ config TEST_ASYNC_DRIVER_PROBE
 config KUNIT_DRIVER_PE_TEST
 	bool "KUnit Tests for property entry API"
 	depends on KUNIT
+	depends on BROKEN
