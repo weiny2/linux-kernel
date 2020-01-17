@@ -270,7 +270,7 @@ long key_set_acl(struct key *key, struct key_acl *acl)
 		}
 	}
 
-	rcu_swap_protected(key->acl, acl, lockdep_is_held(&key->sem));
+	acl = rcu_replace_pointer(key->acl, acl, lockdep_is_held(&key->sem));
 	key_put_acl(acl);
 	notify_key(key, NOTIFY_KEY_SETATTR, 0);
 	return 0;
