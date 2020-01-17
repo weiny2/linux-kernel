@@ -548,6 +548,7 @@ static long vpusmm_session_alloc(struct vpusmm_session * sess, struct vpusmm_arg
     struct vpusmm_device * dev = sess->dev;
     struct dma_buf *dmabuf = NULL;
     const int flags = O_RDWR | O_CLOEXEC;
+    phys_addr_t phys_addr;
     struct dma_buf_export_info exp_info = {
         .exp_name = KBUILD_MODNAME, /* white lie for debug */
         .owner = THIS_MODULE,
@@ -592,6 +593,8 @@ static long vpusmm_session_alloc(struct vpusmm_session * sess, struct vpusmm_arg
         goto failed;
     }
 
+    phys_addr = dma_to_phys(dev->mem_dev[0], buff->dma_addr);
+
     //export the buffer as DMABuf
     exp_info.priv = buff;
     dmabuf = dma_buf_export(&exp_info);
@@ -609,17 +612,8 @@ static long vpusmm_session_alloc(struct vpusmm_session * sess, struct vpusmm_arg
         retval = 0;
     }
 
-#if 0
-    {
-        phys_addr_t phys_addr = dma_to_phys(buff->dev, buff->dma_addr);
-        phys_addr_t pfn = PFN_DOWN(phys_addr);
-        struct page * p0 = pfn_to_page(pfn);
-        pr_info("[VPUSMM]:vpusmm_session_alloc, dma_addr=%llx, phys_addr=%llx, pfn=%llu, page=%px, buff=%px(%%px), size=%lu, fd=%d \n",
-            buff->dma_addr, phys_addr,
-            pfn, p0,
-            buff, exp_info.size, arg->fd);
-    }
-#endif
+    pr_info("[VPUSMM]:vpusmm_session_alloc, dma_addr=%llx, phys_addr=%llx allocated from %s \n",
+            buff->dma_addr, phys_addr, dev_name(dev->dev));
 
     return 0;
 failed:
@@ -896,8 +890,8 @@ static int vpusmm_probe(struct platform_device *pdev)
           as a general 64-bit device and ask another vpu driver translate
           physical address into dma address.
         */
-        dma_set_mask(dev, DMA_BIT_MASK(64));
-        dma_set_coherent_mask(dev, DMA_BIT_MASK(64));
+       // dma_set_mask(dev, DMA_BIT_MASK(64));
+       // dma_set_coherent_mask(dev, DMA_BIT_MASK(64));
     }
 
     vpusmm_dev->rmem_cnt = of_count_phandle_with_args(dev->of_node, "memory-region", NULL);
