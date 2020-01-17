@@ -354,8 +354,8 @@ long watch_queue_set_filter(struct pipe_inode_info *pipe,
 	kfree(tf);
 set:
 	pipe_lock(pipe);
-	rcu_swap_protected(wqueue->filter, wfilter,
-			   lockdep_is_held(&pipe->mutex));
+	wfilter = rcu_replace_pointer(wqueue->filter, wfilter,
+				      lockdep_is_held(&pipe->mutex));
 	pipe_unlock(pipe);
 	if (wfilter)
 		kfree_rcu(wfilter, rcu);
