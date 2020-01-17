@@ -985,8 +985,9 @@ static int vpusmm_remove(struct platform_device *pdev)
     struct device *dev = &pdev->dev;
     struct device *mem_dev = NULL;
     int i;
-    int id = MINOR(vpusmm_dev->device_number);
+    int id;
     if(vpusmm_dev){
+        id = MINOR(vpusmm_dev->device_number);
         for (i=0; i<vpusmm_dev->rmem_cnt; i++) {
             mem_dev = vpusmm_dev->mem_dev[i];
             if ((mem_dev != NULL) && (mem_dev != dev))
@@ -994,9 +995,9 @@ static int vpusmm_remove(struct platform_device *pdev)
         }
         cdev_del(&vpusmm_dev->cdev);
         device_destroy(vpusmm_sys_class, vpusmm_dev->device_number);
+        if (id >= 0)
+            ida_simple_remove(&vpusmm_devid_ida, id);
     }
-    if (id >= 0)
-        ida_simple_remove(&vpusmm_devid_ida, id);
     return 0;
 }
 
