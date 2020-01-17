@@ -17,7 +17,6 @@
 #include "hif_tx.h"
 #include "hif_tx_mib.h"
 
-#define TXOP_UNIT 32
 #define HIF_MAX_ARP_IP_ADDRTABLE_ENTRIES 2
 
 static u32 wfx_rate_mask_to_hw(struct wfx_dev *wdev, u32 rates)
@@ -64,12 +63,7 @@ void wfx_cqm_bssloss_sm(struct wfx_vif *wvif, int init, int good, int bad)
 	int tx = 0;
 
 	mutex_lock(&wvif->bss_loss_lock);
-	wvif->delayed_link_loss = 0;
 	cancel_work_sync(&wvif->bss_params_work);
-
-	/* If we have a pending unjoin */
-	if (wvif->delayed_unjoin)
-		goto end;
 
 	if (init) {
 		schedule_delayed_work(&wvif->bss_loss_work, HZ);
@@ -110,44 +104,6 @@ void wfx_cqm_bssloss_sm(struct wfx_vif *wvif, int init, int good, int bad)
 	}
 end:
 	mutex_unlock(&wvif->bss_loss_lock);
-}
-
-static int wfx_set_uapsd_param(struct wfx_vif *wvif,
-			   const struct wfx_edca_params *arg)
-{
-	/* Here's the mapping AC [queue, bit]
-	 *  VO [0,3], VI [1, 2], BE [2, 1], BK [3, 0]
-	 */
-
-	if (arg->uapsd_enable[IEEE80211_AC_VO])
-		wvif->uapsd_info.trig_voice = 1;
-	else
-		wvif->uapsd_info.trig_voice = 0;
-
-	if (arg->uapsd_enable[IEEE80211_AC_VI])
-		wvif->uapsd_info.trig_video = 1;
-	else
-		wvif->uapsd_info.trig_video = 0;
-
-	if (arg->uapsd_enable[IEEE80211_AC_BE])
-		wvif->uapsd_info.trig_be = 1;
-	else
-		wvif->uapsd_info.trig_be = 0;
-
-	if (arg->uapsd_enable[IEEE80211_AC_BK])
-		wvif->uapsd_info.trig_bckgrnd = 1;
-	else
-		wvif->uapsd_info.trig_bckgrnd = 0;
-
-	/* Currently pseudo U-APSD operation is not supported, so setting
-	 * MinAutoTriggerInterval, MaxAutoTriggerInterval and
-	 * AutoTriggerStep to 0
-	 */
-	wvif->uapsd_info.min_auto_trigger_interval = 0;
-	wvif->uapsd_info.max_auto_trigger_interval = 0;
-	wvif->uapsd_info.auto_trigger_step = 0;
-
-	return hif_set_uapsd_info(wvif, &wvif->uapsd_info);
 }
 
 int wfx_fwd_probe_req(struct wfx_vif *wvif, bool enable)
@@ -316,14 +272,43 @@ void wfx_configure_filter(struct ieee80211_hw *hw,
 	*total_flags &= FIF_OTHER_BSS | FIF_FCSFAIL | FIF_PROBE_REQ;
 
 	while ((wvif = wvif_iterate(wdev, wvif)) != NULL) {
-		down(&wvif->scan.lock);
+		mutex_lock(&wvif->scan_lock);
 		wvif->filter_bssid = (*total_flags &
 				      (FIF_OTHER_BSS | FIF_PROBE_REQ)) ? 0 : 1;
 		wvif->disable_beacon_filter = !(*total_flags & FIF_PROBE_REQ);
 		wfx_fwd_probe_req(wvif, true);
 		wfx_update_filtering(wvif);
-		up(&wvif->scan.lock);
+		mutex_unlock(&wvif->scan_lock);
 	}
+}
+
+static int wfx_update_pm(struct wfx_vif *wvif)
+{
+	struct ieee80211_conf *conf = &wvif->wdev->hw->conf;
+	bool ps = conf->flags & IEEE80211_CONF_PS;
+	int ps_timeout = conf->dynamic_ps_timeout;
+
+	WARN_ON(conf->dynamic_ps_timeout < 0);
+	if (wvif->state != WFX_STATE_STA || !wvif->bss_params.aid)
+		return 0;
+	if (!ps)
+		ps_timeout = 0;
+	if (wvif->uapsd_mask)
+		ps_timeout = 0;
+
+	// Kernel disable PowerSave when multiple vifs are in use. In contrary,
+	// it is absolutly necessary to enable PowerSave for WF200
+	// FIXME: only if channel vif0 != channel vif1
+	if (wvif_count(wvif->wdev) > 1) {
+		ps = true;
+		ps_timeout = 0;
+	}
+
+	if (!wait_for_completion_timeout(&wvif->set_pm_mode_complete,
+					 TU_TO_JIFFIES(512)))
+		dev_warn(wvif->wdev->dev,
+			 "timeout while waiting of set_pm_mode_complete\n");
+	return hif_set_pm(wvif, ps, ps_timeout);
 }
 
 int wfx_conf_tx(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
@@ -332,74 +317,19 @@ int wfx_conf_tx(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 	struct wfx_dev *wdev = hw->priv;
 	struct wfx_vif *wvif = (struct wfx_vif *) vif->drv_priv;
 	int ret = 0;
-	/* To prevent re-applying PM request OID again and again*/
-	u16 old_uapsd_flags, new_uapsd_flags;
-	struct hif_req_edca_queue_params *edca;
+
+	WARN_ON(queue >= hw->queues);
 
 	mutex_lock(&wdev->conf_mutex);
-
-	if (queue < hw->queues) {
-		old_uapsd_flags = *((u16 *) &wvif->uapsd_info);
-		edca = &wvif->edca.params[queue];
-
-		wvif->edca.uapsd_enable[queue] = params->uapsd;
-		edca->aifsn = params->aifs;
-		edca->cw_min = params->cw_min;
-		edca->cw_max = params->cw_max;
-		edca->tx_op_limit = params->txop * TXOP_UNIT;
-		edca->allowed_medium_time = 0;
-		ret = hif_set_edca_queue_params(wvif, edca);
-		if (ret) {
-			ret = -EINVAL;
-			goto out;
-		}
-
-		if (wvif->vif->type == NL80211_IFTYPE_STATION) {
-			ret = wfx_set_uapsd_param(wvif, &wvif->edca);
-			new_uapsd_flags = *((u16 *) &wvif->uapsd_info);
-			if (!ret && wvif->setbssparams_done &&
-			    wvif->state == WFX_STATE_STA &&
-			    old_uapsd_flags != new_uapsd_flags)
-				ret = wfx_set_pm(wvif, &wvif->powersave_mode);
-		}
-	} else {
-		ret = -EINVAL;
+	assign_bit(queue, &wvif->uapsd_mask, params->uapsd);
+	memcpy(&wvif->edca_params[queue], params, sizeof(*params));
+	hif_set_edca_queue_params(wvif, queue, params);
+	if (wvif->vif->type == NL80211_IFTYPE_STATION) {
+		hif_set_uapsd_info(wvif, wvif->uapsd_mask);
+		if (wvif->setbssparams_done && wvif->state == WFX_STATE_STA)
+			ret = wfx_update_pm(wvif);
 	}
-
-out:
 	mutex_unlock(&wdev->conf_mutex);
-	return ret;
-}
-
-int wfx_set_pm(struct wfx_vif *wvif, const struct hif_req_set_pm_mode *arg)
-{
-	struct hif_req_set_pm_mode pm = *arg;
-	u16 uapsd_flags;
-	int ret;
-
-	if (wvif->state != WFX_STATE_STA || !wvif->bss_params.aid)
-		return 0;
-
-	memcpy(&uapsd_flags, &wvif->uapsd_info, sizeof(uapsd_flags));
-
-	if (uapsd_flags != 0)
-		pm.pm_mode.fast_psm = 0;
-
-	// Kernel disable PowerSave when multiple vifs are in use. In contrary,
-	// it is absolutly necessary to enable PowerSave for WF200
-	if (wvif_count(wvif->wdev) > 1) {
-		pm.pm_mode.enter_psm = 1;
-		pm.pm_mode.fast_psm = 0;
-	}
-
-	if (!wait_for_completion_timeout(&wvif->set_pm_mode_complete,
-					 msecs_to_jiffies(300)))
-		dev_warn(wvif->wdev->dev,
-			 "timeout while waiting of set_pm_mode_complete\n");
-	ret = hif_set_pm(wvif, &pm);
-	// FIXME: why ?
-	if (-ETIMEDOUT == wvif->scan.status)
-		wvif->scan.status = 1;
 	return ret;
 }
 
@@ -499,18 +429,9 @@ static void wfx_event_handler_work(struct work_struct *work)
 		switch (event->evt.event_id) {
 		case HIF_EVENT_IND_BSSLOST:
 			cancel_work_sync(&wvif->unjoin_work);
-			if (!down_trylock(&wvif->scan.lock)) {
-				wfx_cqm_bssloss_sm(wvif, 1, 0, 0);
-				up(&wvif->scan.lock);
-			} else {
-				/* Scan is in progress. Delay reporting.
-				 * Scan complete will trigger bss_loss_work
-				 */
-				wvif->delayed_link_loss = 1;
-				/* Also start a watchdog. */
-				schedule_delayed_work(&wvif->bss_loss_work,
-						      5 * HZ);
-			}
+			mutex_lock(&wvif->scan_lock);
+			wfx_cqm_bssloss_sm(wvif, 1, 0, 0);
+			mutex_unlock(&wvif->scan_lock);
 			break;
 		case HIF_EVENT_IND_BSSREGAINED:
 			wfx_cqm_bssloss_sm(wvif, 0, 0, 0);
@@ -566,17 +487,6 @@ static void wfx_set_beacon_wakeup_period_work(struct work_struct *work)
 static void wfx_do_unjoin(struct wfx_vif *wvif)
 {
 	mutex_lock(&wvif->wdev->conf_mutex);
-
-	if (atomic_read(&wvif->scan.in_progress)) {
-		if (wvif->delayed_unjoin)
-			dev_dbg(wvif->wdev->dev,
-				"delayed unjoin is already scheduled\n");
-		else
-			wvif->delayed_unjoin = true;
-		goto done;
-	}
-
-	wvif->delayed_link_loss = false;
 
 	if (!wvif->state)
 		goto done;
@@ -644,20 +554,21 @@ static void wfx_set_mfp(struct wfx_vif *wvif,
 	hif_set_mfp(wvif, mfpc, mfpr);
 }
 
-/* MUST be called with tx_lock held!  It will be unlocked for us. */
 static void wfx_do_join(struct wfx_vif *wvif)
 {
 	const u8 *bssid;
 	struct ieee80211_bss_conf *conf = &wvif->vif->bss_conf;
 	struct cfg80211_bss *bss = NULL;
 	struct hif_req_join join = {
-		.mode = conf->ibss_joined ? HIF_MODE_IBSS : HIF_MODE_BSS,
-		.preamble_type = conf->use_short_preamble ? HIF_PREAMBLE_SHORT : HIF_PREAMBLE_LONG,
+		.infrastructure_bss_mode = !conf->ibss_joined,
+		.short_preamble = conf->use_short_preamble,
 		.probe_for_join = 1,
 		.atim_window = 0,
 		.basic_rate_set = wfx_rate_mask_to_hw(wvif->wdev,
 						      conf->basic_rates),
 	};
+
+	wfx_tx_lock_flush(wvif->wdev);
 
 	if (wvif->channel->flags & IEEE80211_CHAN_NO_IR)
 		join.probe_for_join = 0;
@@ -677,14 +588,6 @@ static void wfx_do_join(struct wfx_vif *wvif)
 	}
 
 	mutex_lock(&wvif->wdev->conf_mutex);
-
-	/* Under the conf lock: check scan status and
-	 * bail out if it is in progress.
-	 */
-	if (atomic_read(&wvif->scan.in_progress)) {
-		wfx_tx_unlock(wvif->wdev);
-		goto done_put;
-	}
 
 	/* Sanity check basic rates */
 	if (!join.basic_rate_set)
@@ -749,7 +652,6 @@ static void wfx_do_join(struct wfx_vif *wvif)
 	}
 	wfx_update_filtering(wvif);
 
-done_put:
 	mutex_unlock(&wvif->wdev->conf_mutex);
 	if (bss)
 		cfg80211_put_bss(wvif->wdev->hw->wiphy, bss);
@@ -843,7 +745,7 @@ static int wfx_start_ap(struct wfx_vif *wvif)
 		.channel_number = wvif->channel->hw_value,
 		.beacon_interval = conf->beacon_int,
 		.dtim_period = conf->dtim_period,
-		.preamble_type = conf->use_short_preamble ? HIF_PREAMBLE_SHORT : HIF_PREAMBLE_LONG,
+		.short_preamble = conf->use_short_preamble,
 		.basic_rate_set = wfx_rate_mask_to_hw(wvif->wdev,
 						      conf->basic_rates),
 	};
@@ -896,32 +798,20 @@ static int wfx_update_beaconing(struct wfx_vif *wvif)
 
 static int wfx_upload_beacon(struct wfx_vif *wvif)
 {
-	int ret = 0;
-	struct sk_buff *skb = NULL;
+	struct sk_buff *skb;
 	struct ieee80211_mgmt *mgmt;
-	struct hif_mib_template_frame *p;
 
 	if (wvif->vif->type == NL80211_IFTYPE_STATION ||
 	    wvif->vif->type == NL80211_IFTYPE_MONITOR ||
 	    wvif->vif->type == NL80211_IFTYPE_UNSPECIFIED)
-		goto done;
+		return 0;
 
 	skb = ieee80211_beacon_get(wvif->wdev->hw, wvif->vif);
-
 	if (!skb)
 		return -ENOMEM;
+	hif_set_template_frame(wvif, skb, HIF_TMPLT_BCN,
+			       API_RATE_INDEX_B_1MBPS);
 
-	p = (struct hif_mib_template_frame *) skb_push(skb, 4);
-	p->frame_type = HIF_TMPLT_BCN;
-	p->init_rate = API_RATE_INDEX_B_1MBPS; /* 1Mbps DSSS */
-	p->frame_length = cpu_to_le16(skb->len - 4);
-
-	ret = hif_set_template_frame(wvif, p);
-
-	skb_pull(skb, 4);
-
-	if (ret)
-		goto done;
 	/* TODO: Distill probe resp; remove TIM and any other beacon-specific
 	 * IEs
 	 */
@@ -929,14 +819,11 @@ static int wfx_upload_beacon(struct wfx_vif *wvif)
 	mgmt->frame_control =
 		cpu_to_le16(IEEE80211_FTYPE_MGMT | IEEE80211_STYPE_PROBE_RESP);
 
-	p->frame_type = HIF_TMPLT_PRBRES;
-
-	ret = hif_set_template_frame(wvif, p);
+	hif_set_template_frame(wvif, skb, HIF_TMPLT_PRBRES,
+			       API_RATE_INDEX_B_1MBPS);
 	wfx_fwd_probe_req(wvif, false);
-
-done:
 	dev_kfree_skb(skb);
-	return ret;
+	return 0;
 }
 
 static int wfx_is_ht(const struct wfx_ht_info *ht_info)
@@ -994,9 +881,9 @@ static void wfx_join_finalize(struct wfx_vif *wvif,
 	association_mode.mode = 1;
 	association_mode.rateset = 1;
 	association_mode.spacing = 1;
-	association_mode.preamble_type = info->use_short_preamble ? HIF_PREAMBLE_SHORT : HIF_PREAMBLE_LONG;
+	association_mode.short_preamble = info->use_short_preamble;
 	association_mode.basic_rate_set = cpu_to_le32(wfx_rate_mask_to_hw(wvif->wdev, info->basic_rates));
-	association_mode.mixed_or_greenfield_type = wfx_ht_greenfield(&wvif->ht_info);
+	association_mode.greenfield = wfx_ht_greenfield(&wvif->ht_info);
 	association_mode.mpdu_start_spacing = wfx_ht_ampdu_density(&wvif->ht_info);
 
 	wfx_cqm_bssloss_sm(wvif, 0, 0, 0);
@@ -1015,7 +902,7 @@ static void wfx_join_finalize(struct wfx_vif *wvif,
 		hif_set_bss_params(wvif, &wvif->bss_params);
 		wvif->setbssparams_done = true;
 		wfx_set_beacon_wakeup_period_work(&wvif->set_beacon_wakeup_period_work);
-		wfx_set_pm(wvif, &wvif->powersave_mode);
+		wfx_update_pm(wvif);
 	}
 }
 
@@ -1055,9 +942,11 @@ void wfx_bss_info_changed(struct ieee80211_hw *hw,
 		}
 	}
 
-	if (changed &
-	    (BSS_CHANGED_BEACON | BSS_CHANGED_AP_PROBE_RESP |
-	     BSS_CHANGED_BSSID | BSS_CHANGED_SSID | BSS_CHANGED_IBSS)) {
+	if (changed & BSS_CHANGED_BEACON ||
+	    changed & BSS_CHANGED_AP_PROBE_RESP ||
+	    changed & BSS_CHANGED_BSSID ||
+	    changed & BSS_CHANGED_SSID ||
+	    changed & BSS_CHANGED_IBSS) {
 		wvif->beacon_int = info->beacon_int;
 		wfx_update_beaconing(wvif);
 		wfx_upload_beacon(wvif);
@@ -1095,10 +984,11 @@ void wfx_bss_info_changed(struct ieee80211_hw *hw,
 		if (changed & BSS_CHANGED_BSSID)
 			do_join = true;
 
-		if (changed &
-		    (BSS_CHANGED_ASSOC | BSS_CHANGED_BSSID |
-		     BSS_CHANGED_IBSS | BSS_CHANGED_BASIC_RATES |
-		     BSS_CHANGED_HT)) {
+		if (changed & BSS_CHANGED_ASSOC ||
+		    changed & BSS_CHANGED_BSSID ||
+		    changed & BSS_CHANGED_IBSS ||
+		    changed & BSS_CHANGED_BASIC_RATES ||
+		    changed & BSS_CHANGED_HT) {
 			if (info->assoc) {
 				if (wvif->state < WFX_STATE_PRE_STA) {
 					ieee80211_connection_loss(vif);
@@ -1120,9 +1010,9 @@ void wfx_bss_info_changed(struct ieee80211_hw *hw,
 	}
 
 	/* ERP Protection */
-	if (changed & (BSS_CHANGED_ASSOC |
-		       BSS_CHANGED_ERP_CTS_PROT |
-		       BSS_CHANGED_ERP_PREAMBLE)) {
+	if (changed & BSS_CHANGED_ASSOC ||
+	    changed & BSS_CHANGED_ERP_CTS_PROT ||
+	    changed & BSS_CHANGED_ERP_PREAMBLE) {
 		u32 prev_erp_info = wvif->erp_info;
 
 		if (info->use_cts_prot)
@@ -1139,10 +1029,10 @@ void wfx_bss_info_changed(struct ieee80211_hw *hw,
 			schedule_work(&wvif->set_cts_work);
 	}
 
-	if (changed & (BSS_CHANGED_ASSOC | BSS_CHANGED_ERP_SLOT))
+	if (changed & BSS_CHANGED_ASSOC || changed & BSS_CHANGED_ERP_SLOT)
 		hif_slot_time(wvif, info->use_short_slot ? 9 : 20);
 
-	if (changed & (BSS_CHANGED_ASSOC | BSS_CHANGED_CQM)) {
+	if (changed & BSS_CHANGED_ASSOC || changed & BSS_CHANGED_CQM) {
 		struct hif_mib_rcpi_rssi_threshold th = {
 			.rolling_average_count = 8,
 			.detection = 1,
@@ -1177,10 +1067,8 @@ void wfx_bss_info_changed(struct ieee80211_hw *hw,
 	}
 	mutex_unlock(&wdev->conf_mutex);
 
-	if (do_join) {
-		wfx_tx_lock_flush(wdev);
-		wfx_do_join(wvif); /* Will unlock it for us */
-	}
+	if (do_join)
+		wfx_do_join(wvif);
 }
 
 static void wfx_ps_notify(struct wfx_vif *wvif, enum sta_notify_cmd notify_cmd,
@@ -1342,7 +1230,7 @@ int wfx_ampdu_action(struct ieee80211_hw *hw,
 }
 
 void wfx_suspend_resume(struct wfx_vif *wvif,
-			struct hif_ind_suspend_resume_tx *arg)
+			const struct hif_ind_suspend_resume_tx *arg)
 {
 	if (arg->suspend_resume_flags.bc_mc_only) {
 		bool cancel_tmo = false;
@@ -1425,7 +1313,7 @@ int wfx_config(struct ieee80211_hw *hw, u32 changed)
 		return 0;
 	}
 
-	down(&wvif->scan.lock);
+	mutex_lock(&wvif->scan_lock);
 	mutex_lock(&wdev->conf_mutex);
 	if (changed & IEEE80211_CONF_CHANGE_POWER) {
 		wdev->output_power = conf->power_level;
@@ -1434,76 +1322,21 @@ int wfx_config(struct ieee80211_hw *hw, u32 changed)
 
 	if (changed & IEEE80211_CONF_CHANGE_PS) {
 		wvif = NULL;
-		while ((wvif = wvif_iterate(wdev, wvif)) != NULL) {
-			memset(&wvif->powersave_mode, 0,
-			       sizeof(wvif->powersave_mode));
-			if (conf->flags & IEEE80211_CONF_PS) {
-				wvif->powersave_mode.pm_mode.enter_psm = 1;
-				if (conf->dynamic_ps_timeout > 0) {
-					wvif->powersave_mode.pm_mode.fast_psm = 1;
-					/*
-					 * Firmware does not support more than
-					 * 128ms
-					 */
-					wvif->powersave_mode.fast_psm_idle_period =
-						min(conf->dynamic_ps_timeout *
-						    2, 255);
-				}
-			}
-			if (wvif->state == WFX_STATE_STA && wvif->bss_params.aid)
-				wfx_set_pm(wvif, &wvif->powersave_mode);
-		}
+		while ((wvif = wvif_iterate(wdev, wvif)) != NULL)
+			ret = wfx_update_pm(wvif);
 		wvif = wdev_to_wvif(wdev, 0);
 	}
 
 	mutex_unlock(&wdev->conf_mutex);
-	up(&wvif->scan.lock);
+	mutex_unlock(&wvif->scan_lock);
 	return ret;
 }
 
 int wfx_add_interface(struct ieee80211_hw *hw, struct ieee80211_vif *vif)
 {
-	int i;
+	int i, ret = 0;
 	struct wfx_dev *wdev = hw->priv;
 	struct wfx_vif *wvif = (struct wfx_vif *) vif->drv_priv;
-	// FIXME: parameters are set by kernel juste after interface_add.
-	// Keep struct hif_req_edca_queue_params blank?
-	struct hif_req_edca_queue_params default_edca_params[] = {
-		[IEEE80211_AC_VO] = {
-			.queue_id = HIF_QUEUE_ID_VOICE,
-			.aifsn = 2,
-			.cw_min = 3,
-			.cw_max = 7,
-			.tx_op_limit = TXOP_UNIT * 47,
-		},
-		[IEEE80211_AC_VI] = {
-			.queue_id = HIF_QUEUE_ID_VIDEO,
-			.aifsn = 2,
-			.cw_min = 7,
-			.cw_max = 15,
-			.tx_op_limit = TXOP_UNIT * 94,
-		},
-		[IEEE80211_AC_BE] = {
-			.queue_id = HIF_QUEUE_ID_BESTEFFORT,
-			.aifsn = 3,
-			.cw_min = 15,
-			.cw_max = 1023,
-			.tx_op_limit = TXOP_UNIT * 0,
-		},
-		[IEEE80211_AC_BK] = {
-			.queue_id = HIF_QUEUE_ID_BACKGROUND,
-			.aifsn = 7,
-			.cw_min = 15,
-			.cw_max = 1023,
-			.tx_op_limit = TXOP_UNIT * 0,
-		},
-	};
-
-	BUILD_BUG_ON(ARRAY_SIZE(default_edca_params) != ARRAY_SIZE(wvif->edca.params));
-	if (wfx_api_older_than(wdev, 2, 0)) {
-		default_edca_params[IEEE80211_AC_BE].queue_id = HIF_QUEUE_ID_BACKGROUND;
-		default_edca_params[IEEE80211_AC_BK].queue_id = HIF_QUEUE_ID_BESTEFFORT;
-	}
 
 	vif->driver_flags |= IEEE80211_VIF_BEACON_FILTER |
 			     IEEE80211_VIF_SUPPORTS_UAPSD |
@@ -1553,10 +1386,6 @@ int wfx_add_interface(struct ieee80211_hw *hw, struct ieee80211_vif *vif)
 	wvif->wep_default_key_id = -1;
 	INIT_WORK(&wvif->wep_key_work, wfx_wep_key_work);
 
-	sema_init(&wvif->scan.lock, 1);
-	INIT_WORK(&wvif->scan.work, wfx_scan_work);
-	INIT_DELAYED_WORK(&wvif->scan.timeout, wfx_scan_timeout);
-
 	spin_lock_init(&wvif->event_queue_lock);
 	INIT_LIST_HEAD(&wvif->event_queue);
 	INIT_WORK(&wvif->event_handler_work, wfx_event_handler_work);
@@ -1569,18 +1398,16 @@ int wfx_add_interface(struct ieee80211_hw *hw, struct ieee80211_vif *vif)
 	INIT_WORK(&wvif->bss_params_work, wfx_bss_params_work);
 	INIT_WORK(&wvif->set_cts_work, wfx_set_cts_work);
 	INIT_WORK(&wvif->unjoin_work, wfx_unjoin_work);
+	INIT_WORK(&wvif->tx_policy_upload_work, wfx_tx_policy_upload_work);
+
+	mutex_init(&wvif->scan_lock);
+	init_completion(&wvif->scan_complete);
+	INIT_WORK(&wvif->scan_work, wfx_hw_scan_work);
 
 	INIT_WORK(&wvif->tx_policy_upload_work, wfx_tx_policy_upload_work);
 	mutex_unlock(&wdev->conf_mutex);
 
 	hif_set_macaddr(wvif, vif->addr);
-	for (i = 0; i < IEEE80211_NUM_ACS; i++) {
-		memcpy(&wvif->edca.params[i], &default_edca_params[i],
-		       sizeof(default_edca_params[i]));
-		wvif->edca.uapsd_enable[i] = false;
-		hif_set_edca_queue_params(wvif, &wvif->edca.params[i]);
-	}
-	wfx_set_uapsd_param(wvif, &wvif->edca);
 
 	wfx_tx_policy_init(wvif);
 	wvif = NULL;
@@ -1591,9 +1418,9 @@ int wfx_add_interface(struct ieee80211_hw *hw, struct ieee80211_vif *vif)
 		else
 			hif_set_block_ack_policy(wvif, 0x00, 0x00);
 		// Combo force powersave mode. We can re-enable it now
-		wfx_set_pm(wvif, &wvif->powersave_mode);
+		ret = wfx_update_pm(wvif);
 	}
-	return 0;
+	return ret;
 }
 
 void wfx_remove_interface(struct ieee80211_hw *hw,
@@ -1603,10 +1430,6 @@ void wfx_remove_interface(struct ieee80211_hw *hw,
 	struct wfx_vif *wvif = (struct wfx_vif *) vif->drv_priv;
 	int i;
 
-	// If scan is in progress, stop it
-	while (down_trylock(&wvif->scan.lock))
-		schedule();
-	up(&wvif->scan.lock);
 	wait_for_completion_timeout(&wvif->set_pm_mode_complete, msecs_to_jiffies(300));
 
 	mutex_lock(&wdev->conf_mutex);
@@ -1646,8 +1469,6 @@ void wfx_remove_interface(struct ieee80211_hw *hw,
 	/* FIXME: In add to reset MAC address, try to reset interface */
 	hif_set_macaddr(wvif, NULL);
 
-	cancel_delayed_work_sync(&wvif->scan.timeout);
-
 	wfx_cqm_bssloss_sm(wvif, 0, 0, 0);
 	cancel_work_sync(&wvif->unjoin_work);
 	cancel_delayed_work_sync(&wvif->link_id_gc_work);
@@ -1666,7 +1487,7 @@ void wfx_remove_interface(struct ieee80211_hw *hw,
 		else
 			hif_set_block_ack_policy(wvif, 0x00, 0x00);
 		// Combo force powersave mode. We can re-enable it now
-		wfx_set_pm(wvif, &wvif->powersave_mode);
+		wfx_update_pm(wvif);
 	}
 }
 
