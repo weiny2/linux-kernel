@@ -3391,6 +3391,36 @@
             ],
             "status": "intel confidential",
             "stuck_at_ref": ""
+        },
+        {
+            "branch": "intel-next-5.5",
+            "branch_type": "expiring",
+            "config_options": [],
+            "contributor": [
+                {
+                    "name": "Yi Liu",
+                    "email": "yi.l.liu@intel.com"
+                }
+            ],
+            "description": "IOMMU VSVA patches",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Vakharwala, Rupin H",
+                    "email": "rupin.h.vakharwala@intel.com"
+                }
+            ],
+            "jira": "",
+            "name": "linux_iommu",
+            "repourl": "ssh://jpan9@git-amr-4.devtools.intel.com:29418/linux_iommu-iommu.git",
+            "sdl_contact": [
+                {
+                    "name": "Ashok Raj",
+                    "email": "ashok.raj@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": ""
         }
     ]
 }
