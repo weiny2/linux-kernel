@@ -6016,7 +6016,8 @@ static inline bool nested_mode_support(void)
 		}
 	}
 	rcu_read_unlock();
-
+	/* fake sm as true since no real platform has all IOMMU support sm */
+	ret = true;
 	return ret;
 }
 
