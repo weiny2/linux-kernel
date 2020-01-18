@@ -656,7 +656,7 @@
                 }
             ],
             "description": "USB host support and fixes",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Abdul Rahman Ismail",
@@ -2075,24 +2075,28 @@
                     "value": "y"
                 },
                 {
-                    "name": "CONFIG_INTEL_IADX",
-                    "value": "m"
-                },
-                {
                     "name": "CONFIG_DMATEST",
-                    "value": "m"
-                },
-                {
-                    "name": "CONFIG_VFIO_MDEV",
-                    "value": "m"
-                },
-                {
-                    "name": "CONFIG_VFIO_MDEV_DEVICE",
                     "value": "m"
                 },
                 {
                     "name": "CONFIG_MSI_IMS",
                     "value": "y"
+                },
+                {
+                    "name": "CONFIG_PCI_ATS",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_PCI_PRI",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_PCI_PASID",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_INTEL_IDXD",
+                    "value": "m"
                 }
             ],
             "contributor": [
@@ -2102,15 +2106,15 @@
                 }
             ],
             "description": "Intel combined Accelerator driver (DSA & IAX)",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Rajesh Pamujula",
                     "email": "rajesh.s.pamujula@intel.com"
                 }
             ],
-            "jira": "",
-            "name": "iadx",
+            "jira": "NEXT-1764",
+            "name": "idxd",
             "repourl": "ssh://git@gitlab.devtools.intel.com:29418/otc-clk-server/linux-dsa/kernel.git",
             "sdl_contact": [
                 {
@@ -3021,7 +3025,7 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "dc23c209f682d8ffaa8686267bba16fe7b19061b"
         },
         {
             "branch": "chall_linus_tgpio",
@@ -3393,16 +3397,65 @@
             "stuck_at_ref": ""
         },
         {
-            "branch": "intel-next-5.5",
+            "branch": "vsva_for_intel_next_v5.5",
             "branch_type": "expiring",
-            "config_options": [],
-            "contributor": [
+            "config_options": [
                 {
-                    "name": "Yi Liu",
-                    "email": "yi.l.liu@intel.com"
+                    "name": "CONFIG_VFIO_IOMMU_TYPE1",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_IOMMU_IOVA",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_IOASID",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_IOMMU_API",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_IOMMU_SUPPORT",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_IOMMU_DEBUGFS",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_INTEL_IOMMU",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_INTEL_IOMMU_DEBUGFS",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_INTEL_IOMMU_SVM",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_INTEL_IOMMU_DEFAULT_ON",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_INTEL_IOMMU_FLOPPY_WA",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_INTEL_IOMMU_SCALABLE_MODE_DEFAULT_ON",
+                    "value": "n"
                 }
             ],
-            "description": "IOMMU VSVA patches",
+            "contributor": [
+                {
+                    "name": "Jacob Jun",
+                    "email": "jacob.jun.pan@intel.com"
+                }
+            ],
+            "description": "Due to inter dependencies, individual pull request to intel-next for each topic branch will result in many merge conflicts. So here is a collection of CET, XSAVE, PASID, IOMMU, and VFIO patches that ultimately enables DSA drivers to use vSVM.",
             "enabled": true,
             "ip_owner": [
                 {
@@ -3410,13 +3463,87 @@
                     "email": "rupin.h.vakharwala@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1762",
             "name": "linux_iommu",
             "repourl": "ssh://git-amr-4.devtools.intel.com:29418/linux_iommu-iommu.git",
             "sdl_contact": [
                 {
                     "name": "Ashok Raj",
                     "email": "ashok.raj@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": ""
+        },
+        {
+            "branch": "rdt/for-intel-next",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "CONFIG_X86_CPU_RESCTRL",
+                    "value": "y"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Reinette Chatre",
+                    "email": "reinette.chatre@intel.com"
+                }
+            ],
+            "description": "Collection of new Intel RDT features",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Tony Luck",
+                    "email": "tony.luck@intel.com"
+                }
+            ],
+            "jira": "NEXT-1761",
+            "name": "rdt",
+            "repourl": "ssh://git-amr-2.devtools.intel.com:29418/rt_linux-linux.git",
+            "sdl_contact": [
+                {
+                    "name": "Reinette Chatre",
+                    "email": "reinette.chatre@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": ""
+        },
+        {
+            "branch": "rneri/hybrid",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "CONFIG_INTEL_HFI",
+                    "value": "y"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Ricardo Neri",
+                    "email": "ricardo.neri-calderon@linux.intel.com"
+                }
+            ],
+            "description": "Support for Hybrid CPUs and Hardware-Guided Scheduling",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Eugene Gorbatov",
+                    "email": "eugene.gorbatov@intel.com"
+                },
+                {
+                    "name": "Muhammad Abozaed",
+                    "email": "muhammad.abozaed@intel.com"
+                }
+            ],
+            "jira": "NEXT-1765",
+            "name": "hybrid",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/ranerica/linux-dev.git",
+            "sdl_contact": [
+                {
+                    "name": "Ravi V. Shankar",
+                    "email": "ravi.v.shankar@intel.com"
                 }
             ],
             "status": "intel confidential",
