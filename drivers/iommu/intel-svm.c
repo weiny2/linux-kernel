@@ -773,8 +773,8 @@ int intel_svm_unbind_gpasid(struct device *dev, int pasid)
 			 * confuse with its previous life.
 			 * intel_svm_drain_prq(dev, pasid);
 			 */
-/* REVISIT: Comment out since it doesn't work on QEMU, tested on Hypersim
 			intel_pasid_tear_down_entry(iommu, dev, svm->pasid);
+/* REVISIT: Comment out since it doesn't work on QEMU, tested on Hypersim
 			intel_svm_drain_prq(dev, pasid);
 */
 			kfree_rcu(sdev, rcu);
