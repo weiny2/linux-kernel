@@ -747,6 +747,10 @@ static long vpusmm_session_ptr2vpu(struct vpusmm_session * sess, unsigned long *
     }
 
     dmabuf = vma->vm_file->private_data;
+    if(dmabuf == NULL) {
+        pr_info("[vpusmm]: failed at line %d\n", __LINE__);
+        goto failed;
+    }
 
     // how do we know it's a dmabuf backed file?
     // our imported dmabuf rbtree should have it inserted
