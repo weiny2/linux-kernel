@@ -2393,6 +2393,10 @@ static int vfio_bind_gpasid_fn(struct device *dev, void *data)
 
 	if (dc->group->mdev_group) {
 		dev_dbg(dev, "%s: data: %llx\n", __func__, (u64)data);
+		if (gbind_data->hpasid == -1) {
+			gbind_data->hpasid =
+				iommu_aux_get_pasid(dc->domain, dev);
+		}
 		/* save mdev host PASID for fault reporting */
 		iommu_add_device_fault_data(vfio_mdev_get_iommu_device(dev),
 						gbind_data->hpasid, dev);
@@ -2413,6 +2417,10 @@ static int vfio_unbind_gpasid_fn(struct device *dev, void *data)
 
 	if (dc->group->mdev_group) {
 		dev_dbg(dev, "%s: data: %llx\n", __func__, (u64)data);
+		if (gbind_data->hpasid == -1) {
+			gbind_data->hpasid =
+				iommu_aux_get_pasid(dc->domain, dev);
+		}
 		iommu_delete_device_fault_data(
 					vfio_mdev_get_iommu_device(dev),
 					gbind_data->hpasid);
