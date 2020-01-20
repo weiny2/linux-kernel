@@ -560,9 +560,14 @@ int intel_svm_bind_gpasid(struct iommu_domain *domain,
 	/*
 	 * We only check host PASID range, we have no knowledge to check
 	 * guest PASID range nor do we use the guest PASID.
+	 *
+	 * As we use "hpasid = -1" to indicate whether guest is working on
+	 * gpasid 0 and hpasid type is "__u64", we should avoid to check
+	 * hpasid range too. When guest is working on gpasid 0, we should
+	 * convert hpasid to PASID_RID2PASID.
 	 */
-	if (data->hpasid <= 0 || data->hpasid >= PASID_MAX)
-		return -EINVAL;
+	if (data->hpasid == -1)
+		data->hpasid = PASID_RID2PASID;
 
 	ddomain = to_dmar_domain(domain);
 
@@ -576,8 +581,12 @@ int intel_svm_bind_gpasid(struct iommu_domain *domain,
 	mutex_lock(&pasid_mutex);
 	svm = ioasid_find(NULL, data->hpasid, NULL);
 	if (IS_ERR(svm)) {
-		ret = PTR_ERR(svm);
-		goto out;
+		if (data->hpasid == PASID_RID2PASID)
+			svm = NULL;
+		else {
+			ret = PTR_ERR(svm);
+			goto out;
+		}
 	}
 
 	if (svm) {
@@ -620,7 +629,10 @@ int intel_svm_bind_gpasid(struct iommu_domain *domain,
 		 * ownership.
 		 */
 		svm->mm = get_task_mm(current);
-		svm->pasid = data->hpasid;
+		if (data->hpasid != PASID_RID2PASID)
+			svm->pasid = data->hpasid;
+		else
+			svm->pasid = PASID_RID2PASID;
 		if (data->flags & IOMMU_SVA_GPASID_VAL) {
 			svm->gpasid = data->gpasid;
 			svm->flags |= SVM_FLAG_GUEST_PASID;
