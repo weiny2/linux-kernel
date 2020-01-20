@@ -188,7 +188,8 @@ static struct kvm_shared_msrs __percpu *shared_msrs;
 				| XFEATURE_MASK_BNDCSR | XFEATURE_MASK_AVX512 \
 				| XFEATURE_MASK_PKRU)
 
-#define KVM_SUPPORTED_XSS       (XFEATURE_MASK_CET_USER | \
+#define KVM_SUPPORTED_XSS       (XFEATURE_MASK_PASID | \
+				 XFEATURE_MASK_CET_USER | \
 				 XFEATURE_MASK_CET_KERNEL)
 
 u64 __read_mostly host_efer;
