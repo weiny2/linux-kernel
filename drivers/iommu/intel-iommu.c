@@ -5537,7 +5537,7 @@ static int aux_domain_add_dev(struct dmar_domain *domain,
 		 */
 		pasid = ioasid_alloc(NULL, PASID_MIN,
 				     pci_max_pasids(to_pci_dev(dev)) - 1,
-				     domain);
+				     NULL);
 		if (pasid == INVALID_IOASID) {
 			pr_err("Can't allocate default pasid\n");
 			return -ENODEV;
