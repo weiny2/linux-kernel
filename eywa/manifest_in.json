@@ -206,7 +206,7 @@
                 }
             ],
             "description": "Drm embargo branch",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Rodrigio Vivi",
@@ -2132,7 +2132,7 @@
                 }
             ],
             "description": "Fix up branch to revert a dma-buf patch from GFX",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Kyle Pelton",
