@@ -2132,7 +2132,7 @@
                 }
             ],
             "description": "Fix up branch to revert a dma-buf patch from GFX",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Kyle Pelton",
