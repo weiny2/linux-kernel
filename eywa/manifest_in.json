@@ -3393,9 +3393,58 @@
             "stuck_at_ref": ""
         },
         {
-            "branch": "intel-next-5.5",
+            "branch": "vsva_for_intel_next_v5.5",
             "branch_type": "expiring",
-            "config_options": [],
+            "config_options": [
+                {
+                    "name": "CONFIG_VFIO_IOMMU_TYPE1",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_IOMMU_IOVA",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_IOASID",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_IOMMU_API",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_IOMMU_SUPPORT",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_IOMMU_DEBUGFS",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_INTEL_IOMMU",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_INTEL_IOMMU_DEBUGFS",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_INTEL_IOMMU_SVM",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_INTEL_IOMMU_DEFAULT_ON",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_INTEL_IOMMU_FLOPPY_WA",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_INTEL_IOMMU_SCALABLE_MODE_DEFAULT_ON",
+                    "value": "n"
+                }
+            ],
             "contributor": [
                 {
                     "name": "Jacob Jun",
@@ -3410,7 +3459,7 @@
                     "email": "rupin.h.vakharwala@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1762",
             "name": "linux_iommu",
             "repourl": "ssh://git-amr-4.devtools.intel.com:29418/linux_iommu-iommu.git",
             "sdl_contact": [
@@ -3437,7 +3486,7 @@
                     "email": "reinette.chatre@intel.com"
                 }
             ],
-            "description": "Collection of new Intel RDT features.",
+            "description": "Due to inter dependencies, individual pull request to intel-next for each topic branch will result in many merge conflicts. So here is a collection of CET, XSAVE, PASID, IOMMU, and VFIO patches that ultimately enables DSA drivers to use vSVM.",
             "enabled": true,
             "ip_owner": [
                 {
