@@ -3421,6 +3421,41 @@
             ],
             "status": "intel confidential",
             "stuck_at_ref": ""
+        },
+        {
+            "branch": "rdt/for-intel-next",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "CONFIG_X86_CPU_RESCTRL",
+                    "value": "y"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Reinette Chatre",
+                    "email": "reinette.chatre@intel.com"
+                }
+            ],
+            "description": "Collection of new Intel RDT features.",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Tony Luck",
+                    "email": "tony.luck@intel.com"
+                }
+            ],
+            "jira": "NEXT-1761",
+            "name": "rdt",
+            "repourl": "ssh://git-amr-2.devtools.intel.com:29418/rt_linux-linux.git",
+            "sdl_contact": [
+                {
+                    "name": "Reinette Chatre",
+                    "email": "reinette.chatre@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": ""
         }
     ]
 }
