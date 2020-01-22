@@ -3452,7 +3452,7 @@
                 }
             ],
             "description": "Due to inter dependencies, individual pull request to intel-next for each topic branch will result in many merge conflicts. So here is a collection of CET, XSAVE, PASID, IOMMU, and VFIO patches that ultimately enables DSA drivers to use vSVM.",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Vakharwala, Rupin H",
