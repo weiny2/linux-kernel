@@ -3452,7 +3452,7 @@
                 }
             ],
             "description": "IOMMU VSVA patches",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Vakharwala, Rupin H",
