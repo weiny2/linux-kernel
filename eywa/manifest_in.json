@@ -2075,24 +2075,28 @@
                     "value": "y"
                 },
                 {
-                    "name": "CONFIG_INTEL_IADX",
-                    "value": "m"
-                },
-                {
                     "name": "CONFIG_DMATEST",
-                    "value": "m"
-                },
-                {
-                    "name": "CONFIG_VFIO_MDEV",
-                    "value": "m"
-                },
-                {
-                    "name": "CONFIG_VFIO_MDEV_DEVICE",
                     "value": "m"
                 },
                 {
                     "name": "CONFIG_MSI_IMS",
                     "value": "y"
+                },
+                {
+                    "name": "CONFIG_PCI_ATS",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_PCI_PRI",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_PCI_PASID",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_INTEL_IDXD",
+                    "value": "m"
                 }
             ],
             "contributor": [
@@ -2102,15 +2106,15 @@
                 }
             ],
             "description": "Intel combined Accelerator driver (DSA & IAX)",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Rajesh Pamujula",
                     "email": "rajesh.s.pamujula@intel.com"
                 }
             ],
-            "jira": "",
-            "name": "iadx",
+            "jira": "NEXT-1764",
+            "name": "idxd",
             "repourl": "ssh://git@gitlab.devtools.intel.com:29418/otc-clk-server/linux-dsa/kernel.git",
             "sdl_contact": [
                 {
