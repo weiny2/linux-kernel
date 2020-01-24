@@ -154,6 +154,8 @@ struct msc {
 
 	struct list_head	iter_list;
 
+	bool			stop_on_full;
+
 	/* config */
 	unsigned int		enabled : 1,
 				wrap	: 1,
@@ -1757,7 +1759,8 @@ static irqreturn_t intel_th_msc_interrupt(struct intel_th_device *thdev)
 
 	/* next window: if READY, proceed, if LOCKED, stop the trace */
 	if (msc_win_set_lockout(next_win, WIN_READY, WIN_INUSE)) {
-		schedule_work(&msc->work);
+		if (msc->stop_on_full)
+			schedule_work(&msc->work);
 		return IRQ_HANDLED;
 	}
 
@@ -2050,11 +2053,39 @@ win_switch_store(struct device *dev, struct device_attribute *attr,
 
 static DEVICE_ATTR_WO(win_switch);
 
+static ssize_t stop_on_full_show(struct device *dev,
+				 struct device_attribute *attr, char *buf)
+{
+	struct msc *msc = dev_get_drvdata(dev);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n", msc->stop_on_full);
+}
+
+static ssize_t stop_on_full_store(struct device *dev,
+				  struct device_attribute *attr,
+				  const char *buf, size_t size)
+{
+	struct msc *msc = dev_get_drvdata(dev);
+	unsigned long val;
+	int ret;
+
+	ret = kstrtoul(buf, 10, &val);
+	if (ret)
+		return ret;
+
+	msc->stop_on_full = !!val;
+
+	return size;
+}
+
+static DEVICE_ATTR_RW(stop_on_full);
+
 static struct attribute *msc_output_attrs[] = {
 	&dev_attr_wrap.attr,
 	&dev_attr_mode.attr,
 	&dev_attr_nr_pages.attr,
 	&dev_attr_win_switch.attr,
+	&dev_attr_stop_on_full.attr,
 	NULL,
 };
 
