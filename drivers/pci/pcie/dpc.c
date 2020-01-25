@@ -18,7 +18,7 @@
 #include "../pci.h"
 
 struct dpc_dev {
-	struct pcie_device	*dev;
+	struct pci_dev		*pdev;
 	u16			cap_pos;
 	bool			rp_extensions;
 	u8			rp_log_size;
@@ -101,7 +101,7 @@ void pci_restore_dpc_state(struct pci_dev *dev)
 static int dpc_wait_rp_inactive(struct dpc_dev *dpc)
 {
 	unsigned long timeout = jiffies + HZ;
-	struct pci_dev *pdev = dpc->dev->port;
+	struct pci_dev *pdev = dpc->pdev;
 	u16 cap = dpc->cap_pos, status;
 
 	pci_read_config_word(pdev, cap + PCI_EXP_DPC_STATUS, &status);
@@ -149,7 +149,7 @@ static pci_ers_result_t dpc_reset_link(struct pci_dev *pdev)
 
 static void dpc_process_rp_pio_error(struct dpc_dev *dpc)
 {
-	struct pci_dev *pdev = dpc->dev->port;
+	struct pci_dev *pdev = dpc->pdev;
 	u16 cap = dpc->cap_pos, dpc_status, first_error;
 	u32 status, mask, sev, syserr, exc, dw0, dw1, dw2, dw3, log, prefix;
 	int i;
@@ -228,7 +228,7 @@ static irqreturn_t dpc_handler(int irq, void *context)
 {
 	struct aer_err_info info;
 	struct dpc_dev *dpc = context;
-	struct pci_dev *pdev = dpc->dev->port;
+	struct pci_dev *pdev = dpc->pdev;
 	u16 cap = dpc->cap_pos, status, source, reason, ext_reason;
 
 	pci_read_config_word(pdev, cap + PCI_EXP_DPC_STATUS, &status);
@@ -267,7 +267,7 @@ static irqreturn_t dpc_handler(int irq, void *context)
 static irqreturn_t dpc_irq(int irq, void *context)
 {
 	struct dpc_dev *dpc = (struct dpc_dev *)context;
-	struct pci_dev *pdev = dpc->dev->port;
+	struct pci_dev *pdev = dpc->pdev;
 	u16 cap = dpc->cap_pos, status;
 
 	pci_read_config_word(pdev, cap + PCI_EXP_DPC_STATUS, &status);
@@ -299,7 +299,7 @@ static int dpc_probe(struct pcie_device *dev)
 		return -ENOMEM;
 
 	dpc->cap_pos = pci_find_ext_capability(pdev, PCI_EXT_CAP_ID_DPC);
-	dpc->dev = dev;
+	dpc->pdev = pdev;
 	set_service_data(dev, dpc);
 
 	status = devm_request_threaded_irq(device, dev->irq, dpc_irq,
