@@ -15,14 +15,8 @@
 #include <linux/pci.h>
 
 #include "portdrv.h"
+#include "dpc.h"
 #include "../pci.h"
-
-struct dpc_dev {
-	struct pci_dev		*pdev;
-	u16			cap_pos;
-	bool			rp_extensions;
-	u8			rp_log_size;
-};
 
 static const char * const rp_pio_error_string[] = {
 	"Configuration Request received UR Completion",	 /* Bit Position 0  */
@@ -117,34 +111,42 @@ static int dpc_wait_rp_inactive(struct dpc_dev *dpc)
 	return 0;
 }
 
-static pci_ers_result_t dpc_reset_link(struct pci_dev *pdev)
+pci_ers_result_t dpc_reset_link_common(struct dpc_dev *dpc)
 {
-	struct dpc_dev *dpc;
 	u16 cap;
 
-	/*
-	 * DPC disables the Link automatically in hardware, so it has
-	 * already been reset by the time we get here.
-	 */
-	dpc = to_dpc_dev(pdev);
 	cap = dpc->cap_pos;
 
 	/*
 	 * Wait until the Link is inactive, then clear DPC Trigger Status
 	 * to allow the Port to leave DPC.
 	 */
-	pcie_wait_for_link(pdev, false);
+	pcie_wait_for_link(dpc->pdev, false);
 
 	if (dpc->rp_extensions && dpc_wait_rp_inactive(dpc))
 		return PCI_ERS_RESULT_DISCONNECT;
 
-	pci_write_config_word(pdev, cap + PCI_EXP_DPC_STATUS,
+	pci_write_config_word(dpc->pdev, cap + PCI_EXP_DPC_STATUS,
 			      PCI_EXP_DPC_STATUS_TRIGGER);
 
-	if (!pcie_wait_for_link(pdev, true))
+	if (!pcie_wait_for_link(dpc->pdev, true))
 		return PCI_ERS_RESULT_DISCONNECT;
 
 	return PCI_ERS_RESULT_RECOVERED;
+}
+
+static pci_ers_result_t dpc_reset_link(struct pci_dev *pdev)
+{
+	struct dpc_dev *dpc;
+
+	/*
+	 * DPC disables the Link automatically in hardware, so it has
+	 * already been reset by the time we get here.
+	 */
+	dpc = to_dpc_dev(pdev);
+
+	return dpc_reset_link_common(dpc);
+
 }
 
 static void dpc_process_rp_pio_error(struct dpc_dev *dpc)
@@ -224,10 +226,9 @@ static int dpc_get_aer_uncorrect_severity(struct pci_dev *dev,
 	return 1;
 }
 
-static irqreturn_t dpc_handler(int irq, void *context)
+void dpc_process_error(struct dpc_dev *dpc)
 {
 	struct aer_err_info info;
-	struct dpc_dev *dpc = context;
 	struct pci_dev *pdev = dpc->pdev;
 	u16 cap = dpc->cap_pos, status, source, reason, ext_reason;
 
@@ -257,6 +258,14 @@ static irqreturn_t dpc_handler(int irq, void *context)
 		pci_cleanup_aer_uncorrect_error_status(pdev);
 		pci_aer_clear_fatal_status(pdev);
 	}
+}
+
+static irqreturn_t dpc_handler(int irq, void *context)
+{
+	struct dpc_dev *dpc = context;
+	struct pci_dev *pdev = dpc->pdev;
+
+	dpc_process_error(dpc);
 
 	/* We configure DPC so it only triggers on ERR_FATAL */
 	pcie_do_recovery(pdev, pci_channel_io_frozen, PCIE_PORT_SERVICE_DPC);
@@ -282,6 +291,25 @@ static irqreturn_t dpc_irq(int irq, void *context)
 	return IRQ_HANDLED;
 }
 
+void dpc_dev_init(struct pci_dev *pdev, struct dpc_dev *dpc)
+{
+	dpc->cap_pos = pci_find_ext_capability(pdev, PCI_EXT_CAP_ID_DPC);
+	dpc->pdev = pdev;
+	pci_read_config_word(pdev, dpc->cap_pos + PCI_EXP_DPC_CAP, &dpc->cap);
+	pci_read_config_word(pdev, dpc->cap_pos + PCI_EXP_DPC_CTL, &dpc->ctl);
+
+	dpc->rp_extensions = (dpc->cap & PCI_EXP_DPC_CAP_RP_EXT);
+	if (dpc->rp_extensions) {
+		dpc->rp_log_size =
+			(dpc->cap & PCI_EXP_DPC_RP_PIO_LOG_SIZE) >> 8;
+		if (dpc->rp_log_size < 4 || dpc->rp_log_size > 9) {
+			pci_err(pdev, "RP PIO log size %u is invalid\n",
+				dpc->rp_log_size);
+			dpc->rp_log_size = 0;
+		}
+	}
+}
+
 #define FLAG(x, y) (((x) & (y)) ? '+' : '-')
 static int dpc_probe(struct pcie_device *dev)
 {
@@ -298,8 +326,8 @@ static int dpc_probe(struct pcie_device *dev)
 	if (!dpc)
 		return -ENOMEM;
 
-	dpc->cap_pos = pci_find_ext_capability(pdev, PCI_EXT_CAP_ID_DPC);
-	dpc->pdev = pdev;
+	dpc_dev_init(pdev, dpc);
+
 	set_service_data(dev, dpc);
 
 	status = devm_request_threaded_irq(device, dev->irq, dpc_irq,
@@ -311,18 +339,8 @@ static int dpc_probe(struct pcie_device *dev)
 		return status;
 	}
 
-	pci_read_config_word(pdev, dpc->cap_pos + PCI_EXP_DPC_CAP, &cap);
-	pci_read_config_word(pdev, dpc->cap_pos + PCI_EXP_DPC_CTL, &ctl);
-
-	dpc->rp_extensions = (cap & PCI_EXP_DPC_CAP_RP_EXT);
-	if (dpc->rp_extensions) {
-		dpc->rp_log_size = (cap & PCI_EXP_DPC_RP_PIO_LOG_SIZE) >> 8;
-		if (dpc->rp_log_size < 4 || dpc->rp_log_size > 9) {
-			pci_err(pdev, "RP PIO log size %u is invalid\n",
-				dpc->rp_log_size);
-			dpc->rp_log_size = 0;
-		}
-	}
+	ctl = dpc->ctl;
+	cap = dpc->cap;
 
 	ctl = (ctl & 0xfff4) | PCI_EXP_DPC_CTL_EN_FATAL | PCI_EXP_DPC_CTL_INT_EN;
 	pci_write_config_word(pdev, dpc->cap_pos + PCI_EXP_DPC_CTL, ctl);

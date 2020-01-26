@@ -443,6 +443,9 @@ struct aer_err_info {
 
 int aer_get_device_error_info(struct pci_dev *dev, struct aer_err_info *info);
 void aer_print_error(struct pci_dev *dev, struct aer_err_info *info);
+int pci_aer_clear_err_uncor_status(struct pci_dev *dev);
+void pci_aer_clear_err_fatal_status(struct pci_dev *dev);
+int pci_aer_clear_err_status_regs(struct pci_dev *dev);
 #endif	/* CONFIG_PCIEAER */
 
 #ifdef CONFIG_PCIE_DPC
@@ -549,6 +552,11 @@ static inline int pci_dev_specific_disable_acs_redir(struct pci_dev *dev)
 /* PCI error reporting and recovery */
 void pcie_do_recovery(struct pci_dev *dev, enum pci_channel_state state,
 		      u32 service);
+pci_ers_result_t pcie_do_recovery_common(struct pci_dev *dev,
+				enum pci_channel_state state,
+				u32 service,
+				pci_ers_result_t (*reset_cb)(void *cb_data),
+				void *cb_data);
 
 bool pcie_wait_for_link(struct pci_dev *pdev, bool active);
 #ifdef CONFIG_PCIEASPM

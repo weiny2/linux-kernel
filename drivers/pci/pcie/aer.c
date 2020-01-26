@@ -376,16 +376,13 @@ void pci_aer_clear_device_status(struct pci_dev *dev)
 	pcie_capability_write_word(dev, PCI_EXP_DEVSTA, sta);
 }
 
-int pci_cleanup_aer_uncorrect_error_status(struct pci_dev *dev)
+int pci_aer_clear_err_uncor_status(struct pci_dev *dev)
 {
 	int pos;
 	u32 status, sev;
 
 	pos = dev->aer_cap;
 	if (!pos)
-		return -EIO;
-
-	if (pcie_aer_get_firmware_first(dev))
 		return -EIO;
 
 	/* Clear status bits for ERR_NONFATAL errors only */
@@ -397,18 +394,23 @@ int pci_cleanup_aer_uncorrect_error_status(struct pci_dev *dev)
 
 	return 0;
 }
+
+int pci_cleanup_aer_uncorrect_error_status(struct pci_dev *dev)
+{
+	if (pcie_aer_get_firmware_first(dev))
+		return -EIO;
+
+	return pci_aer_clear_err_uncor_status(dev);
+}
 EXPORT_SYMBOL_GPL(pci_cleanup_aer_uncorrect_error_status);
 
-void pci_aer_clear_fatal_status(struct pci_dev *dev)
+void pci_aer_clear_err_fatal_status(struct pci_dev *dev)
 {
 	int pos;
 	u32 status, sev;
 
 	pos = dev->aer_cap;
 	if (!pos)
-		return;
-
-	if (pcie_aer_get_firmware_first(dev))
 		return;
 
 	/* Clear status bits for ERR_FATAL errors only */
@@ -419,7 +421,15 @@ void pci_aer_clear_fatal_status(struct pci_dev *dev)
 		pci_write_config_dword(dev, pos + PCI_ERR_UNCOR_STATUS, status);
 }
 
-int pci_cleanup_aer_error_status_regs(struct pci_dev *dev)
+void pci_aer_clear_fatal_status(struct pci_dev *dev)
+{
+	if (pcie_aer_get_firmware_first(dev))
+		return;
+
+	return pci_aer_clear_err_fatal_status(dev);
+}
+
+int pci_aer_clear_err_status_regs(struct pci_dev *dev)
 {
 	int pos;
 	u32 status;
@@ -430,9 +440,6 @@ int pci_cleanup_aer_error_status_regs(struct pci_dev *dev)
 
 	pos = dev->aer_cap;
 	if (!pos)
-		return -EIO;
-
-	if (pcie_aer_get_firmware_first(dev))
 		return -EIO;
 
 	port_type = pci_pcie_type(dev);
@@ -448,6 +455,14 @@ int pci_cleanup_aer_error_status_regs(struct pci_dev *dev)
 	pci_write_config_dword(dev, pos + PCI_ERR_UNCOR_STATUS, status);
 
 	return 0;
+}
+
+int pci_cleanup_aer_error_status_regs(struct pci_dev *dev)
+{
+	if (pcie_aer_get_firmware_first(dev))
+		return -EIO;
+
+	return pci_aer_clear_err_status_regs(dev);
 }
 
 void pci_save_aer_state(struct pci_dev *dev)
