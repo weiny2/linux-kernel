@@ -3351,8 +3351,15 @@ static void intel_ioasid_free(ioasid_t ioasid, void *data)
 
 static void register_pasid_allocator(struct intel_iommu *iommu)
 {
+	/*
+	 * If we are running in the host, no need for custom allocator
+	 * in that PASIDs are allocated from the host system-wide.
+	 */
+	if (!cap_caching_mode(iommu->cap))
+		return;
+
 	if (!sm_supported(iommu)) {
-		pr_warn("VT-d scalable mode not enabled\n");
+		pr_warn("VT-d Scalable Mode not enabled, no PASID allocation\n");
 		return;
 	}
 
@@ -3368,7 +3375,7 @@ static void register_pasid_allocator(struct intel_iommu *iommu)
 		iommu->pasid_allocator.alloc = intel_ioasid_alloc;
 		iommu->pasid_allocator.free = intel_ioasid_free;
 		iommu->pasid_allocator.pdata = (void *)iommu;
-		if (!ioasid_register_allocator(&iommu->pasid_allocator)) {
+		if (ioasid_register_allocator(&iommu->pasid_allocator)) {
 			pr_warn("Custom PASID allocator failed, scalable mode disabled\n");
 			/*
 			 * Disable scalable mode on this IOMMU if there
@@ -5370,7 +5377,8 @@ static void dmar_remove_one_dev_info(struct device *dev)
 
 	spin_lock_irqsave(&device_domain_lock, flags);
 	info = dev->archdata.iommu;
-	if (info)
+	if (info && info != DEFER_DEVICE_DOMAIN_INFO
+	    && info != DUMMY_DEVICE_DOMAIN_INFO)
 		__dmar_remove_one_dev_info(info);
 	spin_unlock_irqrestore(&device_domain_lock, flags);
 }
