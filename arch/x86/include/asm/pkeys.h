@@ -129,4 +129,11 @@ static inline int vma_pkey(struct vm_area_struct *vma)
 	return (vma->vm_flags & vma_pkey_mask) >> VM_PKEY_SHIFT;
 }
 
+enum {
+	PKS_KEY_IDX_DEFAULT			= 0,
+	PKS_KEY_IDX_PMEM			= 1,
+	/* Add more keys here in the future. */
+	PKS_KEY_IDX_MAX				= 16
+};
+
 #endif /*_ASM_X86_PKEYS_H */
