@@ -22,4 +22,10 @@
 #define HFI_PERFORMANCE_REPORTING	BIT(0)
 #define HFI_ENERGY_EFFICIENCY_REPORTING	BIT(1)
 
+#if defined(CONFIG_INTEL_HFI)
+extern void intel_hfi_check_event(void);
+#else
+static inline void intel_hfi_check_event(void) { }
+#endif
+
 #endif /* _ASM_X86_INTEL_HFI_H */
