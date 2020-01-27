@@ -23,10 +23,23 @@
 #define XLINK_IPC_MAX_NMB_DEVICES 4
 #define XLINK_IPC_MAX_DEVICE_NAME_SIZE 12
 
-/* used to translate xlink sw device id to a vpu slice id */
-#define VPU_ID_MASK 0xF
-#define GET_VPU_ID_FROM_SW_DEVICE_ID(sw_device_id) ((sw_device_id >> 1) & VPU_ID_MASK)
-#define GET_SW_DEVICE_ID_FROM_VPU_ID(vpu_id) ((vpu_id << 1) & VPU_ID_MASK)
+/* used to extract fields from and create xlink sw device id */
+#define SW_DEVICE_ID_INTERFACE_SHIFT 24U
+#define SW_DEVICE_ID_INTERFACE_MASK 0x7
+#define SW_DEVICE_ID_INTERFACE_SMASK \
+		(SW_DEVICE_ID_INTERFACE_MASK << SW_DEVICE_ID_INTERFACE_SHIFT)
+#define SW_DEVICE_ID_INTERFACE_IPC_VALUE 0x3
+#define SW_DEVICE_ID_INTERFACE_IPC_SVALUE \
+		(SW_DEVICE_ID_INTERFACE_IPC_VALUE << SW_DEVICE_ID_INTERFACE_SHIFT)
+#define SW_DEVICE_ID_VPU_ID_SHIFT 1U
+#define SW_DEVICE_ID_VPU_ID_MASK 0x7
+#define SW_DEVICE_ID_VPU_ID_SMASK \
+		(SW_DEVICE_ID_VPU_ID_MASK << SW_DEVICE_ID_VPU_ID_SHIFT)
+#define GET_VPU_ID_FROM_SW_DEVICE_ID(id) \
+		((id >> SW_DEVICE_ID_VPU_ID_SHIFT) & SW_DEVICE_ID_VPU_ID_MASK)
+#define GET_SW_DEVICE_ID_FROM_VPU_ID(id) \
+		(((id << SW_DEVICE_ID_VPU_ID_SHIFT) & SW_DEVICE_ID_VPU_ID_SMASK) \
+		| SW_DEVICE_ID_INTERFACE_IPC_SVALUE)
 
 /* the maximum buffer size for volatile xlink operations */
 #define XLINK_MAX_BUF_SIZE 128U
@@ -37,6 +50,9 @@
 
 /* index used to retrieve the vpu ipc device phandle from the dt */
 #define VPU_IPC_DEVICE_PHANDLE_IDX	1
+
+/* vpu firmware image file name */
+#define VPU_FIRMWARE_NAME "vpu.bin"
 
 /* the timeout (in ms) used to wait for the vpu ready message */
 /* TODO: reduce timeout to 3000, waiting longer for PSS platform */
@@ -62,6 +78,7 @@ struct xlink_buf_pool {
 struct xlink_ipc_dev {
 	struct platform_device *pdev;			/* pointer to platform device */
 	u32 vpu_id;								/* the vpu slice id */
+	u32 sw_device_id;						/* the sw device id */
 	const char *device_name;				/* the vpu device name */
 	struct xlink_buf_mem local_xlink_mem;	/* tx buffer memory region */
 	struct xlink_buf_mem remote_xlink_mem;	/* rx buffer memory region */
@@ -76,7 +93,7 @@ struct xlink_ipc_dev {
 static struct xlink_ipc_dev *xlink0_dev;
 
 /* helper functions to get the xlink_ipc_dev data structure */
-static struct xlink_ipc_dev *get_xlink_dev_by_id(u32 vpu_id);
+static struct xlink_ipc_dev *get_xlink_dev_by_sw_device_id(u32 sw_device_id);
 static struct xlink_ipc_dev *get_xlink_dev_by_name(const char *device_name);
 
 /*
@@ -107,7 +124,7 @@ static void xlink_reserved_mem_release(struct device *dev)
 /*
  * get_xlink_reserved_mem_size() - Gets the size of the reserved memory region.
  *
- * @dev: [in] The device the reserved memory region is allocated to. 
+ * @dev: [in] The device the reserved memory region is allocated to.
  * @idx: [in] The reserved memory region's index in the phandle table.
  *
  * Return: The reserved memory size, 0 on failure.
@@ -316,7 +333,7 @@ static int xlink_virt_to_phys(struct xlink_buf_mem *xlink_mem, void *vaddr,
  *
  * @xlink_dev:	[in]  The xlink ipc device to get a buffer from.
  * @buf:		[out] Where to store the reference to the next buffer.
- * @size:		[in]  The size of the buffer to get. 
+ * @size:		[in]  The size of the buffer to get.
  *
  * Return: 0 on success, negative error code otherwise.
  */
@@ -446,15 +463,13 @@ int xlink_ipc_write(void *fd, void *data, size_t * const size, u32 timeout)
 	int rc = 0;
 	u32 paddr;
 	void *vaddr = 0;
-	u32 vpu_id;
 	struct xlink_ipc_dev *xlink_dev;
 	struct xlink_ipc_fd *ipc = (struct xlink_ipc_fd *)fd;
 
 	if (!ipc)
 		return -EINVAL;
 
-	vpu_id = GET_VPU_ID_FROM_SW_DEVICE_ID(ipc->sw_device_id);
-	xlink_dev = get_xlink_dev_by_id(vpu_id);
+	xlink_dev = get_xlink_dev_by_sw_device_id(ipc->sw_device_id);
 	if (!xlink_dev)
 		return -ENODEV;
 
@@ -491,15 +506,13 @@ int xlink_ipc_read(void *fd, void *data, size_t * const size, u32 timeout)
 	int rc = 0;
 	u32 addr = 0;
 	void *vaddr = 0;
-	u32 vpu_id;
 	struct xlink_ipc_dev *xlink_dev;
 	struct xlink_ipc_fd *ipc = (struct xlink_ipc_fd *)fd;
 
 	if (!ipc)
 		return -EINVAL;
 
-	vpu_id = GET_VPU_ID_FROM_SW_DEVICE_ID(ipc->sw_device_id);
-	xlink_dev = get_xlink_dev_by_id(vpu_id);
+	xlink_dev = get_xlink_dev_by_sw_device_id(ipc->sw_device_id);
 	if (!xlink_dev)
 		return -ENODEV;
 
@@ -533,17 +546,19 @@ int xlink_ipc_get_device_list(u32 *sw_device_id_list, u32 *num_devices,
 		int pid)
 {
 	int i = 0;
+	u32 sw_device_id = 0;
 	struct xlink_ipc_dev *xlink_dev;
 
 	if (!sw_device_id_list || !num_devices)
 		return -EINVAL;
 
 	for (i = 0; i < XLINK_IPC_MAX_NMB_DEVICES; i++) {
-		xlink_dev = get_xlink_dev_by_id(i);
+		sw_device_id = GET_SW_DEVICE_ID_FROM_VPU_ID(i);
+		xlink_dev = get_xlink_dev_by_sw_device_id(sw_device_id);
 		if(!xlink_dev)
 			break;
 
-		*sw_device_id_list = GET_SW_DEVICE_ID_FROM_VPU_ID(i);
+		*sw_device_id_list = xlink_dev->sw_device_id;
 		sw_device_id_list++;
 	}
 	*num_devices = i;
@@ -565,12 +580,11 @@ int xlink_ipc_get_device_name(u32 sw_device_id, char *device_name,
 {
 	struct xlink_ipc_dev *xlink_dev;
 	size_t size;
-	u32 vpu_id = GET_VPU_ID_FROM_SW_DEVICE_ID(sw_device_id);
 
 	if (!device_name)
 		return -EINVAL;
 
-	xlink_dev = get_xlink_dev_by_id(vpu_id);
+	xlink_dev = get_xlink_dev_by_sw_device_id(sw_device_id);
 	if (!xlink_dev)
 		return -ENODEV;
 
@@ -619,6 +633,9 @@ int xlink_ipc_boot_device(const char *device_name, const char *binary_path)
 	int rc = 0;
 	enum intel_keembay_vpu_state state;
 	struct xlink_ipc_dev *xlink_dev = NULL;
+
+	/* ignore parameter and use hard coded file name */
+	binary_path = VPU_FIRMWARE_NAME;
 
 	if (!device_name || !binary_path)
 		return -EINVAL;
@@ -703,15 +720,13 @@ EXPORT_SYMBOL(xlink_ipc_reset_device);
 int xlink_ipc_open_channel(void *fd, u32 channel)
 {
 	int rc = 0;
-	u32 vpu_id;
 	struct xlink_ipc_dev *xlink_dev;
 	struct xlink_ipc_fd *ipc = (struct xlink_ipc_fd *)fd;
 
 	if (!ipc)
 		return -EINVAL;
 
-	vpu_id = GET_VPU_ID_FROM_SW_DEVICE_ID(ipc->sw_device_id);
-	xlink_dev = get_xlink_dev_by_id(vpu_id);
+	xlink_dev = get_xlink_dev_by_sw_device_id(ipc->sw_device_id);
 	if (!xlink_dev)
 		return -ENODEV;
 
@@ -732,15 +747,13 @@ EXPORT_SYMBOL(xlink_ipc_open_channel);
 int xlink_ipc_close_channel(void *fd, u32 channel)
 {
 	int rc = 0;
-	u32 vpu_id;
 	struct xlink_ipc_dev *xlink_dev;
 	struct xlink_ipc_fd *ipc = (struct xlink_ipc_fd *)fd;
 
 	if (!ipc)
 		return -EINVAL;
 
-	vpu_id = GET_VPU_ID_FROM_SW_DEVICE_ID(ipc->sw_device_id);
-	xlink_dev = get_xlink_dev_by_id(vpu_id);
+	xlink_dev = get_xlink_dev_by_sw_device_id(ipc->sw_device_id);
 	if (!xlink_dev)
 		return -ENODEV;
 
@@ -802,7 +815,10 @@ static int keembay_xlink_ipc_probe(struct platform_device *pdev)
 		dev_warn(dev, "WARNING: additional VPU devices may fail probing.\n");
 		xlink_dev->vpu_id = 0;
 	}
-	
+
+	/* assign a sw device id */
+	xlink_dev->sw_device_id = GET_SW_DEVICE_ID_FROM_VPU_ID(xlink_dev->vpu_id);
+
 	/* assign a device name */
 	rc = of_property_read_string(dev->of_node, "intel,keembay-vpu-ipc-name",
 			&xlink_dev->device_name);
@@ -829,11 +845,12 @@ static int keembay_xlink_ipc_probe(struct platform_device *pdev)
 		xlink0_dev = xlink_dev;
 	}
 
-	dev_info(dev, "Device id=%d name=%s probe complete.\n", xlink_dev->vpu_id,
+	dev_info(dev, "Device id=%u sw_device_id=0x%x name=%s probe complete.\n",
+			xlink_dev->vpu_id, xlink_dev->sw_device_id,
 			xlink_dev->device_name);
 	return 0;
 
-r_cleanup: 
+r_cleanup:
 	xlink_reserved_memory_remove(xlink_dev);
 	return rc;
 }
@@ -877,13 +894,13 @@ static struct platform_driver keembay_xlink_ipc_driver = {
 module_platform_driver(keembay_xlink_ipc_driver);
 
 /*
- * get_xlink_dev_by_id() - Get an xlink_ipc_dev struct by the device id.
+ * get_xlink_dev_by_sw_device_id() - Get xlink_ipc_dev struct by sw device id.
  *
- * @vpu_id:	[in] The xlink ipc device's vpu id.
+ * @sw_device_id:	[in] The xlink ipc device's sw device id.
  *
  * Return: The xlink ipc device on success, NULL otherwise.
  */
-static struct xlink_ipc_dev *get_xlink_dev_by_id(u32 vpu_id)
+static struct xlink_ipc_dev *get_xlink_dev_by_sw_device_id(u32 sw_device_id)
 {
 	struct device *dev = NULL;
 	struct platform_device *pdev;
@@ -893,7 +910,7 @@ static struct xlink_ipc_dev *get_xlink_dev_by_id(u32 vpu_id)
 			dev))) {
 		pdev = to_platform_device(dev);
 		xlink_dev = platform_get_drvdata(pdev);
-		if (xlink_dev->vpu_id == vpu_id) {
+		if (xlink_dev->sw_device_id == sw_device_id) {
 			break;
 		} else {
 			xlink_dev = NULL;

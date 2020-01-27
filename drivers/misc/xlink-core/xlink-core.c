@@ -35,10 +35,20 @@
 #define CLASS_NAME 	"xlkcore"
 #define DRV_NAME	"xlink-driver"
 
-// these are used to determine if an API was called from user or kernel space
+// used to determine if an API was called from user or kernel space
 #define CHANNEL_SET_USER_BIT(chan) (chan |= (1 << 15))
 #define CHANNEL_USER_BIT_IS_SET(chan) (chan & (1 << 15))
 #define CHANNEL_CLEAR_USER_BIT(chan) (chan &= ~(1 << 15))
+
+// used to extract the interface type from a sw device id
+#define SW_DEVICE_ID_INTERFACE_SHIFT 24U
+#define SW_DEVICE_ID_INTERFACE_MASK  0x7
+#define GET_INTERFACE_FROM_SW_DEVICE_ID(id) \
+		((id >> SW_DEVICE_ID_INTERFACE_SHIFT) & SW_DEVICE_ID_INTERFACE_MASK)
+#define SW_DEVICE_ID_PCIE_INTERFACE 0x0
+#define SW_DEVICE_ID_USB_INTERFACE  0x1
+#define SW_DEVICE_ID_ETH_INTERFACE  0x2
+#define SW_DEVICE_ID_IPC_INTERFACE  0x3
 
 static dev_t xdev;
 static struct class *dev_class;
@@ -134,6 +144,24 @@ static struct xlink_handle *get_link_by_device(enum xlink_dev_type dev_type)
 		}
 	}
 	return link;
+}
+
+static uint32_t get_interface_from_sw_device_id(uint32_t sw_device_id)
+{
+	uint32_t interface = 0;
+	interface = GET_INTERFACE_FROM_SW_DEVICE_ID(sw_device_id);
+	switch (interface) {
+		case SW_DEVICE_ID_PCIE_INTERFACE:
+			return PCIE_DEVICE;
+		case SW_DEVICE_ID_USB_INTERFACE:
+			return USB_DEVICE;
+		case SW_DEVICE_ID_ETH_INTERFACE:
+			return ETH_DEVICE;
+		case SW_DEVICE_ID_IPC_INTERFACE:
+			return IPC_DEVICE;
+		default:
+			return U32_MAX;
+	}
 }
 
 // For now , do nothing and leave for further consideration
@@ -1149,10 +1177,37 @@ enum xlink_error xlink_disconnect(struct xlink_handle *handle)
 }
 EXPORT_SYMBOL(xlink_disconnect);
 
+enum xlink_error xlink_get_device_list(uint32_t *sw_device_id_list,
+		uint32_t *num_devices, int pid)
+{
+	enum xlink_error rc = 0;
+	uint32_t interface_nmb_devices = 0;
+	int i = 0;
+
+	if (!xlink)
+		return X_LINK_ERROR;
+
+	if (!sw_device_id_list || !num_devices)
+		return X_LINK_ERROR;
+
+	/* loop through each interface and combine the lists */
+	for (i = 0; i < NMB_OF_DEVICE_TYPES; i++) {
+		rc = xlink_platform_get_device_list(i, sw_device_id_list, &interface_nmb_devices, pid);
+		if (!rc) {
+			*num_devices += interface_nmb_devices;
+			sw_device_id_list += interface_nmb_devices;
+		}
+		interface_nmb_devices = 0;
+	}
+	return X_LINK_SUCCESS;
+}
+EXPORT_SYMBOL(xlink_get_device_list);
+
 enum xlink_error xlink_get_device_name(uint32_t sw_device_id, char *name,
 		size_t name_size)
 {
 	enum xlink_error rc = 0;
+	uint32_t interface = 0;
 
 	if (!xlink)
 		return X_LINK_ERROR;
@@ -1160,7 +1215,9 @@ enum xlink_error xlink_get_device_name(uint32_t sw_device_id, char *name,
 	if (!name || !name_size)
 		return X_LINK_ERROR;
 
-	rc = xlink_platform_get_device_name(sw_device_id, name, name_size);
+	interface = get_interface_from_sw_device_id(sw_device_id);
+	rc = xlink_platform_get_device_name(interface, sw_device_id, name,
+			name_size);
 	if (rc)
 		rc = X_LINK_ERROR;
 	else
@@ -1169,33 +1226,13 @@ enum xlink_error xlink_get_device_name(uint32_t sw_device_id, char *name,
 }
 EXPORT_SYMBOL(xlink_get_device_name);
 
-enum xlink_error xlink_get_device_list(uint32_t *sw_device_id_list,
-		uint32_t *num_devices, int pid)
-{
-	enum xlink_error rc = 0;
-
-	if (!xlink)
-		return X_LINK_ERROR;
-
-	if (!sw_device_id_list || !num_devices)
-		return X_LINK_ERROR;
-
-	/* TODO: loop through each interface and sum the lists up */
-	rc = xlink_platform_get_device_list(sw_device_id_list, num_devices, pid);
-	if (rc)
-		rc = X_LINK_ERROR;
-	else
-		rc = X_LINK_SUCCESS;
-	return rc;
-}
-EXPORT_SYMBOL(xlink_get_device_list);
-
 enum xlink_error xlink_get_device_status(uint32_t sw_device_id,
 		uint32_t *device_status)
 {
 	enum xlink_error rc = 0;
 	size_t name_size = XLINK_MAX_DEVICE_NAME_SIZE;
 	char *device_name = NULL;
+	uint32_t interface = 0;
 
 	if (!xlink)
 		return X_LINK_ERROR;
@@ -1209,7 +1246,9 @@ enum xlink_error xlink_get_device_status(uint32_t sw_device_id,
 
 	rc = xlink_get_device_name(sw_device_id, device_name, name_size);
 	if (rc == X_LINK_SUCCESS) {
-		rc = xlink_platform_get_device_status(device_name, device_status);
+		interface = get_interface_from_sw_device_id(sw_device_id);
+		rc = xlink_platform_get_device_status(interface, device_name,
+				device_status);
 		if (rc) {
 			rc = X_LINK_ERROR;
 		}
@@ -1228,7 +1267,7 @@ enum xlink_error xlink_boot_device(struct xlink_handle *handle,
 	enum xlink_error rc = 0;
 	size_t name_size = XLINK_MAX_DEVICE_NAME_SIZE;
 	char *device_name = NULL;
-	char *binary_path = NULL;
+	uint32_t interface = 0;
 
 	if (!xlink || !handle)
 		return X_LINK_ERROR;
@@ -1237,21 +1276,15 @@ enum xlink_error xlink_boot_device(struct xlink_handle *handle,
 	if (!device_name)
 		return X_LINK_ERROR;
 
-	/* (temporarily) use operating_frequency parameter to select boot image */
-	if (operating_frequency == POWER_SAVING_HIGH)
-		binary_path = "vpu_xlink_smoke.bin";
-	else
-		binary_path = "vpu.bin";
-
 	rc = xlink_get_device_name(handle->sw_device_id, device_name, name_size);
 	if (rc == X_LINK_SUCCESS) {
-		rc = xlink_platform_boot_device(device_name, binary_path);
+		interface = get_interface_from_sw_device_id(handle->sw_device_id);
+		rc = xlink_platform_boot_device(interface, device_name, NULL);
 		if (rc)
 			rc = X_LINK_ERROR;
 		else
 			rc = X_LINK_SUCCESS;
 	}
-
 	return rc;
 }
 EXPORT_SYMBOL(xlink_boot_device);
@@ -1260,11 +1293,14 @@ enum xlink_error xlink_reset_device(struct xlink_handle *handle,
 		enum xlink_sys_freq operating_frequency)
 {
 	enum xlink_error rc = 0;
+	uint32_t interface = 0;
 
 	if (!xlink || !handle)
 		return X_LINK_ERROR;
 
-	rc = xlink_platform_reset_device(handle->fd, operating_frequency);
+	interface = get_interface_from_sw_device_id(handle->sw_device_id);
+	rc = xlink_platform_reset_device(interface, handle->fd,
+			operating_frequency);
 	if (rc)
 		rc = X_LINK_ERROR;
 	else

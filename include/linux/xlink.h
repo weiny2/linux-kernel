@@ -112,11 +112,11 @@ enum xlink_error xlink_release_data(struct xlink_handle *handle,
 
 enum xlink_error xlink_disconnect(struct xlink_handle *handle);
 
-enum xlink_error xlink_get_device_name(uint32_t sw_device_id, char *name,
-		size_t name_size);
-
 enum xlink_error xlink_get_device_list(uint32_t *sw_device_id_list,
 		uint32_t *num_devices, int pid);
+
+enum xlink_error xlink_get_device_name(uint32_t sw_device_id, char *name,
+		size_t name_size);
 
 enum xlink_error xlink_get_device_status(uint32_t sw_device_id,
 		uint32_t *device_status);
