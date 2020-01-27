@@ -3509,6 +3509,45 @@
             ],
             "status": "intel confidential",
             "stuck_at_ref": ""
+        },
+        {
+            "branch": "rneri/hybrid",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "CONFIG_INTEL_HFI",
+                    "value": "Y"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Ricardo Neri",
+                    "email": "ricardo.neri-calderon@linux.intel.com"
+                }
+            ],
+            "description": "Support for Hybrid CPUs and Hardware-Guided Scheduling",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Eugene Gorbatov",
+                    "email": "eugene.gorbatov@intel.com"
+                },
+                {
+                    "name": "Muhammad Abozaed",
+                    "email": "muhammad.abozaed@intel.com"
+                }
+            ],
+            "jira": "NEXT-1765",
+            "name": "hybrid",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/ranerica/linux-dev.git",
+            "sdl_contact": [
+                {
+                    "name": "Ravi V. Shankar",
+                    "email": "ravi.v.shankar@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": ""
         }
     ]
 }
