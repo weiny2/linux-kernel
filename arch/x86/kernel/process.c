@@ -26,6 +26,7 @@
 #include <linux/elf-randomize.h>
 #include <trace/events/power.h>
 #include <linux/hw_breakpoint.h>
+#include <linux/pkeys.h>
 #include <asm/cpu.h>
 #include <asm/apic.h>
 #include <linux/uaccess.h>
@@ -184,6 +185,20 @@ int copy_thread_tls(unsigned long clone_flags, unsigned long sp,
 	return ret;
 }
 
+/*
+ * Init task's pks here. Debug or speculation MSRs have some bits in
+ * thread->flags and init as 0. But thread->pks is non-zero.  And
+ * fpu__clear() just initialized pkru.
+ */
+#ifdef CONFIG_X86_INTEL_MEMORY_PROTECTION_KEYS
+static void pks_init_task(struct task_struct *tsk)
+{
+	tsk->thread.pks = init_pks_value;
+}
+#else
+static void pks_init_task(struct task_struct *tsk) { }
+#endif
+
 void flush_thread(void)
 {
 	struct task_struct *tsk = current;
@@ -192,6 +207,8 @@ void flush_thread(void)
 	memset(tsk->thread.tls_array, 0, sizeof(tsk->thread.tls_array));
 
 	fpu__clear_all(&tsk->thread.fpu);
+
+	pks_init_task(tsk);
 }
 
 void disable_TSC(void)
@@ -655,6 +672,8 @@ void __switch_to_xtra(struct task_struct *prev_p, struct task_struct *next_p)
 
 	if ((tifp ^ tifn) & _TIF_SLD)
 		switch_to_sld(tifn);
+
+	pks_sched_in(tifn);
 }
 
 /*
