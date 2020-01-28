@@ -88,8 +88,9 @@ struct xlink_ipc_dev {
 
 /* used for single-slice backwards compatibility */
 /* TODO: remove when kmb dt is updated for backwards compatibility */
-#define VPU_SLICE_0_ID 0u
+#define VPU_SLICE_0_ID 0
 #define VPU_SLICE_0_DEVICE_NAME "vpu-slice-0"
+#define VPU_SLICE_0_SW_DEVICE_ID 0
 static struct xlink_ipc_dev *xlink0_dev;
 
 /* helper functions to get the xlink_ipc_dev data structure */
@@ -813,7 +814,8 @@ static int keembay_xlink_ipc_probe(struct platform_device *pdev)
 		dev_warn(dev, "VPU ID not defined in DT, using %u as default.\n",
 				VPU_SLICE_0_ID);
 		dev_warn(dev, "WARNING: additional VPU devices may fail probing.\n");
-		xlink_dev->vpu_id = 0;
+		xlink_dev->vpu_id = VPU_SLICE_0_ID;
+		xlink_dev->sw_device_id = VPU_SLICE_0_SW_DEVICE_ID;
 	}
 
 	/* assign a sw device id */

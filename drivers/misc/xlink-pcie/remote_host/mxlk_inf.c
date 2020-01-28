@@ -46,16 +46,16 @@ int xlink_pcie_get_device_status(const char *device_name,
 	switch (status) {
 	case MXLK_STATUS_READY:
 	case MXLK_STATUS_RUN:
-		*device_status = XLINK_DEV_READY;
+		*device_status = _XLINK_DEV_READY;
 		break;
 	case MXLK_STATUS_ERROR:
-		*device_status = XLINK_DEV_ERROR;
+		*device_status = _XLINK_DEV_ERROR;
 		break;
 	case MXLK_STATUS_RECOVERY:
-		*device_status = XLINK_DEV_RECOVERY;
+		*device_status = _XLINK_DEV_RECOVERY;
 		break;
 	default:
-		*device_status = XLINK_DEV_BUSY;
+		*device_status = _XLINK_DEV_BUSY;
 		break;
 	}
 

@@ -19,7 +19,19 @@
 
 #ifdef CONFIG_XLINK_LOCAL_HOST
 #include <linux/xlink-ipc.h>
-#endif
+#else
+/* used for xlink compilation on remote host */
+#define xlink_ipc_connect NULL
+#define xlink_ipc_read NULL
+#define xlink_ipc_write NULL
+#define xlink_ipc_get_device_list NULL
+#define xlink_ipc_get_device_name NULL
+#define xlink_ipc_get_device_status NULL
+#define xlink_ipc_boot_device NULL
+#define xlink_ipc_reset_device NULL
+#define xlink_ipc_open_channel NULL
+#define xlink_ipc_close_channel NULL
+#endif /* CONFIG_XLINK_LOCAL_HOST */
 
 #include "xlink-platform.h"
 
