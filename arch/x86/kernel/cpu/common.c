@@ -477,6 +477,11 @@ static __always_inline void setup_pks(struct cpuinfo_x86 *c)
 		return;
 
 	cr4_set_bits(X86_CR4_PKS);
+
+#ifdef CONFIG_ARCH_HAS_PKEYS
+	/* Init PKRU MSR. */
+	pks_init();
+#endif
 }
 
 #ifdef CONFIG_X86_INTEL_MEMORY_PROTECTION_KEYS

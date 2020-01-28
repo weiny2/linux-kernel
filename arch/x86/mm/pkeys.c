@@ -111,8 +111,6 @@ int __arch_override_mprotect_pkey(struct vm_area_struct *vma, int prot, int pkey
 	return vma_pkey(vma);
 }
 
-#define PKRU_AD_KEY(pkey)	(PKRU_AD_BIT << ((pkey) * PKRU_BITS_PER_PKEY))
-
 /*
  * Make the default PKRU value (at execve() time) as restrictive
  * as possible.  This ensures that any threads clone()'d early
@@ -210,3 +208,36 @@ static __init int setup_init_pkru(char *opt)
 	return 1;
 }
 __setup("init_pkru=", setup_init_pkru);
+
+/* The IA32_PKRS MSR is cached per CPU. */
+static DEFINE_PER_CPU(u32, pkrs);
+
+void pks_init_task(struct task_struct *tsk)
+{
+	tsk->thread.pkrs = init_pkrs_value;
+}
+
+/* Update PKRS MSR and its cache on local CPU. */
+static void pkrs_update(u32 pkrs_val)
+{
+	this_cpu_write(pkrs, pkrs_val);
+	wrmsrl(MSR_IA32_PKRS, pkrs_val);
+}
+
+/* Init PKRS MSR to ensure pkey-protection unless pkey is changed. */
+void pks_init(void)
+{
+	pkrs_update(init_pkrs_value);
+}
+
+/* Upload current's pkrs to MSR after switching to current. */
+void pkrs_sched_in(void)
+{
+	u64 current_pkrs = current->thread.pkrs;
+
+	/* Only update the MSR when current's pkrs is different from the MSR. */
+	if (this_cpu_read(pkrs) == current_pkrs)
+		return;
+
+	pkrs_update(current_pkrs);
+}
