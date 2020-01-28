@@ -1245,6 +1245,15 @@ config INTEL_CTA_CRASHLOG
 	 For more information, see
 	 <file:Documentation/ABI/testing/sysfs-class-cta_crashlog>
 
+config INTEL_CTA_WATCHER
+	tristate "Intel CTA watcher driver"
+	help
+	 The Intel CTA Watcher driver provides access to hardware sampling and
+	 tracing capabilities on devices that support the feature.
+
+	 For more information, see
+	 <file:Documentation/ABI/testing/sysfs-class-cta_watcher>
+
 config MLX_PLATFORM
 	tristate "Mellanox Technologies platform support"
 	depends on I2C && REGMAP

@@ -96,6 +96,7 @@ obj-$(CONFIG_INTEL_TELEMETRY)	+= intel_telemetry_core.o \
 				   intel_telemetry_debugfs.o
 obj-$(CONFIG_INTEL_CTA_TELEM)	+= intel_cta_telem.o
 obj-$(CONFIG_INTEL_CTA_CRASHLOG)	+= intel_cta_crashlog.o
+obj-$(CONFIG_INTEL_CTA_WATCHER)	+= intel_cta_watcher.o
 obj-$(CONFIG_INTEL_PMC_CORE)    += intel_pmc_core.o intel_pmc_core_pltdrv.o
 obj-$(CONFIG_PMC_ATOM)		+= pmc_atom.o
 obj-$(CONFIG_MLX_PLATFORM)	+= mlx-platform.o
