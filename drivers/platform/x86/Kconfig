@@ -1386,6 +1386,16 @@ config INTEL_PMT_CRASHLOG
 	 For more information, see
 	 <file:Documentation/ABI/testing/sysfs-class-intel_pmt_crashlog>
 
+config INTEL_PMT_WATCHER
+	tristate "Intel PMT watcher driver"
+	help
+	 The Intel Platform Monitoring Technology (PMT) Watcher driver provides
+	 access to hardware sampling and tracing capabilities on devices that
+	 support the feature.
+
+	 For more information, see
+	 <file:Documentation/ABI/testing/sysfs-class-intel_pmt_watcher>
+
 endif # X86_PLATFORM_DEVICES
 
 config PMC_ATOM

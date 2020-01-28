@@ -148,3 +148,4 @@ obj-$(CONFIG_INTEL_TELEMETRY)		+= intel_telemetry_core.o \
 obj-$(CONFIG_PMC_ATOM)			+= pmc_atom.o
 obj-$(CONFIG_INTEL_PMT_TELEM)		+= intel_pmt_telem.o
 obj-$(CONFIG_INTEL_PMT_CRASHLOG)	+= intel_pmt_crashlog.o
+obj-$(CONFIG_INTEL_PMT_WATCHER)		+= intel_pmt_watcher.o
