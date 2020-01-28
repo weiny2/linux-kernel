@@ -250,6 +250,30 @@ static inline bool rdt_get_mb_table(struct rdt_resource *r)
 	return false;
 }
 
+/*
+ * Model-specific test to determine if platform where memory bandwidth
+ * control is applied to a core can be configured to apply either the
+ * maximum or minimum of the per-thread delay values.
+ * By default, platforms where memory bandwidth control is applied to a
+ * core will select the maximum delay value of the per-thread CLOS.
+ *
+ * NOTE: delay value programmed to hardware is inverse of bandwidth
+ * percentage configured via user interface.
+ */
+bool mba_cfg_supports_min_max_intel(void)
+{
+	switch (boot_cpu_data.x86_model) {
+	case INTEL_FAM6_ATOM_TREMONT_D:
+	case INTEL_FAM6_ICELAKE_X:
+	case INTEL_FAM6_ICELAKE_D:
+		return true;
+	default:
+		return false;
+	}
+
+	return false;
+}
+
 static bool __get_mem_config_intel(struct rdt_resource *r)
 {
 	union cpuid_0x10_3_eax eax;
@@ -269,6 +293,11 @@ static bool __get_mem_config_intel(struct rdt_resource *r)
 			return false;
 	}
 	r->data_width = 3;
+
+	if (mba_cfg_supports_min_max_intel())
+		thread_throttle_mode_init_intel_rw();
+	else
+		thread_throttle_mode_init_intel_ro();
 
 	r->alloc_capable = true;
 	r->alloc_enabled = true;
@@ -579,6 +608,9 @@ static void domain_add_cpu(int cpu, struct rdt_resource *r)
 	cpumask_set_cpu(cpu, &d->cpu_mask);
 
 	rdt_domain_reconfigure_cdp(r);
+
+	if (mba_cfg_supports_min_max_intel())
+		wrmsrl(MSR_MBA_CFG, mba_cfg_msr);
 
 	if (r->alloc_capable && domain_setup_ctrlval(r, d)) {
 		kfree(d);

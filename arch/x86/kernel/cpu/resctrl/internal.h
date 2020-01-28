@@ -9,6 +9,7 @@
 
 #define MSR_IA32_L3_QOS_CFG		0xc81
 #define MSR_IA32_L2_QOS_CFG		0xc82
+#define MSR_MBA_CFG			0xc84
 #define MSR_IA32_L3_CBM_BASE		0xc90
 #define MSR_IA32_L2_CBM_BASE		0xd10
 #define MSR_IA32_MBA_THRTL_BASE		0xd50
@@ -20,6 +21,9 @@
 #define L3_QOS_CDP_ENABLE		0x01ULL
 
 #define L2_QOS_CDP_ENABLE		0x01ULL
+
+#define MBA_THROTTLE_MODE_MIN		0x01ULL
+#define MBA_THROTTLE_MODE_MAX		0x00ULL
 
 /*
  * Event IDs are used to program IA32_QM_EVTSEL before reading event
@@ -38,6 +42,8 @@
 #define MBA_MAX_MBPS			U32_MAX
 #define MAX_MBA_BW_AMD			0x800
 
+#define MBA_THROTTLE_MODE_MASK		BIT_ULL(0)
+
 #define RMID_VAL_ERROR			BIT_ULL(63)
 #define RMID_VAL_UNAVAIL		BIT_ULL(62)
 /*
@@ -47,6 +53,10 @@
  */
 #define MBM_CNTR_WIDTH_OFFSET_MAX (62 - MBM_CNTR_WIDTH_BASE)
 
+/*
+ * MSR_MBA_CFG cache
+ */
+extern u64 mba_cfg_msr;
 
 struct rdt_fs_context {
 	struct kernfs_fs_context	kfc;
@@ -611,5 +621,8 @@ void __check_limbo(struct rdt_domain *d, bool force_free);
 bool cbm_validate_intel(char *buf, u32 *data, struct rdt_resource *r);
 bool cbm_validate_amd(char *buf, u32 *data, struct rdt_resource *r);
 void rdt_domain_reconfigure_cdp(struct rdt_resource *r);
+bool mba_cfg_supports_min_max_intel(void);
+void thread_throttle_mode_init_intel_rw(void);
+void thread_throttle_mode_init_intel_ro(void);
 
 #endif /* _ASM_X86_RESCTRL_INTERNAL_H */
