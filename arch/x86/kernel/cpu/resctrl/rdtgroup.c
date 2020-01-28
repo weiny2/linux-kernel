@@ -29,6 +29,7 @@
 
 #include <uapi/linux/magic.h>
 
+#include <asm/intel-family.h>
 #include <asm/resctrl_sched.h>
 #include "internal.h"
 
@@ -1017,6 +1018,135 @@ static int max_threshold_occ_show(struct kernfs_open_file *of,
 	return 0;
 }
 
+/*
+ * As documented in the Intel SDM, on systems supporting the original MBA
+ * implementation the delay value applied to a core is always the maximum
+ * of the delay values assigned to the hardware threads sharing the core.
+ *
+ * Some systems support a model-specific MSR with which this default
+ * behavior can be changed. On these systems the core can be configured
+ * with either the minimum or maximum delay value assigned to its hardware
+ * threads.
+ */
+static int rdt_thread_throttle_mode_show(struct kernfs_open_file *of,
+					 struct seq_file *seq, void *v)
+{
+	unsigned int throttle_mode = 0;
+	u64 mba_cfg;
+	int ret;
+
+	if (mba_cfg_supports_min_max_intel()) {
+		ret = rdmsrl_safe(MSR_IA32_MBA_CFG, &mba_cfg);
+		if (ret)
+			return -ENOENT;
+		throttle_mode = mba_cfg & MBA_THREAD_THROTTLE_MODE;
+	}
+
+	seq_printf(seq, "%s\n", throttle_mode ? "min" : "max");
+
+	return 0;
+}
+
+static void update_mba_cfg(void *data)
+{
+	u64 *mba_cfg = data;
+
+	wrmsrl(MSR_IA32_MBA_CFG, *mba_cfg);
+}
+
+/*
+ * The model-specific MBA configuration MSR has package scope. Making a
+ * system-wide MBA configuration change thus needs to modify the MSR on one
+ * CPU from each package.
+ */
+static int rdt_system_mba_cfg_set(u64 mba_cfg)
+{
+	int max_pkg = topology_max_packages();
+	cpumask_var_t cpu_mask;
+	int pkg, i;
+
+	if (!zalloc_cpumask_var(&cpu_mask, GFP_KERNEL)) {
+		rdt_last_cmd_puts("Memory allocation error\n");
+		return -ENOMEM;
+	}
+
+	/* Set one CPU from each package in CPU mask */
+	for (pkg = 0; pkg < max_pkg; pkg++) {
+		for_each_online_cpu(i) {
+			if (topology_physical_package_id(i) == pkg) {
+				cpumask_set_cpu(i, cpu_mask);
+				break;
+			}
+		}
+	}
+
+	on_each_cpu_mask(cpu_mask, update_mba_cfg, &mba_cfg, 1);
+
+	free_cpumask_var(cpu_mask);
+	return 0;
+}
+
+static ssize_t rdt_thread_throttle_mode_write(struct kernfs_open_file *of,
+					      char *buf, size_t nbytes,
+					      loff_t off)
+{
+	int max_pkg = topology_max_packages();
+	u64 mba_cfg;
+	int ret = 0;
+
+	mutex_lock(&rdtgroup_mutex);
+
+	rdt_last_cmd_clear();
+
+	/*
+	 * Additional check.
+	 * This function should not be associated with the user space file
+	 * on systems that do not support configuration.
+	 */
+	if (!mba_cfg_supports_min_max_intel()) {
+		rdt_last_cmd_puts("Platform does not support mode changes\n");
+		ret = -EINVAL;
+		goto out;
+	}
+
+	/* Valid input requires a trailing newline */
+	if (nbytes == 0 || buf[nbytes - 1] != '\n') {
+		rdt_last_cmd_puts("Invalid input\n");
+		ret = -EINVAL;
+		goto out;
+	}
+
+	rdmsrl(MSR_IA32_MBA_CFG, mba_cfg);
+
+	if ((sysfs_streq(buf, "min") && (mba_cfg & MBA_THREAD_THROTTLE_MODE)) ||
+	    (sysfs_streq(buf, "max") && !(mba_cfg & MBA_THREAD_THROTTLE_MODE)))
+		goto out;
+
+	if (sysfs_streq(buf, "min")) {
+		mba_cfg |= MBA_THROTTLE_MODE_MIN;
+	} else if (sysfs_streq(buf, "max")) {
+		mba_cfg &= ~MBA_THROTTLE_MODE_MIN;
+	} else {
+		rdt_last_cmd_puts("Unknown or unsupported mode\n");
+		ret = -EINVAL;
+		goto out;
+	}
+
+	/*
+	 * MSR has package scope but the throttling mode is expected to be
+	 * configured the same for all packages on the system. When user
+	 * modifies the thread throttling mode ensure that entire system
+	 * uses the same mode.
+	 */
+	if (max_pkg == 1)
+		wrmsrl(MSR_IA32_MBA_CFG, mba_cfg);
+	else
+		ret = rdt_system_mba_cfg_set(mba_cfg);
+out:
+	mutex_unlock(&rdtgroup_mutex);
+	return ret ?: nbytes;
+}
+
 static ssize_t max_threshold_occ_write(struct kernfs_open_file *of,
 				       char *buf, size_t nbytes, loff_t off)
 {
@@ -1513,6 +1643,17 @@ static struct rftype res_common_files[] = {
 		.seq_show	= rdt_delay_linear_show,
 		.fflags		= RF_CTRL_INFO | RFTYPE_RES_MB,
 	},
+	/*
+	 * Platform specific which (if any) capabilities are provided by
+	 * thread_throttle_mode. Defer some initialization to platform
+	 * discovery.
+	 */
+	{
+		.name		= "thread_throttle_mode",
+		.kf_ops		= &rdtgroup_kf_single_ops,
+		.seq_show	= rdt_thread_throttle_mode_show,
+		.fflags		= RF_UNINITIALIZED,
+	},
 	{
 		.name		= "max_threshold_occupancy",
 		.mode		= 0644,
@@ -1571,6 +1712,47 @@ static struct rftype res_common_files[] = {
 	},
 
 };
+
+static struct rftype *rdtgroup_rftype_by_name(const char *name)
+{
+	struct rftype *rfts, *rft;
+	int len;
+
+	rfts = res_common_files;
+	len = ARRAY_SIZE(res_common_files);
+
+	for (rft = rfts; rft < rfts + len; rft++) {
+		if (!strcmp(rft->name, name))
+			return rft;
+	}
+
+	return NULL;
+}
+
+void thread_throttle_mode_init_intel_rw(void)
+{
+	struct rftype *rft;
+
+	rft = rdtgroup_rftype_by_name("thread_throttle_mode");
+	if (!rft)
+		return;
+
+	rft->mode = 0644;
+	rft->write = rdt_thread_throttle_mode_write;
+	rft->fflags = RF_CTRL_INFO | RFTYPE_RES_MB;
+}
+
+void thread_throttle_mode_init_intel_ro(void)
+{
+	struct rftype *rft;
+
+	rft = rdtgroup_rftype_by_name("thread_throttle_mode");
+	if (!rft)
+		return;
+
+	rft->mode = 0444;
+	rft->fflags = RF_CTRL_INFO | RFTYPE_RES_MB;
+}
 
 static int rdtgroup_add_files(struct kernfs_node *kn, unsigned long fflags)
 {
