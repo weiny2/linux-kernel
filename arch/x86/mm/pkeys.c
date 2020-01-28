@@ -12,6 +12,12 @@
 #include <asm/mmu_context.h>            /* vma_pkey()                   */
 #include <asm/fpu/internal.h>		/* init_fpstate			*/
 
+/*
+ * The IA32_PKRS MSR is cached in one variable. The MSRs on all CPUs have
+ *  the same value. Initial value 0 means no protection in all keys in the MSR.
+ */
+static u64 ia32_pkrs_cached;
+
 int __execute_only_pkey(struct mm_struct *mm)
 {
 	bool need_to_set_mm_pkey = false;
@@ -210,3 +216,8 @@ static __init int setup_init_pkru(char *opt)
 	return 1;
 }
 __setup("init_pkru=", setup_init_pkru);
+
+void update_ia32_pkrs(void)
+{
+	wrmsrl(MSR_IA32_PKRS, ia32_pkrs_cached);
+}

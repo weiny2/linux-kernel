@@ -142,4 +142,5 @@ enum {
 	PKS_BITS_PER_KEY	= 2
 };
 
+void update_ia32_pkrs(void);
 #endif /*_ASM_X86_PKEYS_H */
