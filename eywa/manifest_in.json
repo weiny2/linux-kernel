@@ -3025,7 +3025,7 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "dc23c209f682d8ffaa8686267bba16fe7b19061b"
         },
         {
             "branch": "chall_linus_tgpio",
