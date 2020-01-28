@@ -501,6 +501,7 @@ static __always_inline void setup_pks(struct cpuinfo_x86 *c)
 		return;
 
 	cr4_set_bits(X86_CR4_PKS);
+	pks_update(init_pks_value);
 }
 
 /*
