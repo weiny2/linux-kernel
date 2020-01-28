@@ -1233,57 +1233,6 @@
             "stuck_at_ref": ""
         },
         {
-            "branch": "for-intel-next",
-            "branch_type": "expiring",
-            "config_options": [
-                {
-                    "name": "CONFIG_SND_SOC_INTEL_SST_TOPLEVEL",
-                    "value": "y"
-                },
-                {
-                    "name": "CONFIG_SND_SOC_INTEL_SST",
-                    "value": "y"
-                },
-                {
-                    "name": "CONFIG_SND_SOC_INTEL_SKYLAKE",
-                    "value": "y"
-                },
-                {
-                    "name": "CONFIG_SND_SOC_ACPI_INTEL_MATCH",
-                    "value": "y"
-                },
-                {
-                    "name": "CONFIG_SND_SOC_INTEL_MACH",
-                    "value": "y"
-                }
-            ],
-            "contributor": [
-                {
-                    "name": "Gustaw Lewandowsk",
-                    "email": "gustaw.lewandowski@intel.com"
-                }
-            ],
-            "description": "CoE audio features and additions",
-            "enabled": false,
-            "ip_owner": [
-                {
-                    "name": "Filip Kaczmarski",
-                    "email": "filip.kaczmarski@intel.com"
-                }
-            ],
-            "jira": "",
-            "name": "audio_coe",
-            "repourl": "ssh://git-gar-1.devtools.intel.com:29418/eig_audio_integ-kernel.git",
-            "sdl_contact": [
-                {
-                    "name": "Olgierd Uzieblo",
-                    "email": "olgierd.uzieblo@intel.com"
-                }
-            ],
-            "status": "intel confidential",
-            "stuck_at_ref": ""
-        },
-        {
             "branch": "for-eywa",
             "branch_type": "expiring",
             "config_options": [
