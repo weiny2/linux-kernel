@@ -418,6 +418,9 @@ def pre_kconfig_validation(branches):
                     print_and_log("{} is set to {} and {} by '{}' and '{}'".format(name,value,configs_dict[name][0],branch["name"],configs_dict[name][1]))
                     #TODO: Make a list of conflicts print all of them out and then raise exception
                     raise Exception("Option set by two different branches, resolve the conflict and rerun")
+                if value.isupper():
+                    print_and_log("{} is set to {}".format(name, value))
+                    raise Exception("Option is set to uppercase")
                 configs_dict[name] = (value,branch["name"])
  
 def gen_config():
