@@ -142,5 +142,6 @@ enum {
 	PKS_BITS_PER_KEY	= 2
 };
 
-void update_ia32_pkrs(void);
+void update_ia32_pkrs(void *unused);
+void update_pmem_key(int ad, int wd);
 #endif /*_ASM_X86_PKEYS_H */

@@ -48,6 +48,10 @@ static inline void copy_init_pkru_to_fpregs(void)
 {
 }
 
+static inline void update_pmem_key(int ad, int wd)
+{
+}
+
 #endif /* ! CONFIG_ARCH_HAS_PKEYS */
 
 #endif /* _LINUX_PKEYS_H */

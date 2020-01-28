@@ -217,7 +217,30 @@ static __init int setup_init_pkru(char *opt)
 }
 __setup("init_pkru=", setup_init_pkru);
 
-void update_ia32_pkrs(void)
+void update_ia32_pkrs(void *unused)
 {
-	wrmsrl(MSR_IA32_PKRS, ia32_pkrs_cached);
+	wrmsrl(MSR_IA32_PKRS, READ_ONCE(ia32_pkrs_cached));
 }
+
+/*
+ * Update ia32_pkrs_cached and IA32_PKRS MSRs on all CPUs with new
+ * pmem key.
+ */
+void update_pmem_key(int ad, int wd)
+{
+	u64 key = 0;
+
+	if (!cpu_feature_enabled(X86_FEATURE_PKS))
+		return;
+
+	ad &= 1;
+	wd &= 1;
+
+	key |= ((wd << PKS_WD_OFFSET) | (ad << PKS_AD_OFFSET)) <<
+	       (PKS_KEY_IDX_PMEM * PKS_BITS_PER_KEY);
+
+	WRITE_ONCE(ia32_pkrs_cached, key);
+
+	on_each_cpu(update_ia32_pkrs, NULL, 1);
+}
+EXPORT_SYMBOL_GPL(update_pmem_key);
