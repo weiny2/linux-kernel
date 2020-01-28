@@ -136,4 +136,10 @@ enum {
 	PKS_KEY_IDX_MAX				= 16
 };
 
+enum {
+	PKS_AD_OFFSET		= 0,
+	PKS_WD_OFFSET		= 1,
+	PKS_BITS_PER_KEY	= 2
+};
+
 #endif /*_ASM_X86_PKEYS_H */
