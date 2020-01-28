@@ -111,8 +111,6 @@ int __arch_override_mprotect_pkey(struct vm_area_struct *vma, int prot, int pkey
 	return vma_pkey(vma);
 }
 
-#define PKRU_AD_KEY(pkey)	(PKRU_AD_BIT << ((pkey) * PKRU_BITS_PER_PKEY))
-
 /*
  * Make the default PKRU value (at execve() time) as restrictive
  * as possible.  This ensures that any threads clone()'d early
@@ -210,3 +208,27 @@ static __init int setup_init_pkru(char *opt)
 	return 1;
 }
 __setup("init_pkru=", setup_init_pkru);
+
+#ifdef CONFIG_ARCH_HAS_SUPERVISOR_PKEYS
+/* The IA32_PKS MSR is cached per CPU. */
+static DEFINE_PER_CPU(u32, pks);
+
+/* Update PKS MSR and its cache on local CPU. */
+void pks_update(u32 pks_val)
+{
+	this_cpu_write(pks, pks_val);
+	wrmsrl(MSR_IA32_PKS, pks_val);
+}
+
+/* Upload current's pks to MSR after switching to current. */
+void __pks_sched_in(void)
+{
+	u64 current_pks = current->thread.pks;
+
+	/* Only update the MSR when current's pks is different from the MSR. */
+	if (this_cpu_read(pks) == current_pks)
+		return;
+
+	pks_update(current_pks);
+}
+#endif /* CONFIG_ARCH_HAS_SUPERVISOR_PKEYS */
