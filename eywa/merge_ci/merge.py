@@ -403,7 +403,8 @@ def run_regen_script(all_options,branch_tracker):
             output_array.append("{}/{}".format(config_path, config_file))
     return output_array
 
-
+def is_uppercase(s):
+    return s.upper() == s
 
 def pre_kconfig_validation(branches):
     #check for conflicting options and raise exception if found
@@ -421,6 +422,8 @@ def pre_kconfig_validation(branches):
                 if value.isupper():
                     print_and_log("{} is set to {}".format(name, value))
                     raise Exception("Option is set to uppercase")
+                if not is_uppercase(name):
+                    raise Exception("CFG name {} is not all uppercase characters".format(name))
                 configs_dict[name] = (value,branch["name"])
  
 def gen_config():
