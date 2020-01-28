@@ -138,6 +138,16 @@ with respect to allocation:
 		non-linear. This field is purely informational
 		only.
 
+"thread_throttle_mode":
+		The memory bandwidth control applied to a core when
+		control is provided per core but each hardware
+		thread can be assigned a unique CLOSID.
+		"thread_throttle_mode" displays how the delay value
+		applied to the core is selected: either the "max" or
+		"min" of the delay values of the per-thread CLOS.
+		Configurable on systems that support both modes by
+		writing "min" or "max" to the file.
+
 If RDT monitoring is available there will be an "L3_MON" directory
 with the following files:
 
