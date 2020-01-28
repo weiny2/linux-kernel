@@ -2,6 +2,8 @@
 #ifndef _ASM_X86_PKEYS_H
 #define _ASM_X86_PKEYS_H
 
+#include <asm/pkeys_types.h>
+
 #define ARCH_DEFAULT_PKEY	0
 
 /*
@@ -133,5 +135,12 @@ static inline int vma_pkey(struct vm_area_struct *vma)
 
 	return (vma->vm_flags & vma_pkey_mask) >> VM_PKEY_SHIFT;
 }
+
+#ifdef CONFIG_X86_INTEL_MEMORY_PROTECTION_KEYS
+void pks_sched_in(unsigned long tifn);
+#else
+static inline void pks_sched_in(unsigned long tifn) { }
+#endif
+void pks_update(u32 pks_val);
 
 #endif /*_ASM_X86_PKEYS_H */
