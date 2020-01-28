@@ -3516,7 +3516,7 @@
             "config_options": [
                 {
                     "name": "CONFIG_INTEL_HFI",
-                    "value": "Y"
+                    "value": "y"
                 }
             ],
             "contributor": [
