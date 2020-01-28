@@ -138,6 +138,21 @@ with respect to allocation:
 		non-linear. This field is purely informational
 		only.
 
+"thread_throttle_mode":
+		The memory bandwidth control applied to a core when
+		control is provided per core but each hardware
+		thread can be assigned a unique CLOSID.
+		"thread_throttle_mode" displays how the bandwidth
+		percentage allocated to the core is selected:
+		either "max" or "min" throttling of the bandwidth
+		percentages of the per-thread CLOS. Specifically, when
+		throttling is "max" then the lowest bandwith percentage
+		is allocated to the core and when throttling is "min"
+		then the highest bandwidth percentage is allocated to
+		the core.
+		Configurable on systems that support both modes by
+		writing "min" or "max" to the file.
+
 If RDT monitoring is available there will be an "L3_MON" directory
 with the following files:
 
@@ -364,8 +379,10 @@ to the next control step available on the hardware.
 
 The bandwidth throttling is a core specific mechanism on some of Intel
 SKUs. Using a high bandwidth and a low bandwidth setting on two threads
-sharing a core will result in both threads being throttled to use the
-low bandwidth. The fact that Memory bandwidth allocation(MBA) is a core
+sharing a core may result in both threads being throttled to use the
+low bandwidth (see "thread_throttle_mode").
+
+The fact that Memory bandwidth allocation(MBA) may be a core
 specific mechanism where as memory bandwidth monitoring(MBM) is done at
 the package level may lead to confusion when users try to apply control
 via the MBA and then monitor the bandwidth to see if the controls are
