@@ -26,7 +26,9 @@ echo "git repo:ssh://git-amr-1.devtools.intel.com:29418/otc_intel_next-linux.git
 echo  >>$release_notes_file
 echo "branch:master"  >>$release_notes_file
 echo "tag:$latest_tag"  >>$release_notes_file
-echo  >>$release_notes_file
+echo >>$release_notes_file
+echo >>$release_notes_file
+echo "Intel Next validation results: http://mozart.sh.intel.com:8080/dashboard/quick_entrance/LTP-DDT/Lab/intel-next_clr"  >>$release_notes_file
 echo "For more information about intel-next visit:http://goto.intel.com/intelnext" >>$release_notes_file
 echo $rule >>$release_notes_file
 echo  >>$release_notes_file

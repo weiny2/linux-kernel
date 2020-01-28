@@ -1233,57 +1233,6 @@
             "stuck_at_ref": ""
         },
         {
-            "branch": "for-intel-next",
-            "branch_type": "expiring",
-            "config_options": [
-                {
-                    "name": "CONFIG_SND_SOC_INTEL_SST_TOPLEVEL",
-                    "value": "y"
-                },
-                {
-                    "name": "CONFIG_SND_SOC_INTEL_SST",
-                    "value": "y"
-                },
-                {
-                    "name": "CONFIG_SND_SOC_INTEL_SKYLAKE",
-                    "value": "y"
-                },
-                {
-                    "name": "CONFIG_SND_SOC_ACPI_INTEL_MATCH",
-                    "value": "y"
-                },
-                {
-                    "name": "CONFIG_SND_SOC_INTEL_MACH",
-                    "value": "y"
-                }
-            ],
-            "contributor": [
-                {
-                    "name": "Gustaw Lewandowsk",
-                    "email": "gustaw.lewandowski@intel.com"
-                }
-            ],
-            "description": "CoE audio features and additions",
-            "enabled": false,
-            "ip_owner": [
-                {
-                    "name": "Filip Kaczmarski",
-                    "email": "filip.kaczmarski@intel.com"
-                }
-            ],
-            "jira": "",
-            "name": "audio_coe",
-            "repourl": "ssh://git-gar-1.devtools.intel.com:29418/eig_audio_integ-kernel.git",
-            "sdl_contact": [
-                {
-                    "name": "Olgierd Uzieblo",
-                    "email": "olgierd.uzieblo@intel.com"
-                }
-            ],
-            "status": "intel confidential",
-            "stuck_at_ref": ""
-        },
-        {
             "branch": "for-eywa",
             "branch_type": "expiring",
             "config_options": [
@@ -2135,7 +2084,7 @@
                     "email": "kyle.d.pelton@intel.com"
                 }
             ],
-            "description": "Fix up branch to revert a dma-buf patch from GFX",
+            "description": "Fix up branch to revert a dma-buf patch from GFX, Fixup for PKS/DRM",
             "enabled": true,
             "ip_owner": [
                 {
@@ -3025,7 +2974,7 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": "dc23c209f682d8ffaa8686267bba16fe7b19061b"
+            "stuck_at_ref": ""
         },
         {
             "branch": "chall_linus_tgpio",
@@ -3544,6 +3493,131 @@
                 {
                     "name": "Ravi V. Shankar",
                     "email": "ravi.v.shankar@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": ""
+        },
+        {
+            "branch": "iommu_debugfs_improvements",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "CONFIG_INTEL_IOMMU_DEBUGFS",
+                    "value": "y"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Megha Dey",
+                    "email": "megha.dey@intel.com"
+                }
+            ],
+            "description": "This pull request aims to fix some of the existing issues in the iommu debugfs",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Megha Dey",
+                    "email": "megha.dey@intel.com"
+                }
+            ],
+            "jira": "NEXT-1768",
+            "name": "iommu_debugfs",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/meghadey/linux",
+            "sdl_contact": [
+                {
+                    "name": "Ravi V. Shankar",
+                    "email": "ravi.v.shankar@intel.com"
+                }
+            ],
+            "status": "public",
+            "stuck_at_ref": ""
+        },
+        {
+            "branch": "pks",
+            "branch_type": "expiring",
+            "config_options": [],
+            "contributor": [
+                {
+                    "name": "Fenghua Yu",
+                    "email": "fenghua.yu@intel.com"
+                }
+            ],
+            "description": "Introduces APIs for Protetion Kes for Supervisor pages",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Ravi Shankar",
+                    "email": "ravi.v.shankar@intel.com"
+                }
+            ],
+            "jira": "NEXT-1769",
+            "name": "PKS",
+            "repourl": "ssh://git-amr-4.devtools.intel.com:29418/enabling_cldemote_in_linux_kerne-linux_git.git",
+            "sdl_contact": [
+                {
+                    "name": "Dan Williams",
+                    "email": "dan.j.williams@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": ""
+        },
+        {
+            "branch": "resctrl_selftest",
+            "branch_type": "expiring",
+            "config_options": [],
+            "contributor": [
+                {
+                    "name": "Fenghua Yu",
+                    "email": "fenghua.yu@intel.com"
+                }
+            ],
+            "description": "Introduces resctrl selftest in Intel Next.",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Ravi Shankar",
+                    "email": "ravi.v.shankar@intel.com"
+                }
+            ],
+            "jira": "NEXT-1771",
+            "name": "resctrl_selftest",
+            "repourl": "ssh://git-amr-4.devtools.intel.com:29418/enabling_cldemote_in_linux_kerne-linux_git.git",
+            "sdl_contact": [
+                {
+                    "name": "Tony Luck",
+                    "email": "tony.luck@intel.com"
+                }
+            ],
+            "status": "public",
+            "stuck_at_ref": ""
+        },
+        {
+            "branch": "dev/hemanthk/tbh_ocs_driver",
+            "branch_type": "expiring",
+            "config_options": [],
+            "contributor": [
+                {
+                    "name": "Mitul A Shah",
+                    "email": "mitul.a.shah@intel.com"
+                }
+            ],
+            "description": "TBH crypto OCS AES crypto driver first commit",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Sarveswaran, Kumaresan",
+                    "email": "kumaresan.sarveswaran@intel.com"
+                }
+            ],
+            "jira": "NEXT-1774",
+            "name": "crypto driver",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/hspe_csw/sbs/linux.git",
+            "sdl_contact": [
+                {
+                    "name": "Sarveswaran, Kumaresan",
+                    "email": "kumaresan.sarveswaran@intel.com"
                 }
             ],
             "status": "intel confidential",
