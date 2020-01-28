@@ -10,6 +10,8 @@
 #include <linux/thread_info.h>
 #include <linux/init.h>
 #include <linux/uaccess.h>
+#include <linux/mm.h>
+#include <linux/pkeys.h>
 
 #include <asm/cpufeature.h>
 #include <asm/msr.h>
