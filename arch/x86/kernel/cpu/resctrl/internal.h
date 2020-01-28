@@ -9,6 +9,7 @@
 
 #define MSR_IA32_L3_QOS_CFG		0xc81
 #define MSR_IA32_L2_QOS_CFG		0xc82
+#define MSR_MBA_CFG			0xc84
 #define MSR_IA32_L3_CBM_BASE		0xc90
 #define MSR_IA32_L2_CBM_BASE		0xd10
 #define MSR_IA32_MBA_THRTL_BASE		0xd50
@@ -20,6 +21,9 @@
 #define L3_QOS_CDP_ENABLE		0x01ULL
 
 #define L2_QOS_CDP_ENABLE		0x01ULL
+
+#define MBA_THROTTLE_MODE_MIN		0x01ULL
+#define MBA_THROTTLE_MODE_MAX		0x00ULL
 
 /*
  * Event IDs are used to program IA32_QM_EVTSEL before reading event
@@ -38,6 +42,8 @@
 #define MBA_MAX_MBPS			U32_MAX
 #define MAX_MBA_BW_AMD			0x800
 
+#define MBA_THROTTLE_MODE_MASK		BIT_ULL(0)
+
 #define RMID_VAL_ERROR			BIT_ULL(63)
 #define RMID_VAL_UNAVAIL		BIT_ULL(62)
 /*
@@ -47,6 +53,10 @@
  */
 #define MBM_CNTR_WIDTH_OFFSET_MAX (62 - MBM_CNTR_WIDTH_BASE)
 
+/*
+ * MSR_MBA_CFG cache
+ */
+extern u64 mba_cfg_msr;
 
 struct rdt_fs_context {
 	struct kernfs_fs_context	kfc;
@@ -369,22 +379,45 @@ struct rdt_cache {
 };
 
 /**
+ * enum membw_throttle_mode - System's memory bandwidth throttling mode
+ * @THREAD_THROTTLE_UNDEFINED:	Not relevant to the system
+ * @THREAD_THROTTLE_MIN_MAX:	Memory bandwidth is throttled at the core and
+ *				can be configured to use smallest or largest
+ *				bandwidth percentage assigned to threads.
+ *				Systems that support this mode will support
+ *				MSR_MBA_CFG and the configuration of
+ *				thread throttling mode via resctrl
+ *				file "thread_throttle_mode".
+ * @THREAD_THROTTLE_MAX_ONLY:	Memory bandwidth is throttled at the core
+ *				always using smallest bandwidth percentage
+ *				assigned to threads, aka "max throttling"
+ */
+enum membw_throttle_mode {
+	THREAD_THROTTLE_UNDEFINED = 0,
+	THREAD_THROTTLE_MIN_MAX,
+	THREAD_THROTTLE_MAX_ONLY,
+};
+
+/**
  * struct rdt_membw - Memory bandwidth allocation related data
  * @max_delay:		Max throttle delay. Delay is the hardware
  *			representation for memory bandwidth.
  * @min_bw:		Minimum memory bandwidth percentage user can request
  * @bw_gran:		Granularity at which the memory bandwidth is allocated
  * @delay_linear:	True if memory B/W delay is in linear scale
+ * @arch_throttle_mode:	Bandwidth throttling mode when threads request
+ *			different memory bandwidths
  * @mba_sc:		True if MBA software controller(mba_sc) is enabled
  * @mb_map:		Mapping of memory B/W percentage to memory B/W delay
  */
 struct rdt_membw {
-	u32		max_delay;
-	u32		min_bw;
-	u32		bw_gran;
-	u32		delay_linear;
-	bool		mba_sc;
-	u32		*mb_map;
+	u32				max_delay;
+	u32				min_bw;
+	u32				bw_gran;
+	u32				delay_linear;
+	enum membw_throttle_mode	arch_throttle_mode;
+	bool				mba_sc;
+	u32				*mb_map;
 };
 
 static inline bool is_llc_occupancy_enabled(void)
@@ -611,5 +644,7 @@ void __check_limbo(struct rdt_domain *d, bool force_free);
 bool cbm_validate_intel(char *buf, u32 *data, struct rdt_resource *r);
 bool cbm_validate_amd(char *buf, u32 *data, struct rdt_resource *r);
 void rdt_domain_reconfigure_cdp(struct rdt_resource *r);
+void thread_throttle_mode_init_rw(void);
+void thread_throttle_mode_init_ro(void);
 
 #endif /* _ASM_X86_RESCTRL_INTERNAL_H */
