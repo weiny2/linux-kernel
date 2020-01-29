@@ -6,14 +6,14 @@
 #include <linux/scatterlist.h>
 
 /* Register offsets */
-#define DW_SPI_CTRL0			0x00
-#define DW_SPI_CTRL1			0x04
+#define DW_SPI_CTRLR0			0x00
+#define DW_SPI_CTRLR1			0x04
 #define DW_SPI_SSIENR			0x08
 #define DW_SPI_MWCR			0x0c
 #define DW_SPI_SER			0x10
 #define DW_SPI_BAUDR			0x14
-#define DW_SPI_TXFLTR			0x18
-#define DW_SPI_RXFLTR			0x1c
+#define DW_SPI_TXFTLR			0x18
+#define DW_SPI_RXFTLR			0x1c
 #define DW_SPI_TXFLR			0x20
 #define DW_SPI_RXFLR			0x24
 #define DW_SPI_SR			0x28
@@ -32,6 +32,7 @@
 #define DW_SPI_VERSION			0x5c
 #define DW_SPI_DR			0x60
 #define DW_SPI_CS_OVERRIDE		0xf4
+#define DW_SPI_SPI_CTRLR0		0xf4
 
 /* Bit fields in CTRLR0 */
 #define SPI_DFS_OFFSET			0
@@ -56,6 +57,25 @@
 #define SPI_SLVOE_OFFSET		10
 #define SPI_SRL_OFFSET			11
 #define SPI_CFS_OFFSET			12
+#define SPI_SPI_FRF_OFFSET		22
+
+/* Bit fields in CTRLR0 based on DWC_ssi_databook.pdf v1.01a */
+#define DWC_SSI_CTRLR0_SPI_FRF_OFFSET	22
+#define DWC_SSI_CTRLR0_SPI_FRF_MASK	GENMASK(23, 22)
+#define DWC_SSI_CTRLR0_SSTE_OFFSET	14
+#define DWC_SSI_CTRLR0_SSTE_MASK		BIT(14)
+#define DWC_SSI_CTRLR0_SRL_OFFSET	13
+#define DWC_SSI_CTRLR0_SRL_MASK		BIT(13)
+#define DWC_SSI_CTRLR0_TMOD_OFFSET	10
+#define DWC_SSI_CTRLR0_TMOD_MASK	GENMASK(11, 10)
+#define DWC_SSI_CTRLR0_SCPOL_OFFSET	9
+#define DWC_SSI_CTRLR0_SCPOL_MASK	BIT(9)
+#define DWC_SSI_CTRLR0_SCPH_OFFSET	8
+#define DWC_SSI_CTRLR0_SCPH_MASK	BIT(8)
+#define DWC_SSI_CTRLR0_FRF_OFFSET	6
+#define DWC_SSI_CTRLR0_FRF_MASK		GENMASK(7, 6)
+#define DWC_SSI_CTRLR0_DFS_OFFSET	0
+#define DWC_SSI_CTRLR0_DFS_MASK		GENMASK(4, 0)
 
 /* Bit fields in SR, 7 bits */
 #define SR_MASK				0x7f		/* cover 7 bits */
@@ -82,10 +102,26 @@
 /* TX RX interrupt level threshold, max can be 256 */
 #define SPI_INT_THRESHOLD		32
 
+/* Bit fields in SPI_CTRLR0 */
+#define SPI_CTRLR0_WAIT_CYCLES_OFFSET	11
+#define SPI_CTRLR0_WAIT_CYCLES_MASK	GENMASK(15, 11)
+#define SPI_CTRLR0_INST_L_OFFSET	8
+#define SPI_CTRLR0_INST_L_MASK		GENMASK(9, 8)
+#define SPI_CTRLR0_ADDR_L_OFFSET	2
+#define SPI_CTRLR0_ADDR_L_MASK		GENMASK(5, 2)
+#define SPI_CTRLR0_TRANS_TYPE_OFFSET	0
+#define SPI_CTRLR0_TRANS_TYPE_MASK	GENMASK(1, 0)
+
 enum dw_ssi_type {
 	SSI_MOTO_SPI = 0,
 	SSI_TI_SSP,
 	SSI_NS_MICROWIRE,
+};
+
+enum dw_ssi_spi_mode {
+	SSI_STD_SPI = 0,
+	SSI_DUAL_SPI,
+	SSI_QUAD_SPI,
 };
 
 struct dw_spi;
@@ -114,6 +150,8 @@ struct dw_spi {
 	u16			bus_num;
 	u16			num_cs;		/* supported slave numbers */
 	void (*set_cs)(struct spi_device *spi, bool enable);
+	u32 (*update_cr0)(struct spi_controller *master, struct spi_device *spi,
+			  struct spi_transfer *transfer);
 
 	/* Current message transfer state info */
 	size_t			len;
@@ -252,6 +290,12 @@ extern int dw_spi_add_host(struct device *dev, struct dw_spi *dws);
 extern void dw_spi_remove_host(struct dw_spi *dws);
 extern int dw_spi_suspend_host(struct dw_spi *dws);
 extern int dw_spi_resume_host(struct dw_spi *dws);
+extern u32 dw_spi_update_cr0(struct spi_controller *master,
+			     struct spi_device *spi,
+			     struct spi_transfer *transfer);
+extern u32 dw_spi_update_cr0_v1_01a(struct spi_controller *master,
+				    struct spi_device *spi,
+				    struct spi_transfer *transfer);
 
 /* platform related setup */
 extern int dw_spi_mid_init(struct dw_spi *dws); /* Intel MID platforms */
