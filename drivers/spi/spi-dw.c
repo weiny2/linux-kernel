@@ -12,7 +12,8 @@
 #include <linux/delay.h>
 #include <linux/slab.h>
 #include <linux/spi/spi.h>
-
+#include <linux/spi/spi-mem.h>
+#include <linux/pm_runtime.h>
 #include "spi-dw.h"
 
 #ifdef CONFIG_DEBUG_FS
@@ -50,9 +51,9 @@ static ssize_t dw_spi_show_regs(struct file *file, char __user *user_buf,
 	len += scnprintf(buf + len, SPI_REGS_BUFSIZE - len,
 			"=================================\n");
 	len += scnprintf(buf + len, SPI_REGS_BUFSIZE - len,
-			"CTRL0: \t\t0x%08x\n", dw_readl(dws, DW_SPI_CTRL0));
+			"CTRLR0: \t0x%08x\n", dw_readl(dws, DW_SPI_CTRLR0));
 	len += scnprintf(buf + len, SPI_REGS_BUFSIZE - len,
-			"CTRL1: \t\t0x%08x\n", dw_readl(dws, DW_SPI_CTRL1));
+			"CTRLR1: \t0x%08x\n", dw_readl(dws, DW_SPI_CTRLR1));
 	len += scnprintf(buf + len, SPI_REGS_BUFSIZE - len,
 			"SSIENR: \t0x%08x\n", dw_readl(dws, DW_SPI_SSIENR));
 	len += scnprintf(buf + len, SPI_REGS_BUFSIZE - len,
@@ -60,9 +61,9 @@ static ssize_t dw_spi_show_regs(struct file *file, char __user *user_buf,
 	len += scnprintf(buf + len, SPI_REGS_BUFSIZE - len,
 			"BAUDR: \t\t0x%08x\n", dw_readl(dws, DW_SPI_BAUDR));
 	len += scnprintf(buf + len, SPI_REGS_BUFSIZE - len,
-			"TXFTLR: \t0x%08x\n", dw_readl(dws, DW_SPI_TXFLTR));
+			"TXFTLR: \t0x%08x\n", dw_readl(dws, DW_SPI_TXFTLR));
 	len += scnprintf(buf + len, SPI_REGS_BUFSIZE - len,
-			"RXFTLR: \t0x%08x\n", dw_readl(dws, DW_SPI_RXFLTR));
+			"RXFTLR: \t0x%08x\n", dw_readl(dws, DW_SPI_RXFTLR));
 	len += scnprintf(buf + len, SPI_REGS_BUFSIZE - len,
 			"TXFLR: \t\t0x%08x\n", dw_readl(dws, DW_SPI_TXFLR));
 	len += scnprintf(buf + len, SPI_REGS_BUFSIZE - len,
@@ -79,6 +80,9 @@ static ssize_t dw_spi_show_regs(struct file *file, char __user *user_buf,
 			"DMATDLR: \t0x%08x\n", dw_readl(dws, DW_SPI_DMATDLR));
 	len += scnprintf(buf + len, SPI_REGS_BUFSIZE - len,
 			"DMARDLR: \t0x%08x\n", dw_readl(dws, DW_SPI_DMARDLR));
+	len += scnprintf(buf + len, SPI_REGS_BUFSIZE - len,
+			 "SPI_CTRLR0: \t0x%08x\n", dw_readl(dws,
+							    DW_SPI_SPI_CTRLR0));
 	len += scnprintf(buf + len, SPI_REGS_BUFSIZE - len,
 			"=================================\n");
 
@@ -277,6 +281,131 @@ static int poll_transfer(struct dw_spi *dws)
 	return 0;
 }
 
+static u8 dw_spi_update_tmode(struct dw_spi *dws)
+{
+	if (!dws->tx)
+		return SPI_TMOD_RO;
+	if (!dws->rx)
+		return SPI_TMOD_TO;
+
+	return SPI_TMOD_TR;
+}
+
+static u8 dw_spi_get_spimode(struct spi_transfer *transfer)
+{
+	u8 width = 1;
+
+	if (transfer->tx_buf)
+		width = transfer->tx_nbits;
+	if (transfer->rx_buf)
+		width = transfer->rx_nbits;
+
+	switch (width) {
+	case SPI_NBITS_QUAD:
+		return SSI_QUAD_SPI;
+	case SPI_NBITS_DUAL:
+		return SSI_DUAL_SPI;
+	default:
+		return SSI_STD_SPI;
+	}
+}
+
+/* Configure CTRLR0 for DW_apb_ssi */
+u32 dw_spi_update_cr0(struct spi_controller *master, struct spi_device *spi,
+		      struct spi_transfer *transfer)
+{
+	struct dw_spi *dws = spi_controller_get_devdata(master);
+	struct chip_data *chip = spi_get_ctldata(spi);
+	u32 cr0;
+
+	/* Default SPI mode is SCPOL = 0, SCPH = 0 */
+	cr0 = (transfer->bits_per_word - 1)
+		| (chip->type << SPI_FRF_OFFSET)
+		| ((((spi->mode & SPI_CPOL) ? 1 : 0) << SPI_SCOL_OFFSET) |
+			(((spi->mode & SPI_CPHA) ? 1 : 0) << SPI_SCPH_OFFSET))
+		| (chip->tmode << SPI_TMOD_OFFSET)
+		| (((spi->mode & SPI_LOOP) ? 1 : 0) << SPI_SRL_OFFSET);
+
+	/*
+	 * Adjust transfer mode if necessary. Requires platform dependent
+	 * chipselect mechanism.
+	 */
+	if (chip->cs_control) {
+		chip->tmode = dw_spi_update_tmode(dws);
+
+		cr0 &= ~SPI_TMOD_MASK;
+		cr0 |= (chip->tmode << SPI_TMOD_OFFSET);
+	}
+
+	/* Set SPI Frame Format */
+	cr0 |= dw_spi_get_spimode(transfer) << SPI_SPI_FRF_OFFSET;
+
+	return cr0;
+}
+EXPORT_SYMBOL_GPL(dw_spi_update_cr0);
+
+/* Configure CTRLR0 for DWC_ssi */
+u32 dw_spi_update_cr0_v1_01a(struct spi_controller *master,
+			     struct spi_device *spi,
+			     struct spi_transfer *transfer)
+{
+	struct dw_spi *dws = spi_controller_get_devdata(master);
+	struct chip_data *chip = spi_get_ctldata(spi);
+	u32 cr0;
+
+	cr0 = dw_readl(dws, DW_SPI_CTRLR0);
+
+	/* Set Shift Register Loop */
+	cr0 &= ~DWC_SSI_CTRLR0_SRL_MASK;
+	cr0 |= ((spi->mode & SPI_LOOP) ? 1 : 0) << DWC_SSI_CTRLR0_SRL_OFFSET;
+
+	/* Set Transfer Mode */
+	cr0 &= ~DWC_SSI_CTRLR0_TMOD_MASK;
+	cr0 |= chip->tmode << DWC_SSI_CTRLR0_TMOD_OFFSET;
+
+	/* Set SPI mode -> SCPOL|SCPH */
+	cr0 &= ~(DWC_SSI_CTRLR0_SCPOL_MASK | DWC_SSI_CTRLR0_SCPH_MASK);
+	cr0 |= ((spi->mode & SPI_CPOL) ? 1 : 0) << DWC_SSI_CTRLR0_SCPOL_OFFSET;
+	cr0 |= ((spi->mode & SPI_CPHA) ? 1 : 0) << DWC_SSI_CTRLR0_SCPH_OFFSET;
+
+	cr0 &= ~DWC_SSI_CTRLR0_SSTE_MASK;
+	cr0 |= 0 << DWC_SSI_CTRLR0_SSTE_OFFSET;
+
+	/* Set Frame Format */
+	cr0 &= ~DWC_SSI_CTRLR0_FRF_MASK;
+	cr0 |= chip->type << DWC_SSI_CTRLR0_FRF_OFFSET;
+
+	/* Set Data Frame Size */
+	cr0 &= ~DWC_SSI_CTRLR0_DFS_MASK;
+	cr0 |= (transfer->bits_per_word - 1);
+
+	/* Adjust Transfer Mode if necessary */
+	if (chip->cs_control || dw_spi_get_spimode(transfer)) {
+		chip->tmode = dw_spi_update_tmode(dws);
+
+		cr0 &= ~DWC_SSI_CTRLR0_TMOD_MASK;
+		cr0 |= chip->tmode << DWC_SSI_CTRLR0_TMOD_OFFSET;
+	}
+
+	/* Set SPI Frame Format */
+	cr0 &= ~DWC_SSI_CTRLR0_SPI_FRF_MASK;
+	cr0 |= dw_spi_get_spimode(transfer) << DWC_SSI_CTRLR0_SPI_FRF_OFFSET;
+
+	return cr0;
+}
+EXPORT_SYMBOL_GPL(dw_spi_update_cr0_v1_01a);
+
+static int dw_spi_exec_mem_op(struct spi_mem *mem, const struct spi_mem_op *op)
+{
+	int ret = 0;
+
+	return ret;
+}
+
+static const struct spi_controller_mem_ops dw_spi_mem_ops = {
+	.exec_op = dw_spi_exec_mem_op,
+};
+
 static int dw_spi_transfer_one(struct spi_controller *master,
 		struct spi_device *spi, struct spi_transfer *transfer)
 {
@@ -285,7 +414,7 @@ static int dw_spi_transfer_one(struct spi_controller *master,
 	unsigned long flags;
 	u8 imask = 0;
 	u16 txlevel = 0;
-	u32 cr0;
+	u32 cr0, spi_cr0;
 	int ret;
 
 	dws->dma_mapped = 0;
@@ -316,31 +445,13 @@ static int dw_spi_transfer_one(struct spi_controller *master,
 	dws->n_bytes = DIV_ROUND_UP(transfer->bits_per_word, BITS_PER_BYTE);
 	dws->dma_width = DIV_ROUND_UP(transfer->bits_per_word, BITS_PER_BYTE);
 
-	/* Default SPI mode is SCPOL = 0, SCPH = 0 */
-	cr0 = (transfer->bits_per_word - 1)
-		| (chip->type << SPI_FRF_OFFSET)
-		| ((((spi->mode & SPI_CPOL) ? 1 : 0) << SPI_SCOL_OFFSET) |
-			(((spi->mode & SPI_CPHA) ? 1 : 0) << SPI_SCPH_OFFSET) |
-			(((spi->mode & SPI_LOOP) ? 1 : 0) << SPI_SRL_OFFSET))
-		| (chip->tmode << SPI_TMOD_OFFSET);
+	cr0 = dws->update_cr0(master, spi, transfer);
+	dw_writel(dws, DW_SPI_CTRLR0, cr0);
 
-	/*
-	 * Adjust transfer mode if necessary. Requires platform dependent
-	 * chipselect mechanism.
-	 */
-	if (chip->cs_control) {
-		if (dws->rx && dws->tx)
-			chip->tmode = SPI_TMOD_TR;
-		else if (dws->rx)
-			chip->tmode = SPI_TMOD_RO;
-		else
-			chip->tmode = SPI_TMOD_TO;
-
-		cr0 &= ~SPI_TMOD_MASK;
-		cr0 |= (chip->tmode << SPI_TMOD_OFFSET);
-	}
-
-	dw_writel(dws, DW_SPI_CTRL0, cr0);
+	/* TODO: No INST, no ADDR for now */
+	spi_cr0 = dw_readl(dws, DW_SPI_SPI_CTRLR0);
+	spi_cr0 &= ~(SPI_CTRLR0_INST_L_MASK | SPI_CTRLR0_ADDR_L_MASK);
+	dw_writel(dws, DW_SPI_SPI_CTRLR0, 0x2);
 
 	/* Check if current transfer is a DMA transaction */
 	if (master->can_dma && master->can_dma(master, spi, transfer))
@@ -361,7 +472,7 @@ static int dw_spi_transfer_one(struct spi_controller *master,
 		}
 	} else if (!chip->poll_mode) {
 		txlevel = min_t(u16, dws->fifo_len / 2, dws->len / dws->n_bytes);
-		dw_writel(dws, DW_SPI_TXFLTR, txlevel);
+		dw_writel(dws, DW_SPI_TXFTLR, txlevel);
 
 		/* Set the interrupt mask */
 		imask |= SPI_INT_TXEI | SPI_INT_TXOI |
@@ -452,11 +563,11 @@ static void spi_hw_init(struct device *dev, struct dw_spi *dws)
 		u32 fifo;
 
 		for (fifo = 1; fifo < 256; fifo++) {
-			dw_writel(dws, DW_SPI_TXFLTR, fifo);
-			if (fifo != dw_readl(dws, DW_SPI_TXFLTR))
+			dw_writel(dws, DW_SPI_TXFTLR, fifo);
+			if (fifo != dw_readl(dws, DW_SPI_TXFTLR))
 				break;
 		}
-		dw_writel(dws, DW_SPI_TXFLTR, 0);
+		dw_writel(dws, DW_SPI_TXFTLR, 0);
 
 		dws->fifo_len = (fifo == 1) ? 0 : fifo;
 		dev_dbg(dev, "Detected FIFO size: %u bytes\n", dws->fifo_len);
@@ -495,7 +606,8 @@ int dw_spi_add_host(struct device *dev, struct dw_spi *dws)
 	}
 
 	master->use_gpio_descriptors = true;
-	master->mode_bits = SPI_CPOL | SPI_CPHA | SPI_LOOP;
+	master->mode_bits = SPI_CPOL | SPI_CPHA | SPI_LOOP |
+		SPI_TX_DUAL | SPI_RX_DUAL | SPI_TX_QUAD | SPI_RX_QUAD;
 	master->bits_per_word_mask =  SPI_BPW_RANGE_MASK(4, 16);
 	master->bus_num = dws->bus_num;
 	master->num_chipselect = dws->num_cs;
@@ -509,6 +621,7 @@ int dw_spi_add_host(struct device *dev, struct dw_spi *dws)
 	master->dev.fwnode = dev->fwnode;
 	master->flags = SPI_MASTER_GPIO_SS;
 	master->auto_runtime_pm = true;
+	master->mem_ops = &dw_spi_mem_ops;
 
 	if (dws->set_cs)
 		master->set_cs = dws->set_cs;
@@ -526,6 +639,11 @@ int dw_spi_add_host(struct device *dev, struct dw_spi *dws)
 		}
 	}
 
+	pm_runtime_set_autosuspend_delay(dev, 5000);
+	pm_runtime_use_autosuspend(dev);
+	pm_runtime_set_active(dev);
+	pm_runtime_enable(dev);
+
 	ret = devm_spi_register_controller(dev, master);
 	if (ret) {
 		dev_err(&master->dev, "problem registering spi master\n");
@@ -540,6 +658,8 @@ err_dma_exit:
 		dws->dma_ops->dma_exit(dws);
 	spi_enable_chip(dws, 0);
 	free_irq(dws->irq, master);
+	pm_runtime_put_noidle(dev);
+	pm_runtime_disable(dev);
 err_free_master:
 	spi_controller_put(master);
 	return ret;
