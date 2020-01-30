@@ -1145,7 +1145,6 @@ enum xlink_error xlink_disconnect(struct xlink_handle *handle)
 		xlink->nmb_connected_links--;
 		mutex_unlock(&xlink->lock);
 	}
-
 	return rc;
 }
 EXPORT_SYMBOL(xlink_disconnect);
@@ -1166,7 +1165,6 @@ enum xlink_error xlink_get_device_name(uint32_t sw_device_id, char *name,
 		rc = X_LINK_ERROR;
 	else
 		rc = X_LINK_SUCCESS;
-
 	return rc;
 }
 EXPORT_SYMBOL(xlink_get_device_name);
@@ -1188,7 +1186,6 @@ enum xlink_error xlink_get_device_list(uint32_t *sw_device_id_list,
 		rc = X_LINK_ERROR;
 	else
 		rc = X_LINK_SUCCESS;
-
 	return rc;
 }
 EXPORT_SYMBOL(xlink_get_device_list);
@@ -1231,6 +1228,7 @@ enum xlink_error xlink_boot_device(struct xlink_handle *handle,
 	enum xlink_error rc = 0;
 	size_t name_size = XLINK_MAX_DEVICE_NAME_SIZE;
 	char *device_name = NULL;
+	char *binary_path = NULL;
 
 	if (!xlink || !handle)
 		return X_LINK_ERROR;
@@ -1239,9 +1237,15 @@ enum xlink_error xlink_boot_device(struct xlink_handle *handle,
 	if (!device_name)
 		return X_LINK_ERROR;
 
+	/* (temporarily) use operating_frequency parameter to select boot image */
+	if (operating_frequency == POWER_SAVING_HIGH)
+		binary_path = "vpu_xlink_smoke.bin";
+	else
+		binary_path = "vpu.bin";
+
 	rc = xlink_get_device_name(handle->sw_device_id, device_name, name_size);
 	if (rc == X_LINK_SUCCESS) {
-		rc = xlink_platform_boot_device(device_name, NULL);
+		rc = xlink_platform_boot_device(device_name, binary_path);
 		if (rc)
 			rc = X_LINK_ERROR;
 		else

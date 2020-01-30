@@ -1,12 +1,11 @@
 config XLINK_CORE
 	tristate "Support for XLINK CORE"
-	depends on KEEMBAY_VPU_IPC
 	help
 	  XLINK CORE enables the communication/control Sub-System.
 
 config XLINK_LOCAL_HOST
 	tristate "Support for XLINK LOCAL HOST"
-	depends on KEEMBAY_VPU_IPC
+	depends on XLINK_CORE && XLINK_IPC
 	help
 	  XLINK LOCAL HOST enables local host functionality for
 	  the communication/control Sub-System.

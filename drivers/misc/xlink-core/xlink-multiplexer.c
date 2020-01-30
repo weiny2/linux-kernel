@@ -24,7 +24,7 @@
 #include <linux/sched/signal.h>
 
 #ifdef CONFIG_XLINK_LOCAL_HOST
-#include <linux/keembay-vpu-ipc.h>
+#include <linux/xlink-ipc.h>
 #endif
 
 #include "xlink-multiplexer.h"
@@ -33,10 +33,6 @@
 
 // timeout used for open channel
 #define OPEN_CHANNEL_TIMEOUT_MSEC 5000
-
-// the indices used for retrieving reserved memory from the device tree
-#define LOCAL_XLINK_IPC_BUFFER_IDX	0
-#define REMOTE_XLINK_IPC_BUFFER_IDX	1
 
 /* Channel mapping table. */
 struct xlink_channel_type {
@@ -58,22 +54,6 @@ const struct xlink_channel_table_entry default_channel_table[] = {
 	{0x400,			0xFFE,			{PCIE_DEVICE,	NULL_DEVICE}},
 	{0xFFF,			0xFFF,			{ETH_DEVICE,	NULL_DEVICE}},
 	{NMB_CHANNELS,	NMB_CHANNELS,	{NULL_DEVICE,	NULL_DEVICE}},
-};
-
-/* struct xlink_buf_mem - xlink Buffer Memory Region. */
-struct xlink_buf_mem {
-	struct device *dev;	/* Child device managing the memory region. */
-	void *vaddr;		/* The virtual address of the memory region. */
-	dma_addr_t dma_handle;  /* The physical address of the memory region. */
-	size_t size;		/* The size of the memory region. */
-};
-
-/* xlink buffer pool. */
-struct xlink_buf_pool {
-	void *buf;			/* Pointer to the start of pool area */
-	size_t buf_cnt;		/* Pool size (i.e., number of buffers). */
-	size_t idx;			/* Current index. */
-	spinlock_t lock;	/* The lock protecting this pool. */
 };
 
 struct channel {
@@ -122,209 +102,12 @@ struct open_channel {
 
 struct xlink_multiplexer {
 	struct device *dev;
-	struct xlink_buf_mem local_xlink_mem;
-	struct xlink_buf_mem remote_xlink_mem;
-	struct xlink_buf_pool xlink_buf_pool;
 	struct channel channels[NMB_CHANNELS];
 	struct list_head open_channels;
 	struct mutex lock;
 };
 
 struct xlink_multiplexer *mux = 0;
-
-#ifdef CONFIG_XLINK_LOCAL_HOST
-/*
- * Functions related to reserved-memory sub-devices.
- */
-
-/* Remove the xlink memory sub-devices. */
-static void xlink_reserved_memory_remove(struct xlink_multiplexer *xmux)
-{
-	device_unregister(xmux->local_xlink_mem.dev);
-	device_unregister(xmux->remote_xlink_mem.dev);
-}
-
-/* Release function for the reserved memory sub-devices. */
-static void xlink_reserved_mem_release(struct device *dev)
-{
-	of_reserved_mem_device_release(dev);
-}
-
-/* Get the size of the specified reserved memory region. */
-static resource_size_t get_xlink_reserved_mem_size(struct device *dev,
-						 unsigned int idx)
-{
-	struct resource mem;
-	struct device_node *np;
-	int rc;
-
-	np = of_parse_phandle(dev->of_node, "memory-region", idx);
-	if (!np) {
-		dev_err(dev, "Couldn't find memory-region %d\n", idx);
-		return 0;
-	}
-
-	rc = of_address_to_resource(np, 0, &mem);
-	if (rc) {
-		dev_err(dev, "Couldn't map address to resource %d\n", idx);
-		return 0;
-	}
-
-	return resource_size(&mem);
-}
-
-/* Init a reserved memory sub-devices. */
-static struct device *init_xlink_reserved_mem_dev(struct device *dev,
-						const char *name,
-						unsigned int idx)
-{
-	struct device *child;
-	int rc;
-
-	child = devm_kzalloc(dev, sizeof(*child), GFP_KERNEL);
-	if (!child)
-		return NULL;
-
-	device_initialize(child);
-	dev_set_name(child, "%s:%s", dev_name(dev), name);
-	dev_err(dev, " dev_name %s, name %s\n", dev_name(dev), name);
-	child->parent = dev;
-	child->dma_mask = dev->dma_mask;
-	child->coherent_dma_mask = dev->coherent_dma_mask;
-	/* Set up DMA configuration using information from parent's DT node. */
-	rc = of_dma_configure(child, dev->of_node, true);
-	child->release = xlink_reserved_mem_release;
-
-	rc = device_add(child);
-	if (rc)
-		goto err;
-	rc = of_reserved_mem_device_init_by_idx(child, dev->of_node, idx);
-	if (rc) {
-		dev_err(dev, "Couldn't get reserved memory with idx = %d, %d\n",
-			idx, rc);
-		device_del(child);
-		goto err;
-	}
-	return child;
-
-err:
-	put_device(child);
-	return NULL;
-}
-
-/* Init reserved memory for our diver. */
-static int xlink_reserved_memory_init(struct xlink_multiplexer *xmux,
-		struct platform_device *plat_dev)
-{
-	struct device *dev = &plat_dev->dev;
-
-	xmux->local_xlink_mem.dev = init_xlink_reserved_mem_dev(
-		dev, "xlink_local_reserved", LOCAL_XLINK_IPC_BUFFER_IDX);
-	if (!xmux->local_xlink_mem.dev)
-		return -ENOMEM;
-
-	xmux->local_xlink_mem.size =
-		get_xlink_reserved_mem_size(dev, LOCAL_XLINK_IPC_BUFFER_IDX);
-
-	xmux->remote_xlink_mem.dev = init_xlink_reserved_mem_dev(
-		dev, "xlink_remote_reserved", REMOTE_XLINK_IPC_BUFFER_IDX);
-	if (!xmux->remote_xlink_mem.dev) {
-		device_unregister(xmux->local_xlink_mem.dev);
-		return -ENOMEM;
-	}
-
-	xmux->remote_xlink_mem.size =
-		get_xlink_reserved_mem_size(dev, REMOTE_XLINK_IPC_BUFFER_IDX);
-
-	return 0;
-}
-
-/*
- * Init the xlink Buffer Pool.
- *
- * Set up the xlink Buffer Pool to be used for allocating TX buffers.
- *
- * The pool uses the local xlink Buffer memory previously allocated.
- */
-static int init_xlink_buf_pool(struct xlink_multiplexer *xmux,
-		struct platform_device *plat_dev)
-{
-	struct xlink_buf_mem *mem = &xmux->local_xlink_mem;
-	/* Initialize xlink_buf_poll global variable. */
-	/*
-	 * Start by setting everything to 0 to initialize the xlink Buffer array
-	 */
-	memset(mem->vaddr, 0, mem->size);
-	xmux->xlink_buf_pool.buf = mem->vaddr;
-	xmux->xlink_buf_pool.buf_cnt =
-			mem->size / XLINK_MAX_BUF_SIZE;
-	xmux->xlink_buf_pool.idx = 0;
-	dev_info(&plat_dev->dev, "xlink Buffer Pool size: %zX\n",
-			xmux->xlink_buf_pool.buf_cnt);
-	spin_lock_init(&xmux->xlink_buf_pool.lock);
-	return 0;
-}
-
-/*
- * xlink_phys_to_virt() - Convert xlink physical addresses to virtual addresses.
- *
- * @xlink_mem: xlink mem region where the physical address is expected to be.
- * @paddr:	 The physical address to be converted to a virtual one.
- *
- * Return: The corresponding virtual address, or NULL if the physical address
- *	   is not in the expected memory range.
- */
-static void *xlink_phys_to_virt(const struct xlink_buf_mem *xlink_mem,
-		uint32_t paddr)
-{
-	if (unlikely(paddr < xlink_mem->dma_handle) ||
-			 paddr >= (xlink_mem->dma_handle + xlink_mem->size))
-		return NULL;
-	return xlink_mem->vaddr + (paddr - xlink_mem->dma_handle);
-}
-
-/*
- * xlink_virt_to_phys() - Convert xlink virtual addresses to physical addresses.
- *
- * @xlink_mem: [in] xlink mem region where the physical address is expected
- *		   to be.
- * @vaddr:   [in]  The virtual address to be converted to a physical one.
- * @paddr:   [out] Where to store the computed physical address.
- *
- * Return: 0 on success, negative error code otherwise.
- */
-static int xlink_virt_to_phys(struct xlink_buf_mem *xlink_mem, void *vaddr,
-		uint32_t *paddr)
-{
-	if (unlikely((xlink_mem->dma_handle + xlink_mem->size) > 0xFFFFFFFF))
-		return -EINVAL;
-	if (unlikely(vaddr < xlink_mem->vaddr ||
-			vaddr >= (xlink_mem->vaddr + xlink_mem->size)))
-		return -EINVAL;
-	*paddr = xlink_mem->dma_handle + (vaddr - xlink_mem->vaddr);
-
-	return 0;
-}
-
-/* Get next xlink buffer from pool */
-static int get_next_xlink_buf(void **buf, int size)
-{
-	struct xlink_buf_pool *pool = &mux->xlink_buf_pool;
-
-	if (size > XLINK_MAX_BUF_SIZE)
-		return -1;
-	mutex_lock(&mux->lock);
-	if (pool->idx == pool->buf_cnt) {
-		/* reached end of buffers - wrap around */
-		pool->idx = 0;
-	}
-	*buf = pool->buf + (pool->idx * XLINK_MAX_BUF_SIZE);
-	pool->idx++;
-	mutex_unlock(&mux->lock);
-
-	return 0;
-}
-#endif // CONFIG_XLINK_LOCAL_HOST
 
 /*
  * Multiplexer Internal Functions
@@ -623,53 +406,6 @@ enum xlink_error xlink_multiplexer_init(void *dev)
 		return X_LINK_ERROR;
 
 	mux_init->dev = &plat_dev->dev;
-
-#ifdef CONFIG_XLINK_LOCAL_HOST
-	/* Grab reserved memory regions and assign to child devices */
-	rc = xlink_reserved_memory_init(mux_init, plat_dev);
-	if (rc < 0) {
-		dev_err(&plat_dev->dev,
-			"Failed to set up reserved memory regions.\n");
-		goto r_cleanup;
-	}
-
-	/* Allocate memory from the reserved memory regions */
-	mux_init->local_xlink_mem.vaddr =
-		dmam_alloc_coherent(mux_init->local_xlink_mem.dev,
-				mux_init->local_xlink_mem.size,
-					&mux_init->local_xlink_mem.dma_handle,
-					GFP_KERNEL);
-	if (!mux_init->local_xlink_mem.vaddr) {
-		dev_err(&plat_dev->dev,
-			"Failed to allocate from local reserved memory.\n");
-		rc = -ENOMEM;
-		goto r_cleanup;
-	}
-	mux_init->remote_xlink_mem.vaddr = dmam_alloc_coherent(
-			mux_init->remote_xlink_mem.dev,
-			mux_init->remote_xlink_mem.size,
-			&mux_init->remote_xlink_mem.dma_handle,
-			GFP_KERNEL);
-	if (!mux_init->remote_xlink_mem.vaddr) {
-		dev_err(&plat_dev->dev,
-			"Failed to allocate from remote reserved memory.\n");
-		rc = -ENOMEM;
-		goto r_cleanup;
-	}
-
-	dev_info(&plat_dev->dev, "Local vaddr 0x%p paddr 0x%pad size 0x%zX\n",
-			mux_init->local_xlink_mem.vaddr,
-			&mux_init->local_xlink_mem.dma_handle,
-			mux_init->local_xlink_mem.size);
-	dev_info(&plat_dev->dev, "Remote vaddr 0x%p paddr 0x%pad size 0x%zX\n",
-			mux_init->remote_xlink_mem.vaddr,
-			&mux_init->remote_xlink_mem.dma_handle,
-			mux_init->remote_xlink_mem.size);
-
-	/* Init the pool of xlink Buffer to be used to TX. */
-	init_xlink_buf_pool(mux_init, plat_dev);
-	/* Init the only link we have (ARM CSS -> LEON MSS). */
-#endif // CONFIG_XLINK_LOCAL_HOST
 
 	mutex_init(&mux_init->lock);
 	INIT_LIST_HEAD(&mux_init->open_channels);
@@ -1243,16 +979,14 @@ enum xlink_error xlink_passthrough(struct xlink_event *event)
 {
 	enum xlink_error rc = 0;
 #ifdef CONFIG_XLINK_LOCAL_HOST
-	void *vaddr = 0;
 	dma_addr_t vpuaddr = 0;
 	phys_addr_t physaddr = 0;
-	uint32_t paddr;
 	uint32_t timeout = 0;
-	uint32_t thismessage;
 	struct xlink_ipc_fd ipc = {0};
 
+	ipc.sw_device_id = event->handle->sw_device_id;
 	ipc.node = event->handle->node;
-	ipc.chan = event->header.chan;;
+	ipc.chan = event->header.chan;
 
 	switch (event->header.type) {
 	case XLINK_WRITE_REQ:
@@ -1269,17 +1003,9 @@ enum xlink_error xlink_passthrough(struct xlink_event *event)
 		break;
 	case XLINK_WRITE_VOLATILE_REQ:
 		if (mux->channels[ipc.chan].status == CHAN_OPEN) {
-			if (get_next_xlink_buf(&vaddr, 128)) {
-				rc = X_LINK_ERROR;
-			} else {
-				memcpy(vaddr, event->data, event->header.size);
-			}
-			if (xlink_virt_to_phys(&mux->local_xlink_mem, vaddr, &paddr)) {
-				rc = X_LINK_ERROR;
-			} else {
-				rc = xlink_platform_write(IPC_DEVICE, &ipc, &paddr,
-						&event->header.size, 0);
-			}
+			ipc.is_volatile = 1;
+			rc = xlink_platform_write(IPC_DEVICE, &ipc, event->data,
+					&event->header.size, 0);
 		} else {
 			/* channel not open */
 			rc = X_LINK_ERROR;
@@ -1287,17 +1013,9 @@ enum xlink_error xlink_passthrough(struct xlink_event *event)
 		break;
 	case XLINK_WRITE_CONTROL_REQ:
 		if (mux->channels[ipc.chan].status == CHAN_OPEN) {
-			if (get_next_xlink_buf(&vaddr, 128)) {
-				rc = X_LINK_ERROR;
-			} else {
-				memcpy(vaddr, event->header.control_data, event->header.size);
-			}
-			if (xlink_virt_to_phys(&mux->local_xlink_mem, vaddr, &paddr)) {
-				rc = X_LINK_ERROR;
-			} else {
-				rc = xlink_platform_write(IPC_DEVICE, &ipc, &paddr,
-						&event->header.size, 0);
-			}
+			ipc.is_volatile = 1;
+			rc = xlink_platform_write(IPC_DEVICE, &ipc, event->header.control_data,
+					&event->header.size, 0);
 		} else {
 			/* channel not open */
 			rc = X_LINK_ERROR;
@@ -1314,7 +1032,7 @@ enum xlink_error xlink_passthrough(struct xlink_event *event)
 			} else {
 				timeout = mux->channels[ipc.chan].timeout;
 			}
-			rc = xlink_platform_read(IPC_DEVICE, &ipc, &vpuaddr, //????
+			rc = xlink_platform_read(IPC_DEVICE, &ipc, &vpuaddr,
 					(size_t *)event->length, timeout);
 			/* Translate VPU address to physical address */
 			physaddr = dma_to_phys(mux->dev, vpuaddr);
@@ -1336,18 +1054,11 @@ enum xlink_error xlink_passthrough(struct xlink_event *event)
 			} else {
 				timeout = mux->channels[ipc.chan].timeout;
 			}
-			rc = xlink_platform_read(IPC_DEVICE, &ipc, &thismessage,
+			ipc.is_volatile = 1;
+			rc = xlink_platform_read(IPC_DEVICE, &ipc, event->data,
 					(size_t *)event->length, timeout);
 			if (rc || *event->length > XLINK_MAX_BUF_SIZE) {
 				rc = X_LINK_ERROR;
-			} else {
-				vaddr = xlink_phys_to_virt(&mux->remote_xlink_mem,
-						thismessage);
-				if (vaddr) {
-					memcpy(event->data, vaddr, *event->length);
-				} else {
-					rc = X_LINK_ERROR;
-				}
 			}
 		} else {
 			/* channel not open */
@@ -1362,8 +1073,7 @@ enum xlink_error xlink_passthrough(struct xlink_event *event)
 			mux->channels[ipc.chan].size = event->header.size;
 			mux->channels[ipc.chan].timeout = event->header.timeout;
 			mux->channels[ipc.chan].mode = *(enum xlink_opmode *)event->data;
-			rc = intel_keembay_vpu_ipc_open_channel(NULL, ipc.node,
-								ipc.chan);
+			rc = xlink_platform_open_channel(IPC_DEVICE, &ipc, ipc.chan);
 			if (rc) {
 				rc = X_LINK_ERROR;
 			} else {
@@ -1376,8 +1086,7 @@ enum xlink_error xlink_passthrough(struct xlink_event *event)
 		break;
 	case XLINK_CLOSE_CHANNEL_REQ:
 		if (mux->channels[ipc.chan].status == CHAN_OPEN) {
-			rc = intel_keembay_vpu_ipc_close_channel(NULL, ipc.node,
-								 ipc.chan);
+			rc = xlink_platform_close_channel(IPC_DEVICE, &ipc, ipc.chan);
 			if (rc)
 				rc = X_LINK_ERROR;
 			else
@@ -1414,13 +1123,6 @@ enum xlink_error xlink_multiplexer_destroy(void)
 	if (!mux)
 		return X_LINK_ERROR;
 
-#ifdef CONFIG_XLINK_LOCAL_HOST
-	/*
-	 * No need to de-alloc xlink mem (local_xlink_mem and remote_xlink_mem)
-	 * since it was allocated with dmam_alloc.
-	 */
-	xlink_reserved_memory_remove(mux);
-#endif
 	// close all open channels and deallocate remaining packets
 	list_for_each_entry_safe(opchan, tmp, &mux->open_channels, list) {
 		multiplexer_close_channel(opchan);

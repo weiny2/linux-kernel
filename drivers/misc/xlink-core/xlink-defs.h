@@ -94,11 +94,6 @@ struct xlink_event {
 	struct list_head list;
 };
 
-struct xlink_ipc_fd {
-	u8 node;
-	u16 chan;
-};
-
 struct xlink_event *xlink_create_event(enum xlink_event_type type,
 		struct xlink_handle *handle, uint16_t chan,
 		uint32_t size, uint32_t timeout);

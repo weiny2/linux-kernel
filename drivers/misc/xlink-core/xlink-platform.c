@@ -18,44 +18,10 @@
 #include <linux/xlink_drv_inf.h>
 
 #ifdef CONFIG_XLINK_LOCAL_HOST
-#include <linux/keembay-vpu-ipc.h>
+#include <linux/xlink-ipc.h>
 #endif
 
 #include "xlink-platform.h"
-
-/*
- * IPC driver interface functions
- */
-
-static int xlink_ipc_write(void *fd, void *data, size_t * const size, unsigned int timeout)
-{
-	int rc = 0;
-#ifdef CONFIG_XLINK_LOCAL_HOST
-	struct xlink_ipc_fd *ipc = (struct xlink_ipc_fd *)fd;
-	rc = intel_keembay_vpu_ipc_send(NULL, ipc->node, ipc->chan,
-			*(uint32_t *)data, *size);
-#endif
-	return rc;
-}
-
-static int xlink_ipc_read(void *fd, void *data, size_t * const size, unsigned int timeout)
-{
-	int rc = 0;
-#ifdef CONFIG_XLINK_LOCAL_HOST
-	int addr = 0;
-	struct xlink_ipc_fd *ipc = (struct xlink_ipc_fd *)fd;
-	rc = intel_keembay_vpu_ipc_recv(NULL, ipc->node, ipc->chan, &addr,
-			size, timeout);
-	*(uint32_t*)data = addr;
-#endif
-	return rc;
-}
-
-static int xlink_ipc_connect(const char *device_name, void **fd)
-{
-	/* To be implemented */
-	return 0;
-}
 
 /*
  * xlink low-level driver interface arrays
@@ -70,15 +36,19 @@ int (*write_fcts[NMB_OF_DEVICE_TYPES])(void *, void *, size_t * const, uint32_t)
 int (*read_fcts[NMB_OF_DEVICE_TYPES])(void *, void *, size_t * const, uint32_t) = \
 		{NULL, xlink_pcie_read, NULL, NULL, xlink_ipc_read};
 int (*reset_fcts[NMB_OF_DEVICE_TYPES])(void *, uint32_t) = \
-		{NULL, xlink_pcie_reset_device, NULL, NULL, NULL};
+		{NULL, xlink_pcie_reset_device, NULL, NULL, xlink_ipc_reset_device};
 int (*boot_fcts[NMB_OF_DEVICE_TYPES])(const char *, const char *) = \
-		{NULL, xlink_pcie_boot_remote, NULL, NULL, NULL};
+		{NULL, xlink_pcie_boot_remote, NULL, NULL, xlink_ipc_boot_device};
 int (*dev_name_fcts[NMB_OF_DEVICE_TYPES])(uint32_t, char *, size_t) = \
-		{NULL, xlink_pcie_get_device_name, NULL, NULL, NULL};
+		{NULL, xlink_pcie_get_device_name, NULL, NULL, xlink_ipc_get_device_name};
 int (*dev_list_fcts[NMB_OF_DEVICE_TYPES])(uint32_t *, uint32_t *, int) = \
-		{NULL, xlink_pcie_get_device_list, NULL, NULL, NULL};
+		{NULL, xlink_pcie_get_device_list, NULL, NULL, xlink_ipc_get_device_list};
 int (*dev_status_fcts[NMB_OF_DEVICE_TYPES])(const char *, uint32_t *) = \
-		{NULL, xlink_pcie_get_device_status, NULL, NULL, NULL};
+		{NULL, xlink_pcie_get_device_status, NULL, NULL, xlink_ipc_get_device_status};
+int (*open_chan_fcts[NMB_OF_DEVICE_TYPES])(void *, uint32_t) = \
+		{NULL, NULL, NULL, NULL, xlink_ipc_open_channel};
+int (*close_chan_fcts[NMB_OF_DEVICE_TYPES])(void *, uint32_t) = \
+		{NULL, NULL, NULL, NULL, xlink_ipc_close_channel};
 
 /*
  * xlink low-level driver interface
@@ -112,7 +82,12 @@ int xlink_platform_read(uint32_t interface, void *fd, void *data,
 
 int xlink_platform_reset_device(void *fd, uint32_t operating_frequency)
 {
-	int interface = PCIE_DEVICE; // TODO: hard code interface for now
+	/* TODO: hard code interface for now */
+#ifdef CONFIG_XLINK_LOCAL_HOST
+	int interface = IPC_DEVICE;
+#else
+	int interface = PCIE_DEVICE;
+#endif
 
 	if (interface >= NMB_OF_DEVICE_TYPES || !reset_fcts[interface])
 		return -1;
@@ -123,7 +98,12 @@ int xlink_platform_reset_device(void *fd, uint32_t operating_frequency)
 int xlink_platform_boot_device(const char *device_name,
 		const char *binary_path)
 {
-	int interface = PCIE_DEVICE; // TODO: hard code interface for now
+	/* TODO: hard code interface for now */
+#ifdef CONFIG_XLINK_LOCAL_HOST
+	int interface = IPC_DEVICE;
+#else
+	int interface = PCIE_DEVICE;
+#endif
 
 	if (interface >= NMB_OF_DEVICE_TYPES || !boot_fcts[interface])
 		return -1;
@@ -134,7 +114,12 @@ int xlink_platform_boot_device(const char *device_name,
 int xlink_platform_get_device_name(uint32_t sw_device_id, char *device_name,
 		size_t name_size)
 {
-	int interface = PCIE_DEVICE; // TODO: hard code interface for now
+	/* TODO: hard code interface for now */
+#ifdef CONFIG_XLINK_LOCAL_HOST
+	int interface = IPC_DEVICE;
+#else
+	int interface = PCIE_DEVICE;
+#endif
 
 	if (interface >= NMB_OF_DEVICE_TYPES || !dev_name_fcts[interface])
 		return -1;
@@ -145,7 +130,12 @@ int xlink_platform_get_device_name(uint32_t sw_device_id, char *device_name,
 int xlink_platform_get_device_list(uint32_t *sw_device_id_list,
 		uint32_t *num_devices, int pid)
 {
-	int interface = PCIE_DEVICE; // TODO: hard code interface for now
+	/* TODO: hard code interface for now */
+#ifdef CONFIG_XLINK_LOCAL_HOST
+	int interface = IPC_DEVICE;
+#else
+	int interface = PCIE_DEVICE;
+#endif
 
 	if (interface >= NMB_OF_DEVICE_TYPES || !dev_list_fcts[interface])
 		return -1;
@@ -156,12 +146,35 @@ int xlink_platform_get_device_list(uint32_t *sw_device_id_list,
 int xlink_platform_get_device_status(const char *device_name,
 		uint32_t *device_status)
 {
-	int interface = PCIE_DEVICE; // TODO: hard code interface for now
+	/* TODO: hard code interface to ipc or pcie for now */
+#ifdef CONFIG_XLINK_LOCAL_HOST
+	int interface = IPC_DEVICE;
+#else
+	int interface = PCIE_DEVICE;
+#endif
 
 	if (interface >= NMB_OF_DEVICE_TYPES || !dev_status_fcts[interface])
 		return -1;
 
 	return dev_status_fcts[interface](device_name, device_status);
+}
+
+int xlink_platform_open_channel(uint32_t interface, void *fd,
+		uint32_t channel)
+{
+	if (interface >= NMB_OF_DEVICE_TYPES || !open_chan_fcts[interface])
+		return -1;
+
+	return open_chan_fcts[interface](fd, channel);
+}
+
+int xlink_platform_close_channel(uint32_t interface, void *fd,
+		uint32_t channel)
+{
+	if (interface >= NMB_OF_DEVICE_TYPES || !close_chan_fcts[interface])
+		return -1;
+
+	return close_chan_fcts[interface](fd, channel);
 }
 
 void * xlink_platform_allocate(struct device *dev, dma_addr_t *handle,

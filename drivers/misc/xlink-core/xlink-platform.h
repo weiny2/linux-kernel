@@ -33,6 +33,12 @@ int xlink_platform_get_device_list(uint32_t *sw_device_id_list,
 int xlink_platform_get_device_status(const char *device_name,
 		uint32_t *device_status);
 
+int xlink_platform_open_channel(uint32_t interface, void *fd,
+		uint32_t channel);
+
+int xlink_platform_close_channel(uint32_t interface, void *fd,
+		uint32_t channel);
+
 void * xlink_platform_allocate(struct device *dev, dma_addr_t *handle,
 		uint32_t size, uint32_t alignment);
 
