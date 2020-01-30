@@ -631,7 +631,7 @@ CONFIG_CPU_IDLE_GOV_MENU=y
 CONFIG_HALTPOLL_CPUIDLE=y
 # end of CPU Idle
 
-CONFIG_INTEL_IDLE=y
+CONFIG_INTEL_IDLE=m
 # end of Power management and ACPI options
 
 #
