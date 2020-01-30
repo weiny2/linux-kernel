@@ -166,17 +166,15 @@ static unsigned int thunderbay_wdt_get_timeleft(struct watchdog_device *wdog)
 static irqreturn_t thunderbay_wdt_to_isr(int irq, void *dev_id)
 {
 	struct thunderbay_wdt *wdt = (struct thunderbay_wdt *)dev_id;
-#ifndef __ASSEMBLY__
 	struct arm_smccc_res res;
-#endif
 
 	// write a new TIM_WATCHDOG value greater than 0
 	thunderbay_wdt_writel(wdt, TIM_WATCHDOG, 0x1);
 
-#ifndef __ASSEMBLY__
+
 	// clear bit 9 (WDOG_TO_INT_CLR)
-	arm_smccc_smc(0x8200ff18, 0x200, 0, 0, 0, 0, 0, 0, &res);
-#endif
+	if (IS_ENABLED(CONFIG_HAVE_ARM_SMCCC))
+		arm_smccc_smc(0x8200ff18, 0x200, 0, 0, 0, 0, 0, 0, &res);
 
 	/*
 	 * TODO: No action defined.
@@ -191,9 +189,8 @@ static irqreturn_t thunderbay_wdt_to_isr(int irq, void *dev_id)
 static irqreturn_t thunderbay_wdt_th_isr(int irq, void *dev_id)
 {
 	struct thunderbay_wdt *wdt = (struct thunderbay_wdt *)dev_id;
-#ifndef __ASSEMBLY__
 	struct arm_smccc_res res;
-#endif
+
 	u32 th_val = 0;
 
 	// write a new TIM_WATCHDOG value greater than TIM_WATCHDOG_INT_THRES
@@ -201,10 +198,9 @@ static irqreturn_t thunderbay_wdt_th_isr(int irq, void *dev_id)
 		th_val = wdt->wdd.timeout - wdt->wdd.pretimeout;
 	thunderbay_wdt_writel(wdt, TIM_WATCHDOG, th_val * wdt->rate + 10);
 
-#ifndef __ASSEMBLY__
 	// clear bit 8 (WDOG_TH_INT_CLR)
-	arm_smccc_smc(0x8200ff18, 0x100, 0, 0, 0, 0, 0, 0, &res);
-#endif
+	if (IS_ENABLED(CONFIG_HAVE_ARM_SMCCC))
+		arm_smccc_smc(0x8200ff18, 0x100, 0, 0, 0, 0, 0, 0, &res);
 
 	pr_crit("Intel Thunder Bay non-secure watchdog pre-timeout.\n");
 	watchdog_notify_pretimeout(&wdt->wdd);
