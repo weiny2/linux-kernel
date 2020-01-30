@@ -12,56 +12,14 @@
 
 #include "mxlk.h"
 
-/*
- * @brief Initializes mxlk core component
- * NOTES:
- *  1) To be called at PCI probe event
- *
- * @param[in] mxlk - pointer to mxlk instance
- *
- * @return:
- *       0 - success
- *      <0 - linux error code
- */
 int mxlk_core_init(struct mxlk *mxlk);
-
-/*
- * @brief cleans up mxlk core component
- * NOTES:
- *  1) To be called at PCI remove event
- *
- * @param[in] mxlk - pointer to mxlk instance
- *
- */
 void mxlk_core_cleanup(struct mxlk *mxlk);
 
 /*
- * @brief opens mxlk interface
+ * @brief Read buffer from mxlk. Function will block when no data.
  *
- * @param[in] inf - pointer to interface instance
- *
- * @return:
- *       0 - success
- *      <0 - linux error code
- */
-int mxlk_core_open(struct mxlk_interface *inf);
-
-/*
- * @brief closes mxlk interface
- *
- * @param[in] inf - pointer to interface instance
- *
- * @return:
- *       0 - success
- *      <0 - linux error code
- */
-int mxlk_core_close(struct mxlk_interface *inf);
-
-/*
- * @brief Read buffer from mxlk interface. Function will block when no data.
- *
- * @param[in] inf           - pointer to interface instance
- * @param[in] buffer        - pointer to userspace buffer
+ * @param[in] mxlk          - pointer to mxlk instance
+ * @param[in] buffer        - pointer to buffer
  * @param[in] length        - max bytes to copy into buffer
  * @param[in] timeout_ms    - timeout in ms for blocking when no data
  *
@@ -71,14 +29,14 @@ int mxlk_core_close(struct mxlk_interface *inf);
  *              -ETIME - timeout
  *              -EINTR - interrupted
  */
-ssize_t mxlk_core_read(struct mxlk_interface *inf, void *buffer, size_t *length,
-		       unsigned int timeout_ms);
+int mxlk_core_read(struct mxlk *mxlk, void *buffer, size_t *length,
+		   uint32_t timeout_ms);
 
 /*
- * @brief Writes buffer to mxlk interface. Function will block when no buffer.
+ * @brief Writes buffer to mxlk. Function will block when no buffer.
  *
- * @param[in] inf           - pointer to interface instance
- * @param[in] buffer        - pointer to userspace buffer
+ * @param[in] mxlk          - pointer to mxlk instance
+ * @param[in] buffer        - pointer to buffer
  * @param[in] length        - length of buffer to copy from
  * @param[in] timeout_ms    - timeout in ms for blocking when no buffer
  *
@@ -88,9 +46,12 @@ ssize_t mxlk_core_read(struct mxlk_interface *inf, void *buffer, size_t *length,
  *              -ETIME - timeout
  *              -EINTR - interrupted
  */
-ssize_t mxlk_core_write(struct mxlk_interface *inf, void *buffer, size_t length,
-			unsigned int timeout_ms);
+int mxlk_core_write(struct mxlk *mxlk, void *buffer, size_t *length,
+		    uint32_t timeout_ms);
 
-struct mxlk_interface *mxlk_core_default_interface(void);
+#ifdef XLINK_PCIE_LOCAL
+struct mxlk *mxlk_core_get_default(void);
+void mxlk_core_set_default(struct mxlk *mxlk);
+#endif
 
 #endif

@@ -20,7 +20,6 @@
 #include <linux/mutex.h>
 #include <linux/version.h>
 #include <linux/mempool.h>
-// #include <linux/slab_def.h>
 #include <linux/dma-mapping.h>
 #include <linux/cache.h>
 #include <linux/wait.h>
@@ -34,10 +33,6 @@
 #define MXLK_DRIVER_NAME "mxlk_pcie_epf"
 #define MXLK_DRIVER_DESC "Intel(R) xLink PCIe endpoint function driver"
 #endif
-#define MXLK_MAX_NAME_LEN (32)
-
-#define MXLK_TO_PCI(mxlk) ((mxlk)->pci)
-#define MXLK_TO_DEV(mxlk) (&(mxlk)->pci->dev)
 
 struct mxlk_pipe {
 	u32 old;
@@ -63,7 +58,6 @@ struct mxlk_dma_desc {
 };
 
 struct mxlk_stream {
-	int busy;
 	size_t frag;
 	struct mxlk_pipe pipe;
 #ifdef XLINK_PCIE_REMOTE
@@ -81,7 +75,6 @@ struct mxlk_list {
 
 struct mxlk_interface {
 	int id;
-	int opened;
 	struct mxlk *mxlk;
 	struct mutex rlock;
 	struct mxlk_list read;
@@ -90,29 +83,14 @@ struct mxlk_interface {
 	wait_queue_head_t rx_waitqueue;
 };
 
-struct mxlk_stats {
-	struct {
-		size_t pkts;
-		size_t bytes;
-	} tx_krn, rx_krn, tx_usr, rx_usr;
-	size_t doorbells;
-	size_t interrupts;
-	size_t rx_event_runs;
-	size_t tx_event_runs;
-};
-
 struct mxlk {
-	int status;
-#ifdef XLINK_PCIE_REMOTE
-	struct pci_dev *pci; /* pointer to pci device provided by probe */
-#endif
+	u32 status;
+
 	void __iomem *io_comm; /* IO communication space */
 	void __iomem *mmio; /* XLink memory space */
 	void __iomem *bar4; /* not used for now */
 
 	struct workqueue_struct *wq;
-
-	char name[MXLK_MAX_NAME_LEN];
 
 	struct mxlk_interface interfaces[MXLK_NUM_INTERFACES];
 
@@ -125,21 +103,13 @@ struct mxlk {
 	struct mxlk_list write;
 	bool no_tx_buffer;
 	wait_queue_head_t tx_waitqueue;
+	bool tx_pending;
 
 	struct mxlk_list rx_pool;
 	struct mxlk_list tx_pool;
 
 	struct delayed_work rx_event;
 	struct delayed_work tx_event;
-
-#ifdef XLINK_PCIE_REMOTE
-	struct delayed_work wait_event;
-	struct work_struct fw_event;
-#endif
-
-	struct device_attribute debug;
-	struct mxlk_stats stats;
-	struct mxlk_stats stats_old;
 };
 
 #endif

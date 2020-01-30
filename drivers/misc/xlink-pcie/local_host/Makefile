@@ -4,5 +4,5 @@ obj-$(CONFIG_XLINK_PCIE_LH_DRIVER) += mxlk_ep.o
 mxlk_ep-objs := mxlk_epf.o
 mxlk_ep-objs += mxlk_core.o
 mxlk_ep-objs += mxlk_dma.o
-mxlk_ep-objs += mxlk_capabilities.o
-mxlk_ep-objs += mxlk_interface.o
+mxlk_ep-objs += mxlk_inf.o
+mxlk_ep-objs += ../common/mxlk_util.o

@@ -111,15 +111,15 @@ static int usb_devicename(int index, char *name, int nameSize , int pid)
  * note: array indices based on xlink_dev_type enum definition
  */
 int (*write_fcts[NMB_OF_DEVICE_TYPES])(void*, void*, size_t, unsigned int) = \
-		{NULL, keembay_pcie_write, usb_write, NULL, ipc_write};
+		{NULL, NULL/* keembay_pcie_write*/, usb_write, NULL, ipc_write};
 int (*read_fcts[NMB_OF_DEVICE_TYPES])(void*, void*, size_t*, unsigned int) = \
-		{NULL, keembay_pcie_read, usb_read, NULL, ipc_read};
+		{NULL,NULL /* keembay_pcie_read*/, usb_read, NULL, ipc_read};
 int (*open_fcts[NMB_OF_DEVICE_TYPES])(const char*, const char*, void**) = \
-		{NULL, keembay_pcie_connect, usb_open, NULL, ipc_open};
+		{NULL, NULL/*keembay_pcie_connect*/, usb_open, NULL, ipc_open};
 int (*close_fcts[NMB_OF_DEVICE_TYPES])(void*) = \
-		{NULL, keembay_pcie_reset_remote, usb_close, NULL, ipc_close};
+		{NULL,NULL /*keembay_pcie_reset_remote*/, usb_close, NULL, ipc_close};
 int (*devicename_fcts[NMB_OF_DEVICE_TYPES])(int, char*, int, int) = \
-		{NULL, keembay_pcie_get_devicename, usb_devicename, NULL,
+		{NULL, NULL/*keembay_pcie_get_devicename*/, usb_devicename, NULL,
 		ipc_devicename};
 
 /*

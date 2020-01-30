@@ -15,22 +15,30 @@
 #include <linux/pci_ids.h>
 #include "../common/mxlk.h"
 #include "../common/mxlk_core.h"
+#include "../common/mxlk_util.h"
 #include "../common/mxlk_print.h"
-#include "../common/mxlk_mmio.h"
 #include "../common/mxlk_boot.h"
 #include "mxlk_struct.h"
 #include "mxlk_dma.h"
-
-static bool dma_enable = true;
+//TBD
+//static bool dma_enable = true;
+static bool dma_enable = false;
 module_param(dma_enable, bool, 0664);
 MODULE_PARM_DESC(dma_enable, "DMA transfer enable");
 
+static int func_no = 0;
+module_param(func_no, int, 0664);
+MODULE_PARM_DESC(func_no, "function number enable");
+
+static LIST_HEAD(dev_list);
+static DEFINE_MUTEX(dev_list_mutex);
+
 #define BAR2_SIZE (16 * 1024 * 1024)
-#define BAR4_SIZE (512 * 1024 * 1024)
+#define BAR4_SIZE (8 * 1024 * 1024)
 
 static struct pci_epf_header mxlk_pcie_header = {
 	.vendorid = PCI_VENDOR_ID_INTEL,
-	.deviceid = 0x6240,
+	.deviceid = 0x4fc0,
 	.baseclass_code = PCI_BASE_CLASS_MULTIMEDIA,
 	.subclass_code = 0x0,
 	.subsys_vendor_id = 0x0,
@@ -51,8 +59,8 @@ int mxlk_register_host_irq(struct mxlk *mxlk, irq_handler_t func,
 
 	/* Enable interrupt */
 	writel(BIT(18), mxlk_epf->apb_base + 0x18);
-
-	return request_irq(mxlk_epf->irq, func, flags, MXLK_DRIVER_NAME, mxlk);
+        return 0; 
+//	return request_irq(mxlk_epf->irq[mxlk_epf->epf->func_no], func, flags, MXLK_DRIVER_NAME, mxlk);
 }
 
 int mxlk_raise_irq(struct mxlk *mxlk, unsigned int flags)
@@ -86,6 +94,58 @@ static void mxlk_epc_free_addr(struct pci_epc *epc, phys_addr_t phys_addr,
 	spin_unlock_irqrestore(&epc->lock, flags);
 }
 
+u32 mxlk_get_device_num(u32 *id_list)
+{
+	u32 num = 0;
+	struct mxlk_epf *p;
+	mutex_lock(&dev_list_mutex);
+	list_for_each_entry(p, &dev_list, list) {
+	    *id_list++ = p->sw_devid;
+	    num++;
+	}
+	mutex_unlock(&dev_list_mutex);
+	return num;
+}
+
+static struct mxlk_epf *mxlk_get_device_by_id(u32 id)
+{
+	struct mxlk_epf *xdev;
+        mutex_lock(&dev_list_mutex);
+	list_for_each_entry(xdev, &dev_list, list) {
+	if (xdev->sw_devid == id)
+		break;
+	}
+	mutex_unlock(&dev_list_mutex);
+	return xdev;
+}
+
+
+int mxlk_get_device_name_by_id(u32 id, char *device_name, size_t name_size)
+{
+	struct mxlk_epf *xdev;
+	size_t size;
+        xdev = mxlk_get_device_by_id(id);
+        if (!xdev)
+		return -ENODEV;
+	size = (name_size > MXLK_MAX_NAME_LEN) ? MXLK_MAX_NAME_LEN : name_size;
+	strncpy(device_name, xdev->name, size);
+	return 0;
+}
+
+struct mxlk_epf *mxlk_get_device_by_name(const char *name)
+{
+	struct mxlk_epf *p;
+	mutex_lock(&dev_list_mutex);
+	list_for_each_entry(p, &dev_list, list) {
+	if (!strncmp(p->name, name, MXLK_MAX_NAME_LEN))
+		break;
+	}
+	mutex_unlock(&dev_list_mutex);
+	return p;
+}
+
+
+
 int mxlk_copy_from_host(struct mxlk *mxlk, void *dst_addr, u64 pci_addr,
 			size_t len)
 {
@@ -115,7 +175,8 @@ int mxlk_copy_from_host(struct mxlk *mxlk, void *dst_addr, u64 pci_addr,
 		dev_err(dev, "Failed to map address\n");
 		goto err_addr;
 	}
-
+        dev_dbg(dev, "pcie:mxlk_copy_from_host() device=%s: phys_addr=%llx,pci_addr=%llx,function_no=%d\n",
+			mxlk_epf->name,phys_addr,pci_addr,epf->func_no);
 	if (dma_enable) {
 		dma_dst = dma_map_single(dma_dev, dst_addr, len, DMA_FROM_DEVICE);
 		if (dma_mapping_error(dma_dev, dma_dst)) {
@@ -125,7 +186,7 @@ int mxlk_copy_from_host(struct mxlk *mxlk, void *dst_addr, u64 pci_addr,
 			goto skip_dma;
 		}
 
-		tx = mxlk_ep_dma_read(epc, dma_dst, phys_addr, len);
+		tx = mxlk_ep_dma_read(epf, dma_dst, phys_addr, len);
 		if (tx) {
 			dev_err(dev, "DMA transfer failed, using memcpy..\n");
 			dma_unmap_single(dma_dev, dma_dst, len, DMA_FROM_DEVICE);
@@ -177,7 +238,8 @@ int mxlk_copy_to_host(struct mxlk *mxlk, u64 pci_addr, void *src_addr,
 		dev_err(dev, "Failed to map address\n");
 		goto err_addr;
 	}
-
+        dev_dbg(dev,"pcie:mxlk_to_host() device=%s: phys_addr=%llu,pci_addr=%llu,function_no=%d\n",
+			mxlk_epf->name,phys_addr,pci_addr,epf->func_no);
 	if (dma_enable) {
 		dma_src = dma_map_single(dma_dev, src_addr, len, DMA_TO_DEVICE);
 		if (dma_mapping_error(dma_dev, dma_src)) {
@@ -187,7 +249,7 @@ int mxlk_copy_to_host(struct mxlk *mxlk, u64 pci_addr, void *src_addr,
 			goto skip_dma;
 		}
 
-		tx = mxlk_ep_dma_write(epc, phys_addr, dma_src, len);
+		tx = mxlk_ep_dma_write(epf, phys_addr, dma_src, len);
 		if (tx) {
 			dev_err(dev, "DMA transfer failed, using memcpy..\n");
 			dma_unmap_single(dma_dev, dma_src, len, DMA_TO_DEVICE);
@@ -289,7 +351,7 @@ static int mxlk_setup_bar(struct pci_epf *epf, enum pci_barno barno,
 			  size_t size, size_t align)
 {
 	int ret;
-	void *vaddr;
+	void __iomem *vaddr = NULL;
 	struct pci_epc *epc = epf->epc;
 	struct mxlk_epf *mxlk_epf = epf_get_drvdata(epf);
 	struct pci_epf_bar *bar = &epf->bar[barno];
@@ -300,12 +362,19 @@ static int mxlk_setup_bar(struct pci_epf *epf, enum pci_barno barno,
 	bar->flags |= PCI_BASE_ADDRESS_MEM_TYPE_64;
 	bar->size = size;
 
-	if (barno == 2)
-		bar->phys_addr = keembay->mmr2->start;
-	if (barno == 4)
-		bar->phys_addr = keembay->mmr4->start;
+	if (barno == 2) {
+		bar->phys_addr = keembay->mmr2[epf->func_no]->start;
+		vaddr = ioremap(bar->phys_addr, size);
+	}
+	if (barno == 4) {
+		bar->phys_addr = keembay->mmr4[epf->func_no]->start;
+		vaddr = ioremap_cache(bar->phys_addr, size);
+	}
 
-	vaddr = ioremap(bar->phys_addr, size);
+	if (!vaddr) {
+		dev_err(&epf->dev, "Failed to map BAR%d\n", barno);
+		return -ENOMEM;
+	}
 
 	epf->bar[barno].phys_addr = bar->phys_addr;
 	epf->bar[barno].size = size;
@@ -314,9 +383,9 @@ static int mxlk_setup_bar(struct pci_epf *epf, enum pci_barno barno,
 				PCI_BASE_ADDRESS_MEM_TYPE_64 :
 				PCI_BASE_ADDRESS_MEM_TYPE_32;
 
-	keembay->setup_bar = true;
+	keembay->setup_bar[epf->func_no] = true;
 	ret = pci_epc_set_bar(epc, epf->func_no, bar);
-	keembay->setup_bar = false;
+	keembay->setup_bar[epf->func_no] = false;
 
 	if (ret) {
 		pci_epf_free_space(epf, vaddr, barno);
@@ -369,7 +438,13 @@ static int epf_bind(struct pci_epf *epf)
 
 	if (WARN_ON_ONCE(!epc))
 		return -EINVAL;
-
+#if 0
+	if (func_no != epf->func_no)
+	{
+        	printk(KERN_DEBUG "pcie : Return epf_bind() function no=%d\n",epf->func_no);
+		return 0;
+	}
+#endif
 	features = pci_epc_get_features(epc, epf->func_no);
 	mxlk_epf->epc_features = features;
 	if (features) {
@@ -377,34 +452,44 @@ static int epf_bind(struct pci_epf *epf)
 		align = features->align;
 		ret = mxlk_configure_bar(epf, features);
 		if (ret)
-			return ret;
+			goto bind_error;
 	}
 
 	mxlk_epf->irq = keembay->irq;
+	mxlk_epf->irq_dma = keembay->irq_dma;
 	mxlk_epf->apb_base = keembay->slv_apb_base;
 
 	ret = mxlk_setup_bars(epf, align);
 	if (ret) {
 		dev_err(&epf->dev, "BAR initialize failed\n");
-		return ret;
+		goto bind_error;
 	}
 
-	mxlk_ep_dma_init(epc);
+	ret = mxlk_ep_dma_init(epf);
+	if (ret) {
+		dev_err(&epf->dev, "DMA initialization failed\n");
+		goto bind_error;
+	}
+
+	memcpy_toio(mxlk_epf->mxlk.io_comm + MXLK_BOOT_OFFSET_MAGIC,
+		    MXLK_BOOT_MAGIC_YOCTO, strlen(MXLK_BOOT_MAGIC_YOCTO));
+	mxlk_set_device_status(&mxlk_epf->mxlk, MXLK_STATUS_READY);
+
+	mxlk_epf->sw_devid = epf->func_no;
+	snprintf(mxlk_epf->name, MXLK_MAX_NAME_LEN, "%s_func%x",epf->name, epf->func_no);
+	list_add_tail(&mxlk_epf->list, &dev_list);
+       	dev_dbg(&epf->dev,"pcie:mxlk_epf->name of device = %s, sw_devid=%d\n",mxlk_epf->name, mxlk_epf->sw_devid);
 
 	ret = mxlk_core_init(&mxlk_epf->mxlk);
 	if (ret) {
 		dev_err(&epf->dev, "Core component configuration failed\n");
-		goto error;
+		goto bind_error;
 	}
-
-	mxlk_wr_buffer(mxlk_epf->mxlk.io_comm, MXLK_BOOT_OFFSET_MAGIC,
-		       MXLK_BOOT_MAGIC_YOCTO, strlen(MXLK_BOOT_MAGIC_YOCTO));
 
 	return 0;
 
-error:
-	mxlk_cleanup_bars(epf);
-
+bind_error:
+	mxlk_set_device_status(&mxlk_epf->mxlk, MXLK_STATUS_ERROR);
 	return ret;
 }
 
@@ -415,7 +500,7 @@ static void epf_unbind(struct pci_epf *epf)
 
 	mxlk_core_cleanup(&mxlk_epf->mxlk);
 
-	mxlk_ep_dma_uninit(epc);
+	mxlk_ep_dma_uninit(epf);
 
 	pci_epc_stop(epc);
 
@@ -430,6 +515,7 @@ static int epf_probe(struct pci_epf *epf)
 {
 	struct mxlk_epf *mxlk_epf;
 	struct device *dev = &epf->dev;
+	dev_dbg(dev,"pcie:epf_probe() enter fn=%d\n",epf->func_no);
 
 	mxlk_epf = devm_kzalloc(dev, sizeof(*mxlk_epf), GFP_KERNEL);
 	if (!mxlk_epf)
@@ -439,6 +525,7 @@ static int epf_probe(struct pci_epf *epf)
 	mxlk_epf->epf = epf;
 
 	epf_set_drvdata(epf, mxlk_epf);
+	dev_dbg(dev, "pcie:epf_probe() exit fn=%d\n",epf->func_no);
 
 	return 0;
 }
@@ -480,3 +567,4 @@ module_exit(mxlk_epf_exit);
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Intel");
 MODULE_DESCRIPTION(MXLK_DRIVER_DESC);
+MODULE_VERSION(MXLK_DRIVER_VERSION);

@@ -6,11 +6,12 @@
  * Copyright (C) 2019 Intel Corporation
  *
  ****************************************************************************/
+#include <linux/interrupt.h>
+#include <linux/wait.h>
 
 #include "mxlk_dma.h"
 #include "mxlk_struct.h"
 #include "../common/mxlk.h"
-#include "../common/mxlk_mmio.h"
 
 #define DMA_DBI_OFFSET (0x380000)
 #define DMA_WRITE_CHAN0_OFFSET (0x200)
@@ -110,10 +111,16 @@ typedef enum mxlk_ep_engine_type {
 	READ_ENGINE
 } mxlk_ep_engine_type;
 
-static void __iomem *mxlk_ep_get_dma_addr(struct pci_epc *epc)
+static struct dw_pcie *mxlk_ep_get_dw_pcie(struct pci_epf *epf)
 {
+	struct pci_epc *epc = epf->epc;
 	struct dw_pcie_ep *ep = epc_get_drvdata(epc);
-	struct dw_pcie *pci = to_dw_pcie_from_ep(ep);
+	return to_dw_pcie_from_ep(ep);
+}
+
+static void __iomem *mxlk_ep_get_dma_addr(struct pci_epf *epf)
+{
+	struct dw_pcie *pci = mxlk_ep_get_dw_pcie(epf);
 
 	void __iomem *dma_base = pci->dbi_base + DMA_DBI_OFFSET;
 
@@ -122,7 +129,7 @@ static void __iomem *mxlk_ep_get_dma_addr(struct pci_epc *epc)
 
 static int mxlk_ep_dma_err_status(void __iomem *err_status, int chan)
 {
-	if (mxlk_rd32(err_status, 0) &
+	if (ioread32(err_status) &
 	    (DMA_AR_ERROR_CH_MASK(chan) | DMA_LL_ERROR_CH_MASK(chan)))
 		return -EIO;
 
@@ -131,7 +138,7 @@ static int mxlk_ep_dma_err_status(void __iomem *err_status, int chan)
 
 static int mxlk_ep_dma_rd_err_status_high(void __iomem *err_status, int chan)
 {
-	if (mxlk_rd32(err_status, 0) &
+	if (ioread32(err_status) &
 	    (DMA_UNREQ_ERROR_CH_MASK(chan) |
 	     DMA_CPL_ABORT_ERROR_CH_MASK(chan) |
 	     DMA_CPL_TIMEOUT_ERROR_CH_MASK(chan) |
@@ -141,11 +148,12 @@ static int mxlk_ep_dma_rd_err_status_high(void __iomem *err_status, int chan)
 	return 0;
 }
 
-int mxlk_ep_dma_write(struct pci_epc *epc, dma_addr_t dst, dma_addr_t src,
+int mxlk_ep_dma_write(struct pci_epf *epf, dma_addr_t dst, dma_addr_t src,
 		      size_t len)
 {
 	int ret = 0;
-	void __iomem *dma_base = mxlk_ep_get_dma_addr(epc);
+	struct mxlk_epf *mxlk_epf = epf_get_drvdata(epf);
+	void __iomem *dma_base = mxlk_ep_get_dma_addr(epf);
 	u32 src_low = (uint32_t)src;
 	u32 dest_low = (uint32_t)dst;
 #ifdef CONFIG_64BIT
@@ -159,37 +167,38 @@ int mxlk_ep_dma_write(struct pci_epc *epc, dma_addr_t dst, dma_addr_t src,
 		(struct pcie_dma_chan *)(dma_base + DMA_WRITE_CHAN0_OFFSET);
 	struct pcie_dma_reg *dma_reg = (struct pcie_dma_reg *)dma_base;
 
-	mxlk_wr32(&dma_chan->dma_transfer_size, 0, len);
+	iowrite32(len, &dma_chan->dma_transfer_size);
 
-	mxlk_wr32(&dma_chan->dma_sar_low, 0, src_low);
-	mxlk_wr32(&dma_chan->dma_sar_high, 0, src_high);
-	mxlk_wr32(&dma_chan->dma_dar_low, 0, dest_low);
-	mxlk_wr32(&dma_chan->dma_dar_high, 0, dest_high);
+	iowrite32(src_low, &dma_chan->dma_sar_low);
+	iowrite32(src_high, &dma_chan->dma_sar_high);
+	iowrite32(dest_low, &dma_chan->dma_dar_low);
+	iowrite32(dest_high, &dma_chan->dma_dar_high);
 
 	/* Start DMA transfer. */
-	mxlk_wr32(&dma_reg->dma_write_doorbell, 0, DMA_DEF_CHANNEL);
+	iowrite32(DMA_DEF_CHANNEL, &dma_reg->dma_write_doorbell);
 
 	/* Wait for DMA transfer to complete. */
-	while (!(mxlk_rd32(&dma_reg->dma_write_int_status, 0) &
-		 (DMA_ABORT_INTERRUPT_CH_MASK(DMA_DEF_CHANNEL) |
-		  DMA_DONE_INTERRUPT_CH_MASK(DMA_DEF_CHANNEL)))) {
-	}
+	ret = wait_event_interruptible(mxlk_epf->dma_wr_wq,
+			ioread32(&dma_reg->dma_write_int_status) &
+			(DMA_ABORT_INTERRUPT_CH_MASK(DMA_DEF_CHANNEL) |
+			DMA_DONE_INTERRUPT_CH_MASK(DMA_DEF_CHANNEL)));
 
 	ret = mxlk_ep_dma_err_status(&dma_reg->dma_write_err_status,
 				     DMA_DEF_CHANNEL);
 
 	/* Clear the done interrupt. */
-	mxlk_wr32(&dma_reg->dma_write_int_clear, 0,
-		  DMA_DONE_INTERRUPT_CH_MASK(DMA_DEF_CHANNEL));
+	iowrite32(DMA_DONE_INTERRUPT_CH_MASK(DMA_DEF_CHANNEL),
+		  &dma_reg->dma_write_int_clear);
 
 	return ret;
 }
 
-int mxlk_ep_dma_read(struct pci_epc *epc, dma_addr_t dst, dma_addr_t src,
+int mxlk_ep_dma_read(struct pci_epf *epf, dma_addr_t dst, dma_addr_t src,
 		     size_t len)
 {
 	int ret = 0;
-	void __iomem *dma_base = mxlk_ep_get_dma_addr(epc);
+	struct mxlk_epf *mxlk_epf = epf_get_drvdata(epf);
+	void __iomem *dma_base = mxlk_ep_get_dma_addr(epf);
 	u32 src_low = (uint32_t)src;
 	u32 dest_low = (uint32_t)dst;
 #ifdef CONFIG_64BIT
@@ -203,21 +212,21 @@ int mxlk_ep_dma_read(struct pci_epc *epc, dma_addr_t dst, dma_addr_t src,
 		(struct pcie_dma_chan *)(dma_base + DMA_READ_CHAN0_OFFSET);
 	struct pcie_dma_reg *dma_reg = (struct pcie_dma_reg *)dma_base;
 
-	mxlk_wr32(&dma_chan->dma_transfer_size, 0, len);
+	iowrite32(len, &dma_chan->dma_transfer_size);
 
-	mxlk_wr32(&dma_chan->dma_sar_low, 0, src_low);
-	mxlk_wr32(&dma_chan->dma_sar_high, 0, src_high);
-	mxlk_wr32(&dma_chan->dma_dar_low, 0, dest_low);
-	mxlk_wr32(&dma_chan->dma_dar_high, 0, dest_high);
+	iowrite32(src_low, &dma_chan->dma_sar_low);
+	iowrite32(src_high, &dma_chan->dma_sar_high);
+	iowrite32(dest_low, &dma_chan->dma_dar_low);
+	iowrite32(dest_high, &dma_chan->dma_dar_high);
 
 	/* Start DMA transfer. */
-	mxlk_wr32(&dma_reg->dma_read_doorbell, 0, DMA_DEF_CHANNEL);
+	iowrite32(DMA_DEF_CHANNEL, &dma_reg->dma_read_doorbell);
 
 	/* Wait for DMA transfer to complete. */
-	while (!(mxlk_rd32(&dma_reg->dma_read_int_status, 0) &
-		 (DMA_ABORT_INTERRUPT_CH_MASK(DMA_DEF_CHANNEL) |
-		  DMA_DONE_INTERRUPT_CH_MASK(DMA_DEF_CHANNEL)))) {
-	}
+	ret = wait_event_interruptible(mxlk_epf->dma_rd_wq,
+			ioread32(&dma_reg->dma_read_int_status) &
+			(DMA_ABORT_INTERRUPT_CH_MASK(DMA_DEF_CHANNEL) |
+			DMA_DONE_INTERRUPT_CH_MASK(DMA_DEF_CHANNEL)));
 
 	if (mxlk_ep_dma_err_status(&dma_reg->dma_read_err_status_low,
 				   DMA_DEF_CHANNEL))
@@ -227,8 +236,8 @@ int mxlk_ep_dma_read(struct pci_epc *epc, dma_addr_t dst, dma_addr_t src,
 		ret = -EIO;
 
 	/* Clear the done interrupt. */
-	mxlk_wr32(&dma_reg->dma_read_int_clear, 0,
-		  DMA_DONE_INTERRUPT_CH_MASK(DMA_DEF_CHANNEL));
+	iowrite32(DMA_DONE_INTERRUPT_CH_MASK(DMA_DEF_CHANNEL),
+		  &dma_reg->dma_read_int_clear);
 
 	return ret;
 }
@@ -240,10 +249,10 @@ static void mxlk_ep_dma_disable(void __iomem *dma_base, mxlk_ep_engine_type rw)
 					&dma_reg->dma_write_engine_en :
 					&dma_reg->dma_read_engine_en;
 
-	mxlk_wr32(engine_en, 0, 0);
+	iowrite32(0, engine_en);
 
 	/* Wait until the engine is disabled. */
-	while (mxlk_rd32(engine_en, 0) & DMA_ENGINE_EN_MASK) {
+	while (ioread32(engine_en) & DMA_ENGINE_EN_MASK) {
 	}
 }
 
@@ -265,33 +274,66 @@ static void mxlk_ep_dma_enable(void __iomem *dma_base, mxlk_ep_engine_type rw)
 	struct pcie_dma_chan *dma_chan =
 		(struct pcie_dma_chan *)(dma_base + offset);
 
-	mxlk_wr32(engine_en, 0, DMA_ENGINE_EN_MASK);
+	iowrite32(DMA_ENGINE_EN_MASK, engine_en);
 
-	/* Mask all interrupts. */
-	mxlk_wr32(int_mask, 0, DMA_ALL_INTERRUPT_MASK);
+	/* Unmask all interrupts, so that the interrupt line gets asserted. */
+	iowrite32(0x0, int_mask);
 
 	/* Clear all interrupts. */
-	mxlk_wr32(int_clear, 0, DMA_ALL_INTERRUPT_MASK);
+	iowrite32(DMA_ALL_INTERRUPT_MASK, int_clear);
 
 	/* Enable local interrupt status (LIE). */
-	mxlk_wr32(&dma_chan->dma_ch_control1, 0, DMA_CH_CONTROL1_LIE_MASK);
+	iowrite32(DMA_CH_CONTROL1_LIE_MASK, &dma_chan->dma_ch_control1);
 }
 
-void mxlk_ep_dma_uninit(struct pci_epc *epc)
+void mxlk_ep_dma_uninit(struct pci_epf *epf)
 {
-	void __iomem *dma_base = mxlk_ep_get_dma_addr(epc);
+	void __iomem *dma_base = mxlk_ep_get_dma_addr(epf);
 
 	mxlk_ep_dma_disable(dma_base, WRITE_ENGINE);
 	mxlk_ep_dma_disable(dma_base, READ_ENGINE);
 }
 
-void mxlk_ep_dma_init(struct pci_epc *epc)
+static irqreturn_t mxlk_dma_interrupt(int irq, void *args)
 {
-	void __iomem *dma_base = mxlk_ep_get_dma_addr(epc);
+	struct mxlk_epf *mxlk_epf = args;
+	void __iomem *dma_base = mxlk_ep_get_dma_addr(mxlk_epf->epf);
+	struct pcie_dma_reg *dma_reg = (struct pcie_dma_reg *)dma_base;
+
+	if (ioread32(&dma_reg->dma_read_int_status) &
+		(DMA_ABORT_INTERRUPT_CH_MASK(DMA_DEF_CHANNEL) |
+		 DMA_DONE_INTERRUPT_CH_MASK(DMA_DEF_CHANNEL)))
+		wake_up_interruptible(&mxlk_epf->dma_rd_wq);
+
+	if (ioread32(&dma_reg->dma_write_int_status) &
+		(DMA_ABORT_INTERRUPT_CH_MASK(DMA_DEF_CHANNEL) |
+		 DMA_DONE_INTERRUPT_CH_MASK(DMA_DEF_CHANNEL)))
+		wake_up_interruptible(&mxlk_epf->dma_wr_wq);
+
+	return IRQ_HANDLED;
+}
+
+int mxlk_ep_dma_init(struct pci_epf *epf)
+{
+	struct mxlk_epf *mxlk_epf = epf_get_drvdata(epf);
+	void __iomem *dma_base = mxlk_ep_get_dma_addr(epf);
+	int ret = 0;
 
 	/* Disable the DMA read/write engine. */
-	mxlk_ep_dma_uninit(epc);
+	mxlk_ep_dma_uninit(epf);
+
+	init_waitqueue_head(&mxlk_epf->dma_rd_wq);
+	init_waitqueue_head(&mxlk_epf->dma_wr_wq);
 
 	mxlk_ep_dma_enable(dma_base, WRITE_ENGINE);
 	mxlk_ep_dma_enable(dma_base, READ_ENGINE);
+#if 0
+	ret = request_irq(mxlk_epf->irq_dma, &mxlk_dma_interrupt, 0,
+			  MXLK_DRIVER_NAME, mxlk_epf);
+#endif
+	if (ret) {
+		mxlk_ep_dma_uninit(epf);
+		return ret;
+	}
+	return 0;
 }
