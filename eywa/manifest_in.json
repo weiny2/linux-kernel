@@ -3497,6 +3497,41 @@
             ],
             "status": "intel confidential",
             "stuck_at_ref": ""
+        },
+        {
+            "branch": "iommu_debugfs_improvements",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "CONFIG_INTEL_IOMMU_DEBUGFS",
+                    "value": "y"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Megha Dey",
+                    "email": "megha.dey@intel.com"
+                }
+            ],
+            "description": "This pull request aims to fix some of the existing issues in the iommu debugfs",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Megha Dey",
+                    "email": "megha.dey@intel.com"
+                }
+            ],
+            "jira": "NEXT-1768",
+            "name": "iommu_debugfs",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/meghadey/linux",
+            "sdl_contact": [
+                {
+                    "name": "Ravi V. Shankar",
+                    "email": "ravi.v.shankar@intel.com"
+                }
+            ],
+            "status": "public",
+            "stuck_at_ref": ""
         }
     ]
 }
