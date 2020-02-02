@@ -71,6 +71,9 @@
 			 _PAGE_PKEY_BIT1 | \
 			 _PAGE_PKEY_BIT2 | \
 			 _PAGE_PKEY_BIT3)
+#define	_PAGE_PKEY_PMEM	(_AT(pteval_t, 1) << _PAGE_BIT_PKEY_BIT0)
+			/* FIXME 1 should be PKS_KEY_IDX_PMEM */
+
 
 #if defined(CONFIG_X86_64) || defined(CONFIG_X86_PAE)
 #define _PAGE_KNL_ERRATUM_MASK (_PAGE_DIRTY | _PAGE_ACCESSED)
@@ -218,6 +221,8 @@ enum page_cache_mode {
 
 #define PAGE_KERNEL_IO		__pgprot_mask(__PAGE_KERNEL_IO)
 #define PAGE_KERNEL_IO_NOCACHE	__pgprot_mask(__PAGE_KERNEL_IO_NOCACHE)
+
+#define PAGE_KERNEL_PKEY_PMEM	__pgprot_mask(__PAGE_KERNEL | _PAGE_PKEY_PMEM)
 
 #endif	/* __ASSEMBLY__ */
 
@@ -507,7 +512,6 @@ static inline pgprot_t pgprot_large_2_4k(pgprot_t pgprot)
 			   (_PAGE_BIT_PAT_LARGE - _PAGE_BIT_PAT));
 	return new;
 }
-
 
 typedef struct page *pgtable_t;
 
