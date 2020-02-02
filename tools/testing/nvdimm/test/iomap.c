@@ -130,7 +130,7 @@ void *__wrap_devm_memremap_pages(struct device *dev, struct dev_pagemap *pgmap)
 	struct nfit_test_resource *nfit_res = get_nfit_res(offset);
 
 	if (!nfit_res)
-		return devm_memremap_pages(dev, pgmap);
+		return devm_memremap_pages(dev, pgmap, PAGE_KERNEL);
 
 	if (!pgmap->ref) {
 		if (pgmap->ops && (pgmap->ops->kill || pgmap->ops->cleanup))

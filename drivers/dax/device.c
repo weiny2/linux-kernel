@@ -429,7 +429,7 @@ int dev_dax_probe(struct device *dev)
 	}
 
 	dev_dax->pgmap.type = MEMORY_DEVICE_DEVDAX;
-	addr = devm_memremap_pages(dev, &dev_dax->pgmap);
+	addr = devm_memremap_pages(dev, &dev_dax->pgmap, PAGE_KERNEL);
 	if (IS_ERR(addr))
 		return PTR_ERR(addr);
 

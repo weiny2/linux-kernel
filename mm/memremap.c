@@ -157,7 +157,7 @@ static void dev_pagemap_percpu_release(struct percpu_ref *ref)
  * memunmap_pages().  Please use dev_memremap_pages if you have a struct
  * device available.
  */
-void *memremap_pages(struct dev_pagemap *pgmap, int nid)
+void *memremap_pages(struct dev_pagemap *pgmap, int nid, pgprot_t pgprot)
 {
 	struct resource *res = &pgmap->res;
 	struct dev_pagemap *conflict_pgmap;
@@ -166,7 +166,7 @@ void *memremap_pages(struct dev_pagemap *pgmap, int nid)
 		 * We do not want any optional features only our own memmap
 		 */
 		.altmap = pgmap_altmap(pgmap),
-		.pgprot = PAGE_KERNEL,
+		.pgprot = pgprot,
 	};
 	int error, is_ram;
 	bool need_devmap_managed = true;
@@ -346,12 +346,13 @@ EXPORT_SYMBOL_GPL(memremap_pages);
  *    treated as a "System RAM" range, i.e. not a device mmio range, but
  *    this is not enforced.
  */
-void *devm_memremap_pages(struct device *dev, struct dev_pagemap *pgmap)
+void *devm_memremap_pages(struct device *dev, struct dev_pagemap *pgmap,
+			  pgprot_t pgprot)
 {
 	int error;
 	void *ret;
 
-	ret = memremap_pages(pgmap, dev_to_node(dev));
+	ret = memremap_pages(pgmap, dev_to_node(dev), pgprot);
 	if (IS_ERR(ret))
 		return ret;
 

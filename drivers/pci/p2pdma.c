@@ -194,7 +194,7 @@ int pci_p2pdma_add_resource(struct pci_dev *pdev, int bar, size_t size,
 	p2p_pgmap->bus_offset = pci_bus_address(pdev, bar) -
 		pci_resource_start(pdev, bar);
 
-	addr = devm_memremap_pages(&pdev->dev, pgmap);
+	addr = devm_memremap_pages(&pdev->dev, pgmap, PAGE_KERNEL);
 	if (IS_ERR(addr)) {
 		error = PTR_ERR(addr);
 		goto pgmap_free;
