@@ -3343,7 +3343,7 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": "8c3d3c71a70d4c9c0b57241d732739691c3dd6f7"
+            "stuck_at_ref": ""
         },
         {
             "branch": "vsva_for_intel_next_v5.5",
