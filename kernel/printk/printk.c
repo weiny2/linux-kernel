@@ -2668,7 +2668,6 @@ void register_console(struct console *newcon)
 	 * already have a valid console
 	 */
 	if (newcon->flags & CON_BOOT) {
-		/* find the last or real console */
 		for_each_console(bcon) {
 			if (!(bcon->flags & CON_BOOT)) {
 				pr_info("Too late to register bootconsole %s%d\n",
