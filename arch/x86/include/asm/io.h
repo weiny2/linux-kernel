@@ -435,4 +435,41 @@ static inline void iosubmit_cmds512(void __iomem *__dst, const void *src,
 	}
 }
 
+/**
+ * iosubmit_cmds512_sync - copy data to single MMIO location, in 512-bit units
+ * @dst: destination, in MMIO space (must be 512-bit aligned)
+ * @src: source
+ * @count: number of 512 bits quantities to submit
+ *
+ * Submit data from kernel space to MMIO space, in units of 512 bits at a
+ * time. Order of access is not guaranteed, nor is a memory barrier
+ * performed afterwards. The command returns the remaining count that is not
+ * successful on failure. 0 is returned if successful.
+ *
+ * Warning: Do not use this helper unless your driver has checked that the CPU
+ * instruction is supported on the platform.
+ */
+static inline size_t iosubmit_cmds512_sync(void __iomem *dst, const void *src,
+					   size_t count)
+{
+	const u8 *from = src;
+	const u8 *end = from + count * 64;
+	size_t remain = count;
+	bool retry;
+
+	while (from < end) {
+		/* ENQCMDS [rdx], rax */
+		asm volatile(".byte 0xf3, 0x0f, 0x38, 0xf8, 0x02, 0x66, 0x90\t\n"
+			     "setz %0\t\n"
+			     : "=r"(retry) : "a" (dst), "d" (from));
+		if (retry)
+			return remain;
+
+		from += 64;
+		remain--;
+	}
+
+	return 0;
+}
+
 #endif /* _ASM_X86_IO_H */
