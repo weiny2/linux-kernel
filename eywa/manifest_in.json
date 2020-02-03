@@ -3532,6 +3532,36 @@
             ],
             "status": "public",
             "stuck_at_ref": ""
+        },
+        {
+            "branch": "pks",
+            "branch_type": "expiring",
+            "config_options": [],
+            "contributor": [
+                {
+                    "name": "Fenghua Yu",
+                    "email": "fenghua.yu@intel.com"
+                }
+            ],
+            "description": "Introduces APIs for Protetion Kes for Supervisor pages",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Ravi Shankar",
+                    "email": "ravi.v.shankar@intel.com"
+                }
+            ],
+            "jira": "NEXT-1769",
+            "name": "PKS",
+            "repourl": "ssh://git-amr-4.devtools.intel.com:29418/enabling_cldemote_in_linux_kerne-linux_git.git",
+            "sdl_contact": [
+                {
+                    "name": "Dan Williams",
+                    "email": "dan.j.williams@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": ""
         }
     ]
 }
