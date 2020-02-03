@@ -418,7 +418,14 @@ DEFINE_RAW_SPINLOCK(logbuf_lock);
 	} while (0)
 
 #ifdef CONFIG_PRINTK
+
+#ifdef CONFIG_PROC_FS
+extern wait_queue_head_t log_wait;	/* Used in fs/proc/kmsg.c */
 DECLARE_WAIT_QUEUE_HEAD(log_wait);
+#else
+static DECLARE_WAIT_QUEUE_HEAD(log_wait);
+#endif /* CONFIG_PROC_FS */
+
 /* the next printk record to read by syslog(READ) or /proc/kmsg */
 static u64 syslog_seq;
 static u32 syslog_idx;
