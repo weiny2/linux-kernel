@@ -86,6 +86,26 @@ static void delay_tsc(unsigned long __loops)
 }
 
 /*
+ * On Intel the TPAUSE instruction waits until any of:
+ * 1) the TSC counter exceeds the value provided in EAX:EDX
+ * 2) global timeout in IA32_UMWAIT_CONTROL is exceeded
+ * 3) an external interrupt occurs
+ */
+static void tpause(u64 start, u64 cycles)
+{
+	u64 until = start + cycles;
+	unsigned int eax, edx;
+
+	eax = (unsigned int)(until & 0xffffffff);
+	edx = (unsigned int)(until >> 32);
+
+	/* Hard code the deeper (C0.2) sleep state because exit latency is
+	 * small compared to the "microseconds" that usleep() will delay.
+	 */
+	__tpause(TPAUSE_C02_STATE, edx, eax);
+}
+
+/*
  * On some AMD platforms, MWAITX has a configurable 32-bit timer, that
  * counts with TSC frequency. The input value is the loop of the
  * counter, it will exit when the timer expires.
@@ -153,8 +173,12 @@ static void (*delay_platform)(unsigned long) = delay_loop;
 
 void use_tsc_delay(void)
 {
-	if (delay_platform == delay_loop)
+	if (static_cpu_has(X86_FEATURE_WAITPKG)) {
+		wait_func = tpause;
+		delay_platform = delay_iterate;
+	} else if (delay_platform == delay_loop) {
 		delay_platform = delay_tsc;
+	}
 }
 
 void use_mwaitx_delay(void)
