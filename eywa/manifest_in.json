@@ -3544,7 +3544,7 @@
                 }
             ],
             "description": "Introduces APIs for Protetion Kes for Supervisor pages",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Ravi Shankar",
