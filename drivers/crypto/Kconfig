@@ -840,7 +840,7 @@ config CRYPTO_DEV_CCREE
 	  If unsure say Y.
 
 source "drivers/crypto/hisilicon/Kconfig"
-
 source "drivers/crypto/amlogic/Kconfig"
+source "drivers/crypto/thunderbay/Kconfig"
 
 endif # CRYPTO_HW
