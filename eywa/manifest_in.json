@@ -2084,7 +2084,7 @@
                     "email": "kyle.d.pelton@intel.com"
                 }
             ],
-            "description": "Fix up branch to revert a dma-buf patch from GFX",
+            "description": "Fix up branch to revert a dma-buf patch from GFX, Fixup for PKS/DRM",
             "enabled": true,
             "ip_owner": [
                 {
@@ -3544,7 +3544,7 @@
                 }
             ],
             "description": "Introduces APIs for Protetion Kes for Supervisor pages",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Ravi Shankar",
