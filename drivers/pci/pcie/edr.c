@@ -48,13 +48,17 @@ static int acpi_enable_dpc_port(struct pci_dev *pdev, bool enable)
 	 */
 	obj = acpi_evaluate_dsm(adev->handle, &pci_acpi_dsm_guid, 5,
 				EDR_PORT_ENABLE_DSM, &argv4);
-	if (!obj)
+	if (!obj) {
+		pci_info(pdev, "%s: EDR enable DSM failed\n", __func__);
 		return 0;
+	}
 
 	if (obj->type != ACPI_TYPE_INTEGER || obj->integer.value != enable)
 		status = -EIO;
 
 	ACPI_FREE(obj);
+
+	pci_info(pdev, "%s: EDR enable DSM success\n", __func__);
 
 	return status;
 }
@@ -68,16 +72,22 @@ static int acpi_enable_dpc_port(struct pci_dev *pdev, bool enable)
 static struct pci_dev *acpi_locate_dpc_port(struct pci_dev *pdev)
 {
 	struct acpi_device *adev = ACPI_COMPANION(&pdev->dev);
+	struct pci_dev *ndev;
 	union acpi_object *obj;
 	u16 port;
 
+	pci_info(pdev, "%s called\n", __func__);
+
 	obj = acpi_evaluate_dsm(adev->handle, &pci_acpi_dsm_guid, 5,
 				EDR_PORT_LOCATE_DSM, NULL);
-	if (!obj)
+	if (!obj) {
+		pci_info(pdev, "%s, return same device\n", __func__);
 		return pci_dev_get(pdev);
+	}
 
 	if (obj->type != ACPI_TYPE_INTEGER) {
 		ACPI_FREE(obj);
+		pci_info(pdev, "%s, failed return null\n", __func__);
 		return NULL;
 	}
 
@@ -90,6 +100,13 @@ static struct pci_dev *acpi_locate_dpc_port(struct pci_dev *pdev)
 	port = obj->integer.value;
 
 	ACPI_FREE(obj);
+
+	ndev = pci_get_domain_bus_and_slot(pci_domain_nr(pdev->bus),
+					   PCI_BUS_NUM(port), port & 0xff);
+
+	pci_info(pdev, "%s return new pdev %p\n", __func__, ndev);
+
+	pci_info(pdev, "%s new dev name %s\n", __func__, pci_name(ndev));
 
 	return pci_get_domain_bus_and_slot(pci_domain_nr(pdev->bus),
 					   PCI_BUS_NUM(port), port & 0xff);
@@ -107,7 +124,7 @@ static int acpi_send_edr_status(struct pci_dev *pdev, struct pci_dev *edev,
 	struct acpi_device *adev = ACPI_COMPANION(&pdev->dev);
 	u32 ost_status;
 
-	pci_dbg(pdev, "Sending EDR status :%#x\n", status);
+	pci_info(pdev, "Sending EDR status :%#x\n", status);
 
 	ost_status =  PCI_DEVID(edev->bus->number, edev->devfn);
 	ost_status = (ost_status << 16) | status;
@@ -115,15 +132,26 @@ static int acpi_send_edr_status(struct pci_dev *pdev, struct pci_dev *edev,
 	status = acpi_evaluate_ost(adev->handle,
 				   ACPI_NOTIFY_DISCONNECT_RECOVER,
 				   ost_status, NULL);
-	if (ACPI_FAILURE(status))
+	if (ACPI_FAILURE(status)) {
+		pci_info(pdev, "Sending EDR status failed\n");
 		return -EINVAL;
+	}
+
+	pci_info(pdev, "Sending EDR status success\n");
 
 	return 0;
 }
 
 pci_ers_result_t edr_dpc_reset_link(void *cb_data)
 {
-	return dpc_reset_link_common(cb_data);
+	struct dpc_dev *dpc = cb_data;
+	pci_ers_result_t state;
+
+	state =  dpc_reset_link_common(dpc);
+
+	pci_info(dpc->pdev, "EDR DPC reset link called, ret:%x\n", state);
+
+	return state;
 }
 
 static void edr_handle_event(acpi_handle handle, u32 event, void *data)
@@ -133,7 +161,7 @@ static void edr_handle_event(acpi_handle handle, u32 event, void *data)
 	pci_ers_result_t estate = PCI_ERS_RESULT_DISCONNECT;
 	u16 status;
 
-	pci_info(pdev, "ACPI event %#x received\n", event);
+	pci_info(pdev, "ACPI event %#x received dpc:%p pdev:%p\n", event, dpc, pdev);
 
 	if (event != ACPI_NOTIFY_DISCONNECT_RECOVER)
 		return;
@@ -157,8 +185,10 @@ static void edr_handle_event(acpi_handle handle, u32 event, void *data)
 	/*
 	 * If port does not support DPC, just send the OST:
 	 */
-	if (!dpc->cap_pos)
+	if (!dpc->cap_pos) {
+		pci_err(pdev, "DPC cap not supported, just send ost\n");
 		goto send_ost;
+	}
 
 	/* Check if there is a valid DPC trigger */
 	pci_read_config_word(pdev, dpc->cap_pos + PCI_EXP_DPC_STATUS, &status);
@@ -167,13 +197,17 @@ static void edr_handle_event(acpi_handle handle, u32 event, void *data)
 		goto send_ost;
 	}
 
+	pci_info(pdev, "Process DPC error\n");
+
 	dpc_process_error(dpc);
 
+	pci_info(pdev, "Clear AER register\n");
 	/* Clear AER registers */
 	pci_aer_clear_err_uncor_status(pdev);
 	pci_aer_clear_err_fatal_status(pdev);
 	pci_aer_clear_err_status_regs(pdev);
 
+	pci_info(pdev, "EDR do error recovery\n");
 	/*
 	 * Irrespective of whether the DPC event is triggered by
 	 * ERR_FATAL or ERR_NONFATAL, since the link is already down,
@@ -195,6 +229,8 @@ send_ost:
 	else
 		acpi_send_edr_status(dpc->pdev, pdev, EDR_OST_FAILED);
 
+	pci_info(dpc->pdev, "EDR handling success\n");
+
 	pci_dev_put(pdev);
 }
 
@@ -206,6 +242,9 @@ int pci_acpi_add_edr_notifier(struct pci_dev *pdev)
 	acpi_status astatus;
 	int status;
 
+	pci_info(pdev, "EDR notification add start() v6 type:%x\n",
+		 pci_pcie_type(pdev));
+
 	/*
 	 * Per the Downstream Port Containment Related Enhancements ECN to
 	 * the PCI Firmware Spec, r3.2, sec 4.5.1, table 4-6, EDR support
@@ -215,8 +254,13 @@ int pci_acpi_add_edr_notifier(struct pci_dev *pdev)
 	 * determine ownership of DPC between firmware or OS.
 	 */
 	if (!pcie_aer_get_firmware_first(pdev) || pcie_ports_dpc_native ||
-	    (host->native_dpc))
+	    (host->native_dpc)) {
+		pci_info(pdev, "EDR cannot be enabled FF:%d CC:%d NS:%d\n",
+			 pcie_aer_get_firmware_first(pdev),
+			 pcie_ports_dpc_native,
+			 host->native_dpc);
 		return -ENODEV;
+	}
 
 	if (!adev)
 		return 0;
@@ -244,6 +288,8 @@ int pci_acpi_add_edr_notifier(struct pci_dev *pdev)
 		return status;
 	}
 
+	pci_warn(pdev, "EDR notification %p add complete()\n", dpc);
+
 	return 0;
 }
 
@@ -251,8 +297,12 @@ void pci_acpi_remove_edr_notifier(struct pci_dev *pdev)
 {
 	struct acpi_device *adev = ACPI_COMPANION(&pdev->dev);
 
+	pci_warn(pdev, "%s called\n", __func__);
+
 	if (!adev)
 		return;
+
+	pci_warn(pdev, "Remove EDR handler %p\n", pdev);
 
 	acpi_remove_notify_handler(adev->handle, ACPI_SYSTEM_NOTIFY,
 				   edr_handle_event);
