@@ -91,8 +91,11 @@ struct dmub_srv;
 	DMUB_SR(DMCUB_SCRATCH13) \
 	DMUB_SR(DMCUB_SCRATCH14) \
 	DMUB_SR(DMCUB_SCRATCH15) \
+	DMUB_SR(DMCUB_GPINT_DATAIN1) \
 	DMUB_SR(CC_DC_PIPE_DIS) \
-	DMUB_SR(MMHUBBUB_SOFT_RESET)
+	DMUB_SR(MMHUBBUB_SOFT_RESET) \
+	DMUB_SR(DCN_VM_FB_LOCATION_BASE) \
+	DMUB_SR(DCN_VM_FB_OFFSET)
 
 #define DMUB_COMMON_FIELDS() \
 	DMUB_SF(DMCUB_CNTL, DMCUB_ENABLE) \
@@ -121,7 +124,9 @@ struct dmub_srv;
 	DMUB_SF(DMCUB_REGION4_TOP_ADDRESS, DMCUB_REGION4_TOP_ADDRESS) \
 	DMUB_SF(DMCUB_REGION4_TOP_ADDRESS, DMCUB_REGION4_ENABLE) \
 	DMUB_SF(CC_DC_PIPE_DIS, DC_DMCUB_ENABLE) \
-	DMUB_SF(MMHUBBUB_SOFT_RESET, DMUIF_SOFT_RESET)
+	DMUB_SF(MMHUBBUB_SOFT_RESET, DMUIF_SOFT_RESET) \
+	DMUB_SF(DCN_VM_FB_LOCATION_BASE, FB_BASE) \
+	DMUB_SF(DCN_VM_FB_OFFSET, FB_OFFSET)
 
 struct dmub_srv_common_reg_offset {
 #define DMUB_SR(reg) uint32_t reg;
@@ -178,5 +183,13 @@ void dmub_dcn20_set_inbox1_wptr(struct dmub_srv *dmub, uint32_t wptr_offset);
 bool dmub_dcn20_is_hw_init(struct dmub_srv *dmub);
 
 bool dmub_dcn20_is_supported(struct dmub_srv *dmub);
+
+void dmub_dcn20_set_gpint(struct dmub_srv *dmub,
+			  union dmub_gpint_data_register reg);
+
+bool dmub_dcn20_is_gpint_acked(struct dmub_srv *dmub,
+			       union dmub_gpint_data_register reg);
+
+uint32_t dmub_dcn20_get_gpint_response(struct dmub_srv *dmub);
 
 #endif /* _DMUB_DCN20_H_ */

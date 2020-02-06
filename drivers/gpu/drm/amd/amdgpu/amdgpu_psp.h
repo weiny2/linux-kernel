@@ -172,6 +172,8 @@ struct psp_dtm_context {
 #define MEM_TRAIN_SYSTEM_SIGNATURE		0x54534942
 #define GDDR6_MEM_TRAINING_DATA_SIZE_IN_BYTES	0x1000
 #define GDDR6_MEM_TRAINING_OFFSET		0x8000
+/*Define the VRAM size that will be encroached by BIST training.*/
+#define GDDR6_MEM_TRAINING_ENCROACHED_SIZE	0x2000000
 
 enum psp_memory_training_init_flag {
 	PSP_MEM_TRAIN_NOT_SUPPORT	= 0x0,
@@ -360,6 +362,8 @@ int psp_gpu_reset(struct amdgpu_device *adev);
 int psp_update_vcn_sram(struct amdgpu_device *adev, int inst_idx,
 			uint64_t cmd_gpu_addr, int cmd_size);
 
+int psp_xgmi_initialize(struct psp_context *psp);
+int psp_xgmi_terminate(struct psp_context *psp);
 int psp_xgmi_invoke(struct psp_context *psp, uint32_t ta_cmd_id);
 
 int psp_ras_invoke(struct psp_context *psp, uint32_t ta_cmd_id);

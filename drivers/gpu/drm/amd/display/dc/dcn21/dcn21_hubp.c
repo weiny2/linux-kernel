@@ -79,32 +79,47 @@ void apply_DEDCN21_142_wa_for_hostvm_deadline(
 		struct _vcs_dpi_display_dlg_regs_st *dlg_attr)
 {
 	struct dcn21_hubp *hubp21 = TO_DCN21_HUBP(hubp);
-	uint32_t cur_value;
+	uint32_t refcyc_per_vm_group_vblank;
+	uint32_t refcyc_per_vm_req_vblank;
+	uint32_t refcyc_per_vm_group_flip;
+	uint32_t refcyc_per_vm_req_flip;
+	const uint32_t uninitialized_hw_default = 0;
 
-	REG_GET(VBLANK_PARAMETERS_5, REFCYC_PER_VM_GROUP_VBLANK, &cur_value);
-	if (cur_value > dlg_attr->refcyc_per_vm_group_vblank)
+	REG_GET(VBLANK_PARAMETERS_5,
+			REFCYC_PER_VM_GROUP_VBLANK, &refcyc_per_vm_group_vblank);
+
+	if (refcyc_per_vm_group_vblank == uninitialized_hw_default ||
+			refcyc_per_vm_group_vblank > dlg_attr->refcyc_per_vm_group_vblank)
 		REG_SET(VBLANK_PARAMETERS_5, 0,
 				REFCYC_PER_VM_GROUP_VBLANK, dlg_attr->refcyc_per_vm_group_vblank);
 
 	REG_GET(VBLANK_PARAMETERS_6,
-			REFCYC_PER_VM_REQ_VBLANK,
-			&cur_value);
-	if (cur_value > dlg_attr->refcyc_per_vm_req_vblank)
+			REFCYC_PER_VM_REQ_VBLANK, &refcyc_per_vm_req_vblank);
+
+	if (refcyc_per_vm_req_vblank == uninitialized_hw_default ||
+			refcyc_per_vm_req_vblank > dlg_attr->refcyc_per_vm_req_vblank)
 		REG_SET(VBLANK_PARAMETERS_6, 0,
 				REFCYC_PER_VM_REQ_VBLANK, dlg_attr->refcyc_per_vm_req_vblank);
 
-	REG_GET(FLIP_PARAMETERS_3, REFCYC_PER_VM_GROUP_FLIP, &cur_value);
-	if (cur_value > dlg_attr->refcyc_per_vm_group_flip)
+	REG_GET(FLIP_PARAMETERS_3,
+			REFCYC_PER_VM_GROUP_FLIP, &refcyc_per_vm_group_flip);
+
+	if (refcyc_per_vm_group_flip == uninitialized_hw_default ||
+			refcyc_per_vm_group_flip > dlg_attr->refcyc_per_vm_group_flip)
 		REG_SET(FLIP_PARAMETERS_3, 0,
 				REFCYC_PER_VM_GROUP_FLIP, dlg_attr->refcyc_per_vm_group_flip);
 
-	REG_GET(FLIP_PARAMETERS_4, REFCYC_PER_VM_REQ_FLIP, &cur_value);
-	if (cur_value > dlg_attr->refcyc_per_vm_req_flip)
+	REG_GET(FLIP_PARAMETERS_4,
+			REFCYC_PER_VM_REQ_FLIP, &refcyc_per_vm_req_flip);
+
+	if (refcyc_per_vm_req_flip == uninitialized_hw_default ||
+			refcyc_per_vm_req_flip > dlg_attr->refcyc_per_vm_req_flip)
 		REG_SET(FLIP_PARAMETERS_4, 0,
 					REFCYC_PER_VM_REQ_FLIP, dlg_attr->refcyc_per_vm_req_flip);
 
 	REG_SET(FLIP_PARAMETERS_5, 0,
 			REFCYC_PER_PTE_GROUP_FLIP_C, dlg_attr->refcyc_per_pte_group_flip_c);
+
 	REG_SET(FLIP_PARAMETERS_6, 0,
 			REFCYC_PER_META_CHUNK_FLIP_C, dlg_attr->refcyc_per_meta_chunk_flip_c);
 }
@@ -261,28 +276,28 @@ static void hubp21_apply_PLAT_54186_wa(
 			address->video_progressive.luma_addr.high_part == 0xf4)
 		return;
 
-	if ((rotation_angle == 0 || rotation_angle == 180)
+	if ((rotation_angle == ROTATION_ANGLE_0 || rotation_angle == ROTATION_ANGLE_180)
 			&& viewport_c_height <= 512)
 		return;
 
-	if ((rotation_angle == 90 || rotation_angle == 270)
+	if ((rotation_angle == ROTATION_ANGLE_90 || rotation_angle == ROTATION_ANGLE_270)
 				&& viewport_c_width <= 512)
 		return;
 
 	switch (rotation_angle) {
-	case 0: /* 0 degree rotation */
+	case ROTATION_ANGLE_0: /* 0 degree rotation */
 		row_height = 128;
 		patched_viewport_height = (viewport_c_height / row_height + 1) * row_height + 1;
 		patched_viewport_width = viewport_c_width;
 		hubp21->PLAT_54186_wa_chroma_addr_offset = 0;
 		break;
-	case 2: /* 180 degree rotation */
+	case ROTATION_ANGLE_180: /* 180 degree rotation */
 		row_height = 128;
 		patched_viewport_height = viewport_c_height + row_height;
 		patched_viewport_width = viewport_c_width;
 		hubp21->PLAT_54186_wa_chroma_addr_offset = 0 - chroma_pitch * row_height * chroma_bpe;
 		break;
-	case 1: /* 90 degree rotation */
+	case ROTATION_ANGLE_90: /* 90 degree rotation */
 		row_height = 256;
 		if (h_mirror_en) {
 			patched_viewport_height = viewport_c_height;
@@ -294,7 +309,7 @@ static void hubp21_apply_PLAT_54186_wa(
 			hubp21->PLAT_54186_wa_chroma_addr_offset = 0 - tile_blk_size;
 		}
 		break;
-	case 3:	/* 270 degree rotation */
+	case ROTATION_ANGLE_270: /* 270 degree rotation */
 		row_height = 256;
 		if (h_mirror_en) {
 			patched_viewport_height = viewport_c_height;
