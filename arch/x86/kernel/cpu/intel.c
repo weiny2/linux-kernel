@@ -1019,6 +1019,14 @@ static void __init split_lock_setup(void)
 }
 
 /*
+ * Soft copy of MSR_TEST_CTRL initialized when we first read the
+ * MSR. Used at runtime to avoid using rdmsr again just to collect
+ * the reserved bits in the MSR. We assume reserved bits are the
+ * same on all CPUs.
+ */
+static u64 test_ctrl_val;
+
+/*
  * Locking is not required at the moment because only bit 29 of this
  * MSR is implemented and locking would not prevent that the operation
  * of one thread is immediately undone by the sibling thread.
@@ -1027,19 +1035,29 @@ static void __init split_lock_setup(void)
  * exist, there may be glitches in virtualization that leave a guest
  * with an incorrect view of real h/w capabilities.
  */
-static bool __sld_msr_set(bool on)
+static bool __sld_msr_init(void)
 {
-	u64 test_ctrl_val;
+	u64 val;
 
-	if (rdmsrl_safe(MSR_TEST_CTRL, &test_ctrl_val))
+	if (rdmsrl_safe(MSR_TEST_CTRL, &val))
 		return false;
+	test_ctrl_val = val;
+
+	val |= MSR_TEST_CTRL_SPLIT_LOCK_DETECT;
+
+	return !wrmsrl_safe(MSR_TEST_CTRL, val);
+}
+
+static void __sld_msr_set(bool on)
+{
+	u64 val = test_ctrl_val;
 
 	if (on)
-		test_ctrl_val |= MSR_TEST_CTRL_SPLIT_LOCK_DETECT;
+		val |= MSR_TEST_CTRL_SPLIT_LOCK_DETECT;
 	else
-		test_ctrl_val &= ~MSR_TEST_CTRL_SPLIT_LOCK_DETECT;
+		val &= ~MSR_TEST_CTRL_SPLIT_LOCK_DETECT;
 
-	return !wrmsrl_safe(MSR_TEST_CTRL, test_ctrl_val);
+	wrmsrl_safe(MSR_TEST_CTRL, val);
 }
 
 static void split_lock_init(void)
@@ -1047,7 +1065,7 @@ static void split_lock_init(void)
 	if (sld_state == sld_off)
 		return;
 
-	if (__sld_msr_set(true))
+	if (__sld_msr_init())
 		return;
 
 	/*
