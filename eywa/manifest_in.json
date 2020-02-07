@@ -3603,7 +3603,7 @@
                     "email": "mitul.a.shah@intel.com"
                 }
             ],
-            "description": "TBH crypto OCS AES\ncrypto driver first commit",
+            "description": "TBH crypto OCS AES crypto driver first commit",
             "enabled": true,
             "ip_owner": [
                 {
