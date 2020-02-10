@@ -259,6 +259,10 @@ static struct event_constraint intel_icl_event_constraints[] = {
 	FIXED_EVENT_CONSTRAINT(0x003c, 1),	/* CPU_CLK_UNHALTED.CORE */
 	FIXED_EVENT_CONSTRAINT(0x0300, 2),	/* CPU_CLK_UNHALTED.REF */
 	FIXED_EVENT_CONSTRAINT(0x0400, 3),	/* SLOTS */
+	METRIC_EVENT_CONSTRAINT(0x1000, 0),	/* Retiring metric */
+	METRIC_EVENT_CONSTRAINT(0x1100, 1),	/* Bad speculation metric */
+	METRIC_EVENT_CONSTRAINT(0x1200, 2),	/* FE bound metric */
+	METRIC_EVENT_CONSTRAINT(0x1300, 3),	/* BE bound metric */
 	INTEL_EVENT_CONSTRAINT_RANGE(0x03, 0x0a, 0xf),
 	INTEL_EVENT_CONSTRAINT_RANGE(0x1f, 0x28, 0xf),
 	INTEL_EVENT_CONSTRAINT(0x32, 0xf),	/* SW_PREFETCH_ACCESS.* */
@@ -279,6 +283,14 @@ static struct extra_reg intel_icl_extra_regs[] __read_mostly = {
 	INTEL_UEVENT_EXTRA_REG(0x01bb, MSR_OFFCORE_RSP_1, 0x3fffffbfffull, RSP_1),
 	INTEL_UEVENT_PEBS_LDLAT_EXTRA_REG(0x01cd),
 	INTEL_UEVENT_EXTRA_REG(0x01c6, MSR_PEBS_FRONTEND, 0x7fff17, FE),
+	/*
+	 * The original Fixed Ctr 3 are shared from different metrics
+	 * events. So use the extra reg to enforce the same
+	 * configuration on the original register, but do not actually
+	 * write to it.
+	 */
+	INTEL_UEVENT_EXTRA_REG(0x0400, 0, -1L, TOPDOWN),
+	INTEL_UEVENT_TOPDOWN_EXTRA_REG(0x1000),
 	EVENT_EXTRA_END
 };
 
@@ -2235,10 +2247,125 @@ static void intel_pmu_del_event(struct perf_event *event)
 		intel_pmu_pebs_del(event);
 }
 
+static int icl_set_topdown_event_period(struct perf_event *event)
+{
+	struct hw_perf_event *hwc = &event->hw;
+	s64 left = local64_read(&hwc->period_left);
+
+	/*
+	 * The values in PERF_METRICS MSR are derived from fixed counter 3.
+	 * Software should start both registers, PERF_METRICS and fixed
+	 * counter 3, from zero.
+	 * Clear PERF_METRICS and Fixed counter 3 in initialization.
+	 * After that, both MSRs will be cleared for each read.
+	 * Don't need to clear them again.
+	 */
+	if (left == x86_pmu.max_period) {
+		wrmsrl(MSR_CORE_PERF_FIXED_CTR3, 0);
+		wrmsrl(MSR_PERF_METRICS, 0);
+		local64_set(&hwc->period_left, 0);
+	}
+
+	perf_event_update_userpage(event);
+
+	return 0;
+}
+
+static u64 icl_get_metrics_event_value(u64 metric, u64 slots, int idx)
+{
+	u32 val;
+
+	/*
+	 * The metric is reported as an 8bit integer fraction
+	 * suming up to 0xff.
+	 * slots-in-metric = (Metric / 0xff) * slots
+	 */
+	val = (metric >> ((idx - INTEL_PMC_IDX_FIXED_METRIC_BASE) * 8)) & 0xff;
+	return  mul_u64_u32_div(slots, val, 0xff);
+}
+
+static void __icl_update_topdown_event(struct perf_event *event,
+				       u64 slots, u64 metrics)
+{
+	int idx = event->hw.idx;
+	u64 delta;
+
+	if (is_metric_idx(idx))
+		delta = icl_get_metrics_event_value(metrics, slots, idx);
+	else
+		delta = slots;
+
+	local64_add(delta, &event->count);
+}
+
+/*
+ * Update all active Topdown events.
+ *
+ * The PERF_METRICS and Fixed counter 3 are read separately. The values may be
+ * modify by a NMI. PMU has to be disabled before calling this function.
+ */
+static u64 icl_update_topdown_event(struct perf_event *event)
+{
+	struct cpu_hw_events *cpuc = this_cpu_ptr(&cpu_hw_events);
+	struct perf_event *other;
+	u64 slots, metrics;
+	int idx;
+
+	/* read Fixed counter 3 */
+	rdpmcl((3 | 1<<30), slots);
+	if (!slots)
+		return 0;
+
+	/* read PERF_METRICS */
+	rdpmcl((1<<29), metrics);
+
+	for_each_set_bit(idx, cpuc->active_mask, INTEL_PMC_IDX_TD_BE_BOUND + 1) {
+		if (!is_topdown_idx(idx))
+			continue;
+		other = cpuc->events[idx];
+		__icl_update_topdown_event(other, slots, metrics);
+	}
+
+	/*
+	 * Check and update this event, which may have been cleared
+	 * in active_mask e.g. x86_pmu_stop()
+	 */
+	if (event && !test_bit(event->hw.idx, cpuc->active_mask))
+		__icl_update_topdown_event(event, slots, metrics);
+
+	/*
+	 * Software is recommended to periodically clear both registers
+	 * in order to maintain accurate measurements, which is required for
+	 * certain scenarios that involve sampling metrics at high rates.
+	 * Software should always write fixed counter 3 before write to
+	 * PERF_METRICS.
+	 */
+	wrmsrl(MSR_CORE_PERF_FIXED_CTR3, 0);
+	wrmsrl(MSR_PERF_METRICS, 0);
+
+	return slots;
+}
+
+static void intel_pmu_read_topdown_event(struct perf_event *event)
+{
+	struct cpu_hw_events *cpuc = this_cpu_ptr(&cpu_hw_events);
+
+	/* Only need to call update_topdown_event() once for group read. */
+	if ((cpuc->txn_flags & PERF_PMU_TXN_READ) &&
+	    !is_slots_event(event))
+		return;
+
+	perf_pmu_disable(event->pmu);
+	x86_pmu.update_topdown_event(event);
+	perf_pmu_enable(event->pmu);
+}
+
 static void intel_pmu_read_event(struct perf_event *event)
 {
 	if (event->hw.flags & PERF_X86_EVENT_AUTO_RELOAD)
 		intel_pmu_auto_reload_read(event);
+	else if (is_topdown_count(event) && x86_pmu.update_topdown_event)
+		intel_pmu_read_topdown_event(event);
 	else
 		x86_perf_event_update(event);
 }
@@ -2460,6 +2587,15 @@ static int handle_pmi_common(struct pt_regs *regs, u64 status)
 			perf_guest_cbs->handle_intel_pt_intr();
 		else
 			intel_pt_interrupt();
+	}
+
+	/*
+	 * Intel Perf mertrics
+	 */
+	if (__test_and_clear_bit(48, (unsigned long *)&status)) {
+		handled++;
+		if (x86_pmu.update_topdown_event)
+			x86_pmu.update_topdown_event(NULL);
 	}
 
 	/*
@@ -3379,6 +3515,42 @@ static int intel_pmu_hw_config(struct perf_event *event)
 
 	if (event->attr.type != PERF_TYPE_RAW)
 		return 0;
+
+	/*
+	 * Config Topdown slots and metric events
+	 *
+	 * The slots event on Fixed Counter 3 can support sampling,
+	 * which will be handled normally in x86_perf_event_update().
+	 *
+	 * The metric events don't support sampling.
+	 *
+	 * For counting, topdown slots and metric events will be
+	 * handled specially for event update.
+	 * A flag PERF_X86_EVENT_TOPDOWN is applied for the case.
+	 */
+	if (x86_pmu.intel_cap.perf_metrics && is_topdown_event(event)) {
+		if (is_metric_event(event) && is_sampling_event(event))
+			return -EINVAL;
+
+		if (!is_sampling_event(event)) {
+			if (event->attr.config1 != 0)
+				return -EINVAL;
+			if (event->attr.config & ARCH_PERFMON_EVENTSEL_ANY)
+				return -EINVAL;
+			/*
+			 * Put configuration (minus event) into config1 so that
+			 * the scheduler enforces through an extra_reg that
+			 * all instances of the metrics events have the same
+			 * configuration.
+			 */
+			event->attr.config1 = event->hw.config &
+					      X86_ALL_EVENT_FLAGS;
+			event->hw.flags |= PERF_X86_EVENT_TOPDOWN;
+
+			if (is_metric_event(event))
+				event->hw.flags &= ~PERF_X86_EVENT_RDPMC_ALLOWED;
+		}
+	}
 
 	if (!(event->attr.config & ARCH_PERFMON_EVENTSEL_ANY))
 		return 0;
@@ -5193,6 +5365,8 @@ __init int intel_pmu_init(void)
 		x86_pmu.rtm_abort_event = X86_CONFIG(.event=0xca, .umask=0x02);
 		x86_pmu.lbr_pt_coexist = true;
 		intel_pmu_pebs_data_source_skl(pmem);
+		x86_pmu.update_topdown_event = icl_update_topdown_event;
+		x86_pmu.set_topdown_event_period = icl_set_topdown_event_period;
 		pr_cont("Icelake events, ");
 		name = "icelake";
 		break;
@@ -5249,10 +5423,17 @@ __init int intel_pmu_init(void)
 		 * counter, so do not extend mask to generic counters
 		 */
 		for_each_event_constraint(c, x86_pmu.event_constraints) {
-			if (c->cmask == FIXED_EVENT_FLAGS
-			    && c->idxmsk64 != INTEL_PMC_MSK_FIXED_REF_CYCLES
-			    && c->idxmsk64 != INTEL_PMC_MSK_FIXED_SLOTS) {
-				c->idxmsk64 |= (1ULL << x86_pmu.num_counters) - 1;
+			if (c->cmask == FIXED_EVENT_FLAGS) {
+				/*
+				 * Don't extend topdown slots and metrics
+				 * events to generic counters.
+				 */
+				if (c->idxmsk64 & INTEL_PMC_MSK_TOPDOWN) {
+					c->weight = hweight64(c->idxmsk64);
+					continue;
+				}
+				if (c->idxmsk64 != INTEL_PMC_MSK_FIXED_REF_CYCLES)
+					c->idxmsk64 |= (1ULL << x86_pmu.num_counters) - 1;
 			}
 			c->idxmsk64 &=
 				~(~0ULL << (INTEL_PMC_IDX_FIXED + x86_pmu.num_counters_fixed));
@@ -5304,6 +5485,9 @@ __init int intel_pmu_init(void)
 	 */
 	if (x86_pmu.counter_freezing)
 		x86_pmu.handle_irq = intel_pmu_handle_irq_v4;
+
+	if (x86_pmu.intel_cap.perf_metrics)
+		x86_pmu.intel_ctrl |= 1ULL << 48;
 
 	return 0;
 }

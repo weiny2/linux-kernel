@@ -40,6 +40,7 @@ enum extra_reg_type {
 	EXTRA_REG_LBR   = 2,	/* lbr_select */
 	EXTRA_REG_LDLAT = 3,	/* ld_lat_threshold */
 	EXTRA_REG_FE    = 4,    /* fe_* */
+	EXTRA_REG_TOPDOWN = 5,	/* Topdown slots/metrics */
 
 	EXTRA_REG_MAX		/* number of entries needed */
 };
@@ -78,6 +79,29 @@ static inline bool constraint_match(struct event_constraint *c, u64 ecode)
 #define PERF_X86_EVENT_LARGE_PEBS	0x0400 /* use large PEBS */
 #define PERF_X86_EVENT_PEBS_VIA_PT	0x0800 /* use PT buffer for PEBS */
 #define PERF_X86_EVENT_PAIR		0x1000 /* Large Increment per Cycle */
+#define PERF_X86_EVENT_TOPDOWN		0x2000 /* Count Topdown slots/metrics events */
+
+static inline bool is_topdown_count(struct perf_event *event)
+{
+	return event->hw.flags & PERF_X86_EVENT_TOPDOWN;
+}
+
+static inline bool is_metric_event(struct perf_event *event)
+{
+	return ((event->attr.config & ARCH_PERFMON_EVENTSEL_EVENT) == 0) &&
+		((event->attr.config & INTEL_ARCH_EVENT_MASK) >= 0x1000)  &&
+		((event->attr.config & INTEL_ARCH_EVENT_MASK) <= 0x1300);
+}
+
+static inline bool is_slots_event(struct perf_event *event)
+{
+	return (event->attr.config & INTEL_ARCH_EVENT_MASK) == 0x0400;
+}
+
+static inline bool is_topdown_event(struct perf_event *event)
+{
+	return is_metric_event(event) || is_slots_event(event);
+}
 
 struct amd_nb {
 	int nb_id;  /* NorthBridge id */
@@ -266,6 +290,12 @@ struct cpu_hw_events {
 	 * SKL TSX_FORCE_ABORT shadow
 	 */
 	u64				tfa_shadow;
+
+	/*
+	 * Perf Metrics
+	 */
+	/* number of accepted metrics events */
+	int				n_metric_event;
 
 	/*
 	 * AMD specific bits
@@ -519,6 +549,9 @@ struct extra_reg {
 			       0xffff, \
 			       LDLAT)
 
+#define INTEL_UEVENT_TOPDOWN_EXTRA_REG(event)	\
+	EVENT_EXTRA_REG(event, 0, 0xfcff, -1L, TOPDOWN)
+
 #define EVENT_EXTRA_END EVENT_EXTRA_REG(0, 0, 0, 0, RSP_0)
 
 union perf_capabilities {
@@ -697,6 +730,12 @@ struct x86_pmu {
 	 * Intel PT/LBR/BTS are exclusive
 	 */
 	atomic_t	lbr_exclusive[x86_lbr_exclusive_max];
+
+	/*
+	 * Intel perf metrics
+	 */
+	u64		(*update_topdown_event)(struct perf_event *event);
+	int		(*set_topdown_event_period)(struct perf_event *event);
 
 	/*
 	 * perf task context (i.e. struct perf_event_context::task_ctx_data)
