@@ -2944,12 +2944,7 @@
         {
             "branch": "tbh/dev",
             "branch_type": "expiring",
-            "config_options": [
-                {
-                    "name": "CONFIG_THUNDERBAY_TIMER",
-                    "value": "y"
-                }
-            ],
+            "config_options": [],
             "contributor": [
                 {
                     "name": "Rathina Thalaiappan ",
@@ -2957,16 +2952,16 @@
                 }
             ],
             "description": "Thunderbay I/O drivers",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Ajit Tapkir",
                     "email": "ajit.tapkir@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1782",
             "name": "Thunderbay IO",
-            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/hspe_csw/bsp/linux.git",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/hspe_csw/bsp/otc_intel_next-linux.git",
             "sdl_contact": [
                 {
                     "name": "Ajit Tapkir",
