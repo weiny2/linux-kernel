@@ -801,6 +801,8 @@ static inline struct device_node *dev_of_node(struct device *dev)
 	return dev->of_node;
 }
 
+extern bool device_supports_cmdmem(struct device *dev);
+
 /*
  * High level routines for use by the bus drivers
  */
