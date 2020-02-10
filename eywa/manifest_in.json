@@ -2548,7 +2548,7 @@
                 }
             ],
             "description": "Remove Action Request (RAR) TLB Shootdown",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Ido  Ouziel",
