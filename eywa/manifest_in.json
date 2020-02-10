@@ -1212,15 +1212,15 @@
                     "email": "alexander.shishkin@linux.intel.com"
                 }
             ],
-            "description": "Contains support for ICL and TGL and EHL and CML",
-            "enabled": false,
+            "description": "Contains support for Tiger Lake PCH-H, Emmitsburg",
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Marcus Winston",
                     "email": "marcus.winston@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1783",
             "name": "tracehub",
             "repourl": "ssh://git-amr-4.devtools.intel.com:29418/ash-pullme.git",
             "sdl_contact": [
