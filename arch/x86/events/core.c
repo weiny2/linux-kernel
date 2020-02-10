@@ -77,6 +77,9 @@ u64 x86_perf_event_update(struct perf_event *event)
 	if (idx == INTEL_PMC_IDX_FIXED_BTS)
 		return 0;
 
+	/* Specially handle the counting of Topdown slots/metrics */
+	if (unlikely(is_topdown_count(event)) && x86_pmu.update_topdown_event)
+		return x86_pmu.update_topdown_event(event);
 	/*
 	 * Careful: an NMI might modify the previous event value.
 	 *
@@ -1031,6 +1034,32 @@ int x86_schedule_events(struct cpu_hw_events *cpuc, int n, int *assign)
 	return unsched ? -EINVAL : 0;
 }
 
+static int add_nr_metric_event(struct cpu_hw_events *cpuc,
+			       struct perf_event *event,
+			       int *max_count, bool sibling)
+{
+	/* There are 4 TopDown metrics events. */
+	if (is_metric_event(event) && (++cpuc->n_metric_event > 4))
+		return -EINVAL;
+
+	/*
+	 * Take the accepted metrics events into account for leader event.
+	 */
+	if (!sibling)
+		*max_count += cpuc->n_metric_event;
+	else if (is_metric_event(event))
+		(*max_count)++;
+
+	return 0;
+}
+
+static void del_nr_metric_event(struct cpu_hw_events *cpuc,
+				struct perf_event *event)
+{
+	if (is_metric_event(event))
+		cpuc->n_metric_event--;
+}
+
 /*
  * dogrp: true if must collect siblings events (group)
  * returns total number of events and error code
@@ -1066,6 +1095,10 @@ static int collect_events(struct cpu_hw_events *cpuc, struct perf_event *leader,
 		cpuc->pebs_output = is_pebs_pt(leader) + 1;
 	}
 
+	if (x86_pmu.intel_cap.perf_metrics &&
+	    add_nr_metric_event(cpuc, leader, &max_count, false))
+			return -EINVAL;
+
 	if (is_x86_event(leader)) {
 		if (n >= max_count)
 			return -EINVAL;
@@ -1081,6 +1114,10 @@ static int collect_events(struct cpu_hw_events *cpuc, struct perf_event *leader,
 		if (!is_x86_event(event) ||
 		    event->state <= PERF_EVENT_STATE_OFF)
 			continue;
+
+		if (x86_pmu.intel_cap.perf_metrics &&
+		    add_nr_metric_event(cpuc, event, &max_count, true))
+			return -EINVAL;
 
 		if (n >= max_count)
 			return -EINVAL;
@@ -1246,6 +1283,11 @@ int x86_perf_event_set_period(struct perf_event *event)
 
 	if (idx == INTEL_PMC_IDX_FIXED_BTS)
 		return 0;
+
+	/* Specially handle the counting of Topdown slots/metrics */
+	if (unlikely(is_topdown_count(event)) &&
+	    x86_pmu.set_topdown_event_period)
+		return x86_pmu.set_topdown_event_period(event);
 
 	/*
 	 * If we are way outside a reasonable range then just skip forward:
@@ -1531,6 +1573,8 @@ static void x86_pmu_del(struct perf_event *event, int flags)
 	}
 	cpuc->event_constraint[i-1] = NULL;
 	--cpuc->n_events;
+	if (x86_pmu.intel_cap.perf_metrics)
+		del_nr_metric_event(cpuc, event);
 
 	perf_event_update_userpage(event);
 
