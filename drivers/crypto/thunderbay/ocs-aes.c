@@ -164,7 +164,7 @@ inline void OCS_IOWRITE8(const uint8_t val, __iomem void *dst_addr)
 #define OCS_WRAPPER_CONFIGURATION_REG_0_OFFSET (0x0000)
 #define OCS_WRAPPER_STATUS_BIT_FUSE_ATTACK_0_OFFSET (0x0004)
 
-void ocs_wrapper_init(unsigned long base_address)
+void ocs_wrapper_init(uint64_t base_address)
 {
  uint32_t base_val;
  base_val = base_address >> OCS_64BIT_ADDRESS_CONVERSION;

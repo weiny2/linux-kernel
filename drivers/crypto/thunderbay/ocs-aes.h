@@ -41,7 +41,7 @@ struct ocs_dma_linked_list {
 	uint32_t terminate :1;
 };
 
-void ocs_wrapper_init(unsigned long base_address);
+void ocs_wrapper_init(uint64_t base_address);
 
 int ocs_aes_set_key(const uint32_t key_size, const uint8_t *key);
 

@@ -46,7 +46,7 @@ static int ocs_aes_hw_init(struct platform_device *pdev,
 	int rc, irq;
 	struct resource *res;
 	void __iomem *reg;
-	struct clk *clk;
+	//struct clk *clk;
 
 	/* Get ocs base register address. */
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "ocs_base");
@@ -235,7 +235,7 @@ static int aes_skcipher_common(struct skcipher_request *req,
 {
 	uint8_t *src_desc_buf = NULL, *dst_desc_buf = NULL;
 	uint32_t src_desc_size = 0, dst_desc_size = 0;
-	dma_addr_t src_desc, dst_desc;
+	dma_addr_t src_desc = 0, dst_desc = 0;
 	int num_src = 0, num_dst;
 	int ret = 0, in_place, cts_swap, iv_size;
 	uint8_t last_c[AES_BLOCK_SIZE];
@@ -505,7 +505,8 @@ static int aes_aead_cipher_common(struct aead_request *req,
 		const enum aes_instruction instruction,
 		const enum aes_mode mode)
 {
-	dma_addr_t src_desc, aad_src_desc, aad_dst_desc, dst_desc;
+	dma_addr_t src_desc = 0, aad_src_desc = 0,
+			aad_dst_desc = 0, dst_desc = 0;
 	uint8_t *src_desc_buf = NULL, *aad_src_desc_buf = NULL,
 			*aad_dst_desc_buf = NULL, *dst_desc_buf = NULL;
 	uint32_t src_desc_size = 0, aad_src_desc_size = 0,
