@@ -835,16 +835,16 @@
                 }
             ],
             "description": "Enable out of tree powertop",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Nivedita Swaminathan",
                     "email": "Nivedita.Swaminathan@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1791",
             "name": "powertop",
-            "repourl": "ssh://git-amr-4.devtools.intel.com:29418/otc_power-kernel.git",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/otc-power-management-enabling-team/otc-power-kernel.git",
             "sdl_contact": [
                 {
                     "name": "Charles D Prestopine",
