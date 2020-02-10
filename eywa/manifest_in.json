@@ -2547,17 +2547,17 @@
                     "email": "yu-cheng.yu@intel.com"
                 }
             ],
-            "description": "Intel RAR patches",
-            "enabled": false,
+            "description": "Remove Action Request (RAR) TLB Shootdown",
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Ido  Ouziel",
                     "email": "ido.ouziel@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1787",
             "name": "rar",
-            "repourl": "ssh://git-amr-1.devtools.intel.com:29418/linux_yyu-rar",
+            "repourl": "ssh://git@gitlab.devtools.intel.com/yyu32/rar.git",
             "sdl_contact": [
                 {
                     "name": "Yu-cheng Yu",
