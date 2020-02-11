@@ -1711,14 +1711,14 @@
                 }
             ],
             "description": "Intel PCI driver related fixes",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Ashok Raj",
                     "email": "ashok.raj@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1794",
             "name": "pci",
             "repourl": "ssh://git@gitlab.devtools.intel.com:29418/skuppusw/linux.git",
             "sdl_contact": [
