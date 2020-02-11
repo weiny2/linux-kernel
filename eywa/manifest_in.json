@@ -516,7 +516,7 @@
                 }
             ],
             "description": "CSE/CSME MEI driver and MEI client drivers",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "William A. Stevens",
