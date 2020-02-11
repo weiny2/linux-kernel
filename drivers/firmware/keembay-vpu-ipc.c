@@ -596,7 +596,7 @@ static int retrieve_clocks(struct vpu_ipc_dev *vpu_dev)
 
 	clk = devm_clk_get(dev, "cpu_clock");
 	if (IS_ERR(clk)) {
-		dev_err(dev, " cpu_clock not found.\n");
+		dev_err(dev, "1. cpu_clock not found.\n");
 		return PTR_ERR(clk);
 	}
 	vpu_dev->cpu_clock = clk;
@@ -606,7 +606,7 @@ static int retrieve_clocks(struct vpu_ipc_dev *vpu_dev)
 			sprintf(pll_string, "pll_%d_out_%d", pll, out);
 			clk = devm_clk_get(dev, pll_string);
 			if (IS_ERR(clk)) {
-				dev_err(dev, " %s not found.\n", pll_string);
+				dev_err(dev, "2. %s not found.\n", pll_string);
 				return PTR_ERR(clk);
 			}
 			vpu_dev->pll[pll][out] = clk;
@@ -1486,7 +1486,7 @@ static int keembay_vpu_ipc_probe(struct platform_device *pdev)
 	struct vpu_ipc_dev *vpu_dev;
 	struct device *dev = &pdev->dev;
 
-	dev_info(dev, "Keem Bay VPU IPC driver probed.\n");
+	dev_info(dev, "Keem Bay VPU IPC probing.\n");
 
 	vpu_dev = devm_kzalloc(dev, sizeof(*vpu_dev), GFP_KERNEL);
 	if (!vpu_dev)
@@ -1561,6 +1561,8 @@ static int keembay_vpu_ipc_probe(struct platform_device *pdev)
 		}
 		vpu0_dev = vpu_dev;
 	}
+
+	dev_info(dev, "Keem Bay VPU IPC probed.\n");
 
 	return 0;
 
