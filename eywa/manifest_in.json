@@ -3636,7 +3636,7 @@
                     "email": "kumaresan.sarveswaran@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1799",
             "name": "AES warning fix",
             "repourl": "ssh://git@gitlab.devtools.intel.com:29418/hspe_csw/sbs/linux.git",
             "sdl_contact": [],
