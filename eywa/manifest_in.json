@@ -2883,7 +2883,7 @@
                 }
             ],
             "description": "TGPIO branch",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Abdul Rahman Ismail",
