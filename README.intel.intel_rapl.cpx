@@ -1,0 +1,4 @@
+powercap/intel_rapl enabling for CooperLake
+
+Added platform stubs for CooperLake. If new RAPL-related
+features are introduced, additional functionality may be added.
