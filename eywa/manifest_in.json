@@ -559,7 +559,7 @@
                 }
             ],
             "description": "Intel Integrated Sensor Hub enabling",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Guangyu Ren",
