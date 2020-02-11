@@ -3646,6 +3646,36 @@
             "sdl_contact": [],
             "status": "intel confidential",
             "stuck_at_ref": ""
+        },
+        {
+            "branch": "drm-tip",
+            "branch_type": "expiring",
+            "config_options": [],
+            "contributor": [
+                {
+                    "name": "Rodrigo Vivi",
+                    "email": "rodrigo.vivi@intel.com"
+                }
+            ],
+            "description": "upstream DRM branch while drm-embargo is being rebased",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Rodrigo Vivi",
+                    "email": "rodrigo.vivi@intel.com"
+                }
+            ],
+            "jira": "NEXT-1777",
+            "name": "drm_tip",
+            "repourl": "git://anongit.freedesktop.org/drm-tip",
+            "sdl_contact": [
+                {
+                    "name": "Rodrigo Vivi",
+                    "email": "rodrigo.vivi@intel.com"
+                }
+            ],
+            "status": "public",
+            "stuck_at_ref": ""
         }
     ]
 }
