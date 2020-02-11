@@ -183,10 +183,6 @@ static int mtk8250_startup(struct uart_port *port)
 	struct uart_8250_port *up = up_to_u8250p(port);
 	struct mtk8250_data *data = port->private_data;
 
-	/* disable DMA for console */
-	if (uart_console(port))
-		up->dma = NULL;
-
 	if (up->dma) {
 		data->rx_status = DMA_RX_START;
 		uart_circ_clear(&port->state->xmit);
