@@ -567,6 +567,8 @@ struct device {
 #endif
 #ifdef CONFIG_GENERIC_MSI_IRQ
 	struct list_head	msi_list;
+	struct list_head	platform_msi_list;
+	unsigned int		platform_msi_type;
 #endif
 
 	const struct dma_map_ops *dma_ops;

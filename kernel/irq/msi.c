@@ -320,7 +320,7 @@ int msi_domain_populate_irqs(struct irq_domain *domain, struct device *dev,
 	struct msi_desc *desc;
 	int ret = 0;
 
-	for_each_msi_entry(desc, dev) {
+	for_each_msi_entry_common(desc, dev) {
 		/* Don't even try the multi-MSI brain damage. */
 		if (WARN_ON(!desc->irq || desc->nvec_used != 1)) {
 			ret = -EINVAL;
@@ -342,7 +342,7 @@ int msi_domain_populate_irqs(struct irq_domain *domain, struct device *dev,
 
 	if (ret) {
 		/* Mop up the damage */
-		for_each_msi_entry(desc, dev) {
+		for_each_msi_entry_common(desc, dev) {
 			if (!(desc->irq >= virq && desc->irq < (virq + nvec)))
 				continue;
 
@@ -383,7 +383,7 @@ static bool msi_check_reservation_mode(struct irq_domain *domain,
 	 * Checking the first MSI descriptor is sufficient. MSIX supports
 	 * masking and MSI does so when the maskbit is set.
 	 */
-	desc = first_msi_entry(dev);
+	desc = first_msi_entry_common(dev);
 	return desc->msi_attrib.is_msix || desc->msi_attrib.maskbit;
 }
 
@@ -411,7 +411,7 @@ int msi_domain_alloc_irqs(struct irq_domain *domain, struct device *dev,
 	if (ret)
 		return ret;
 
-	for_each_msi_entry(desc, dev) {
+	for_each_msi_entry_common(desc, dev) {
 		ops->set_desc(&arg, desc);
 
 		virq = __irq_domain_alloc_irqs(domain, -1, desc->nvec_used,
@@ -437,7 +437,7 @@ int msi_domain_alloc_irqs(struct irq_domain *domain, struct device *dev,
 
 	can_reserve = msi_check_reservation_mode(domain, info, dev);
 
-	for_each_msi_entry(desc, dev) {
+	for_each_msi_entry_common(desc, dev) {
 		virq = desc->irq;
 		if (desc->nvec_used == 1)
 			dev_dbg(dev, "irq %d for MSI\n", virq);
@@ -468,7 +468,7 @@ int msi_domain_alloc_irqs(struct irq_domain *domain, struct device *dev,
 	 * so request_irq() will assign the final vector.
 	 */
 	if (can_reserve) {
-		for_each_msi_entry(desc, dev) {
+		for_each_msi_entry_common(desc, dev) {
 			irq_data = irq_domain_get_irq_data(domain, desc->irq);
 			irqd_clr_activated(irq_data);
 		}
@@ -476,7 +476,7 @@ int msi_domain_alloc_irqs(struct irq_domain *domain, struct device *dev,
 	return 0;
 
 cleanup:
-	for_each_msi_entry(desc, dev) {
+	for_each_msi_entry_common(desc, dev) {
 		struct irq_data *irqd;
 
 		if (desc->irq == virq)
@@ -500,7 +500,7 @@ void msi_domain_free_irqs(struct irq_domain *domain, struct device *dev)
 {
 	struct msi_desc *desc;
 
-	for_each_msi_entry(desc, dev) {
+	for_each_msi_entry_common(desc, dev) {
 		/*
 		 * We might have failed to allocate an MSI early
 		 * enough that there is no IRQ associated to this

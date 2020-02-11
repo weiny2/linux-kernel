@@ -130,6 +130,11 @@ struct msi_desc {
 	};
 };
 
+enum platform_msi_type {
+	NOT_PLAT_MSI = 0,
+	GEN_PLAT_MSI = 1,
+};
+
 /* Helpers to hide struct msi_desc implementation details */
 #define msi_desc_to_dev(desc)		((desc)->dev)
 #define dev_to_msi_list(dev)		(&(dev)->msi_list)
@@ -139,6 +144,22 @@ struct msi_desc {
 	list_for_each_entry((desc), dev_to_msi_list((dev)), list)
 #define for_each_msi_entry_safe(desc, tmp, dev)	\
 	list_for_each_entry_safe((desc), (tmp), dev_to_msi_list((dev)), list)
+
+#define dev_to_platform_msi_list(dev)	(&(dev)->platform_msi_list)
+#define first_platform_msi_entry(dev)		\
+	list_first_entry(dev_to_platform_msi_list((dev)), struct msi_desc, list)
+#define for_each_platform_msi_entry(desc, dev)	\
+	list_for_each_entry((desc), dev_to_platform_msi_list((dev)), list)
+#define for_each_platform_msi_entry_safe(desc, tmp, dev)	\
+	list_for_each_entry_safe((desc), (tmp), dev_to_platform_msi_list((dev)), list)
+
+#define first_msi_entry_common(dev)	\
+	list_first_entry_select((dev)->platform_msi_type, dev_to_platform_msi_list((dev)),	\
+				dev_to_msi_list((dev)), struct msi_desc, list)
+
+#define for_each_msi_entry_common(desc, dev)	\
+	list_for_each_entry_select((dev)->platform_msi_type, desc, dev_to_platform_msi_list((dev)), \
+				   dev_to_msi_list((dev)), list)	\
 
 #ifdef CONFIG_IRQ_MSI_IOMMU
 static inline const void *msi_desc_get_iommu_cookie(struct msi_desc *desc)

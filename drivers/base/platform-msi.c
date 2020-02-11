@@ -110,7 +110,8 @@ static void platform_msi_free_descs(struct device *dev, int base, int nvec)
 {
 	struct msi_desc *desc, *tmp;
 
-	list_for_each_entry_safe(desc, tmp, dev_to_msi_list(dev), list) {
+	list_for_each_entry_safe(desc, tmp, dev_to_platform_msi_list(dev),
+				 list) {
 		if (desc->platform.msi_index >= base &&
 		    desc->platform.msi_index < (base + nvec)) {
 			list_del(&desc->list);
@@ -127,8 +128,8 @@ static int platform_msi_alloc_descs_with_irq(struct device *dev, int virq,
 	struct msi_desc *desc;
 	int i, base = 0;
 
-	if (!list_empty(dev_to_msi_list(dev))) {
-		desc = list_last_entry(dev_to_msi_list(dev),
+	if (!list_empty(dev_to_platform_msi_list(dev))) {
+		desc = list_last_entry(dev_to_platform_msi_list(dev),
 				       struct msi_desc, list);
 		base = desc->platform.msi_index + 1;
 	}
@@ -142,7 +143,7 @@ static int platform_msi_alloc_descs_with_irq(struct device *dev, int virq,
 		desc->platform.msi_index = base + i;
 		desc->irq = virq ? virq + i : 0;
 
-		list_add_tail(&desc->list, dev_to_msi_list(dev));
+		list_add_tail(&desc->list, dev_to_platform_msi_list(dev));
 	}
 
 	if (i != nvec) {
@@ -213,7 +214,7 @@ platform_msi_alloc_priv_data(struct device *dev, unsigned int nvec,
 	}
 
 	/* Already had a helping of MSI? Greed... */
-	if (!list_empty(dev_to_msi_list(dev)))
+	if (!list_empty(dev_to_platform_msi_list(dev)))
 		return ERR_PTR(-EBUSY);
 
 	datap = kzalloc(sizeof(*datap), GFP_KERNEL);
@@ -255,6 +256,8 @@ int platform_msi_domain_alloc_irqs(struct device *dev, unsigned int nvec,
 	struct platform_msi_priv_data *priv_data;
 	int err;
 
+	dev->platform_msi_type = GEN_PLAT_MSI;
+
 	priv_data = platform_msi_alloc_priv_data(dev, nvec, platform_ops);
 	if (IS_ERR(priv_data))
 		return PTR_ERR(priv_data);
@@ -284,10 +287,10 @@ EXPORT_SYMBOL_GPL(platform_msi_domain_alloc_irqs);
  */
 void platform_msi_domain_free_irqs(struct device *dev)
 {
-	if (!list_empty(dev_to_msi_list(dev))) {
+	if (!list_empty(dev_to_platform_msi_list(dev))) {
 		struct msi_desc *desc;
 
-		desc = first_msi_entry(dev);
+		desc = first_platform_msi_entry(dev);
 		platform_msi_free_priv_data(desc->platform.msi_priv_data);
 	}
 
@@ -370,7 +373,7 @@ void platform_msi_domain_free(struct irq_domain *domain, unsigned int virq,
 {
 	struct platform_msi_priv_data *data = domain->host_data;
 	struct msi_desc *desc, *tmp;
-	for_each_msi_entry_safe(desc, tmp, data->dev) {
+	for_each_platform_msi_entry_safe(desc, tmp, data->dev) {
 		if (WARN_ON(!desc->irq || desc->nvec_used != 1))
 			return;
 		if (!(desc->irq >= virq && desc->irq < (virq + nvec)))
