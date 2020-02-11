@@ -1711,7 +1711,7 @@
                 }
             ],
             "description": "Intel PCI driver related fixes",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Ashok Raj",
