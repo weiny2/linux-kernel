@@ -3624,12 +3624,16 @@
             "config_options": [],
             "contributor": [
                 {
-                    "name": "Kumaresan Sarveswaran",
-                    "email": "kumaresan.sarveswaran@intel.com"
+                    "name": "Hemanthkumar S",
+                    "email": "Hemanthkumar S"
+                },
+                {
+                    "name": "",
+                    "email": "Hemanthkumar.Sm@intel.com"
                 }
             ],
             "description": "THB crypto AES driver warning fix",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Kumaresan Sarveswaran",
