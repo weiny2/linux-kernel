@@ -28,9 +28,6 @@
 
 #define DRV_NAME		"kmb-ipc-driver"
 
-#define IPC_VERSION_MAJOR	0
-#define IPC_VERSION_MINOR	1
-
 /* The IPC Node ID of this node. */
 #define MY_NODE_ID		KMB_IPC_NODE_ARM_CSS
 /*
@@ -704,8 +701,7 @@ static int kmb_ipc_probe(struct platform_device *pdev)
 	struct keembay_ipc_dev *ipc_dev;
 	struct device *dev = &pdev->dev;
 
-	dev_info(&pdev->dev, "KeemBay IPC v%d.%d\n", IPC_VERSION_MAJOR,
-		 IPC_VERSION_MINOR);
+	dev_info(&pdev->dev, "Keem Bay IPC device probing");
 
 	ipc_dev = devm_kzalloc(dev, sizeof(*ipc_dev), GFP_KERNEL);
 	if (!ipc_dev)
@@ -729,11 +725,11 @@ static int kmb_ipc_probe(struct platform_device *pdev)
 		return rc;
 	}
 	/* Print out some information about the configured memory. */
-	dev_info(dev, "Local vaddr 0x%p vpu_addr 0x%pad size 0x%zX\n",
+	dev_info(dev, "Local vaddr 0x%p vpu_addr %pad size 0x%zX\n",
 		 ipc_dev->local_ipc_mem.vaddr,
 		 &ipc_dev->local_ipc_mem.dma_handle,
 		 ipc_dev->local_ipc_mem.size);
-	dev_info(dev, "Remote vaddr 0x%p vpu_addr 0x%pad size 0x%zX\n",
+	dev_info(dev, "Remote vaddr 0x%p vpu_addr %pad size 0x%zX\n",
 		 ipc_dev->remote_ipc_mem.vaddr,
 		 &ipc_dev->remote_ipc_mem.dma_handle,
 		 ipc_dev->remote_ipc_mem.size);
@@ -749,6 +745,8 @@ static int kmb_ipc_probe(struct platform_device *pdev)
 	ipc_hw_init(pdev, ipc_dev);
 
 	platform_set_drvdata(pdev, ipc_dev);
+
+	dev_info(&pdev->dev, "Keem Bay IPC device probed");
 
 	return 0;
 }
