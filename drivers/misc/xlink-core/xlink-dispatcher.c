@@ -134,10 +134,8 @@ static int dispatcher_event_send(struct xlink_event *event)
 			if (rc) {
 				printk(KERN_DEBUG "Write data failed %d\n", rc);
 			}
-			if(event->paddr != 0){
-				xlink_platform_deallocate(disp_dev, event->data, event->paddr,
-						event->header.size, XLINK_PACKET_ALIGNMENT);
-			}
+			xlink_platform_deallocate(disp_dev, event->data, event->paddr,
+					event->header.size, XLINK_PACKET_ALIGNMENT);
 		}
 	}
 	return rc;

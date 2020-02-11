@@ -58,6 +58,7 @@ const struct xlink_channel_table_entry default_channel_table[] = {
 
 struct channel {
 	struct xlink_handle	*handle;
+	struct open_channel *opchan;
 	enum xlink_opmode mode;
 	enum xlink_channel_status status;
 	struct task_struct *ready_calling_pid;
@@ -86,13 +87,11 @@ struct packet_queue {
 struct open_channel {
 	uint16_t id;
 	struct channel *chan;
-	struct xlink_channel_type type;
 	struct packet_queue rx_queue;
 	struct packet_queue tx_queue;
 	int32_t rx_fill_level;
 	int32_t tx_fill_level;
 	int32_t tx_packet_level;
-	struct list_head list;
 	struct completion opened;
 	struct completion pkt_available;
 	struct completion pkt_consumed;
@@ -103,8 +102,6 @@ struct open_channel {
 struct xlink_multiplexer {
 	struct device *dev;
 	struct channel channels[NMB_CHANNELS];
-	struct list_head open_channels;
-	struct mutex lock;
 };
 
 struct xlink_multiplexer *mux = 0;
@@ -224,17 +221,10 @@ static int is_control_channel(uint16_t chan)
 
 static struct open_channel *get_channel(uint16_t chan)
 {
-	struct open_channel *opchan = NULL;
-	mutex_lock(&mux->lock);
-	list_for_each_entry(opchan, &mux->open_channels, list) {
-		if (opchan->id == chan) {
-			mutex_lock(&opchan->lock);
-			mutex_unlock(&mux->lock);
-			return opchan;
-		}
-	}
-	mutex_unlock(&mux->lock);
-	return NULL;
+	if (!mux->channels[chan].opchan)
+		return NULL;
+	mutex_lock(&mux->channels[chan].opchan->lock);
+	return mux->channels[chan].opchan;
 }
 
 static void release_channel(struct open_channel *opchan)
@@ -250,7 +240,6 @@ static int add_packet_to_channel(struct open_channel *opchan,
 {
 	struct packet *pkt = NULL;
 
-	mutex_lock(&queue->lock);
 	if (queue->count < queue->capacity) {
 		pkt = kzalloc(sizeof(*pkt), GFP_KERNEL);
 		if (!pkt)
@@ -263,7 +252,6 @@ static int add_packet_to_channel(struct open_channel *opchan,
 		queue->count++;
 		opchan->rx_fill_level += pkt->length;
 	}
-	mutex_unlock(&queue->lock);
 	return X_LINK_SUCCESS;
 }
 
@@ -271,12 +259,10 @@ static struct packet *get_packet_from_channel(struct packet_queue *queue)
 {
 	struct packet *pkt = NULL;
 
-	mutex_lock(&queue->lock);
 	// get first packet in queue
 	if (!list_empty(&queue->head)) {
 		pkt = list_first_entry(&queue->head, struct packet, list);
 	}
-	mutex_unlock(&queue->lock);
 	return pkt;
 }
 
@@ -286,7 +272,6 @@ static int release_packet_from_channel(struct open_channel *opchan,
 	uint8_t packet_found = 0;
 	struct packet *pkt = NULL;
 
-	mutex_lock(&queue->lock);
 	if (!addr) {
 		// address is null, release first packet in queue
 		if (!list_empty(&queue->head)) {
@@ -303,7 +288,6 @@ static int release_packet_from_channel(struct open_channel *opchan,
 		}
 	}
 	if (!pkt || !packet_found) {
-		mutex_unlock(&queue->lock);
 		return X_LINK_ERROR;
 	}
 	// packet found, deallocate and remove from queue
@@ -321,7 +305,6 @@ static int release_packet_from_channel(struct open_channel *opchan,
 	// printk(KERN_DEBUG "Release of %u on channel 0x%x: rx fill level = %u out of %u\n",
 	// 		pkt->length, opchan->id, opchan->rx_fill_level,
 	// 		opchan->chan->size);
-	mutex_unlock(&queue->lock);
 	return X_LINK_SUCCESS;
 }
 
@@ -337,6 +320,7 @@ static int multiplexer_open_channel(uint16_t chan)
 	// initialize open channel
 	opchan->id = chan;
 	opchan->chan = &mux->channels[chan];
+	mux->channels[chan].opchan = opchan; // TODO: remove circular dependency
 	INIT_LIST_HEAD(&opchan->rx_queue.head);
 	opchan->rx_queue.count = 0;
 	opchan->rx_queue.capacity = XLINK_PACKET_QUEUE_CAPACITY;
@@ -351,10 +335,6 @@ static int multiplexer_open_channel(uint16_t chan)
 	init_completion(&opchan->pkt_consumed);
 	init_completion(&opchan->pkt_released);
 	mutex_init(&opchan->lock);
-	// add to open channels list
-	mutex_lock(&mux->lock);
-	list_add_tail(&opchan->list, &mux->open_channels);
-	mutex_unlock(&mux->lock);
 	return X_LINK_SUCCESS;
 }
 
@@ -370,11 +350,8 @@ static int multiplexer_close_channel(struct open_channel *opchan)
 	while (!list_empty(&opchan->tx_queue.head)) {
 		release_packet_from_channel(opchan, &opchan->tx_queue, NULL, NULL);
 	}
-	// remove channel from list
-	mutex_lock(&mux->lock);
-	list_del(&opchan->list);
-	mutex_unlock(&mux->lock);
 	// deallocate data structure and destroy
+	opchan->chan->opchan = NULL; // TODO: remove circular dependency
 	mutex_destroy(&opchan->rx_queue.lock);
 	mutex_destroy(&opchan->tx_queue.lock);
 	mutex_unlock(&opchan->lock);
@@ -406,9 +383,6 @@ enum xlink_error xlink_multiplexer_init(void *dev)
 		return X_LINK_ERROR;
 
 	mux_init->dev = &plat_dev->dev;
-
-	mutex_init(&mux_init->lock);
-	INIT_LIST_HEAD(&mux_init->open_channels);
 
 	// set the global reference to multiplexer
 	mux = mux_init;
@@ -446,7 +420,7 @@ r_cleanup:
 
 enum xlink_error xlink_multiplexer_tx(struct xlink_event *event, int *event_queued)
 {
-	enum xlink_error rc = X_LINK_SUCCESS;
+	int rc = X_LINK_SUCCESS;
 	struct open_channel *opchan = NULL;
 	struct packet *pkt = NULL;
 	uint32_t size = 0;
@@ -524,36 +498,38 @@ enum xlink_error xlink_multiplexer_tx(struct xlink_event *event, int *event_queu
 					}
 				}
 				if (rc == X_LINK_SUCCESS) {
-					xlink_dispatcher_event_add(EVENT_TX, event);
-					*event_queued = 1;
-					if ((opchan->chan->mode == RXN_TXB) ||
-							(opchan->chan->mode == RXB_TXB)) {
-						// channel is blocking, wait for packet to be consumed
-						// TODO: calculate timeout remainder since last wait
-						mutex_unlock(&opchan->lock);
-						if (opchan->chan->timeout == 0) {
-							rc = wait_for_completion_interruptible(
-									&opchan->pkt_consumed);
-							// reinit_completion(&opchan->pkt_consumed);
-							if (rc < 0) {
-								// wait interrupted
-								rc = X_LINK_ERROR;
+					rc = xlink_dispatcher_event_add(EVENT_TX, event);
+					if (rc == X_LINK_SUCCESS) {
+						*event_queued = 1;
+						if ((opchan->chan->mode == RXN_TXB) ||
+								(opchan->chan->mode == RXB_TXB)) {
+							// channel is blocking, wait for packet to be consumed
+							// TODO: calculate timeout remainder since last wait
+							mutex_unlock(&opchan->lock);
+							if (opchan->chan->timeout == 0) {
+								rc = wait_for_completion_interruptible(
+										&opchan->pkt_consumed);
+								// reinit_completion(&opchan->pkt_consumed);
+								if (rc < 0) {
+									// wait interrupted
+									rc = X_LINK_ERROR;
+								}
+							} else {
+								rc = wait_for_completion_interruptible_timeout(
+										&opchan->pkt_consumed,
+										msecs_to_jiffies(opchan->chan->timeout));
+								// reinit_completion(&opchan->pkt_consumed);
+								if (rc == 0) {
+									rc = X_LINK_TIMEOUT;
+								} else if (rc < 0) {
+									// wait interrupted
+									rc = X_LINK_ERROR;
+								} else if (rc > 0) {
+									rc = X_LINK_SUCCESS;
+								}
 							}
-						} else {
-							rc = wait_for_completion_interruptible_timeout(
-									&opchan->pkt_consumed,
-									msecs_to_jiffies(opchan->chan->timeout));
-							// reinit_completion(&opchan->pkt_consumed);
-							if (rc == 0) {
-								rc = X_LINK_TIMEOUT;
-							} else if (rc < 0) {
-								// wait interrupted
-								rc = X_LINK_ERROR;
-							} else if (rc > 0) {
-								rc = X_LINK_SUCCESS;
-							}
+							mutex_lock(&opchan->lock);
 						}
-						mutex_lock(&opchan->lock);
 					}
 				}
 			}
@@ -757,7 +733,7 @@ enum xlink_error xlink_multiplexer_tx(struct xlink_event *event, int *event_queu
 
 enum xlink_error xlink_multiplexer_rx(struct xlink_event *event)
 {
-	enum xlink_error rc = X_LINK_SUCCESS;
+	int rc = X_LINK_SUCCESS;
 	struct open_channel *opchan = NULL;
 	void *buffer = NULL;
 	size_t size = 0;
@@ -809,7 +785,6 @@ enum xlink_error xlink_multiplexer_rx(struct xlink_event *event)
 				//complete regardless of mode/timeout
 				complete(&opchan->pkt_available);
 				// run callback
-				release_channel(opchan);
 				if (mux->channels[chan].status == CHAN_OPEN &&
 						chan_is_non_blocking_read(chan) &&
 						mux->channels[chan].ready_callback != NULL) {
@@ -977,7 +952,7 @@ enum xlink_error xlink_multiplexer_rx(struct xlink_event *event)
 
 enum xlink_error xlink_passthrough(struct xlink_event *event)
 {
-	enum xlink_error rc = 0;
+	int rc = 0;
 #ifdef CONFIG_XLINK_LOCAL_HOST
 	dma_addr_t vpuaddr = 0;
 	phys_addr_t physaddr = 0;
@@ -1118,17 +1093,17 @@ enum xlink_error xlink_passthrough(struct xlink_event *event)
 
 enum xlink_error xlink_multiplexer_destroy(void)
 {
-	struct open_channel *opchan, *tmp;
+	int i = 0;
 
 	if (!mux)
 		return X_LINK_ERROR;
 
 	// close all open channels and deallocate remaining packets
-	list_for_each_entry_safe(opchan, tmp, &mux->open_channels, list) {
-		multiplexer_close_channel(opchan);
+	for (i = 0; i < NMB_CHANNELS; i++) {
+		if (mux->channels[i].opchan)
+			multiplexer_close_channel(mux->channels[i].opchan);
 	}
 	// destroy multiplexer
-	mutex_destroy(&mux->lock);
 	kfree(mux);
 
 	return X_LINK_SUCCESS;

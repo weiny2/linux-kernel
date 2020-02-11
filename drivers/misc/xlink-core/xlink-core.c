@@ -26,9 +26,14 @@
 
 // xlink version number
 #define XLINK_VERSION_MAJOR	0
-#define XLINK_VERSION_MINOR	94
+#define XLINK_VERSION_MINOR	95
 
+// timeout in milliseconds used to wait for the reay message from the VPU
+#ifdef CONFIG_XLINK_PSS
 #define XLINK_VPU_WAIT_FOR_READY (3000000)
+#else
+#define XLINK_VPU_WAIT_FOR_READY (3000)
+#endif
 
 // device, class, and driver names
 #define DEVICE_NAME "xlnk"
@@ -375,10 +380,10 @@ static long xlink_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		if (!rc) {
 			if (devH.dev_type == IPC_DEVICE) {
 				if (copy_to_user(rd.pmessage, (void *)&rdaddr, sizeof(uint32_t)))
-				return -EFAULT;
+					return -EFAULT;
 			} else {
 				if (copy_to_user(rd.pmessage, (void *)rdaddr, size))
-				return -EFAULT;
+					return -EFAULT;
 			}
 			if (copy_to_user(rd.size, (void *)&size, sizeof(size)))
 				return -EFAULT;
@@ -911,7 +916,7 @@ static enum xlink_error xlink_write_data_user(struct xlink_handle *handle,
 	struct xlink_handle *link = NULL;
 	struct xlink_event *event = NULL;
 	int event_queued = 0;
-	dma_addr_t paddr;
+	dma_addr_t paddr = 0;
 	uint32_t addr;
 
 	if (!xlink || !handle)

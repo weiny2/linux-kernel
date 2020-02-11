@@ -9,3 +9,9 @@ config XLINK_LOCAL_HOST
 	help
 	  XLINK LOCAL HOST enables local host functionality for
 	  the communication/control Sub-System.
+
+config XLINK_PSS
+	tristate "Support for XLINK PSS"
+	depends on XLINK_LOCAL_HOST
+	help
+	  XLINK PSS enables the communication/control Sub-System on a PSS platform.
