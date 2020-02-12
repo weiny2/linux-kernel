@@ -2120,15 +2120,15 @@
                     "email": "fenghua.yu@intel.com"
                 }
             ],
-            "description": "Handle PASID in svm binding/unbinding and #GP",
-            "enabled": false,
+            "description": "Handling pasid in svm binding/unbinding and #GP",
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Ravi V. Shankar",
                     "email": "ravi.v.shankar@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1805",
             "name": "pasid",
             "repourl": "ssh://git-amr-4.devtools.intel.com:29418/enabling_cldemote_in_linux_kerne-linux_git.git",
             "sdl_contact": [
