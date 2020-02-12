@@ -3470,7 +3470,7 @@
                 }
             ],
             "description": "Support for Hybrid CPUs and Hardware-Guided Scheduling",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Eugene Gorbatov",
@@ -3481,7 +3481,7 @@
                     "email": "muhammad.abozaed@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1806",
             "name": "hybrid",
             "repourl": "ssh://git@gitlab.devtools.intel.com:29418/ranerica/linux-dev.git",
             "sdl_contact": [
