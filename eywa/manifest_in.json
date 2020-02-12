@@ -1944,24 +1944,24 @@
                     "email": "srinivas.pandruvada@intel.com"
                 }
             ],
-            "description": "Speed Select Technologies (SST)",
-            "enabled": false,
+            "description": "Intel Speed Select Technology",
+            "enabled": true,
             "ip_owner": [
                 {
-                    "name": "Stanley Chen",
-                    "email": "stanley.chen@intel.com"
+                    "name": "Vasudevan Srinivasan",
+                    "email": "vasudevan.srinivasan@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1808",
             "name": "sst",
             "repourl": "ssh://git-amr-4.devtools.intel.com:29418/otc_linux_spandruv-internal.git",
             "sdl_contact": [
                 {
-                    "name": "Charles Prestopine",
-                    "email": "charles.d.prestopine@intel.com"
+                    "name": "Srinivas Pandruvada",
+                    "email": "srinivas.pandruvada@intel.com"
                 }
             ],
-            "status": "intel confidential",
+            "status": "public",
             "stuck_at_ref": ""
         },
         {
