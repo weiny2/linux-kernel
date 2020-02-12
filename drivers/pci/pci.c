@@ -6426,6 +6426,8 @@ void __weak pci_fixup_cardbus(struct pci_bus *bus)
 }
 EXPORT_SYMBOL(pci_fixup_cardbus);
 
+int port_idle_delay = 0;
+
 static int __init pci_setup(char *str)
 {
 	while (str) {
@@ -6484,6 +6486,9 @@ static int __init pci_setup(char *str)
 				pci_add_flags(PCI_SCAN_ALL_PCIE_DEVS);
 			} else if (!strncmp(str, "disable_acs_redir=", 18)) {
 				disable_acs_redir_param = str + 18;
+			} else if (!strncmp(str, "port_idle_delay=", 16)) {
+				port_idle_delay =
+					simple_strtoul(str + 16, &str, 0);
 			} else {
 				pr_err("PCI: Unknown option `%s'\n", str);
 			}
