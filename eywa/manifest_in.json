@@ -1064,11 +1064,19 @@
             "stuck_at_ref": ""
         },
         {
-            "branch": "avx512_cpuids",
+            "branch": "pmc_core",
             "branch_type": "expiring",
             "config_options": [
                 {
                     "name": "INTEL_PMC_CORE",
+                    "value": "y"
+                },
+                {
+                    "name": "PM_SLEEP",
+                    "value": "y"
+                },
+                {
+                    "name": "DEBUG_FS",
                     "value": "y"
                 }
             ],
@@ -1078,8 +1086,8 @@
                     "email": "gayatri.kammela@intel.com"
                 }
             ],
-            "description": "TGL, EHL, RKL PMC core driver changes and new AVX512 cpuid support",
-            "enabled": false,
+            "description": "TGL, JSL and RKL PMC core driver changes and new AVX512 cpuid support",
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Mark Charney",
@@ -1090,9 +1098,9 @@
                     "email": "christopher.j.lake@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1807",
             "name": "pmc_core",
-            "repourl": "ssh://git-ger-6.devtools.intel.com:29418/secure_git_internal_repo-my_internal_repo.git",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/gkammela/pmc_core-intel-next.git",
             "sdl_contact": [
                 {
                     "name": "David Box",
