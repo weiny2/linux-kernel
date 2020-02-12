@@ -121,7 +121,8 @@ static uint32_t get_next_link_id(void)
 	if (xlink->nmb_connected_links == XLINK_MAX_CONNECTIONS)
 		return XLINK_MAX_CONNECTIONS;
 	for (i = 0; i < XLINK_MAX_CONNECTIONS; i++)
-		if (xlink->links[i].handle.link_id == XLINK_INVALID_LINK_ID)
+		if (xlink->links[i].handle.link_id == XLINK_INVALID_LINK_ID &&
+			xlink->links[i].handle.sw_device_id == XLINK_INVALID_SW_DEVICE_ID)
 			break;
 	return i;
 }
@@ -138,12 +139,12 @@ static struct xlink_handle *get_link(uint32_t link_id)
 	}
 	return link;
 }
-static struct xlink_handle *get_link_by_device(enum xlink_dev_type dev_type)
+static struct xlink_handle *get_link_by_sw_device_id(uint32_t sw_device_id)
 {
 	int i = 0;
 	struct xlink_handle *link = NULL;
 	for (i = 0; i < xlink->nmb_connected_links; i++) {
-		if (xlink->links[i].handle.dev_type == dev_type) {
+		if (xlink->links[i].handle.sw_device_id == sw_device_id) {
 			link = &xlink->links[i].handle;
 			break;
 		}
@@ -206,6 +207,7 @@ static int kmb_xlink_probe(struct platform_device *pdev)
 	mutex_init(&xlink_dev->lock);
 	for (i = 0; i < XLINK_MAX_CONNECTIONS; i++) {
 		xlink_dev->links[i].handle.link_id = XLINK_INVALID_LINK_ID;
+		xlink_dev->links[i].handle.sw_device_id = XLINK_INVALID_SW_DEVICE_ID;
 	}
 
 	platform_set_drvdata(pdev, xlink_dev);
@@ -669,11 +671,11 @@ enum xlink_error xlink_connect(struct xlink_handle *handle)
 		return X_LINK_ERROR;
 	/*
 	 * Keep get_link_by_device also be protected considering multi
-	 * process need get same link id via same dev_type when invoking
+	 * process need get same link id via same sw device id when invoking
 	 * xlink_connect cocurrently in user space
 	 */
 	mutex_lock(&xlink->lock);
-	link = get_link_by_device(handle->dev_type);
+	link = get_link_by_sw_device_id(handle->sw_device_id);
 	if (!link) {
 		link_id = get_next_link_id();
 		if (link_id >=  XLINK_MAX_CONNECTIONS) {
@@ -1159,6 +1161,7 @@ enum xlink_error xlink_disconnect(struct xlink_handle *handle)
 	link = get_link(handle->link_id);
 	if (!link)
 		return X_LINK_ERROR;
+
 	prv_ctx = container_of(link, struct xlink_handle_prv, handle);
 	// Decrease the refcount with mutex and release the connection if refcount is 0
 	if (kref_put_mutex(&prv_ctx->refcount, release_after_kref_put, &xlink->lock)) {
@@ -1174,6 +1177,7 @@ enum xlink_error xlink_disconnect(struct xlink_handle *handle)
 		// TODO: reset device?
 		// set link handler reference
 		mutex_lock(&xlink->lock);
+		xlink->links[link->link_id].handle.sw_device_id = XLINK_INVALID_SW_DEVICE_ID;
 		xlink->links[link->link_id].handle.link_id = XLINK_INVALID_LINK_ID;
 		xlink->nmb_connected_links--;
 		mutex_unlock(&xlink->lock);
