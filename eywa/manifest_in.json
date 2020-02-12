@@ -2008,6 +2008,182 @@
             "stuck_at_ref": ""
         },
         {
+            "branch": "fixups",
+            "branch_type": "expiring",
+            "config_options": [],
+            "contributor": [
+                {
+                    "name": "Kyle Pelton",
+                    "email": "kyle.d.pelton@intel.com"
+                }
+            ],
+            "description": "Fix up branch to revert a dma-buf patch from GFX, Fixup for PKS/DRM",
+            "enabled": false,
+            "ip_owner": [
+                {
+                    "name": "Kyle Pelton",
+                    "email": "kyle.d.pelton@intel.com"
+                }
+            ],
+            "jira": "",
+            "name": "fixups",
+            "repourl": "ssh://git-amr-4.devtools.intel.com:29418/otc_power-kernel.git",
+            "sdl_contact": [
+                {
+                    "name": "Charles Prestopine",
+                    "email": "charles.d.prestopine@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": ""
+        },
+        {
+            "branch": "supervisor",
+            "branch_type": "expiring",
+            "config_options": [],
+            "contributor": [
+                {
+                    "name": "Yu-cheng Yu",
+                    "email": "yu-cheng.yu@intel.com"
+                }
+            ],
+            "description": "XSAVES Supervisor states",
+            "enabled": false,
+            "ip_owner": [
+                {
+                    "name": "Yu-cheng Yu",
+                    "email": "yu-cheng.yu@intel.com"
+                }
+            ],
+            "jira": "",
+            "name": "XSAVES",
+            "repourl": "git://github.com/yyu168/linux_super",
+            "sdl_contact": [
+                {
+                    "name": "Yu-cheng Yu",
+                    "email": "yu-cheng.yu@intel.com"
+                }
+            ],
+            "status": "public",
+            "stuck_at_ref": ""
+        },
+        {
+            "branch": "cet",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "CONFIG_X86_INTEL_SHADOW_STACK_USER",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_X86_INTEL_BRANCH_TRACKING_USER",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_X86_INTEL_CET",
+                    "value": "y"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Yu-cheng Yu",
+                    "email": "yu-cheng.yu@intel.com"
+                }
+            ],
+            "description": "Control-flow Enforcement Technology (CET) provides protection againstreturn/jump-oriented programming (ROP) attacks.",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Vedvyas Shanbhogue",
+                    "email": "vedvyas.shanbhogue@intel.com"
+                }
+            ],
+            "jira": "NEXT-1792",
+            "name": "cet",
+            "repourl": "git://github.com/yyu168/linux_cet",
+            "sdl_contact": [
+                {
+                    "name": "Yu-cheng Yu",
+                    "email": "yu-cheng.yu@intel.com"
+                }
+            ],
+            "status": "public",
+            "stuck_at_ref": ""
+        },
+        {
+            "branch": "pasid",
+            "branch_type": "expiring",
+            "config_options": [],
+            "contributor": [
+                {
+                    "name": "Fenghua Yu",
+                    "email": "fenghua.yu@intel.com"
+                }
+            ],
+            "description": "Handle PASID in svm binding/unbinding and #GP",
+            "enabled": false,
+            "ip_owner": [
+                {
+                    "name": "Ravi V. Shankar",
+                    "email": "ravi.v.shankar@intel.com"
+                }
+            ],
+            "jira": "",
+            "name": "pasid",
+            "repourl": "ssh://git-amr-4.devtools.intel.com:29418/enabling_cldemote_in_linux_kerne-linux_git.git",
+            "sdl_contact": [
+                {
+                    "name": "Ashok Raj",
+                    "email": "ashok.raj@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": ""
+        },
+        {
+            "branch": "amx",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "CONFIG_X86_INTEL_SHADOW_STACK_USER",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_X86_INTEL_BRANCH_TRACKING_USER",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_X86_INTEL_CET",
+                    "value": "y"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Chang S. Bae",
+                    "email": "chang.seok.bae@intel.com"
+                }
+            ],
+            "description": "Advanced Matrix Extension (AMX/TMUL), including cet, xsaves and pasid code",
+            "enabled": false,
+            "ip_owner": [
+                {
+                    "name": "Bob Valentine",
+                    "email": "bob.valentine@intel.com"
+                }
+            ],
+            "jira": "",
+            "name": "amx_xsaves_cet_pasid",
+            "repourl": "ssh://git-amr-4.devtools.intel.com:29418/enabling_cldemote_in_linux_kerne-linux_git.git",
+            "sdl_contact": [
+                {
+                    "name": "Israel Hirsh",
+                    "email": "israel.hirsh@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": ""
+        },
+        {
             "branch": "intel-next",
             "branch_type": "expiring",
             "config_options": [
@@ -2069,182 +2245,6 @@
                 {
                     "name": "Dave Jiang",
                     "email": "dave.jiang@intel.com"
-                }
-            ],
-            "status": "intel confidential",
-            "stuck_at_ref": ""
-        },
-        {
-            "branch": "fixups",
-            "branch_type": "expiring",
-            "config_options": [],
-            "contributor": [
-                {
-                    "name": "Kyle Pelton",
-                    "email": "kyle.d.pelton@intel.com"
-                }
-            ],
-            "description": "Fix up branch to revert a dma-buf patch from GFX, Fixup for PKS/DRM",
-            "enabled": false,
-            "ip_owner": [
-                {
-                    "name": "Kyle Pelton",
-                    "email": "kyle.d.pelton@intel.com"
-                }
-            ],
-            "jira": "",
-            "name": "fixups",
-            "repourl": "ssh://git-amr-4.devtools.intel.com:29418/otc_power-kernel.git",
-            "sdl_contact": [
-                {
-                    "name": "Charles Prestopine",
-                    "email": "charles.d.prestopine@intel.com"
-                }
-            ],
-            "status": "intel confidential",
-            "stuck_at_ref": ""
-        },
-        {
-            "branch": "supervisor",
-            "branch_type": "expiring",
-            "config_options": [],
-            "contributor": [
-                {
-                    "name": "Yu-cheng Yu",
-                    "email": "yu-cheng.yu@intel.com"
-                }
-            ],
-            "description": "XSAVES Supervisor states",
-            "enabled": false,
-            "ip_owner": [
-                {
-                    "name": "Yu-cheng Yu",
-                    "email": "yu-cheng.yu@intel.com"
-                }
-            ],
-            "jira": "",
-            "name": "XSAVES",
-            "repourl": "git://github.com/yyu168/linux_super",
-            "sdl_contact": [
-                {
-                    "name": "Yu-cheng Yu",
-                    "email": "yu-cheng.yu@intel.com"
-                }
-            ],
-            "status": "public",
-            "stuck_at_ref": ""
-        },
-        {
-            "branch": "pasid",
-            "branch_type": "expiring",
-            "config_options": [],
-            "contributor": [
-                {
-                    "name": "Fenghua Yu",
-                    "email": "fenghua.yu@intel.com"
-                }
-            ],
-            "description": "Handle PASID in svm binding/unbinding and #GP",
-            "enabled": false,
-            "ip_owner": [
-                {
-                    "name": "Ravi V. Shankar",
-                    "email": "ravi.v.shankar@intel.com"
-                }
-            ],
-            "jira": "",
-            "name": "pasid",
-            "repourl": "ssh://git-amr-4.devtools.intel.com:29418/enabling_cldemote_in_linux_kerne-linux_git.git",
-            "sdl_contact": [
-                {
-                    "name": "Ashok Raj",
-                    "email": "ashok.raj@intel.com"
-                }
-            ],
-            "status": "intel confidential",
-            "stuck_at_ref": ""
-        },
-        {
-            "branch": "cet",
-            "branch_type": "expiring",
-            "config_options": [
-                {
-                    "name": "CONFIG_X86_INTEL_SHADOW_STACK_USER",
-                    "value": "y"
-                },
-                {
-                    "name": "CONFIG_X86_INTEL_BRANCH_TRACKING_USER",
-                    "value": "y"
-                },
-                {
-                    "name": "CONFIG_X86_INTEL_CET",
-                    "value": "y"
-                }
-            ],
-            "contributor": [
-                {
-                    "name": "Yu-cheng Yu",
-                    "email": "yu-cheng.yu@intel.com"
-                }
-            ],
-            "description": "Control-flow Enforcement Technology (CET) provides protection againstreturn/jump-oriented programming (ROP) attacks.",
-            "enabled": true,
-            "ip_owner": [
-                {
-                    "name": "Vedvyas Shanbhogue",
-                    "email": "vedvyas.shanbhogue@intel.com"
-                }
-            ],
-            "jira": "NEXT-1792",
-            "name": "cet",
-            "repourl": "git://github.com/yyu168/linux_cet",
-            "sdl_contact": [
-                {
-                    "name": "Yu-cheng Yu",
-                    "email": "yu-cheng.yu@intel.com"
-                }
-            ],
-            "status": "public",
-            "stuck_at_ref": ""
-        },
-        {
-            "branch": "amx",
-            "branch_type": "expiring",
-            "config_options": [
-                {
-                    "name": "CONFIG_X86_INTEL_SHADOW_STACK_USER",
-                    "value": "y"
-                },
-                {
-                    "name": "CONFIG_X86_INTEL_BRANCH_TRACKING_USER",
-                    "value": "y"
-                },
-                {
-                    "name": "CONFIG_X86_INTEL_CET",
-                    "value": "y"
-                }
-            ],
-            "contributor": [
-                {
-                    "name": "Chang S. Bae",
-                    "email": "chang.seok.bae@intel.com"
-                }
-            ],
-            "description": "Advanced Matrix Extension (AMX/TMUL), including cet, xsaves and pasid code",
-            "enabled": false,
-            "ip_owner": [
-                {
-                    "name": "Bob Valentine",
-                    "email": "bob.valentine@intel.com"
-                }
-            ],
-            "jira": "",
-            "name": "amx_xsaves_cet_pasid",
-            "repourl": "ssh://git-amr-4.devtools.intel.com:29418/enabling_cldemote_in_linux_kerne-linux_git.git",
-            "sdl_contact": [
-                {
-                    "name": "Israel Hirsh",
-                    "email": "israel.hirsh@intel.com"
                 }
             ],
             "status": "intel confidential",
