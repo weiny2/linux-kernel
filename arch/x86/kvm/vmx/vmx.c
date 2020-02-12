@@ -3268,7 +3268,7 @@ int vmx_set_cr4(struct kvm_vcpu *vcpu, unsigned long cr4)
 		}
 
 		/*
-		 * SMEP/SMAP/PKU is disabled if CPU is in non-paging mode in
+		 * SMEP/SMAP/PKU/PKS is disabled if CPU is in non-paging mode in
 		 * hardware.  To emulate this behavior, SMEP/SMAP/PKU needs
 		 * to be manually disabled when guest switches to non-paging
 		 * mode.
@@ -3276,10 +3276,10 @@ int vmx_set_cr4(struct kvm_vcpu *vcpu, unsigned long cr4)
 		 * If !enable_unrestricted_guest, the CPU is always running
 		 * with CR0.PG=1 and CR4 needs to be modified.
 		 * If enable_unrestricted_guest, the CPU automatically
-		 * disables SMEP/SMAP/PKU when the guest sets CR0.PG=0.
+		 * disables SMEP/SMAP/PKU/PKS when the guest sets CR0.PG=0.
 		 */
 		if (!is_paging(vcpu))
-			hw_cr4 &= ~(X86_CR4_SMEP | X86_CR4_SMAP | X86_CR4_PKE);
+			hw_cr4 &= ~(X86_CR4_SMEP | X86_CR4_SMAP | X86_CR4_PKE | X86_CR4_PKS);
 	}
 
 	if (cpu_has_load_cet_ctrl()) {
@@ -7610,6 +7610,10 @@ static __init void vmx_set_cpu_caps(void)
 	/* PKU is not yet implemented for shadow paging. */
 	if (enable_ept && boot_cpu_has(X86_FEATURE_OSPKE))
 		kvm_cpu_cap_check_and_set(X86_FEATURE_PKU);
+
+	/* PKS is not yet implemented for shadow paging. */
+	if (enable_ept)
+		kvm_cpu_cap_check_and_set(X86_FEATURE_PKS);
 
 	if (vmx_umip_emulated())
 		kvm_cpu_cap_set(X86_FEATURE_UMIP);
