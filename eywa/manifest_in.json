@@ -1709,7 +1709,7 @@
                 },
                 {
                     "name": "CONFIG_PCIE_EDR",
-                    "value": "y"
+                    "value": "n"
                 }
             ],
             "contributor": [
@@ -1719,7 +1719,7 @@
                 }
             ],
             "description": "Intel PCI driver related fixes",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Ashok Raj",
