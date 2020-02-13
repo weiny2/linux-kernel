@@ -324,6 +324,8 @@ int intel_svm_bind_mm(struct device *dev, int *pasid, int flags, struct svm_dev_
 	init_rcu_head(&sdev->rcu);
 
 	if (!svm) {
+		bool new_pasid = false;
+
 		svm = kzalloc(sizeof(*svm), GFP_KERNEL);
 		if (!svm) {
 			ret = -ENOMEM;
@@ -335,14 +337,34 @@ int intel_svm_bind_mm(struct device *dev, int *pasid, int flags, struct svm_dev_
 		if (pasid_max > intel_pasid_max_id)
 			pasid_max = intel_pasid_max_id;
 
-		/* Do not use PASID 0, reserved for RID to PASID */
-		svm->pasid = ioasid_alloc(NULL, PASID_MIN,
-					  pasid_max - 1, svm);
-		if (svm->pasid == INVALID_IOASID) {
-			kfree(svm);
-			kfree(sdev);
-			ret = -ENOSPC;
-			goto out;
+		if (mm && mm->context.pasid) {
+			/*
+			 * Once a PASID is allocated for this mm, the PASID
+			 * stays with the mm until the mm is released. Reuse
+			 * the PASID which has been already allocated for the
+			 * mm instead of allocating a new one.
+			 *
+			 * If some random applications do bind_mm() and
+			 * unbind_mm() but don't use PASID ever, they can
+			 * cause PASID depletion. There are up to 1 million
+			 * PASIDs. Ignores the PASID depletion issue to simplify
+			 * code. If deemed necessary, add follow-on code to
+			 * free PASID actively on all threads in unbind_mm().
+			 */
+			ioasid_set_data(mm->context.pasid, svm);
+			svm->pasid = mm->context.pasid;
+			new_pasid = false;
+		} else {
+			/* Do not use PASID 0, reserved for RID to PASID */
+			svm->pasid = ioasid_alloc(NULL, PASID_MIN,
+						  pasid_max - 1, svm);
+			if (svm->pasid == INVALID_IOASID) {
+				kfree(svm);
+				kfree(sdev);
+				ret = -ENOSPC;
+				goto out;
+			}
+			new_pasid = true;
 		}
 		svm->notifier.ops = &intel_mmuops;
 		svm->mm = mm;
@@ -353,7 +375,8 @@ int intel_svm_bind_mm(struct device *dev, int *pasid, int flags, struct svm_dev_
 		if (mm) {
 			ret = mmu_notifier_register(&svm->notifier, mm);
 			if (ret) {
-				ioasid_free(svm->pasid);
+				if (new_pasid)
+					ioasid_free(svm->pasid);
 				kfree(svm);
 				kfree(sdev);
 				goto out;
@@ -371,7 +394,8 @@ int intel_svm_bind_mm(struct device *dev, int *pasid, int flags, struct svm_dev_
 		if (ret) {
 			if (mm)
 				mmu_notifier_unregister(&svm->notifier, mm);
-			ioasid_free(svm->pasid);
+			if (new_pasid)
+				ioasid_free(svm->pasid);
 			kfree(svm);
 			kfree(sdev);
 			goto out;
@@ -451,7 +475,6 @@ int intel_svm_unbind_mm(struct device *dev, int pasid)
 			kfree_rcu(sdev, rcu);
 
 			if (list_empty(&svm->devs)) {
-				ioasid_free(svm->pasid);
 				if (svm->mm)
 					mmu_notifier_unregister(&svm->notifier, svm->mm);
 				list_del(&svm->list);
@@ -725,5 +748,47 @@ bool __fixup_pasid_exception(void)
 	/* Fix up the MSR. */
 	wrmsrl(MSR_IA32_PASID, pasid | MSR_IA32_PASID_VALID_MASK);
 
+	refcount_inc(&mm->context.pasid_refcount);
+	set_thread_flag(TIF_PASID);
+
 	return true;
+}
+
+void __destroy_pasid(struct task_struct *tsk, struct mm_struct *mm)
+{
+	int pasid;
+
+	mutex_lock(&pasid_mutex);
+	pasid = mm->context.pasid;
+	/* Ensure PASID has been bound to the mm. */
+	if (!pasid)
+		goto out;
+
+	/* Ensure the task uses PASID. */
+	if (!test_ti_thread_flag(task_thread_info(tsk), TIF_PASID))
+		goto out;
+
+	/* The last task using the PASID frees it. */
+	refcount_dec(&mm->context.pasid_refcount);
+	if (refcount_read(&mm->context.pasid_refcount) == 1) {
+		struct intel_svm *dummy_svm;
+
+		/*
+		 * By now, there is no svm bound to the PASID any more.
+		 * To free the PASID successfully, it must have a bound svm.
+		 * Bind a dummy svm to the PASID in order to free it.
+		 */
+		dummy_svm = kzalloc(sizeof(*dummy_svm), GFP_KERNEL);
+		if (!dummy_svm) {
+			pr_warn("cannot free PASID %d\n", pasid);
+			goto out;
+		}
+		ioasid_set_data(pasid, dummy_svm);
+		ioasid_free(pasid);
+		kfree(dummy_svm);
+		/* The mm won't have a PASID any more. */
+		mm->context.pasid = 0;
+	}
+out:
+	mutex_unlock(&pasid_mutex);
 }
