@@ -214,7 +214,7 @@ static int ecb_decrypt(struct skcipher_request *req)
 	unsigned int nbytes;
 	int err;
 
-	tfm = crypto_skcipher_reqtfm(req);;
+	tfm = crypto_skcipher_reqtfm(req);
 	ctx = aes_ctx(crypto_skcipher_ctx(tfm));
 
 	err = skcipher_walk_virt(&walk, req, true);
