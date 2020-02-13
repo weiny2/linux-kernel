@@ -697,3 +697,33 @@ static irqreturn_t prq_event_thread(int irq, void *d)
 
 	return IRQ_RETVAL(handled);
 }
+
+/*
+ * Fix up the PASID MSR if possible.
+ *
+ * But if the #GP was due to another reason, a second #GP might be triggered
+ * to force proper behavior.
+ */
+bool __fixup_pasid_exception(void)
+{
+	struct mm_struct *mm;
+	u64 pasid_msr;
+	int pasid;
+
+	mm = get_task_mm(current);
+	pasid = mm->context.pasid;
+	/* Ensure this process has been bound to a PASID. */
+	if (!pasid)
+		return false;
+
+	/* Read the MSR directly which is valid at this point. */
+	rdmsrl(MSR_IA32_PASID, pasid_msr);
+	/* If the MSR already has a valid PASID, no need to fix it up. */
+	if ((pasid_msr & MSR_IA32_PASID_VALID_MASK))
+		return false;
+
+	/* Fix up the MSR. */
+	wrmsrl(MSR_IA32_PASID, pasid | MSR_IA32_PASID_VALID_MASK);
+
+	return true;
+}
