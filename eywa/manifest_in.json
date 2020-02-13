@@ -2960,7 +2960,7 @@
                 }
             ],
             "description": "Thunderbay I/O drivers",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Ajit Tapkir",
