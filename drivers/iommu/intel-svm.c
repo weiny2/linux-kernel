@@ -760,3 +760,40 @@ void __free_pasid(struct mm_struct *mm)
 	 */
 	ioasid_free(pasid);
 }
+
+/*
+ * Fix up the PASID MSR if possible.
+ *
+ * But if the #GP was due to another reason, a second #GP might be triggered
+ * to force proper behavior.
+ */
+bool __fixup_pasid_exception(void)
+{
+	struct mm_struct *mm;
+	bool ret = true;
+	u64 pasid_msr;
+	int pasid;
+
+	mm = get_task_mm(current);
+	/* This #GP was triggered from user mode. So mm cannot be NULL. */
+	pasid = mm->context.pasid;
+	/* Ensure this process has been bound to a PASID. */
+	if (!pasid) {
+		ret = false;
+		goto out;
+	}
+
+	/* Check to see if the PASID MSR has already been set for this task. */
+	rdmsrl(MSR_IA32_PASID, pasid_msr);
+	if (pasid_msr & MSR_IA32_PASID_VALID) {
+		ret = false;
+		goto out;
+	}
+
+	/* Fix up the MSR. */
+	wrmsrl(MSR_IA32_PASID, pasid | MSR_IA32_PASID_VALID);
+out:
+	mmput(mm);
+
+	return ret;
+}
