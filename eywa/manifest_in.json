@@ -2030,7 +2030,12 @@
         {
             "branch": "fixups",
             "branch_type": "expiring",
-            "config_options": [],
+            "config_options": [
+                {
+                    "name": "CONFIG_IGC",
+                    "value": "m"
+                }
+            ],
             "contributor": [
                 {
                     "name": "Kyle Pelton",
