@@ -824,6 +824,95 @@ struct tb_port *usb4_switch_map_usb3_down(struct tb_switch *sw,
 	return NULL;
 }
 
+static void usb4_port_release(struct device *dev)
+{
+	struct usb4_port *usb4 = container_of(dev, struct usb4_port, dev);
+
+	kfree(usb4);
+}
+
+static const struct device_type usb4_port_type = {
+	.name = "usb4_port",
+	.release = usb4_port_release,
+};
+
+static struct usb4_port *usb4_port_add(struct tb_switch *sw, struct tb_port *port)
+{
+	struct usb4_port *usb4;
+	int ret;
+
+	usb4 = kzalloc(sizeof(*usb4), GFP_KERNEL);
+	if (!usb4)
+		return ERR_PTR(-ENOMEM);
+
+	usb4->port = port;
+	usb4->dev.type = &usb4_port_type;
+	usb4->dev.parent = &sw->dev;
+	dev_set_name(&usb4->dev, "port%d", port->port);
+
+	ret = device_register(&usb4->dev);
+	if (ret) {
+		put_device(&usb4->dev);
+		return ERR_PTR(ret);
+	}
+
+	return usb4;
+}
+
+/**
+ * usb4_switch_add_ports() - Add USB4 ports to this router
+ * @sw: USB4 router
+ *
+ * For USB4 router this finds all USB4 ports and registers devices for
+ * each. Can be called to any router.
+ *
+ * Returns %0 in case of success and negative errno in case of failure.
+ */
+int usb4_switch_add_ports(struct tb_switch *sw)
+{
+	struct tb_port *port;
+
+	if (!tb_switch_is_usb4(sw))
+		return 0;
+
+	tb_switch_for_each_port(sw, port) {
+		struct usb4_port *usb4;
+
+		if (!port->cap_usb4)
+			continue;
+
+		usb4 = usb4_port_add(sw, port);
+		if (IS_ERR(usb4)) {
+			/* Remove them all */
+			usb4_switch_remove_ports(sw);
+			return PTR_ERR(usb4);
+		}
+
+		port->usb4 = usb4;
+	}
+
+	return 0;
+}
+
+/**
+ * usb4_switch_remove_ports() - Remove USB4 ports from this router
+ * @sw: USB4 router
+ *
+ * Unregisters the previously registers USB4 ports. The devices will be
+ * released once their refcount goes to zero.
+ */
+void usb4_switch_remove_ports(struct tb_switch *sw)
+{
+	struct tb_port *port;
+
+	tb_switch_for_each_port(sw, port) {
+		if (port->usb4) {
+			device_unregister(&port->usb4->dev);
+			port->usb4 = NULL;
+		}
+	}
+}
+
 /**
  * usb4_port_unlock() - Unlock USB4 downstream port
  * @port: USB4 port to unlock

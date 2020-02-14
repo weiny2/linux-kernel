@@ -2323,6 +2323,44 @@ void tb_switch_lane_bonding_disable(struct tb_switch *sw)
 	tb_sw_dbg(sw, "lane bonding disabled\n");
 }
 
+static void tb_switch_link_to_port(struct tb_switch *sw)
+{
+	u64 route = tb_route(sw);
+	struct tb_port *port;
+	int ret;
+
+	if (!route)
+		return;
+
+	port = tb_port_at(route, tb_switch_parent(sw));
+	if (!port->usb4)
+		return;
+
+	ret = sysfs_create_link(&sw->dev.kobj, &port->usb4->dev.kobj, "port");
+	if (ret)
+		return;
+
+	ret = sysfs_create_link(&port->usb4->dev.kobj, &sw->dev.kobj, "device");
+	if (ret)
+		sysfs_remove_link(&sw->dev.kobj, "port");
+}
+
+static void tb_switch_unlink_from_port(struct tb_switch *sw)
+{
+	u64 route = tb_route(sw);
+	struct tb_port *port;
+
+	if (!tb_route(sw))
+		return;
+
+	port = tb_port_at(route, tb_switch_parent(sw));
+	if (!port->usb4)
+		return;
+
+	sysfs_remove_link(&port->usb4->dev.kobj, "device");
+	sysfs_remove_link(&sw->dev.kobj, "port");
+}
+
 /**
  * tb_switch_add() - Add a switch to the domain
  * @sw: Switch to add
@@ -2411,6 +2449,9 @@ int tb_switch_add(struct tb_switch *sw)
 		return ret;
 	}
 
+	tb_switch_link_to_port(sw);
+	usb4_switch_add_ports(sw);
+
 	pm_runtime_set_active(&sw->dev);
 	if (sw->rpm) {
 		pm_runtime_set_autosuspend_delay(&sw->dev, TB_AUTOSUSPEND_DELAY);
@@ -2454,10 +2495,13 @@ void tb_switch_remove(struct tb_switch *sw)
 	if (!sw->is_unplugged)
 		tb_plug_events_active(sw, false);
 
-	if (tb_switch_is_usb4(sw))
+	if (tb_switch_is_usb4(sw)) {
+		usb4_switch_remove_ports(sw);
 		usb4_switch_unconfigure_link(sw);
-	else
+	} else {
 		tb_lc_unconfigure_link(sw);
+	}
+	tb_switch_unlink_from_port(sw);
 
 	tb_switch_nvm_remove(sw);
 
