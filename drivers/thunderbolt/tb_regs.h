@@ -292,12 +292,31 @@ struct tb_regs_port_header {
 #define LANE_ADP_CS_1_CURRENT_WIDTH_SHIFT	20
 
 /* USB4 port registers */
+#define PORT_CS_1				0x01
+#define PORT_CS_1_ADDRESS_MASK			GENMASK(7, 0)
+#define PORT_CS_1_LENGTH_SHIFT			8
+#define PORT_CS_1_TARGET_MASK			GENMASK(18, 16)
+#define PORT_CS_1_TARGET_SHIFT			16
+#define PORT_CS_1_RETIMER_INDEX_SHIFT		20
+#define PORT_CS_1_WNR_WRITE			BIT(24)
+#define PORT_CS_1_NR				BIT(25)
+#define PORT_CS_1_RC				BIT(26)
+#define PORT_CS_1_PND				BIT(31)
+#define PORT_CS_2				0x02
 #define PORT_CS_18				0x12
 #define PORT_CS_18_BE				BIT(8)
+#define PORT_CS_18_TCM				BIT(9)
 #define PORT_CS_18_WOU4S			BIT(18)
 #define PORT_CS_19				0x13
 #define PORT_CS_19_PC				BIT(3)
 #define PORT_CS_19_WOU4				BIT(18)
+
+/* USB4 sideband registers common for routers and retimers */
+#define USB4_SB_VENDOR_ID			0x00
+#define USB4_SB_PRODUCT_ID			0x01
+#define USB4_SB_OPCODE				0x08
+#define USB4_SB_METADATA			0x09
+#define USB4_SB_DATA				0x12
 
 /* Display Port adapter registers */
 #define ADP_DP_CS_0				0x00

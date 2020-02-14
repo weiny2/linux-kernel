@@ -212,6 +212,25 @@ struct usb4_port {
 };
 
 /**
+ * tb_retimer: Thunderbolt retimer
+ * @dev: Device for the retimer
+ * @index: Retimer index facing the router USB4 port
+ * @vendor: Vendor ID of the retimer
+ * @device: Device ID of the retimer
+ * @port: Pointer to the lane 0 adapter
+ */
+struct tb_retimer {
+	struct device dev;
+	u8 index;
+	u32 vendor;
+	u32 device;
+	struct tb_port *port;
+	/* TODO: These are temporary and will be removed */
+	u8 nvm_major;
+	u8 nvm_minor;
+};
+
+/**
  * struct tb_path_hop - routing information for a tb_path
  * @in_port: Ingress port of a switch
  * @out_port: Egress port of a switch where the packet is routed out
@@ -550,6 +569,7 @@ struct tb *icm_probe(struct tb_nhi *nhi);
 struct tb *tb_probe(struct tb_nhi *nhi);
 
 extern struct device_type tb_domain_type;
+extern struct device_type tb_retimer_type;
 extern struct device_type tb_switch_type;
 
 int tb_domain_init(void);
@@ -828,6 +848,21 @@ void tb_xdomain_remove(struct tb_xdomain *xd);
 struct tb_xdomain *tb_xdomain_find_by_link_depth(struct tb *tb, u8 link,
 						 u8 depth);
 
+int tb_retimer_scan(struct tb_port *port);
+void tb_retimer_remove_all(struct tb_port *port);
+
+static inline bool tb_is_retimer(const struct device *dev)
+{
+	return dev->type == &tb_retimer_type;
+}
+
+static inline struct tb_retimer *tb_to_retimer(struct device *dev)
+{
+	if (tb_is_retimer(dev))
+		return container_of(dev, struct tb_retimer, dev);
+	return NULL;
+}
+
 int usb4_switch_setup(struct tb_switch *sw, bool restore);
 int usb4_switch_read_uid(struct tb_switch *sw, u64 *uid);
 int usb4_switch_drom_read(struct tb_switch *sw, unsigned int address, void *buf,
@@ -853,4 +888,20 @@ int usb4_switch_add_ports(struct tb_switch *sw);
 void usb4_switch_remove_ports(struct tb_switch *sw);
 
 int usb4_port_unlock(struct tb_port *port);
+
+int usb4_port_retimer_read(struct tb_port *port, u8 index, u8 reg, void *buf,
+			   u8 size);
+int usb4_port_retimer_write(struct tb_port *port, u8 index, u8 reg,
+			    const void *buf, u8 size);
+int usb4_port_retimer_is_last(struct tb_port *port, u8 index);
+int usb4_port_retimer_nvm_sector_size(struct tb_port *port, u8 index);
+int usb4_port_retimer_nvm_set_offset(struct tb_port *port, u8 index,
+				     unsigned int address);
+int usb4_port_retimer_nvm_write(struct tb_port *port, u8 index,
+				unsigned int address, const void *buf,
+				size_t size);
+int usb4_port_retimer_nvm_authenticate(struct tb_port *port, u8 index);
+int usb4_port_retimer_nvm_read(struct tb_port *port, u8 index,
+			       unsigned int address, void *buf, size_t size);
+
 #endif

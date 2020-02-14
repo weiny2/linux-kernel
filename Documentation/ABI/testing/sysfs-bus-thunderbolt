@@ -258,3 +258,29 @@ KernelVersion:	4.15
 Contact:	thunderbolt-software@lists.01.org
 Description:	This contains XDomain service specific settings as
 		bitmask. Format: %x
+
+What:		/sys/bus/thunderbolt/devices/<device>:<port>.<index>
+Date:		Aug 2020
+KernelVersion:	v5.8
+Contact:	Mika Westerberg <mika.westerberg@linux.intel.com>
+Description:	This represents retimer at <index> connected to USB4
+		port <port> of device <device>.
+
+What:		/sys/bus/thunderbolt/devices/<device>:<port>.<index>/device
+Date:		Aug 2020
+KernelVersion:	v5.8
+Contact:	Mika Westerberg <mika.westerberg@linux.intel.com>
+Description:	Retimer device identifier read from the hardware.
+
+What:		/sys/bus/thunderbolt/devices/<device>:<port>.<index>/nvm_version
+Date:		Aug 2020
+KernelVersion:	v5.8
+Contact:	Mika Westerberg <mika.westerberg@linux.intel.com>
+Description:	If the retimers has upgradeable firmware the version
+		number is available here. Format: %x.%x, major.minor.
+
+What:		/sys/bus/thunderbolt/devices/<device>:<port>.<index>/vendor
+Date:		Aug 2020
+KernelVersion:	v5.8
+Contact:	Mika Westerberg <mika.westerberg@linux.intel.com>
+Description:	Retimer vendor identifier read from the hardware.

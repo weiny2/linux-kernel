@@ -14,6 +14,7 @@
 
 #define USB4_DATA_DWORDS		16
 #define USB4_DATA_RETRIES		3
+#define USB4_TIMEOUT			250
 
 enum usb4_switch_op {
 	USB4_SWITCH_OP_QUERY_DP_RESOURCE = 0x10,
@@ -25,6 +26,23 @@ enum usb4_switch_op {
 	USB4_SWITCH_OP_NVM_SET_OFFSET = 0x23,
 	USB4_SWITCH_OP_DROM_READ = 0x24,
 	USB4_SWITCH_OP_NVM_SECTOR_SIZE = 0x25,
+};
+
+enum usb4_port_op {
+	USB4_PORT_OP_ERR = 0x20525245,			/* "ERR " */
+	USB4_PORT_OP_ONS = 0x444d4321,			/* "!CMD" */
+	USB4_PORT_OP_QUERY_LAST_RETIMER = 0x5453414c,	/* "LAST" */
+	USB4_PORT_OP_GET_NVM_SECTOR_SIZE = 0x53534e47,	/* "GNSS" */
+	USB4_PORT_OP_NVM_SET_OFFSET = 0x53504f42,	/* "BOPS" */
+	USB4_PORT_OP_NVM_BLOCK_WRITE = 0x574b4c42,	/* "BLKW" */
+	USB4_PORT_OP_NVM_AUTH_WRITE = 0x48545541,	/* "AUTH" */
+	USB4_PORT_OP_NVM_READ = 0x52524641,		/* "AFRR" */
+};
+
+enum usb4_sb_target {
+	USB4_SB_TARGET_ROUTER,
+	USB4_SB_TARGET_PARTNER,
+	USB4_SB_TARGET_RETIMER,
 };
 
 #define USB4_NVM_READ_OFFSET_MASK	GENMASK(23, 2)
@@ -41,6 +59,8 @@ enum usb4_switch_op {
 #define USB4_DROM_SIZE_SHIFT		15
 
 #define USB4_NVM_SECTOR_SIZE_MASK	GENMASK(23, 0)
+
+#define USB4_RT_NVM_AUTH_WRITE_MASK	GENMASK(5, 0)
 
 typedef int (*read_block_fn)(void *, unsigned int, void *, size_t);
 typedef int (*write_block_fn)(void *, const void *, size_t);
@@ -931,4 +951,454 @@ int usb4_port_unlock(struct tb_port *port)
 
 	val &= ~ADP_CS_4_LCK;
 	return tb_port_write(port, &val, TB_CFG_PORT, ADP_CS_4, 1);
+}
+
+static int usb4_port_read_data(struct tb_port *port, void *data, size_t dwords)
+{
+	if (dwords > USB4_DATA_DWORDS)
+		return -EINVAL;
+
+	return tb_port_read(port, data, TB_CFG_PORT, port->cap_usb4 + PORT_CS_2,
+			    dwords);
+}
+
+static int usb4_port_write_data(struct tb_port *port, const void *data,
+				size_t dwords)
+{
+	if (dwords > USB4_DATA_DWORDS)
+		return -EINVAL;
+
+	return tb_port_write(port, data, TB_CFG_PORT, port->cap_usb4 + PORT_CS_2,
+			     dwords);
+}
+
+static int usb4_port_wait_for_bit(struct tb_port *port, u32 offset, u32 bit,
+				  u32 value, int timeout_msec)
+{
+	ktime_t timeout = ktime_add_ms(ktime_get(), timeout_msec);
+
+	do {
+		u32 val;
+		int ret;
+
+		ret = tb_port_read(port, &val, TB_CFG_PORT, offset, 1);
+		if (ret)
+			return ret;
+
+		if ((val & bit) == value)
+			return 0;
+
+		usleep_range(50, 100);
+	} while (ktime_before(ktime_get(), timeout));
+
+	return -ETIMEDOUT;
+}
+
+static int usb4_port_sb_read(struct tb_port *port, enum usb4_sb_target target,
+			     u8 index, u8 reg, void *buf, u8 size,
+			     int timeout_msec)
+{
+	size_t dwords = DIV_ROUND_UP(size, 4);
+	int ret;
+	u32 val;
+
+	if (!port->cap_usb4)
+		return -EINVAL;
+
+	val = reg;
+	val |= size << PORT_CS_1_LENGTH_SHIFT;
+	val |= (target << PORT_CS_1_TARGET_SHIFT) & PORT_CS_1_TARGET_MASK;
+	if (target == USB4_SB_TARGET_RETIMER)
+		val |= (index << PORT_CS_1_RETIMER_INDEX_SHIFT);
+	val |= PORT_CS_1_PND;
+
+	ret = tb_port_write(port, &val, TB_CFG_PORT,
+			    port->cap_usb4 + PORT_CS_1, 1);
+	if (ret)
+		return ret;
+
+	ret = usb4_port_wait_for_bit(port, port->cap_usb4 + PORT_CS_1,
+				     PORT_CS_1_PND, 0, timeout_msec);
+	if (ret)
+		return ret;
+
+	ret = tb_port_read(port, &val, TB_CFG_PORT,
+			    port->cap_usb4 + PORT_CS_1, 1);
+	if (ret)
+		return ret;
+
+	if (val & PORT_CS_1_NR)
+		return -ENODEV;
+	if (val & PORT_CS_1_RC)
+		return -EIO;
+
+	return buf ? usb4_port_read_data(port, buf, dwords) : 0;
+}
+
+static int usb4_port_sb_write(struct tb_port *port, enum usb4_sb_target target,
+			      u8 index, u8 reg, const void *buf, u8 size,
+			      int timeout_msec)
+{
+	size_t dwords = DIV_ROUND_UP(size, 4);
+	int ret;
+	u32 val;
+
+	if (!port->cap_usb4)
+		return -EINVAL;
+
+	if (buf) {
+		ret = usb4_port_write_data(port, buf, dwords);
+		if (ret)
+			return ret;
+	}
+
+	val = reg;
+	val |= size << PORT_CS_1_LENGTH_SHIFT;
+	val |= PORT_CS_1_WNR_WRITE;
+	val |= (target << PORT_CS_1_TARGET_SHIFT) & PORT_CS_1_TARGET_MASK;
+	if (target == USB4_SB_TARGET_RETIMER)
+		val |= (index << PORT_CS_1_RETIMER_INDEX_SHIFT);
+	val |= PORT_CS_1_PND;
+
+	ret = tb_port_write(port, &val, TB_CFG_PORT,
+			    port->cap_usb4 + PORT_CS_1, 1);
+	if (ret)
+		return ret;
+
+	ret = usb4_port_wait_for_bit(port, port->cap_usb4 + PORT_CS_1,
+				     PORT_CS_1_PND, 0, timeout_msec);
+	if (ret)
+		return ret;
+
+	ret = tb_port_read(port, &val, TB_CFG_PORT,
+			    port->cap_usb4 + PORT_CS_1, 1);
+	if (ret)
+		return ret;
+
+	if (val & PORT_CS_1_NR)
+		return -ENODEV;
+	if (val & PORT_CS_1_RC)
+		return -EIO;
+
+	return 0;
+}
+
+static int usb4_port_sb_op(struct tb_port *port, enum usb4_sb_target target,
+			   u8 index, enum usb4_port_op opcode, int timeout_msec)
+{
+	u32 val;
+	int ret;
+
+	val = opcode;
+	ret = usb4_port_sb_write(port, target, index, USB4_SB_OPCODE, &val,
+				 sizeof(val), timeout_msec);
+	if (ret)
+		return ret;
+
+	/* Check results */
+	ret = usb4_port_sb_read(port, target, index, USB4_SB_OPCODE, &val,
+				sizeof(val), USB4_TIMEOUT);
+	if (ret)
+		return ret;
+
+	switch (val) {
+	case 0:
+		return 0;
+
+	case USB4_PORT_OP_ERR:
+		return -EAGAIN;
+
+	case USB4_PORT_OP_ONS:
+		return -EOPNOTSUPP;
+
+	default:
+		return -EIO;
+	}
+}
+
+static inline int usb4_port_retimer_op(struct tb_port *port, u8 index,
+				       enum usb4_port_op opcode, int timeout_msec)
+{
+	return usb4_port_sb_op(port, USB4_SB_TARGET_RETIMER, index, opcode,
+			       timeout_msec);
+}
+
+/**
+ * usb4_port_retimer_read() - Read from retimer sideband registers
+ * @port: USB4 port
+ * @index: Retimer index
+ * @reg: Sideband register to read
+ * @buf: Data from @reg is stored here
+ * @size: Number of bytes to read
+ *
+ * Function reads retimer sideband registers starting from @reg. The
+ * retimer is connected to @port at @index. Returns %0 in case of
+ * success, and read data is copied to @buf. If there is no retimer
+ * present at given @index returns %-ENODEV. In any other failure
+ * returns negative errno.
+ */
+int usb4_port_retimer_read(struct tb_port *port, u8 index, u8 reg, void *buf,
+			   u8 size)
+{
+	return usb4_port_sb_read(port, USB4_SB_TARGET_RETIMER, index, reg, buf,
+				 size, USB4_TIMEOUT);
+}
+
+/**
+ * usb4_port_retimer_write() - Write to retimer sideband registers
+ * @port: USB4 port
+ * @index: Retimer index
+ * @reg: Sideband register to write
+ * @buf: Data that is written starting from @reg
+ * @size: Number of bytes to write
+ *
+ * Writes retimer sideband registers starting from @reg. The retimer is
+ * connected to @port at @index. Returns %0 in case of success. If there
+ * is no retimer present at given @index returns %-ENODEV. In any other
+ * failure returns negative errno.
+ */
+int usb4_port_retimer_write(struct tb_port *port, u8 index, u8 reg,
+			    const void *buf, u8 size)
+{
+	return usb4_port_sb_write(port, USB4_SB_TARGET_RETIMER, index, reg, buf,
+				  size, USB4_TIMEOUT);
+}
+
+/**
+ * usb4_port_retimer_is_last() - Is the retimer last on-board retimer
+ * @port: USB4 port
+ * @index: Retimer index
+ *
+ * If the retimer at @index is last one (connected directly to the
+ * Type-C port) this function returns %1. If it is not returns %0. If
+ * the retimer is not present returns %-ENODEV. Otherwise returns
+ * negative errno.
+ */
+int usb4_port_retimer_is_last(struct tb_port *port, u8 index)
+{
+	u32 metadata;
+	int ret;
+
+	ret = usb4_port_retimer_op(port, index, USB4_PORT_OP_QUERY_LAST_RETIMER,
+				   USB4_TIMEOUT);
+	if (ret)
+		return ret;
+
+	ret = usb4_port_retimer_read(port, index, USB4_SB_METADATA, &metadata,
+				     sizeof(metadata));
+	return ret ? ret : metadata & 1;
+}
+
+/**
+ * usb4_port_retimer_nvm_sector_size() - Read retimer NVM sector size
+ * @port: USB4 port
+ * @index: Retimer index
+ *
+ * Reads NVM sector size (in bytes) of a retimer at @index. This
+ * operation can be used to determine whether the retimer supports NVM
+ * upgrade for example. Returns sector size in bytes or negative errno
+ * in case of error. Specifically returns %-ENODEV if there is no
+ * retimer at @index.
+ */
+int usb4_port_retimer_nvm_sector_size(struct tb_port *port, u8 index)
+{
+	u32 metadata;
+	int ret;
+
+	ret = usb4_port_retimer_op(port, index, USB4_PORT_OP_GET_NVM_SECTOR_SIZE,
+				   USB4_TIMEOUT);
+	if (ret)
+		return ret;
+
+	ret = usb4_port_retimer_read(port, index, USB4_SB_METADATA, &metadata,
+				     sizeof(metadata));
+	return ret ? ret : metadata & USB4_NVM_SECTOR_SIZE_MASK;
+}
+
+/**
+ * usb4_port_retimer_nvm_set_offset() - Set retimer NVM offset
+ * @port: USB4 port
+ * @index: Retimer index
+ * @address: Byte address to set
+ *
+ * This operation is used to set the starting address of the next NVM
+ * write operation. Typically this needs to be called only once and the
+ * retimer automatically increments the offset after each block write.
+ * Returns %0 if the offset was set successfully and negative errno in
+ * case of failure. Specifically returns %-ENODEV if there is no retimer
+ * at @index.
+ */
+int usb4_port_retimer_nvm_set_offset(struct tb_port *port, u8 index,
+				     unsigned int address)
+{
+       u32 metadata, dwaddress;
+       int ret;
+
+       dwaddress = address / 4;
+       metadata = (dwaddress << USB4_NVM_SET_OFFSET_SHIFT) &
+                  USB4_NVM_SET_OFFSET_MASK;
+
+       ret = usb4_port_retimer_write(port, index, USB4_SB_METADATA, &metadata,
+				     sizeof(metadata));
+       if (ret)
+               return ret;
+
+       return usb4_port_retimer_op(port, index, USB4_PORT_OP_NVM_SET_OFFSET,
+				   USB4_TIMEOUT);
+}
+
+struct retimer_info {
+	struct tb_port *port;
+	u8 index;
+};
+
+static int usb4_port_retimer_nvm_write_next_block(void *data, const void *buf,
+						  size_t dwords)
+
+{
+	const struct retimer_info *info = data;
+	struct tb_port *port = info->port;
+	u8 index = info->index;
+	int ret;
+
+	ret = usb4_port_write_data(port, buf, dwords);
+	if (ret)
+		return ret;
+
+	return usb4_port_retimer_op(port, index, USB4_PORT_OP_NVM_BLOCK_WRITE,
+				    USB4_TIMEOUT);
+}
+
+/**
+ * usb4_port_retimer_nvm_write() - Write to retimer NVM
+ * @port: USB4 port
+ * @index: Retimer index
+ * @address: Byte address where to start the write
+ * @buf: Data to write
+ * @size: Size in bytes how much to write
+ *
+ * Writes @size bytes from @buf to the retimer NVM. Used for NVM
+ * upgrade. Returns %0 if the data was written succesfully and negative
+ * errno in case of failure. Specifically returns %-ENODEV if there is
+ * no retimer at @index.
+ */
+int usb4_port_retimer_nvm_write(struct tb_port *port, u8 index, unsigned int address,
+				const void *buf, size_t size)
+{
+	struct retimer_info info = { .port = port, .index = index };
+	int ret;
+
+	ret = usb4_port_retimer_nvm_set_offset(port, index, address);
+	if (ret)
+		return ret;
+
+	return usb4_do_write_data(address, buf, size,
+			usb4_port_retimer_nvm_write_next_block, &info);
+}
+
+/**
+ * usb4_port_retimer_nvm_authenticate() - Start retimer NVM upgrade
+ * @port: USB4 port
+ * @index: Retimer index
+ *
+ * After the new NVM image has been written via usb4_port_retimer_nvm_write()
+ * this function can be used to trigger the NVM upgrade process. Returns
+ * %0 if the upgrade was successful and negative errno in case of
+ * failure. Specifically %-EAGAIN is returned if the caller need to
+ * rewrite the NVM image and restart the authentication. %-EINVAL is
+ * returned if the authentication failed.
+ *
+ * The retimer is expected to be operating fully after this completes
+ * successfully.
+ */
+int usb4_port_retimer_nvm_authenticate(struct tb_port *port, u8 index)
+{
+	u32 metadata;
+	int ret;
+
+	/*
+	 * The spec says we need to wait at least 5 seconds so we wait
+	 * 10 seconds just in case.
+	 */
+	ret = usb4_port_retimer_op(port, index, USB4_PORT_OP_NVM_AUTH_WRITE,
+				   5000);
+	if (ret)
+		return ret;
+
+	ret = usb4_port_retimer_read(port, index, USB4_SB_METADATA, &metadata,
+				     sizeof(metadata));
+	if (ret)
+		return ret;
+
+	switch (metadata & USB4_RT_NVM_AUTH_WRITE_MASK) {
+	case 0x0:
+		/*
+		 * TODO: After the upgrade retimers may not have their
+		 *	 index set so we need to issue ENUMERATE_RE-TIMERS
+		 *	 here now and check that the retimer answers to it.
+		 */
+		tb_port_dbg(port, "retimer %u NVM authentication successful\n",
+			    index);
+		return 0;
+	case 0x1:
+		return -EINVAL;
+	case 0x2:
+		return -EAGAIN;
+	default:
+		return -EIO;
+	}
+}
+
+static int usb4_port_retimer_nvm_read_block(void *data, unsigned int dwaddress,
+					    void *buf, size_t dwords)
+{
+	const struct retimer_info *info = data;
+	struct tb_port *port = info->port;
+	u8 index = info->index;
+	u32 metadata;
+	int ret;
+
+	metadata = dwaddress << USB4_NVM_READ_OFFSET_SHIFT;
+	if (dwords < USB4_DATA_DWORDS)
+		metadata |= dwords << USB4_NVM_READ_LENGTH_SHIFT;
+
+	ret = usb4_port_retimer_write(port, index, USB4_SB_METADATA, &metadata,
+				      sizeof(metadata));
+	if (ret) {
+		tb_port_dbg(port, "retimer %u metadata write failed: %d\n",
+			    index, ret);
+		return ret;
+	}
+
+	ret = usb4_port_retimer_op(port, index, USB4_PORT_OP_NVM_READ,
+				   USB4_TIMEOUT);
+	if (ret) {
+		tb_port_dbg(port, "retimer %u port operation failed: %d\n",
+			    index, ret);
+		return ret;
+	}
+
+	return usb4_port_retimer_read(port, index, USB4_SB_DATA, buf,
+				      dwords * 4);
+}
+
+/**
+ * usb4_port_retimer_nvm_read() - Read contents of retimer NVM
+ * @port: USB4 port
+ * @index: Retimer index
+ * @address: NVM address (in bytes) to start reading
+ * @buf: Data read from NVM is stored here
+ * @size: Number of bytes to read
+ *
+ * Reads retimer NVM and copies the contents to @buf. Returns %0 if the
+ * read was successful and negative errno in case of failure.
+ * Specifically returns %-ENODEV if there is no retimer at @index.
+ */
+int usb4_port_retimer_nvm_read(struct tb_port *port, u8 index,
+			       unsigned int address, void *buf, size_t size)
+{
+	struct retimer_info info = { .port = port, .index = index };
+
+	return usb4_do_read_data(address, buf, size,
+			usb4_port_retimer_nvm_read_block, &info);
 }
