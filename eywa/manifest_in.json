@@ -2968,7 +2968,7 @@
                 }
             ],
             "description": "Thunderbay I/O drivers",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Ajit Tapkir",
@@ -2977,7 +2977,7 @@
             ],
             "jira": "NEXT-1782",
             "name": "Thunderbay IO",
-            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/hspe_csw/bsp/otc_intel_next-linux.git",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/hspe_csw/bsp/linux.git",
             "sdl_contact": [
                 {
                     "name": "Ajit Tapkir",
