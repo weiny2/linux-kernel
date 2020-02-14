@@ -1316,14 +1316,14 @@
                 }
             ],
             "description": "Type-C Support",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Vijay Kadgi",
                     "email": "vijaykumar.b.kadgi@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1813",
             "name": "usb-typec",
             "repourl": "ssh://git-amr-4.devtools.intel.com:29418/otc_usb-typec.git",
             "sdl_contact": [
