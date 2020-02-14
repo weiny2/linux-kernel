@@ -348,6 +348,12 @@ out:
 	return ret;
 }
 
+static int tb_switch_nvm_no_read(void *priv, unsigned int offset, void *val,
+				 size_t bytes)
+{
+	return -EPERM;
+}
+
 static int tb_switch_nvm_write(void *priv, unsigned int offset, void *val,
 			       size_t bytes)
 {
@@ -393,6 +399,7 @@ static struct nvmem_device *register_nvmem(struct tb_switch *sw, int id,
 		config.read_only = true;
 	} else {
 		config.name = "nvm_non_active";
+		config.reg_read = tb_switch_nvm_no_read;
 		config.reg_write = tb_switch_nvm_write;
 		config.root_only = true;
 	}
@@ -1265,23 +1272,24 @@ static void tb_dump_switch(const struct tb *tb, const struct tb_switch *sw)
 
 /**
  * reset_switch() - reconfigure route, enable and send TB_CFG_PKG_RESET
+ * @sw: Switch to reset
  *
  * Return: Returns 0 on success or an error code on failure.
  */
-int tb_switch_reset(struct tb *tb, u64 route)
+int tb_switch_reset(struct tb_switch *sw)
 {
 	struct tb_cfg_result res;
-	struct tb_regs_switch_header header = {
-		header.route_hi = route >> 32,
-		header.route_lo = route,
-		header.enabled = true,
-	};
-	tb_dbg(tb, "resetting switch at %llx\n", route);
-	res.err = tb_cfg_write(tb->ctl, ((u32 *) &header) + 2, route,
-			0, 2, 2, 2);
+
+	if (sw->generation > 1)
+		return 0;
+
+	tb_sw_dbg(sw, "resetting switch\n");
+
+	res.err = tb_sw_write(sw, ((u32 *) &sw->config) + 2,
+			      TB_CFG_SWITCH, 2, 2);
 	if (res.err)
 		return res.err;
-	res = tb_cfg_reset(tb->ctl, route, TB_CFG_DEFAULT_TIMEOUT);
+	res = tb_cfg_reset(sw->tb->ctl, tb_route(sw), TB_CFG_DEFAULT_TIMEOUT);
 	if (res.err > 0)
 		return -EIO;
 	return res.err;
@@ -1984,6 +1992,7 @@ tb_switch_alloc_safe_mode(struct tb *tb, struct device *parent, u64 route)
  */
 int tb_switch_configure(struct tb_switch *sw)
 {
+	bool restore = sw->config.enabled;
 	struct tb *tb = sw->tb;
 	u64 route;
 	int ret;
@@ -1991,7 +2000,7 @@ int tb_switch_configure(struct tb_switch *sw)
 	route = tb_route(sw);
 
 	tb_dbg(tb, "%s Switch at %#llx (depth: %d, up port: %d)\n",
-	       sw->config.enabled ? "restoring " : "initializing", route,
+	       restore ? "restoring " : "initializing", route,
 	       tb_route_length(route), sw->config.upstream_port_number);
 
 	sw->config.enabled = 1;
@@ -2010,7 +2019,7 @@ int tb_switch_configure(struct tb_switch *sw)
 		if (ret)
 			return ret;
 
-		ret = usb4_switch_setup(sw);
+		ret = usb4_switch_setup(sw, restore);
 		if (ret)
 			return ret;
 
@@ -2314,6 +2323,44 @@ void tb_switch_lane_bonding_disable(struct tb_switch *sw)
 	tb_sw_dbg(sw, "lane bonding disabled\n");
 }
 
+static void tb_switch_link_to_port(struct tb_switch *sw)
+{
+	u64 route = tb_route(sw);
+	struct tb_port *port;
+	int ret;
+
+	if (!route)
+		return;
+
+	port = tb_port_at(route, tb_switch_parent(sw));
+	if (!port->usb4)
+		return;
+
+	ret = sysfs_create_link(&sw->dev.kobj, &port->usb4->dev.kobj, "port");
+	if (ret)
+		return;
+
+	ret = sysfs_create_link(&port->usb4->dev.kobj, &sw->dev.kobj, "device");
+	if (ret)
+		sysfs_remove_link(&sw->dev.kobj, "port");
+}
+
+static void tb_switch_unlink_from_port(struct tb_switch *sw)
+{
+	u64 route = tb_route(sw);
+	struct tb_port *port;
+
+	if (!tb_route(sw))
+		return;
+
+	port = tb_port_at(route, tb_switch_parent(sw));
+	if (!port->usb4)
+		return;
+
+	sysfs_remove_link(&port->usb4->dev.kobj, "device");
+	sysfs_remove_link(&sw->dev.kobj, "port");
+}
+
 /**
  * tb_switch_add() - Add a switch to the domain
  * @sw: Switch to add
@@ -2402,6 +2449,9 @@ int tb_switch_add(struct tb_switch *sw)
 		return ret;
 	}
 
+	tb_switch_link_to_port(sw);
+	usb4_switch_add_ports(sw);
+
 	pm_runtime_set_active(&sw->dev);
 	if (sw->rpm) {
 		pm_runtime_set_autosuspend_delay(&sw->dev, TB_AUTOSUSPEND_DELAY);
@@ -2440,15 +2490,21 @@ void tb_switch_remove(struct tb_switch *sw)
 			tb_xdomain_remove(port->xdomain);
 			port->xdomain = NULL;
 		}
+
+		/* Remove any downstream retimers */
+		tb_retimer_remove_all(port);
 	}
 
 	if (!sw->is_unplugged)
 		tb_plug_events_active(sw, false);
 
-	if (tb_switch_is_usb4(sw))
+	if (tb_switch_is_usb4(sw)) {
+		usb4_switch_remove_ports(sw);
 		usb4_switch_unconfigure_link(sw);
-	else
+	} else {
 		tb_lc_unconfigure_link(sw);
+	}
+	tb_switch_unlink_from_port(sw);
 
 	tb_switch_nvm_remove(sw);
 

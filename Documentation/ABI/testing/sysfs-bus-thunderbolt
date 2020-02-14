@@ -189,6 +189,28 @@ Description:	When new NVM image is written to the non-active NVM
 		based mailbox before the device is power cycled. Writing
 		0 here clears the status.
 
+What:		/sys/bus/thunderbolt/devices/.../port
+Date:		Aug 2020
+KernelVersion:	v5.8
+Contact:	Mika Westerberg <mika.westerberg@linux.intel.com>
+Description:	If the device is connected to USB4 downstream port this
+		symlink points to that port.
+
+What:		/sys/bus/thunderbolt/devices/.../portX
+Date:		Aug 2020
+KernelVersion:	v5.8
+Contact:	Mika Westerberg <mika.westerberg@linux.intel.com>
+Description:	Only available on USB4 devices. One portX device is
+		created for each USB4 port on the device. The numbering
+		uses lane 0 adapter number.
+
+What:		/sys/bus/thunderbolt/devices/.../portX/device
+Date:		Aug 2020
+KernelVersion:	v5.8
+Contact:	Mika Westerberg <mika.westerberg@linux.intel.com>
+Description:	If this USB4 port has device connected this symlink
+		points to that device.
+
 What:		/sys/bus/thunderbolt/devices/<xdomain>.<service>/key
 Date:		Jan 2018
 KernelVersion:	4.15
@@ -236,3 +258,29 @@ KernelVersion:	4.15
 Contact:	thunderbolt-software@lists.01.org
 Description:	This contains XDomain service specific settings as
 		bitmask. Format: %x
+
+What:		/sys/bus/thunderbolt/devices/<device>:<port>.<index>
+Date:		Aug 2020
+KernelVersion:	v5.8
+Contact:	Mika Westerberg <mika.westerberg@linux.intel.com>
+Description:	This represents retimer at <index> connected to USB4
+		port <port> of device <device>.
+
+What:		/sys/bus/thunderbolt/devices/<device>:<port>.<index>/device
+Date:		Aug 2020
+KernelVersion:	v5.8
+Contact:	Mika Westerberg <mika.westerberg@linux.intel.com>
+Description:	Retimer device identifier read from the hardware.
+
+What:		/sys/bus/thunderbolt/devices/<device>:<port>.<index>/nvm_version
+Date:		Aug 2020
+KernelVersion:	v5.8
+Contact:	Mika Westerberg <mika.westerberg@linux.intel.com>
+Description:	If the retimers has upgradeable firmware the version
+		number is available here. Format: %x.%x, major.minor.
+
+What:		/sys/bus/thunderbolt/devices/<device>:<port>.<index>/vendor
+Date:		Aug 2020
+KernelVersion:	v5.8
+Contact:	Mika Westerberg <mika.westerberg@linux.intel.com>
+Description:	Retimer vendor identifier read from the hardware.

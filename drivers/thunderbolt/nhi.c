@@ -1091,6 +1091,42 @@ static bool nhi_imr_valid(struct pci_dev *pdev)
 	return true;
 }
 
+static int pcie_port_add_links(struct device *dev, void *data)
+{
+	struct pci_dev *pdev = to_pci_dev(dev);
+	struct fwnode_reference_args args;
+	struct tb_nhi *nhi = data;
+	int ret;
+
+	if (!pci_is_pcie(pdev))
+		return 0;
+
+	if (pci_pcie_type(pdev) != PCI_EXP_TYPE_ROOT_PORT &&
+	    pci_pcie_type(pdev) != PCI_EXP_TYPE_DOWNSTREAM)
+		return 0;
+
+	/*
+	 * Check if the port has the optional usb4-host-interface
+	 * property.
+	 */
+	ret = fwnode_property_get_reference_args(dev_fwnode(dev),
+		"usb4-host-interface", NULL, NR_FWNODE_REFERENCE_ARGS,
+		0, &args);
+	if (!ret) {
+		/*
+		 * If it is referencing to this NHI add links between
+		 * the two now.
+		 */
+		if (args.fwnode == dev_fwnode(&nhi->pdev->dev)) {
+			device_link_add(&pdev->dev, &nhi->pdev->dev,
+					DL_FLAG_AUTOREMOVE_SUPPLIER |
+					DL_FLAG_PM_RUNTIME);
+		}
+	}
+
+	return 0;
+}
+
 static int nhi_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 {
 	struct tb_nhi *nhi;
@@ -1152,6 +1188,9 @@ static int nhi_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 
 	pci_set_master(pdev);
 
+	/* Find all PCIe ports with firmware linkage description */
+	bus_for_each_dev(&pci_bus_type, NULL, nhi, pcie_port_add_links);
+
 	if (nhi->ops && nhi->ops->init) {
 		res = nhi->ops->init(nhi);
 		if (res)
@@ -1181,10 +1220,14 @@ static int nhi_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	}
 	pci_set_drvdata(pdev, tb);
 
+	device_init_wakeup(&pdev->dev, true);
+
 	pm_runtime_allow(&pdev->dev);
 	pm_runtime_set_autosuspend_delay(&pdev->dev, TB_AUTOSUSPEND_DELAY);
 	pm_runtime_use_autosuspend(&pdev->dev);
 	pm_runtime_put_autosuspend(&pdev->dev);
+
+	tb_dbg_register_domain(tb);
 
 	return 0;
 }
@@ -1193,6 +1236,8 @@ static void nhi_remove(struct pci_dev *pdev)
 {
 	struct tb *tb = pci_get_drvdata(pdev);
 	struct tb_nhi *nhi = tb->nhi;
+
+	tb_dbg_unregister_domain(tb);
 
 	pm_runtime_get_sync(&pdev->dev);
 	pm_runtime_dont_use_autosuspend(&pdev->dev);
@@ -1270,6 +1315,13 @@ static struct pci_device_id nhi_ids[] = {
 	  .driver_data = (kernel_ulong_t)&icl_nhi_ops },
 	{ PCI_VDEVICE(INTEL, PCI_DEVICE_ID_INTEL_ICL_NHI1),
 	  .driver_data = (kernel_ulong_t)&icl_nhi_ops },
+	{ PCI_VDEVICE(INTEL, PCI_DEVICE_ID_INTEL_TGL_NHI0),
+	  .driver_data = (kernel_ulong_t)&tgl_nhi_ops },
+	{ PCI_VDEVICE(INTEL, PCI_DEVICE_ID_INTEL_TGL_NHI1),
+	  .driver_data = (kernel_ulong_t)&tgl_nhi_ops },
+
+	/* USB4 */
+	{ PCI_VDEVICE(INTEL, PCI_DEVICE_ID_INTEL_MAPLE_RIDGE_4C_NHI) },
 
 	/* Any USB4 compliant host */
 	{ PCI_DEVICE_CLASS(PCI_CLASS_SERIAL_USB_USB4, ~0) },
@@ -1295,15 +1347,22 @@ static int __init nhi_init(void)
 	ret = tb_domain_init();
 	if (ret)
 		return ret;
+
+	tb_dbg_init();
+
 	ret = pci_register_driver(&nhi_driver);
-	if (ret)
+	if (ret) {
+		tb_dbg_exit();
 		tb_domain_exit();
+	}
+
 	return ret;
 }
 
 static void __exit nhi_unload(void)
 {
 	pci_unregister_driver(&nhi_driver);
+	tb_dbg_exit();
 	tb_domain_exit();
 }
 

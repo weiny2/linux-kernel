@@ -339,6 +339,10 @@ static void tb_scan_port(struct tb_port *port)
 		tb_port_dbg(port, "port already has a remote\n");
 		return;
 	}
+
+	/* Scan for downstream retimers on this link */
+	tb_retimer_scan(port);
+
 	sw = tb_switch_alloc(port->sw->tb, &port->sw->dev,
 			     tb_downstream_route(port));
 	if (IS_ERR(sw)) {
@@ -374,6 +378,8 @@ static void tb_scan_port(struct tb_port *port)
 	if (!tcm->hotplug_active)
 		dev_set_uevent_suppress(&sw->dev, true);
 
+	device_init_wakeup(&sw->dev, true);
+
 	if (tb_switch_add(sw)) {
 		tb_switch_put(sw);
 		return;
@@ -394,6 +400,9 @@ static void tb_scan_port(struct tb_port *port)
 
 	if (tb_enable_tmu(sw))
 		tb_sw_warn(sw, "failed to enable TMU\n");
+
+	/* Scan upstream retimers */
+	tb_retimer_scan(upstream_port);
 
 	/*
 	 * Create USB 3.x tunnels only when the switch is plugged to the
@@ -827,6 +836,8 @@ static void tb_handle_hotplug(struct work_struct *work)
 		goto put_sw;
 	}
 	if (ev->unplug) {
+		tb_retimer_remove_all(port);
+
 		if (tb_port_has_remote(port)) {
 			tb_port_dbg(port, "switch unplugged\n");
 			tb_sw_set_unplugged(port->remote->sw);
@@ -972,6 +983,13 @@ static int tb_start(struct tb *tb)
 		return ret;
 	}
 
+	/*
+	 * Thunderbolt and USB4 devices themselves do not generate
+	 * wakeup but they are used to tunnel other protocols that do
+	 * wake so we enable it here.
+	 */
+	device_init_wakeup(&tb->root_switch->dev, true);
+
 	/* Announce the switch to the world */
 	ret = tb_switch_add(tb->root_switch);
 	if (ret) {
@@ -1039,7 +1057,7 @@ static int tb_resume_noirq(struct tb *tb)
 	tb_dbg(tb, "resuming...\n");
 
 	/* remove any pci devices the firmware might have setup */
-	tb_switch_reset(tb, 0);
+	tb_switch_reset(tb->root_switch);
 
 	tb_switch_resume(tb->root_switch);
 	tb_free_invalid_tunnels(tb);
@@ -1071,6 +1089,7 @@ static int tb_free_unplugged_xdomains(struct tb_switch *sw)
 		if (tb_is_upstream_port(port))
 			continue;
 		if (port->xdomain && port->xdomain->is_unplugged) {
+			tb_retimer_remove_all(port);
 			tb_xdomain_remove(port->xdomain);
 			port->xdomain = NULL;
 			ret++;
