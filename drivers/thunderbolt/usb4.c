@@ -115,11 +115,8 @@ static int usb4_do_read_data(u16 address, void *buf, size_t size,
 
 		ret = read_block(read_block_data, dwaddress, data, dwords);
 		if (ret) {
-			if (ret == -ETIMEDOUT) {
-				if (retries--)
-					continue;
-				ret = -EIO;
-			}
+			if (ret != -ENODEV && retries--)
+				continue;
 			return ret;
 		}
 
@@ -151,11 +148,8 @@ static int usb4_do_write_data(unsigned int address, const void *buf, size_t size
 
 		ret = write_next_block(write_block_data, data, nbytes / 4);
 		if (ret) {
-			if (ret == -ETIMEDOUT) {
-				if (retries--)
-					continue;
-				ret = -EIO;
-			}
+			if (ret != -ENODEV && retries--)
+				continue;
 			return ret;
 		}
 
