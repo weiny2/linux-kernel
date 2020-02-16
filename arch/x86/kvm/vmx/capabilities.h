@@ -367,4 +367,10 @@ static inline bool vmx_pt_mode_is_host_guest(void)
 	return pt_mode == PT_MODE_HOST_GUEST;
 }
 
+static inline bool cpu_has_vmx_no_commit_exiting(void)
+{
+	return vmcs_config.cpu_based_2nd_exec_ctrl &
+		SECONDARY_EXEC_NO_COMMIT_EXITING;
+}
+
 #endif /* __KVM_X86_VMX_CAPS_H */
