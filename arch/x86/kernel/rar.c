@@ -13,6 +13,7 @@
 #include <asm/smp.h>
 #include <asm/sync_bitops.h>
 #include <asm/tlbflush.h>
+#include <asm/io.h>
 
 static unsigned long rar_in_use = ~GENMASK(RAR_MAX_PAYLOADS - 1, 0);
 static struct rar_payload rar_payload[RAR_MAX_PAYLOADS] __page_aligned_bss;
