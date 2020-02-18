@@ -1091,6 +1091,29 @@ static bool nhi_imr_valid(struct pci_dev *pdev)
 	return true;
 }
 
+static struct tb *nhi_select_cm(struct tb_nhi *nhi)
+{
+	struct tb *tb;
+
+	/*
+	 * USB4 case is simple. If we got control of any of the
+	 * capabilities, we use software CM.
+	 */
+	if (tb_is_native())
+		return tb_probe(nhi);
+
+	/*
+	 * Either firmware based CM is running (we did not get control
+	 * from the firmware) or this is pre-USB4 PC so try first
+	 * firmware CM and then fallback to software CM.
+	 */
+	tb = icm_probe(nhi);
+	if (!tb)
+		tb = tb_probe(nhi);
+
+	return tb;
+}
+
 static int nhi_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 {
 	struct tb_nhi *nhi;
@@ -1158,9 +1181,7 @@ static int nhi_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 			return res;
 	}
 
-	tb = icm_probe(nhi);
-	if (!tb)
-		tb = tb_probe(nhi);
+	tb = nhi_select_cm(nhi);
 	if (!tb) {
 		dev_err(&nhi->pdev->dev,
 			"failed to determine connection manager, aborting\n");
