@@ -1316,7 +1316,7 @@
                 }
             ],
             "description": "Type-C Support",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Vijay Kadgi",
