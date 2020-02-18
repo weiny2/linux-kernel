@@ -408,3 +408,11 @@ void __init map_vsyscall(void)
 	BUILD_BUG_ON((unsigned long)__fix_to_virt(VSYSCALL_PAGE) !=
 		     (unsigned long)VSYSCALL_ADDR);
 }
+
+void emulate_vsyscall_xonly(void)
+{
+	if (vsyscall_mode == EMULATE) {
+		pr_info("vsyscall emulation is enabled, but still set vyscall mode x-only.\n");
+		vsyscall_mode = XONLY;
+	}
+}
