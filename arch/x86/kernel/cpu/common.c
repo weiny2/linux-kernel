@@ -56,6 +56,7 @@
 #include <asm/intel-family.h>
 #include <asm/cpu_device_id.h>
 #include <asm/uv/uv.h>
+#include <asm/vsyscall.h>
 
 #include "cpu.h"
 
@@ -321,6 +322,14 @@ static __always_inline void setup_smap(struct cpuinfo_x86 *c)
 		cr4_clear_bits(X86_CR4_SMAP);
 #endif
 	}
+}
+
+static __always_inline void setup_lass(struct cpuinfo_x86 *c)
+{
+       if (cpu_has(c, X86_FEATURE_LASS))
+               cr4_set_bits(X86_CR4_LASS);
+       else
+               cr4_clear_bits(X86_CR4_LASS);
 }
 
 static __always_inline void setup_umip(struct cpuinfo_x86 *c)
@@ -1477,6 +1486,7 @@ static void identify_cpu(struct cpuinfo_x86 *c)
 	setup_smep(c);
 	setup_smap(c);
 	setup_umip(c);
+	setup_lass(c);
 
 	/*
 	 * The vendor-specific functions might have changed features.
