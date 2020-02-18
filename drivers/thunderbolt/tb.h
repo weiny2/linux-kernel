@@ -9,6 +9,7 @@
 #ifndef TB_H_
 #define TB_H_
 
+#include <linux/acpi.h>
 #include <linux/nvmem-provider.h>
 #include <linux/pci.h>
 #include <linux/thunderbolt.h>
@@ -945,4 +946,39 @@ int usb4_usb3_port_allocate_bandwidth(struct tb_port *port, int *upstream_bw,
 				      int *downstream_bw);
 int usb4_usb3_port_release_bandwidth(struct tb_port *port, int *upstream_bw,
 				     int *downstream_bw);
+
+#ifdef CONFIG_ACPI
+static inline bool tb_is_native(void)
+{
+	return osc_sb_native_usb4_support_confirmed &&
+	       osc_sb_native_usb4_control;
+}
+
+static inline bool tb_can_tunnel_usb3(void)
+{
+	if (tb_is_native())
+		return osc_sb_native_usb4_control & OSC_USB_USB3_TUNNELING;
+	return true;
+}
+
+static inline bool tb_can_tunnel_dp(void)
+{
+	if (tb_is_native())
+		return osc_sb_native_usb4_control & OSC_USB_DP_TUNNELING;
+	return true;
+}
+
+static inline bool tb_can_tunnel_pcie(void)
+{
+	if (tb_is_native())
+		return osc_sb_native_usb4_control & OSC_USB_PCIE_TUNNELING;
+	return true;
+}
+#else
+static inline bool tb_is_native(void) { return true; }
+static inline bool tb_can_tunnel_usb3(void) { return true; }
+static inline bool tb_can_tunnel_dp(void) { return true; }
+static inline bool tb_can_tunnel_pcie(void) { return true; }
+#endif
+
 #endif
