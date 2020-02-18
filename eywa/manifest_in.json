@@ -3156,7 +3156,7 @@
                 }
             ],
             "description": "SVOS Kernel/Driver Changes for v5.6",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Tom Stonecypher",
