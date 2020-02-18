@@ -73,6 +73,10 @@ Description:	This attribute is used to authorize Thunderbolt devices
 		   the device did not contain a key at all, and
 		   EKEYREJECTED if the challenge response did not match.
 
+		For USB4 capable systems if the platform firmware did
+		not grant PCIe tunneling control to Linux, writing to
+		this attribute fails with errno EOPNOTSUPP.
+
 What: /sys/bus/thunderbolt/devices/.../boot
 Date:		Jun 2018
 KernelVersion:	4.17

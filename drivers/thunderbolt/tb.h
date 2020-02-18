@@ -959,8 +959,18 @@ int usb4_usb3_port_release_bandwidth(struct tb_port *port, int *upstream_bw,
 
 #ifdef CONFIG_ACPI
 void tb_acpi_add_links(struct tb_nhi *nhi);
+
+bool tb_acpi_is_native(void);
+bool tb_acpi_may_tunnel_usb3(void);
+bool tb_acpi_may_tunnel_dp(void);
+bool tb_acpi_may_tunnel_pcie(void);
 #else
 static inline void tb_acpi_add_links(struct tb_nhi *nhi) { }
+
+static inline bool tb_acpi_is_native(void) { return true; }
+static inline bool tb_acpi_may_tunnel_usb3(void) { return true; }
+static inline bool tb_acpi_may_tunnel_dp(void) { return true; }
+static inline bool tb_acpi_may_tunnel_pcie(void) { return true; }
 #endif
 
 #endif
