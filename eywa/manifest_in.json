@@ -3133,7 +3133,7 @@
             "stuck_at_ref": ""
         },
         {
-            "branch": "svos-next-pull-5.5",
+            "branch": "svos-next-pull-5.6",
             "branch_type": "expiring",
             "config_options": [
                 {
@@ -3143,6 +3143,10 @@
                 {
                     "name": "CONFIG_SVFS_ACPI",
                     "value": "n"
+                },
+                {
+                    "name": "CONFIG_SVOS_RAS_ERRORCORRECT",
+                    "value": "n"
                 }
             ],
             "contributor": [
@@ -3151,8 +3155,8 @@
                     "email": "tom.stonecypher@intel.com"
                 }
             ],
-            "description": "SVOS Kernel/Driver Changes for v5.5",
-            "enabled": false,
+            "description": "SVOS Kernel/Driver Changes for v5.6",
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Tom Stonecypher",
