@@ -1044,7 +1044,7 @@
                 }
             ],
             "description": "Linux EDAC support for SPR, EHL, ICL NNPI and and IEH support for TGL.",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Puneet Wadhawan",
@@ -1316,7 +1316,7 @@
                 }
             ],
             "description": "Type-C Support",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Vijay Kadgi",
