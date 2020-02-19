@@ -3163,7 +3163,7 @@
                     "email": "tom.stonecypher@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1818",
             "name": "SVOS Kernel",
             "repourl": "ssh://git-amr-1.devtools.intel.com:29418/svos_kernel-next.git",
             "sdl_contact": [
