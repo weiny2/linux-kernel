@@ -627,6 +627,12 @@ static int pmc_core_check_read_lock_bit(void)
 	return value & BIT(pmcdev->map->pm_read_disable_bit);
 }
 
+static void pmc_core_slps0_display(struct pmc_dev *pmcdev, struct device *dev,
+                                   struct seq_file *s);
+static void pmc_core_lpm_display(struct pmc_dev *pmcdev, struct device *dev,
+                                 struct seq_file *s, u32 offset,
+                                 const char *str,
+                                 const struct pmc_bit_map **maps);
 #if IS_ENABLED(CONFIG_DEBUG_FS)
 static bool slps0_dbg_latch;
 
