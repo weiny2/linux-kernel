@@ -1921,15 +1921,15 @@
                     "email": "srinivas.pandruvada@intel.com"
                 }
             ],
-            "description": "Intel Thermal",
-            "enabled": false,
+            "description": "x86/DTT thermal",
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Jim Hermerding",
                     "email": "jim.g.hermerding@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1820",
             "name": "thermal",
             "repourl": "ssh://git-amr-4.devtools.intel.com:29418/otc_linux_spandruv-internal.git",
             "sdl_contact": [
