@@ -988,13 +988,25 @@ static bool mei_cl_bus_dev_setup(struct mei_device *bus,
 static int mei_cl_bus_dev_add(struct mei_cl_device *cldev)
 {
 	int ret;
+	struct device *clsdev = cldev->bus->clsdev;
+
+	if (!clsdev)
+		return -ENODEV;
 
 	dev_dbg(cldev->bus->dev, "adding %pUL:%02X\n",
 		mei_me_cl_uuid(cldev->me_cl),
 		mei_me_cl_ver(cldev->me_cl));
 	ret = device_add(&cldev->dev);
-	if (!ret)
-		cldev->is_added = 1;
+	if (ret)
+		return ret;
+
+	ret = sysfs_create_link_nowarn(&cldev->dev.kobj, &clsdev->kobj, "mei");
+	if (ret) {
+		device_del(&cldev->dev);
+		return ret;
+	}
+
+	cldev->is_added = 1;
 
 	return ret;
 }
@@ -1025,6 +1037,7 @@ static void mei_cl_bus_dev_destroy(struct mei_cl_device *cldev)
 	if (!cldev->is_added)
 		return;
 
+	sysfs_remove_link(&cldev->dev.kobj, "mei");
 	device_del(&cldev->dev);
 
 	list_del_init(&cldev->bus_list);
