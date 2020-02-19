@@ -54,7 +54,9 @@
 #define IGEN6_TOUUD_OFF			0xa8
 #define IGEN6_TOLUD_OFF			0xbc
 #define IGEN6_CAPID_C_OFF		0xec
+#define IGEN6_CAPID_E_OFF		0xf0
 #define IGEN6_CAPID_C_IBECC		BIT(15)
+#define IGEN6_CAPID_E_IBECC		BIT(12)
 #define _4GB				BIT_ULL(32)
 
 #define IGEN6_ERRSTS_OFF		0xc8
@@ -114,7 +116,7 @@ static struct res_config {
 	int num_imc;
 	u32 ibecc_base;
 	bool (*ibecc_available)(struct pci_dev *pdev);
-	u64 (*eaddr_to_saddr)(u64 eaddr);
+	u64 (*eaddr_to_saddr)(u64 eaddr, int mc);
 	u64 (*eaddr_to_iaddr)(u64 eaddr);
 } *res_cfg;
 
@@ -189,6 +191,9 @@ static struct work_struct ecclog_work;
 #define DID_EHL_SKU14	0x4534
 #define DID_EHL_SKU15	0x4536
 
+/* Compute die IDs for Tiger Lake with IBECC */
+#define DID_TGL_SKU	0x9a14
+
 static bool icl_ibecc_available(struct pci_dev *pdev)
 {
 	u32 v;
@@ -210,7 +215,17 @@ static bool ehl_ibecc_available(struct pci_dev *pdev)
 	return !!(IGEN6_CAPID_C_IBECC & v);
 }
 
-static u64 icl_eaddr_to_saddr(u64 eaddr)
+static bool tgl_ibecc_available(struct pci_dev *pdev)
+{
+	u32 v;
+
+	if (pci_read_config_dword(pdev, IGEN6_CAPID_E_OFF, &v))
+		return false;
+
+	return !(IGEN6_CAPID_E_IBECC & v);
+}
+
+static u64 icl_eaddr_to_saddr(u64 eaddr, int mc)
 {
 	return eaddr;
 }
@@ -226,6 +241,53 @@ static u64 icl_eaddr_to_iaddr(u64 eaddr)
 	if (eaddr < _4GB)
 		return eaddr + igen6_tolud - igen6_tom;
 
+	return eaddr;
+}
+
+static u64 tgl_maddr_to_saddr(u64 maddr)
+{
+	if (maddr < igen6_tolud)
+		return maddr;
+
+	if (igen6_tom <= _4GB)
+		return maddr - igen6_tolud + _4GB;
+
+	if (maddr < _4GB)
+		return maddr - igen6_tolud + igen6_tom;
+
+	return maddr;
+}
+
+static u64 tgl_eaddr_to_maddr(u64 eaddr, int mc)
+{
+	u32 hash = igen6_getreg(&igen6_pvt->imc[mc], u32, IGEN6_HASH_OFF);
+	int i, m = IGEN6_HASH_LSB_MASK_BIT(hash) + 6;
+	u64 inflated, h = 0;
+
+	inflated = GET_BITFIELD(eaddr, m, 63) << (m + 1) |
+		   GET_BITFIELD(eaddr, 0, m - 1);
+
+	if (IGEN6_HASH_MODE(hash)) {
+		eaddr &= IGEN6_HASH_MASK(hash);
+
+		for (i = 6; i < 20; i++)
+			h ^= (eaddr >> i) & 1;
+
+		h ^= mc;
+
+		return inflated | (h << m);
+	}
+
+	return inflated | (mc << m);
+}
+
+static u64 tgl_eaddr_to_saddr(u64 eaddr, int mc)
+{
+	return tgl_maddr_to_saddr(tgl_eaddr_to_maddr(eaddr, mc));
+}
+
+static u64 tgl_eaddr_to_iaddr(u64 eaddr)
+{
 	return eaddr;
 }
 
@@ -245,6 +307,14 @@ static struct res_config ehl_cfg = {
 	.eaddr_to_iaddr  = icl_eaddr_to_iaddr,
 };
 
+static struct res_config tgl_cfg = {
+	.num_imc	 = 2,
+	.ibecc_base	 = 0xd400,
+	.ibecc_available = tgl_ibecc_available,
+	.eaddr_to_saddr  = tgl_eaddr_to_saddr,
+	.eaddr_to_iaddr  = tgl_eaddr_to_iaddr,
+};
+
 static const struct pci_device_id igen6_pci_tbl[] = {
 	{ PCI_VDEVICE(INTEL, DID_ICL_SKU8), (kernel_ulong_t)&icl_cfg },
 	{ PCI_VDEVICE(INTEL, DID_ICL_SKU10), (kernel_ulong_t)&icl_cfg },
@@ -261,6 +331,7 @@ static const struct pci_device_id igen6_pci_tbl[] = {
 	{ PCI_VDEVICE(INTEL, DID_EHL_SKU13), (kernel_ulong_t)&ehl_cfg },
 	{ PCI_VDEVICE(INTEL, DID_EHL_SKU14), (kernel_ulong_t)&ehl_cfg },
 	{ PCI_VDEVICE(INTEL, DID_EHL_SKU15), (kernel_ulong_t)&ehl_cfg },
+	{ PCI_VDEVICE(INTEL, DID_TGL_SKU), (kernel_ulong_t)&tgl_cfg },
 	{ },
 };
 MODULE_DEVICE_TABLE(pci, igen6_pci_tbl);
@@ -521,7 +592,7 @@ static void ecclog_work_cb(struct work_struct *work)
 		eaddr = IGEN6_ECCERRLOG_ADDR(node->ecclog) <<
 			IGEN6_ECCERRLOG_ADDR_SHIFT;
 		res.mc	     = node->mc;
-		res.sys_addr = res_cfg->eaddr_to_saddr(eaddr);
+		res.sys_addr = res_cfg->eaddr_to_saddr(eaddr, res.mc);
 		res.imc_addr = res_cfg->eaddr_to_iaddr(eaddr);
 
 		mci = igen6_pvt->imc[res.mc].mci;
