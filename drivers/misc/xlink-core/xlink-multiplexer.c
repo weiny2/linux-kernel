@@ -169,7 +169,7 @@ static struct xlink_channel_type const *get_channel_type(uint16_t chan)
 {
 	int i = 0;
 	struct xlink_channel_type const *type = NULL;
-	
+
 	while(default_channel_table[i].start_range < NMB_CHANNELS) {
 		if ((chan >= default_channel_table[i].start_range) &&
 				(chan <= default_channel_table[i].stop_range)) {
@@ -194,7 +194,7 @@ static int is_channel_for_device_type(uint16_t chan,
 				return 1;
 		}
 	}
-	return 0; 
+	return 0;
 }
 
 static int is_enough_space_in_channel(struct open_channel *opchan,
@@ -312,6 +312,10 @@ static int multiplexer_open_channel(uint16_t chan)
 {
 	struct open_channel* opchan = NULL;
 
+	// channel already open
+	if (mux->channels[chan].opchan != NULL)
+		return X_LINK_SUCCESS;
+
 	// allocate open channel
 	opchan = kzalloc(sizeof(*opchan), GFP_KERNEL);
 	if (!opchan)
@@ -368,7 +372,7 @@ static int multiplexer_close_channel(struct open_channel *opchan)
 enum xlink_error xlink_multiplexer_init(void *dev)
 {
 	int rc = 0;
-	struct xlink_multiplexer *mux_init; 
+	struct xlink_multiplexer *mux_init;
 	struct platform_device *plat_dev = (struct platform_device *) dev;
 
 	// only initialize multiplexer once
@@ -898,7 +902,16 @@ enum xlink_error xlink_multiplexer_rx(struct xlink_event *event)
 			}
 		} else {
 			/* channel already open */
-			rc = X_LINK_ALREADY_OPEN;
+			opchan = get_channel(chan);
+			if (!opchan) {
+				rc = X_LINK_COMMUNICATION_FAIL;
+			} else {
+				event->header.timeout = opchan->chan->timeout;
+				event->header.type = XLINK_OPEN_CHANNEL_RESP;
+				xlink_dispatcher_event_add(EVENT_RX, event);
+			}
+			release_channel(opchan);
+			// printk(KERN_DEBUG "\n RX open chan %x already connected",chan);
 		}
 		break;
 	case XLINK_CLOSE_CHANNEL_REQ:
