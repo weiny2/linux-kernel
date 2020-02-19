@@ -416,6 +416,7 @@ int mxlk_core_init(struct mxlk *mxlk)
 {
 	int error;
 	int status;
+
 	struct mxlk_pcie *xdev = container_of(mxlk, struct mxlk_pcie, mxlk);
 
 	status = mxlk_get_device_status(mxlk);
@@ -465,6 +466,7 @@ error_stream:
 void mxlk_core_cleanup(struct mxlk *mxlk)
 {
 	if (mxlk->status == MXLK_STATUS_RUN) {
+		mxlk_set_physical_device_id(mxlk,0xFFFF);
 		mxlk_set_host_status(mxlk, MXLK_STATUS_READY);
 		mxlk_events_cleanup(mxlk);
 		mxlk_interfaces_cleanup(mxlk);

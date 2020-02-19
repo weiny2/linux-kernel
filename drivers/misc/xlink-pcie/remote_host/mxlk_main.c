@@ -23,14 +23,13 @@ static int mxlk_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	int ret = 0;
         uint8_t func = 0xFF;
 	struct mxlk_pcie *xdev = NULL;
-	        func = PCI_FUNC(pdev->devfn);
+	func = PCI_FUNC(pdev->devfn);
         printk("mxlk_probe() for function idx=%x start\n",func);
-	if (func > 7)
+	if (!(func & 0x1))
 	{
 		printk("return incomplete mxlk_probe() for function idx=%x\n",func);
 		return 0; // for now only probe for function 0 ;
 	}
-
 	xdev = kzalloc(sizeof(struct mxlk_pcie), GFP_KERNEL);
  	if (!xdev)
 		return -ENOMEM;

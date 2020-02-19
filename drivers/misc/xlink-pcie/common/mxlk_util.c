@@ -9,6 +9,65 @@
 
 #include "mxlk_util.h"
 
+u32 mxlk_create_sw_device_id(u8 func_no,u16 phy_id, u8 max_functions)
+{
+	int sw_id = 0;
+	switch (func_no)
+	{
+		case 0:
+		case 1:
+			sw_id = sw_id | SLICE_ID_0;
+			break;
+		case 2:
+		case 3:
+			sw_id = sw_id | SLICE_ID_1;
+			break;
+		case 4:
+		case 5:
+			sw_id = sw_id | SLICE_ID_2;
+			break;
+		case 6:
+		case 7:
+			sw_id = sw_id | SLICE_ID_3;
+			break;
+		default:
+			break;
+
+	}
+	if (!(func_no & 1)) // all even functions are media function
+		sw_id = sw_id | MEDIA_FUNCTION;
+
+	sw_id |= (phy_id << 0x8); // physical id
+
+	if (max_functions == 8)
+		sw_id = sw_id | TBH_STANDARD;
+	else if (max_functions == 4)
+		sw_id = sw_id | TBH_PRIME;
+
+	return sw_id;
+}
+
+
+void mxlk_set_max_functions(struct mxlk *mxlk, u8 max_functions )
+{
+	iowrite8(max_functions, mxlk->mmio + MXLK_MMIO_MAX_FUNCTION);
+}
+
+u8 mxlk_get_max_functions(struct mxlk *mxlk)
+{
+	return ioread8(mxlk->mmio + MXLK_MMIO_MAX_FUNCTION);
+}
+
+void mxlk_set_physical_device_id(struct mxlk *mxlk, u16 phys_id)
+{
+	iowrite16(phys_id, mxlk->mmio + MXLK_MMIO_PHY_DEV_ID);
+}
+
+u16 mxlk_get_physical_device_id(struct mxlk *mxlk)
+{
+	return ioread16(mxlk->mmio + MXLK_MMIO_PHY_DEV_ID);
+}
+
 void mxlk_set_device_status(struct mxlk *mxlk, u32 status)
 {
 	mxlk->status = status;
@@ -293,3 +352,4 @@ void mxlk_add_bd_to_interface(struct mxlk *mxlk, struct mxlk_buf_desc *bd)
 	mutex_unlock(&inf->rlock);
 	wake_up_interruptible(&inf->rx_waitqueue);
 }
+

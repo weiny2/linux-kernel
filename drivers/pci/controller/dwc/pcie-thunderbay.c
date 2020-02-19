@@ -765,6 +765,10 @@ static void thunderbay_pcie_ep_init(struct dw_pcie_ep *ep)
 
 	/* Retrieve and register interrupt from DT */
 	thunderbay_pcie->irq = irq_of_parse_and_map(pci->dev->of_node, 1);
+	ret = dma_set_mask_and_coherent(dev, DMA_BIT_MASK(64));
+	if (ret) {
+		printk("pcie:failed to set dma mask\n");
+	}
 }
 
 static int thunderbay_pcie_raise_irq(struct dw_pcie_ep *ep, u8 func_no,
@@ -999,6 +1003,8 @@ static int __init thunderbay_pcie_probe(struct platform_device *pdev)
 	pci->atu_base = pci->dbi_base + 0x300000;
 
 	platform_set_drvdata(pdev, pcie);
+
+
 
 	switch (pcie->mode) {
 	case DW_PCIE_RC_TYPE:

@@ -185,6 +185,7 @@ static void mxlk_start_rx(struct mxlk *mxlk, unsigned long delay)
 static void mxlk_rx_event_handler(struct work_struct *work)
 {
 	struct mxlk *mxlk = container_of(work, struct mxlk, rx_event.work);
+	struct mxlk_epf *mxlk_epf = container_of(mxlk, struct mxlk_epf, mxlk);
 
 	u16 interface;
 	u32 head, tail, ndesc, length;
@@ -194,11 +195,23 @@ static void mxlk_rx_event_handler(struct work_struct *work)
 	struct mxlk_transfer_desc *td;
 	unsigned long delay = msecs_to_jiffies(1);
 	bool reset_work = false;
+	u16 phy_id;
+	u8 max_functions;
 	// TODO Remove this when host->device interrupt is available
 	reset_work = true;
+
+	if ((mxlk_get_host_status(mxlk) == MXLK_STATUS_READY) && (false == mxlk_epf->sw_dev_id_updated))
+	{
+            phy_id = mxlk_get_physical_device_id(mxlk);
+	    max_functions = mxlk_get_max_functions(mxlk);
+	    mxlk_epf->sw_devid = mxlk_create_sw_device_id(mxlk_epf->epf->func_no,phy_id,max_functions);
+	    mxlk_epf->sw_dev_id_updated = true;
+	    dev_dbg(&mxlk_epf->epf->dev,"pcie : func_no=%d swid updated=%x, phy_id=%x\n",mxlk_epf->epf->func_no, mxlk_epf->sw_devid, phy_id);
+	    printk("pcie : func_no=%d swid updated=%x, phy_id=%x\n",mxlk_epf->epf->func_no, mxlk_epf->sw_devid, phy_id);
+	}
+
 	if (mxlk_get_host_status(mxlk) != MXLK_STATUS_RUN)
 		goto task_exit;
-
 	ndesc = rx->pipe.ndesc;
 	tail = mxlk_get_tdr_tail(&rx->pipe);
 	head = mxlk_get_tdr_head(&rx->pipe);
@@ -368,6 +381,7 @@ static void mxlk_events_cleanup(struct mxlk *mxlk)
 int mxlk_core_init(struct mxlk *mxlk)
 {
 	int error;
+        struct mxlk_epf *mxlk_epf = container_of(mxlk, struct mxlk_epf, mxlk);
 
 	global_mxlk = mxlk;
 
@@ -392,6 +406,7 @@ int mxlk_core_init(struct mxlk *mxlk)
 		goto error_interfaces;
 	}
 #endif
+	mxlk_epf->sw_dev_id_updated = false;
 	mxlk_set_device_status(mxlk, MXLK_STATUS_RUN);
         /*TBD*/
         mxlk_start_rx(mxlk, 0);

@@ -23,6 +23,7 @@
 #include <linux/dma-mapping.h>
 #include <linux/cache.h>
 #include <linux/wait.h>
+#include <linux/xlink_drv_inf.h>
 
 #include "mxlk_common.h"
 

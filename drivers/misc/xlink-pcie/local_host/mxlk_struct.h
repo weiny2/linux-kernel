@@ -15,6 +15,7 @@
 #include "../common/mxlk.h"
 
 #define MXLK_MAX_NAME_LEN (32)
+#define MXLK_MAX_BUS_SLOT_LEN (6)
 
 struct mxlk_epf {
 	struct pci_epf			*epf;
@@ -29,8 +30,9 @@ struct mxlk_epf {
 
 	wait_queue_head_t		dma_rd_wq;
 	wait_queue_head_t		dma_wr_wq;
-	u32                             sw_devid;
         char                            name[MXLK_MAX_NAME_LEN];
+	u32 				sw_devid;
+	bool                            sw_dev_id_updated;
 	struct list_head 		list;
 };
 

@@ -13,6 +13,7 @@
 #include <linux/io.h>
 #include <linux/types.h>
 #include <linux/pci_ids.h>
+#include <linux/xlink_drv_inf.h>
 
 #ifndef PCI_DEVICE_ID_INTEL_KEEMBAY
 #define PCI_DEVICE_ID_INTEL_KEEMBAY 0x6240
@@ -80,6 +81,8 @@ struct mxlk_mmio {
 	struct mxlk_version version;
 	uint32_t device_status;
 	uint32_t host_status;
+	uint16_t phy_dev_id;
+	uint8_t max_functions;
 	uint8_t htod_tx_doorbell_status;
 	uint8_t htod_rx_doorbell_status;
 	uint8_t dtoh_tx_doorbell_status;
@@ -90,6 +93,8 @@ struct mxlk_mmio {
 #define MXLK_MMIO_VERSION (offsetof(struct mxlk_mmio, version))
 #define MXLK_MMIO_DEV_STATUS (offsetof(struct mxlk_mmio, device_status))
 #define MXLK_MMIO_HOST_STATUS (offsetof(struct mxlk_mmio, host_status))
+#define MXLK_MMIO_PHY_DEV_ID (offsetof(struct mxlk_mmio, phy_dev_id))
+#define MXLK_MMIO_MAX_FUNCTION (offsetof(struct mxlk_mmio, max_functions))
 #define MXLK_MMIO_HTOD_TX_DOORBELL_STATUS \
 	(offsetof(struct mxlk_mmio, htod_tx_doorbell_status))
 #define MXLK_MMIO_HTOD_RX_DOORBELL_STATUS \

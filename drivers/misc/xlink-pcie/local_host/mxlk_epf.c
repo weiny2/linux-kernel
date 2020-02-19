@@ -13,6 +13,7 @@
 #include <linux/types.h>
 #include <linux/errno.h>
 #include <linux/pci_ids.h>
+#include <linux/xlink_drv_inf.h>
 #include "../common/mxlk.h"
 #include "../common/mxlk_core.h"
 #include "../common/mxlk_util.h"
@@ -100,8 +101,11 @@ u32 mxlk_get_device_num(u32 *id_list)
 	struct mxlk_epf *p;
 	mutex_lock(&dev_list_mutex);
 	list_for_each_entry(p, &dev_list, list) {
-	    *id_list++ = p->sw_devid;
-	    num++;
+		if (true == p->sw_dev_id_updated)
+		{
+	            *id_list++ = p->sw_devid;
+	             num++;
+		}
 	}
 	mutex_unlock(&dev_list_mutex);
 	return num;
@@ -185,7 +189,6 @@ int mxlk_copy_from_host(struct mxlk *mxlk, void *dst_addr, u64 pci_addr,
 			memcpy_fromio(dst_addr, src_addr, len);
 			goto skip_dma;
 		}
-
 		tx = mxlk_ep_dma_read(epf, dma_dst, phys_addr, len);
 		if (tx) {
 			dev_err(dev, "DMA transfer failed, using memcpy..\n");
@@ -438,13 +441,10 @@ static int epf_bind(struct pci_epf *epf)
 
 	if (WARN_ON_ONCE(!epc))
 		return -EINVAL;
-#if 0
-	if (func_no != epf->func_no)
+	if (!(epf->func_no & 0x1))
 	{
-        	printk(KERN_DEBUG "pcie : Return epf_bind() function no=%d\n",epf->func_no);
 		return 0;
 	}
-#endif
 	features = pci_epc_get_features(epc, epf->func_no);
 	mxlk_epf->epc_features = features;
 	if (features) {
@@ -473,12 +473,14 @@ static int epf_bind(struct pci_epf *epf)
 
 	memcpy_toio(mxlk_epf->mxlk.io_comm + MXLK_BOOT_OFFSET_MAGIC,
 		    MXLK_BOOT_MAGIC_YOCTO, strlen(MXLK_BOOT_MAGIC_YOCTO));
+
+	mxlk_set_max_functions(&mxlk_epf->mxlk,epc->max_functions);
 	mxlk_set_device_status(&mxlk_epf->mxlk, MXLK_STATUS_READY);
 
-	mxlk_epf->sw_devid = epf->func_no;
 	snprintf(mxlk_epf->name, MXLK_MAX_NAME_LEN, "%s_func%x",epf->name, epf->func_no);
 	list_add_tail(&mxlk_epf->list, &dev_list);
-       	dev_dbg(&epf->dev,"pcie:mxlk_epf->name of device = %s, sw_devid=%d\n",mxlk_epf->name, mxlk_epf->sw_devid);
+       	dev_dbg(&epc->dev,"pcie:mxlk_epf->name of device = %s, sw_devid=%d\n",mxlk_epf->name, mxlk_epf->sw_devid);
+       	printk("pcie:mxlk_epf->name of device = %s, sw_devid=%d\n",mxlk_epf->name, mxlk_epf->sw_devid);
 
 	ret = mxlk_core_init(&mxlk_epf->mxlk);
 	if (ret) {

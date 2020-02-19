@@ -440,7 +440,7 @@ void dw_pcie_disable_atu(struct dw_pcie *pci, int index,
 				break;
 			mdelay(LINK_WAIT_IATU);
 		}
-		dev_err(pci->dev, "Outbound iATU is disabled\n");
+		dev_dbg(pci->dev, "Outbound iATU is disabled\n");
 		return;
 	}
 

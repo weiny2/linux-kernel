@@ -22,6 +22,12 @@ enum mxlk_doorbell_type {
 	DATA_RECEIVED
 };
 
+u32 mxlk_create_sw_device_id(u8 func_no, u16 phy_id, u8 max_functions);
+void mxlk_set_max_functions(struct mxlk *mxlk, u8 max_function);
+u8 mxlk_get_max_functions(struct mxlk *mxlk);
+void mxlk_set_physical_device_id(struct mxlk *mxlk, u16 phys_id);
+u16 mxlk_get_physical_device_id(struct mxlk *mxlk);
+
 void mxlk_set_doorbell(struct mxlk *mxlk, enum mxlk_doorbell_direction dirt,
 		       enum mxlk_doorbell_type type);
 bool mxlk_get_doorbell(struct mxlk *mxlk,

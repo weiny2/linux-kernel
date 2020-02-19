@@ -19,6 +19,7 @@
 #include "mxlk_pci.h"
 #include "../common/mxlk_core.h"
 #include "../common/mxlk_print.h"
+#include "../common/mxlk_util.h"
 
 #define BOOT_TIMEOUT 60000
 #define STATUS_TIMEOUT 5000
@@ -50,13 +51,27 @@ static struct mxlk_pcie *mxlk_get_device_by_name(const char *name)
 	return p;
 }
 
+static struct mxlk_pcie *mxlk_get_device_by_bus_slot(const char *name)
+{
+	struct mxlk_pcie *p = NULL;
+
+	mutex_lock(&dev_list_mutex);
+	list_for_each_entry(p, &dev_list, list) {
+		if (!strncmp(p->name, name, MXLK_MAX_BUS_SLOT_LEN))
+			break;
+	}
+	mutex_unlock(&dev_list_mutex);
+
+	return p;
+}
+
 static struct mxlk_pcie *mxlk_get_device_by_id(u32 id)
 {
 	struct mxlk_pcie *xdev;
 
 	mutex_lock(&dev_list_mutex);
 	list_for_each_entry(xdev, &dev_list, list) {
-		if (xdev->devid == id)
+		if (xdev->sw_devid == id)
 			break;
 	}
 	mutex_unlock(&dev_list_mutex);
@@ -66,19 +81,26 @@ static struct mxlk_pcie *mxlk_get_device_by_id(u32 id)
 
 static void mxlk_add_device(struct mxlk_pcie *xdev)
 {
-	static u32 devid = 0xFFFFFFFF;
-
-	mutex_lock(&dev_list_mutex);
-
-	xdev->devid = ++devid;
+	static u16 phy_devid = 0x0;
+        struct mxlk_pcie *find_xdev = NULL;
 	snprintf(xdev->name, MXLK_MAX_NAME_LEN, "%02x:%02x.%x",
 		 xdev->pci->bus->number,
 		 PCI_SLOT(xdev->pci->devfn),
 		 PCI_FUNC(xdev->pci->devfn));
-
+        find_xdev = mxlk_get_device_by_bus_slot(xdev->name);
+	mutex_lock(&dev_list_mutex);
+	if(find_xdev)
+	{
+		 xdev->devid = find_xdev->devid;
+	}
+	else
+	{
+		 xdev->devid = ++phy_devid;
+	}
 	list_add_tail(&xdev->list, &dev_list);
-
 	mutex_unlock(&dev_list_mutex);
+	if (phy_devid >= 0xFFFF) // Just to check the overflow
+		phy_devid = 0x0;
 }
 
 static void mxlk_del_device(struct mxlk_pcie *xdev)
@@ -460,6 +482,7 @@ static void mxlk_device_enable_irq(struct mxlk_pcie *xdev)
 
 static void mxlk_device_poll(struct work_struct *work)
 {
+	u8 max_functions;
 	struct mxlk_pcie *xdev = container_of(work, struct mxlk_pcie,
 					 wait_event.work);
 	enum mxlk_stage stage = mxlk_check_magic(xdev);
@@ -471,6 +494,11 @@ static void mxlk_device_poll(struct work_struct *work)
 		wake_up_interruptible(&xdev->waitqueue);
 	} else if (stage == STAGE_OS) {
 		xdev->mxlk.status = MXLK_STATUS_READY;
+		mxlk_set_physical_device_id(&xdev->mxlk,xdev->devid);
+		max_functions = mxlk_get_max_functions(&xdev->mxlk);
+		xdev->sw_devid = mxlk_create_sw_device_id(PCI_FUNC(xdev->pci->devfn),xdev->devid,max_functions);
+		printk("xdev->sw_devid=%x, function idx=%d, max_functions=%d\n",xdev->sw_devid,PCI_FUNC(xdev->pci->devfn),max_functions);
+		mxlk_set_host_status(&xdev->mxlk, xdev->mxlk.status);
 		wake_up_interruptible(&xdev->waitqueue);
 		return;
 	}
@@ -509,6 +537,7 @@ int mxlk_pci_init(struct mxlk_pcie *xdev, struct pci_dev *pdev)
 
 	xdev->pci = pdev;
 	pci_set_drvdata(pdev, xdev);
+
 	mxlk_add_device(xdev);
 
 	rc = pci_enable_device_mem(xdev->pci);
@@ -579,6 +608,7 @@ int mxlk_pci_cleanup(struct mxlk_pcie *xdev)
 	kfree(xdev->dma_buf);
 	xdev->dma_buf = NULL;
 	xdev->dma_buf_offset = 0;
+	 
 
 	mxlk_core_cleanup(&xdev->mxlk);
 
@@ -632,7 +662,7 @@ u32 mxlk_get_device_num(u32 *id_list)
 
 	mutex_lock(&dev_list_mutex);
 	list_for_each_entry(p, &dev_list, list) {
-		*id_list++ = p->devid;
+		*id_list++ = p->sw_devid;
 		num++;
 	}
 	mutex_unlock(&dev_list_mutex);

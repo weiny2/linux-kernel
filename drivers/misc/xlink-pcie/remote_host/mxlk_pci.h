@@ -12,10 +12,13 @@
 
 #include <linux/list.h>
 #include <linux/interrupt.h>
+#include <linux/pci.h>
 #include "../common/mxlk.h"
 #include "../common/mxlk_boot.h"
 
 #define MXLK_MAX_NAME_LEN (32)
+#define MXLK_MAX_BUS_SLOT_LEN (6)
+
 
 struct mxlk_pcie {
 	struct list_head list;
@@ -23,7 +26,8 @@ struct mxlk_pcie {
 
 	struct pci_dev *pci;
 	char name[MXLK_MAX_NAME_LEN];
-	u32 devid;
+	u16 devid;
+	u32 sw_devid;
 
 	struct delayed_work wait_event;
 	struct work_struct irq_event;
