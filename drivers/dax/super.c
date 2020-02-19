@@ -15,6 +15,7 @@
 #include <linux/uio.h>
 #include <linux/dax.h>
 #include <linux/fs.h>
+#include <linux/pkeys.h>
 #include "dax-private.h"
 
 static dev_t dax_devt;
@@ -30,12 +31,17 @@ static DEFINE_SPINLOCK(dax_host_lock);
 
 int dax_read_lock(void)
 {
-	return srcu_read_lock(&dax_srcu);
+	int ret;
+
+	ret = srcu_read_lock(&dax_srcu);
+	update_pmem_key(1, 1);
+	return ret;
 }
 EXPORT_SYMBOL_GPL(dax_read_lock);
 
 void dax_read_unlock(int id)
 {
+	update_pmem_key(0, 0);
 	srcu_read_unlock(&dax_srcu, id);
 }
 EXPORT_SYMBOL_GPL(dax_read_unlock);
