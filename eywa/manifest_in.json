@@ -3191,7 +3191,7 @@
                 }
             ],
             "description": "Intel User interrupt support",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Jacob Pan",
