@@ -3929,6 +3929,15 @@ static u64 nhm_limit_period(struct perf_event *event, u64 left)
 	return max(left, 32ULL);
 }
 
+static u64 adl_limit_period(struct perf_event *event, u64 left)
+{
+	if ((event->attr.precise_ip == 3) &&
+	    constraint_match(&fixed0_constraint, event->attr.config))
+		return max(left, 128ULL);
+
+	return left;
+}
+
 PMU_FORMAT_ATTR(event,	"config:0-7"	);
 PMU_FORMAT_ATTR(umask,	"config:8-15"	);
 PMU_FORMAT_ATTR(edge,	"config:18"	);
@@ -5610,6 +5619,7 @@ __init int intel_pmu_init(void)
 		x86_pmu.event_constraints = intel_icl_event_constraints;
 		x86_pmu.pebs_constraints = intel_icl_pebs_event_constraints;
 		x86_pmu.extra_regs = intel_icl_extra_regs;
+		x86_pmu.limit_period = adl_limit_period;
 		x86_pmu.pebs_aliases = NULL;
 		x86_pmu.pebs_prec_dist = true;
 		x86_pmu.flags |= PMU_FL_HAS_RSP_1;
