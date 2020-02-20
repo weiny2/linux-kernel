@@ -242,9 +242,9 @@ static void thunderbay_pcie_sram_bypass_mode(struct thunderbay_pcie *pcie)
 /* Initialize the PCIe PLL in Host mode (assume 24MHz refclk) */
 static void thunderbay_pcie_pll_init(struct thunderbay_pcie *pcie)
 {
+#if 0
 	struct dw_pcie *pci = pcie->pci;
 	u32 val;
-#if 0
 	val = (0x0 << 12)	// [17:12] ljlpp_ref_div
 		| (0x32 << 0);	// [11: 0] ljpll_fb_div
 	thunderbay_pcie_writel(pcie, PCIE_REGS_LJPLL_CNTRL_2, val);
@@ -347,7 +347,7 @@ static void thunderbay_pcie_write_dbi(struct dw_pcie *pci, void __iomem *base,
 			return;
 	}
 
-        dev_dbg(pci->dev, "thunderbay_pcie_write_dbi():base+reg=%x,val=%x\n",base+reg, val);
+        dev_dbg(pci->dev, "thunderbay_pcie_write_dbi():base+reg=%px,val=%x\n",base+reg, val);
 	ret = dw_pcie_write(base + reg, size, val);
 	if (ret)
 		dev_err(pci->dev, "write DBI address failed\n");
@@ -363,7 +363,7 @@ static void thunderbay_pcie_write_dbi2(struct dw_pcie *pci, void __iomem *base,
 	if (thunderbay->mode == DW_PCIE_EP_TYPE)
 		return;
 
-        dev_dbg(pci->dev,"thunderbay_pcie_write_dbi2():base+reg=%x,val=%x\n",base+reg, val);
+        dev_dbg(pci->dev,"thunderbay_pcie_write_dbi2():base+reg=%px,val=%x\n",base+reg, val);
 	ret = dw_pcie_write(base + reg, size, val);
 	if (ret)
 		dev_err(pci->dev, "write DBI address failed\n");
@@ -489,7 +489,6 @@ static void thunderbay_pcie_ep_init(struct dw_pcie_ep *ep)
 	static struct resource f7res2;
 	static struct resource f7res4;
 	int ret;
-	u32 val;
 
 	/* function 0 */
 	np = of_parse_phandle(pci->dev->of_node, "memory-region", 0);
