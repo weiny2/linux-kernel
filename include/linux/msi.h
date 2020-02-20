@@ -33,10 +33,12 @@ typedef void (*irq_write_msi_msg_t)(struct msi_desc *desc,
  * platform_msi_desc - Platform device specific msi descriptor data
  * @msi_priv_data:	Pointer to platform private data
  * @msi_index:		The index of the MSI descriptor for multi MSI
+ * @masked:		mask bits
  */
 struct platform_msi_desc {
 	struct platform_msi_priv_data	*msi_priv_data;
 	u16				msi_index;
+	u32				masked;
 };
 
 /**
@@ -368,6 +370,18 @@ struct platform_msi_ops {
 	unsigned int		(*irq_mask)(struct msi_desc *desc);
 	unsigned int		(*irq_unmask)(struct msi_desc *desc);
 	irq_write_msi_msg_t	write_msg;
+};
+
+/*
+ * Internal data structure containing a (made up, but unique) devid
+ * and the callback to write the MSI message.
+ */
+struct platform_msi_priv_data {
+	struct device			*dev;
+	void				*host_data;
+	msi_alloc_info_t		arg;
+	const struct platform_msi_ops	*ops;
+	int				devid;
 };
 
 int msi_domain_set_affinity(struct irq_data *data, const struct cpumask *mask,

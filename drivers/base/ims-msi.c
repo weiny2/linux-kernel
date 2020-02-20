@@ -7,10 +7,55 @@
  * Author: Megha Dey <megha.dey@intel.com>
  */
 
+#include <linux/device.h>
 #include <linux/dmar.h>
+#include <linux/export.h>
 #include <linux/irq.h>
 #include <linux/mdev.h>
+#include <linux/msi.h>
 #include <linux/pci.h>
+
+static u32 __dev_ims_desc_mask_irq(struct msi_desc *desc, u32 flag)
+{
+	u32 mask_bits = desc->platform.masked;
+	const struct platform_msi_ops *ops;
+
+	ops = desc->platform.msi_priv_data->ops;
+	if (!ops)
+		return 0;
+
+	if (flag) {
+		if (ops->irq_mask)
+			mask_bits = ops->irq_mask(desc);
+	} else {
+		if (ops->irq_unmask)
+			mask_bits = ops->irq_unmask(desc);
+	}
+
+	return mask_bits;
+}
+
+/**
+ * dev_ims_mask_irq - Generic irq chip callback to mask IMS interrupts
+ * @data: pointer to irqdata associated to that interrupt
+ */
+static void dev_ims_mask_irq(struct irq_data *data)
+{
+	struct msi_desc *desc = irq_data_get_msi_desc(data);
+
+	desc->platform.masked = __dev_ims_desc_mask_irq(desc, 1);
+}
+
+/**
+ * dev_msi_unmask_irq - Generic irq chip callback to unmask IMS interrupts
+ * @data: pointer to irqdata associated to that interrupt
+ */
+void dev_ims_unmask_irq(struct irq_data *data)
+{
+	struct msi_desc *desc = irq_data_get_msi_desc(data);
+
+	desc->platform.masked = __dev_ims_desc_mask_irq(desc, 0);
+}
 
 /*
  * Determine if a dev is mdev or not. Return NULL if not mdev device.
@@ -69,6 +114,8 @@ static struct irq_chip dev_ims_ir_controller = {
 	.irq_set_vcpu_affinity	= irq_chip_set_vcpu_affinity_parent,
 	.flags			= IRQCHIP_SKIP_SET_WAKE,
 	.irq_write_msi_msg	= platform_msi_write_msg,
+	.irq_unmask             = dev_ims_unmask_irq,
+	.irq_mask               = dev_ims_mask_irq,
 };
 
 static struct msi_domain_info ims_ir_domain_info = {
