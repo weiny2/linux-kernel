@@ -16,18 +16,6 @@
 #define DEV_ID_SHIFT	21
 #define MAX_DEV_MSIS	(1 << (32 - DEV_ID_SHIFT))
 
-/*
- * Internal data structure containing a (made up, but unique) devid
- * and the callback to write the MSI message.
- */
-struct platform_msi_priv_data {
-	struct device			*dev;
-	void				*host_data;
-	msi_alloc_info_t		arg;
-	const struct platform_msi_ops	*ops;
-	int				devid;
-};
-
 /* The devid allocator */
 static DEFINE_IDA(platform_msi_devid_ida);
 
