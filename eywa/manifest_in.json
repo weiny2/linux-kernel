@@ -1627,7 +1627,7 @@
             ],
             "jira": "NEXT-1825",
             "name": "ims",
-            "repourl": "ssh://git-amr-4.devtools.intel.com:29418/otc_core_linux-linux.git",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/meghadey/linux.git",
             "sdl_contact": [
                 {
                     "name": "Ashok Raj",
