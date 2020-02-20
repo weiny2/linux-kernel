@@ -160,10 +160,6 @@
                 {
                     "name": "CONFIG_INTEL_SGX",
                     "value": "y"
-                },
-                {
-                    "name": "CONFIG_INTEL_SGX_DRIVER",
-                    "value": "y"
                 }
             ],
             "contributor": [
