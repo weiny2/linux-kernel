@@ -2026,12 +2026,7 @@
         {
             "branch": "fixups",
             "branch_type": "expiring",
-            "config_options": [
-                {
-                    "name": "CONFIG_IGC",
-                    "value": "m"
-                }
-            ],
+            "config_options": [],
             "contributor": [
                 {
                     "name": "Kyle Pelton",
@@ -2039,7 +2034,7 @@
                 }
             ],
             "description": "Fix up branch to revert a dma-buf patch from GFX, Fixup for PKS/DRM",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Kyle Pelton",
