@@ -3929,7 +3929,7 @@ static u64 nhm_limit_period(struct perf_event *event, u64 left)
 static u64 adl_limit_period(struct perf_event *event, u64 left)
 {
 	if ((event->attr.precise_ip == 3) &&
-	    constraint_match(&fixed0_constraint, event->attr.config))
+	    constraint_match(&fixed0_constraint, event->hw.config))
 		return max(left, 128ULL);
 
 	return left;
