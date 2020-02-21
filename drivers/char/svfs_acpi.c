@@ -919,11 +919,11 @@ svfs_acpi_proc_open(struct inode *inode, struct file *file)
 	return single_open(file, svfs_acpi_proc_show, NULL);
 }
 
-static const struct file_operations svfs_acpi_proc_ops = {
-	.open		= svfs_acpi_proc_open,
-	.read		= seq_read,
-	.llseek		= seq_lseek,
-	.release	= single_release,
+static const struct proc_ops svfs_acpi_proc_ops = {
+	.proc_open	= svfs_acpi_proc_open,
+	.proc_read	= seq_read,
+	.proc_lseek	= seq_lseek,
+	.proc_release	= single_release,
 };
 
 static int __init 
@@ -940,7 +940,7 @@ svfs_acpi_init(void)
 		return ret;
 	}
 
-	dir = proc_create ("driver/svfs_acpi", 0, NULL, &svfs_acpi_proc_ops);
+	dir = proc_create("driver/svfs_acpi", 0, NULL, &svfs_acpi_proc_ops);
 	if (dir == NULL) {
 		printk(KERN_ERR "%s: can't create /proc/driver/svfs_acpi\n", __FUNCTION__);
 		misc_deregister(&svfs_acpi_dev);
