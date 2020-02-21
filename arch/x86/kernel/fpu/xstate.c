@@ -990,7 +990,7 @@ void __init fpu__init_system_xstate(void)
 		if (!xfeature_supports_firstuse_detection(idx) &&
 		    (mask & XFEATURE_MASK_HUGESTATE)) {
 			xfeatures_mask_all &= ~mask;
-			firstuse_mask &= mask;
+			firstuse_mask &= ~mask;
 		}
 	}
 
