@@ -1357,3 +1357,261 @@ int usb4_port_retimer_nvm_read(struct tb_port *port, u8 index,
 	return usb4_do_read_data(address, buf, size,
 			usb4_port_retimer_nvm_read_block, &info);
 }
+
+static int usb4_usb3_port_cm_request(struct tb_port *port, bool request)
+{
+	int ret;
+	u32 val;
+
+	if (!tb_port_is_usb3_down(port))
+		return -EINVAL;
+
+	ret = tb_port_read(port, &val, TB_CFG_PORT,
+			   port->cap_adap + ADP_USB3_CS_2, 1);
+	if (ret)
+		return ret;
+
+	if (request)
+		val |= ADP_USB3_CS_2_CMR;
+	else
+		val &= ~ADP_USB3_CS_2_CMR;
+
+	ret = tb_port_write(port, &val, TB_CFG_PORT,
+			    port->cap_adap + ADP_USB3_CS_2, 1);
+	if (ret)
+		return ret;
+
+	/*
+	 * We can use val here directly as the CMR bit is in the same place
+	 * as HCA. Just mask out others.
+	 */
+	val &= ADP_USB3_CS_2_CMR;
+	return usb4_port_wait_for_bit(port, port->cap_adap + ADP_USB3_CS_1,
+				      ADP_USB3_CS_1_HCA, val, 500);
+}
+
+static inline int usb4_usb3_port_set_cm_request(struct tb_port *port)
+{
+	return usb4_usb3_port_cm_request(port, true);
+}
+
+static inline int usb4_usb3_port_clear_cm_request(struct tb_port *port)
+{
+	return usb4_usb3_port_cm_request(port, false);
+}
+
+static unsigned int usb3_bw_to_mbps(u32 bw, u8 scale)
+{
+	unsigned long uframes, mbps;
+
+	uframes = bw * 512 << scale;
+	mbps = (uframes * 8000) / (1000 * 1000);
+
+	return roundup(mbps, 1000);
+}
+
+static u32 mbps_to_usb3_bw(unsigned int mbps, u8 scale)
+{
+	unsigned long uframes;
+
+	/* 1 uframe is 1/8 ms (125 us) -> 1 / 8000 s */
+	uframes = (unsigned long)mbps * 1000 * 1000 / 8000;
+	return uframes / (512 << scale);
+}
+
+/**
+ * usb4_usb3_port_consumed_bandwidth() - Currently consumed USB3 bandwidth
+ * @port: Host router USB3 adapter
+ * @up_bw: Upstream consumed bandwidth is stored here (can be %NULL)
+ * @down_bw: Downstream consumed bandwidth is stored here (can be %NULL)
+ *
+ * Reads currently consumed USB3 bandwidth, converts it to Mb/s and
+ * stores to @up_bw and @down_bw. Return %0 in success and negative
+ * errno in case of failure.
+ */
+int usb4_usb3_port_consumed_bandwidth(struct tb_port *port, unsigned int *up_bw,
+				      unsigned int *down_bw)
+{
+	u32 val, bw, scale;
+	int ret;
+
+	ret = usb4_usb3_port_set_cm_request(port);
+	if (ret)
+		return ret;
+
+	ret = tb_port_read(port, &val, TB_CFG_PORT,
+			   port->cap_adap + ADP_USB3_CS_1, 1);
+	usb4_usb3_port_clear_cm_request(port);
+	if (ret)
+		return ret;
+
+	ret = tb_port_read(port, &scale, TB_CFG_PORT,
+			   port->cap_adap + ADP_USB3_CS_3, 1);
+	if (ret)
+		return ret;
+
+	scale &= ADP_USB3_CS_3_SCALE_MASK;
+
+	if (up_bw) {
+		bw = val & ADP_USB3_CS_1_CUBW_MASK;
+		*up_bw = usb3_bw_to_mbps(bw, scale);
+	}
+
+	if (down_bw) {
+		bw = (val & ADP_USB3_CS_1_CDBW_MASK) >> ADP_USB3_CS_1_CDBW_SHIFT;
+		*down_bw = usb3_bw_to_mbps(bw, scale);
+	}
+
+	return 0;
+}
+
+/**
+ * usb4_usb3_port_allocated_bandwidth() - Currently allocated USB3 bandwidth
+ * @port: Host router USB3 adapter
+ * @up_bw: Upstream allocated bandwidth is stored here (can be %NULL)
+ * @down_bw: Downstream allocated bandwidth is stored here (can be %NULL)
+ *
+ * Reads currently allocated USB3 bandwidth, converts it to Mb/s and
+ * stores to @up_bw and @down_bw. Return %0 in success and negative
+ * errno in case of failure.
+ */
+int usb4_usb3_port_allocated_bandwidth(struct tb_port *port, unsigned int *up_bw,
+				       unsigned int *down_bw)
+{
+	u32 val, bw, scale;
+	int ret;
+
+	ret = usb4_usb3_port_set_cm_request(port);
+	if (ret)
+		return ret;
+
+	ret = tb_port_read(port, &val, TB_CFG_PORT,
+			   port->cap_adap + ADP_USB3_CS_2, 1);
+	usb4_usb3_port_clear_cm_request(port);
+	if (ret)
+		return ret;
+
+	ret = tb_port_read(port, &scale, TB_CFG_PORT,
+			   port->cap_adap + ADP_USB3_CS_3, 1);
+	if (ret)
+		return ret;
+
+	scale &= ADP_USB3_CS_3_SCALE_MASK;
+
+	if (up_bw) {
+		bw = val & ADP_USB3_CS_2_AUBW_MASK;
+		*up_bw = usb3_bw_to_mbps(bw, scale);
+	}
+
+	if (down_bw) {
+		bw = (val & ADP_USB3_CS_2_ADBW_MASK) >> ADP_USB3_CS_2_ADBW_SHIFT;
+		*down_bw = usb3_bw_to_mbps(bw, scale);
+	}
+
+	return 0;
+}
+
+/**
+ * usb4_usb3_port_allocate_bandwidth() - Set new bandwidth allocation
+ * @port: Host router USB3 adapter
+ * @up_bw: How much bandwidth in Mb/s is allocated for upstream
+ *	   isonchronous transfers
+ * @down_bw: How much bandwidth in Mb/s is allocated for downstream
+ *	     isonchronous transfers
+ *
+ * Negotiates new USB3 bandwidth allocation with the xHCI according to
+ * new bandwidth given in @up_bw and @down_bw.
+ *
+ * Return %0 in success and negative errno in case of failure.
+ */
+int usb4_usb3_port_allocate_bandwidth(struct tb_port *port, unsigned int up_bw,
+				      unsigned int down_bw)
+{
+	u32 val, ubw, dbw, scale;
+	int ret;
+
+	if (!tb_port_is_usb3_down(port))
+		return -EINVAL;
+
+	/* Read the used scale, hardware default is 0 */
+	ret = tb_port_read(port, &scale, TB_CFG_PORT,
+			   port->cap_adap + ADP_USB3_CS_3, 1);
+	if (ret)
+		return ret;
+
+	scale &= ADP_USB3_CS_3_SCALE_MASK;
+	ubw = mbps_to_usb3_bw(up_bw, scale);
+	dbw = mbps_to_usb3_bw(down_bw, scale);
+
+	ret = usb4_usb3_port_set_cm_request(port);
+	if (ret)
+		return ret;
+
+	ret = tb_port_read(port, &val, TB_CFG_PORT,
+			   port->cap_adap + ADP_USB3_CS_2, 1);
+	if (ret)
+		goto out;
+
+	val &= ~(ADP_USB3_CS_2_AUBW_MASK | ADP_USB3_CS_2_ADBW_MASK);
+	val |= dbw << ADP_USB3_CS_2_ADBW_SHIFT;
+	val |= ubw;
+
+	ret = tb_port_write(port, &val, TB_CFG_PORT,
+			   port->cap_adap + ADP_USB3_CS_2, 1);
+
+out:
+	usb4_usb3_port_clear_cm_request(port);
+	return ret;
+}
+
+/**
+ * usb4_usb3_port_max_link_rate() - Maximum support USB3 link rate
+ * @port: USB3 adapter port
+ *
+ * Return maximum supported link rate of a USB3 adapter in Mb/s (either
+ * %10000 or %20000). Negative errno in case of error.
+ */
+int usb4_usb3_port_max_link_rate(struct tb_port *port)
+{
+	int ret, lr;
+	u32 val;
+
+	if (!tb_port_is_usb3_down(port) && !tb_port_is_usb3_up(port))
+		return -EINVAL;
+
+	ret = tb_port_read(port, &val, TB_CFG_PORT,
+			   port->cap_adap + ADP_USB3_CS_4, 1);
+	if (ret)
+		return ret;
+
+	lr = (val & ADP_USB3_CS_4_MSLR_MASK) >> ADP_USB3_CS_4_MSLR_SHIFT;
+	return lr == ADP_USB3_CS_4_MSLR_20G ? 20000 : 10000;
+}
+
+/**
+ * usb4_usb3_port_actual_link_rate() - Established USB3 link rate
+ * @port: USB3 adapter port
+ *
+ * Return actual established link rate of a USB3 adapter in Mb/s (either
+ * %10000 or %20000). If the link is not established, returns %-ENOTCONN
+ * and negative errno in case of other failures.
+ */
+int usb4_usb3_port_actual_link_rate(struct tb_port *port)
+{
+	int ret, lr;
+	u32 val;
+
+	if (!tb_port_is_usb3_down(port) && !tb_port_is_usb3_up(port))
+		return -EINVAL;
+
+	ret = tb_port_read(port, &val, TB_CFG_PORT,
+			   port->cap_adap + ADP_USB3_CS_4, 1);
+	if (ret)
+		return ret;
+
+	if (!(val & ADP_USB3_CS_4_ULV))
+		return -ENOTCONN;
+
+	lr = val & ADP_USB3_CS_4_ALR_MASK;
+	return lr == ADP_USB3_CS_4_ALR_20G ? 20000 : 10000;
+}

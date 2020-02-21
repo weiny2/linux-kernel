@@ -914,6 +914,15 @@ int usb4_port_retimer_nvm_authenticate_status(struct tb_port *port, u8 index,
 int usb4_port_retimer_nvm_read(struct tb_port *port, u8 index,
 			       unsigned int address, void *buf, size_t size);
 
+int usb4_usb3_port_consumed_bandwidth(struct tb_port *port, unsigned int *up_bw,
+				      unsigned int *down_bw);
+int usb4_usb3_port_allocated_bandwidth(struct tb_port *port, unsigned int *up_bw,
+				       unsigned int *down_bw);
+int usb4_usb3_port_allocate_bandwidth(struct tb_port *port, unsigned int up_bw,
+				      unsigned int down_bw);
+int usb4_usb3_port_max_link_rate(struct tb_port *port);
+int usb4_usb3_port_actual_link_rate(struct tb_port *port);
+
 #ifdef CONFIG_ACPI
 static inline bool tb_is_native(void)
 {
