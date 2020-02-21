@@ -116,6 +116,8 @@ static void platform_msi_free_descs(struct device *dev, int base, int nvec,
 			kfree(platform_msi_group);
 		}
 	}
+
+	dev->is_platform_msi = 0;
 }
 
 static int platform_msi_alloc_descs_with_irq(struct device *dev, int virq,
@@ -202,18 +204,22 @@ platform_msi_alloc_priv_data(struct device *dev, unsigned int nvec,
 	 * accordingly (which would impact the max number of MSI
 	 * capable devices).
 	 */
-	if (!dev->msi_domain || !platform_ops->write_msg || !nvec ||
-	    nvec > MAX_DEV_MSIS)
+	if (!platform_ops->write_msg || !nvec || nvec > MAX_DEV_MSIS)
 		return ERR_PTR(-EINVAL);
 
-	if (dev->msi_domain->bus_token != DOMAIN_BUS_PLATFORM_MSI) {
-		dev_err(dev, "Incompatible msi_domain, giving up\n");
-		return ERR_PTR(-EINVAL);
+	if (dev->is_platform_msi == GEN_PLAT_MSI) {
+		if (!dev->msi_domain)
+			return ERR_PTR(-EINVAL);
+
+		if (dev->msi_domain->bus_token != DOMAIN_BUS_PLATFORM_MSI) {
+			dev_err(dev, "Incompatible msi_domain, giving up\n");
+			return ERR_PTR(-EINVAL);
+		}
+
+		/* Already had a helping of MSI? Greed... */
+		if (!list_empty(platform_msi_current_group_entry_list(dev)))
+			return ERR_PTR(-EBUSY);
 	}
-
-	/* Already had a helping of MSI? Greed... */
-	if (!list_empty(platform_msi_current_group_entry_list(dev)))
-		return ERR_PTR(-EBUSY);
 
 	datap = kzalloc(sizeof(*datap), GFP_KERNEL);
 	if (!datap)
@@ -250,7 +256,9 @@ static void platform_msi_free_priv_data(struct platform_msi_priv_data *data)
  */
 int platform_msi_domain_alloc_irqs(struct device *dev, unsigned int nvec,
 				   const struct platform_msi_ops *platform_ops)
+
 {
+	dev->is_platform_msi = GEN_PLAT_MSI;
 	return platform_msi_domain_alloc_irqs_group(dev, nvec, platform_ops, NULL);
 }
 EXPORT_SYMBOL_GPL(platform_msi_domain_alloc_irqs);
@@ -261,14 +269,19 @@ int platform_msi_domain_alloc_irqs_group(struct device *dev, unsigned int nvec,
 {
 	struct platform_msi_group_entry *platform_msi_group;
 	struct platform_msi_priv_data *priv_data;
+	struct irq_domain *domain;
 	int err;
 
-	dev->is_platform_msi = 1;
-
-	if (group_id)
+	if (!dev->is_platform_msi) {
+		dev->is_platform_msi = IMS;
+		domain = dev_get_ims_domain(dev);
+		if (!domain)
+			return -ENOSYS;
 		*group_id = dev->group_id;
-	else
+	} else {
+		domain = dev->msi_domain;
 		*group_id = 0;
+	}
 
 	platform_msi_group = kzalloc(sizeof(*platform_msi_group), GFP_KERNEL);
 	INIT_LIST_HEAD(&platform_msi_group->group_list);
@@ -284,11 +297,12 @@ int platform_msi_domain_alloc_irqs_group(struct device *dev, unsigned int nvec,
 	if (err)
 		goto out_free_priv_data;
 
-	err = msi_domain_alloc_irqs(dev->msi_domain, dev, nvec);
+	err = msi_domain_alloc_irqs(domain, dev, nvec);
 	if (err)
 		goto out_free_desc;
 
 	dev->group_id++;
+	dev->is_platform_msi = 0;
 	return 0;
 
 out_free_desc:
@@ -306,6 +320,7 @@ EXPORT_SYMBOL_GPL(platform_msi_domain_alloc_irqs_group);
  */
 void platform_msi_domain_free_irqs(struct device *dev)
 {
+	dev->is_platform_msi = GEN_PLAT_MSI;
 	platform_msi_domain_free_irqs_group(dev, 0);
 }
 EXPORT_SYMBOL_GPL(platform_msi_domain_free_irqs);
@@ -313,6 +328,14 @@ EXPORT_SYMBOL_GPL(platform_msi_domain_free_irqs);
 void platform_msi_domain_free_irqs_group(struct device *dev, unsigned int group)
 {
 	struct platform_msi_group_entry *platform_msi_group;
+	struct irq_domain *domain;
+
+	if (!dev->is_platform_msi) {
+		dev->is_platform_msi = IMS;
+		domain = dev_get_ims_domain(dev);
+	} else {
+		domain = dev->msi_domain;
+	}
 
 	list_for_each_entry(platform_msi_group,
 			    dev_to_platform_msi_group_list((dev)), group_list) {
@@ -325,7 +348,7 @@ void platform_msi_domain_free_irqs_group(struct device *dev, unsigned int group)
 			}
 		}
 	}
-	msi_domain_free_irqs_group(dev->msi_domain, dev, group);
+	msi_domain_free_irqs_group(domain, dev, group);
 	platform_msi_free_descs(dev, 0, MAX_DEV_MSIS, group);
 }
 EXPORT_SYMBOL_GPL(platform_msi_domain_free_irqs_group);
