@@ -1076,15 +1076,15 @@
             "branch_type": "expiring",
             "config_options": [
                 {
-                    "name": "INTEL_PMC_CORE",
+                    "name": "CONFIG_INTEL_PMC_CORE",
                     "value": "y"
                 },
                 {
-                    "name": "PM_SLEEP",
+                    "name": "CONFIG_PM_SLEEP",
                     "value": "y"
                 },
                 {
-                    "name": "DEBUG_FS",
+                    "name": "CONFIG_DEBUG_FS",
                     "value": "y"
                 }
             ],
