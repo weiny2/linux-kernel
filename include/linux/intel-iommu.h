@@ -555,6 +555,7 @@ struct intel_iommu {
 	struct ir_table *ir_table;	/* Interrupt remapping info */
 	struct irq_domain *ir_domain;
 	struct irq_domain *ir_msi_domain;
+	struct irq_domain *ir_ims_domain;
 #endif
 	struct iommu_device iommu;  /* IOMMU core code handle */
 	int		node;
