@@ -107,6 +107,40 @@ static unsigned long find_trampoline_placement(void)
 	return bios_start - TRAMPOLINE_32BIT_SIZE;
 }
 
+#ifdef CONFIG_INTEL_IOMMU_WORKAROUND
+/* Code imported from arch/x86/lib/cpu.c */
+static unsigned int x86_family(unsigned int sig)
+{
+        unsigned int x86;
+
+        x86 = (sig >> 8) & 0xf;
+
+        if (x86 == 0xf)
+                x86 += (sig >> 20) & 0xff;
+
+        return x86;
+}
+
+static unsigned int x86_model(unsigned int sig)
+{
+        unsigned int fam, model;
+
+        fam = x86_family(sig);
+
+        model = (sig >> 4) & 0xf;
+
+        if (fam >= 0x6)
+                model += ((sig >> 16) & 0xf) << 4;
+
+        return model;
+}
+
+static unsigned int x86_stepping(unsigned int sig)
+{
+        return sig & 0xf;
+}
+#endif
+
 struct paging_config paging_prepare(void *rmode)
 {
 	struct paging_config paging_config = {};
@@ -133,6 +167,25 @@ struct paging_config paging_prepare(void *rmode)
 		paging_config.l5_required = 1;
 	}
 
+#ifdef CONFIG_INTEL_IOMMU_WORKAROUND
+	/* M2IOSF swizzle errata for SPR A0 */
+	if ((paging_config.l5_required == 1) &&
+	    cmdline_find_option_bool("ats_with_iommu_swizzle")) {
+
+		unsigned int cpuid_1_eax = native_cpuid_eax(1);
+
+		/* Confirm Family model stepping for SPR A0 */
+		if((x86_family(cpuid_1_eax) == 0x6) &&
+		   (x86_model(cpuid_1_eax) == 0x8F) &&
+		   (x86_stepping(cpuid_1_eax) == 0x0)) {
+			/*
+			 * Disable 5-level paging to restrict IOMMU SVM IOVAs
+			 * to 48 bits.
+			 */
+			paging_config.l5_required = 0;
+		}
+	}
+#endif
 	paging_config.trampoline_start = find_trampoline_placement();
 
 	trampoline_32bit = (unsigned long *)paging_config.trampoline_start;
