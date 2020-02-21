@@ -57,6 +57,7 @@
 #include <asm/umip.h>
 #include <asm/insn.h>
 #include <asm/insn-eval.h>
+#include <asm/vsyscall.h>
 
 #ifdef CONFIG_X86_64
 #include <asm/x86_init.h>
@@ -535,6 +536,12 @@ dotraplinkage void do_general_protection(struct pt_regs *regs, long error_code)
 	tsk = current;
 
 	if (user_mode(regs)) {
+		if (IS_ENABLED(CONFIG_X86_VSYSCALL_EMULATION) &&
+		    is_vsyscall_vaddr(regs->ip)) {
+			if (emulate_vsyscall(regs, regs->ip))
+				return;
+		}
+
 		tsk->thread.error_code = error_code;
 		tsk->thread.trap_nr = X86_TRAP_GP;
 
