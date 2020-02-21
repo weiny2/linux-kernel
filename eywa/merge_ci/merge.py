@@ -10,6 +10,7 @@ import datetime
 import re
 import argparse
 import os
+import tabulate
 
 pp = pprint.PrettyPrinter(indent=4)
 
@@ -359,35 +360,78 @@ def gen_manifest(skip_fetch,fetch_single,fetch_all,blacklist,whitelist,enable_li
     manifest=fetch_remotes(manifest,skip_fetch,fetch_single,fetch_all)
     return manifest
 
+def is_valid_line(cfg_line):
+    """
+    Examines a line of a config file to ensure that it is not whitespace, is
+    not preceded by a # character, and can be split into a name/value pair.
+    """
+    return all([bool(cfg_line), 
+                not cfg_line.isspace(),
+                not cfg_line.startswith("#"),
+                len(cfg_line.split("=")) == 2])
 
-def config_validation(all_options,branch_tracker):
-    #This function checks to make sure all cfg options were set from the manifest
-    #Prints a report that is to be read by a human
-    
-    for cfg_file in config_files_to_val:
-        print_and_log("\nValidation for {}".format(cfg_file))
-        print_and_log(rule)
-        with open(config_path + "/" + cfg_file) as cfg_obj:
-            gen_cfg =cfg_obj.read()
-            gen_cfg_split = gen_cfg.split("\n")
-            for option in all_options:
-                opt_str = ""
-                name = option["name"]
-                value = option["value"]
-                if value == "n":
-                    opt_str = "# {} is not set".format(name)
-                else:
-                    opt_str = "{}={}".format(name,value)
-                if opt_str not in gen_cfg:
-                    print_and_log("Expected {} defined in {}".format(opt_str,",".join(branch_tracker[name])))
-                    if name not in gen_cfg:
-                        print_and_log("  Not found".format(name))
-                    else:
-                        for line in gen_cfg_split:
-                            if name in line:
-                                print_and_log("  Got {} ".format(line))
-                                break
-    
+def parse_config_file(cfg_file):
+    """
+    Parses a config file into a dictionary of options and values.
+    """
+    with open(cfg_file) as f:
+        return {k : v for k, v in map(lambda s : s.split("="), filter(is_valid_line, f))}
+
+def validate_config(cfg_file, all_options, branch_tracker):
+    """
+    Examines the contents of cfg_file to determine if its options correspond to
+    the options provided in all_options.
+
+    Args:
+    cfg_file: (path) Path to the config file.
+    all_options ([dict(string, string)]) Each dict must contain a name and value.
+    branch_tracker (dict(string, list)) Associates a config name to the
+    branches that define it.
+
+    Returns:
+    A list of dictionaries associating a config name to its expected value,
+    value, and branch(es) that defined it
+    """
+    with open(cfg_file) as f:
+        cfg_dict = parse_config_file(cfg_file)
+        return [
+            {
+                "name" : option["name"],
+                "expected" : option["value"],
+                "value" : cfg_dict.get(option["name"], "Not Found"),
+                "branches" : ",".join(branch_tracker[option["name"]])
+            }
+            for option in all_options
+        ]
+
+def filter_table(dct_lst):
+    """
+    Filters out all entries in the list where expected value is equal to the
+    actual value. This is because we don't care about the good values -
+    we just want the bad ones.
+    """
+    return [dct for dct in dct_lst if not dct["expected"].strip() == dct["value"].strip()]
+
+def concat_dict_values(dct_lst):
+    """
+    Given a list of dictionaries with the same keys, concatenates the values
+    into a single dictionary with a list of values.
+    """
+    result_dict = {}
+    for dct in dct_lst:
+        for k, v in dct.items():
+            result_dict[k] = result_dict.get(k, []) + [v]
+    return result_dict
+
+def config_validation(all_options, branch_tracker):
+    # Parse all of the config files, and put them into a dictionary.
+    cfg_filepaths = [os.path.join(config_path, cfg_file) for cfg_file in config_files_to_val]
+    cfg_dictlsts = [validate_config(path, all_options, branch_tracker) for path in cfg_filepaths]
+
+    for filename, dct_lst in zip(config_files_to_val, cfg_dictlsts):
+        print_and_log("Filename: {}".format(filename))
+        print_and_log(tabulate.tabulate(concat_dict_values(filter_table(dct_lst)), "keys"))
+        print_and_log("")
 
 def run_regen_script(all_options,branch_tracker):
     run_shell_cmd("mv {} {}".format(config_fragments, config_path))
