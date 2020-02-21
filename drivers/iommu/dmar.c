@@ -31,6 +31,11 @@
 #include <asm/irq_remapping.h>
 #include <asm/iommu_table.h>
 
+#ifndef CONFIG_IA64
+#include <asm/cmdline.h>
+#include <asm/intel-family.h>
+#endif
+
 #include "irq_remapping.h"
 
 typedef int (*dmar_res_handler_t)(struct acpi_dmar_header *, void *);
@@ -591,6 +596,12 @@ static inline int dmar_walk_dmar_table(struct acpi_table_dmar *dmar,
 			dmar->header.length - sizeof(*dmar), cb);
 }
 
+
+#ifdef CONFIG_INTEL_IOMMU_WORKAROUND
+static int ats_with_iommu_swizzle;
+//static int disable_device_tlb_support; /* Skip this for now */
+#endif
+
 /**
  * parse_dmar_table - parses the DMA reporting table
  */
@@ -633,6 +644,46 @@ parse_dmar_table(void)
 	}
 
 	pr_info("Host address width %d\n", dmar->width + 1);
+
+#ifdef CONFIG_INTEL_IOMMU_WORKAROUND
+	/* M2IOSF swizzle errata for SPR A0 */
+	pr_info("Current vendor 0x%x, model 0x%x, stepping 0x%x\n",
+		boot_cpu_data.x86_vendor, boot_cpu_data.x86_model, boot_cpu_data.x86_stepping);
+
+	/* Confirm Family model stepping for SPR A0 */
+	if((boot_cpu_data.x86_vendor == X86_VENDOR_INTEL) &&
+	   (boot_cpu_data.x86_model == 0x8F) &&
+	   (boot_cpu_data.x86_stepping == 0x0)) {
+
+		pr_info("**********Attention**************\n");
+		pr_info("Detected Intel SPR A0\n");
+
+		if (cmdline_find_option_bool(boot_command_line,
+				     "ats_with_iommu_swizzle")) {
+			pr_info("ATS swizzle: Detected 'ats_with_iommu_swizzle' kernel parameter\n");
+			pr_info("ATS swizzle: Enabling swizzle device TLB workaround for M2IOSF Errata on SPR A0\n");
+			pr_info("ATS swizzle: To disable workaround remove 'ats_with_iommu_swizzle' kernel parameter\n");
+			pr_info("ATS swizzle: Restrictions: CPU and IOMMU 5-level paging is disabled. HAW, MGAW and SAGAW are restricted to 48 bits\n");
+
+			ats_with_iommu_swizzle = 1;
+
+			if (dmar->width > 47) {
+				dmar->width = 47;
+				pr_info("ATS swizzle: Updated Host address width %d\n", dmar->width + 1);
+			}
+		} else {
+			pr_info("If you are on a real silicon then ATS and Device TLBs are not expected to work reliably due to a M2IOSF errata\n");
+			pr_info("Use 'ats_with_iommu_swizzle' to enable workaround for the errata and enable ATS with restrictions\n");
+			pr_info("If you don't care about ATS. Use 'pci=noats' kernel parameter to disable ATS on the platform\n");
+
+			/* Skip this for now. Enable it when simics updates its stepping id.
+			pr_info("Disabling ATS by default due to M2IOSF errata\n");
+			disable_device_tlb_support = 1;
+			*/
+		}
+	}
+#endif
+
 	ret = dmar_walk_dmar_table(dmar, &cb);
 	if (ret == 0 && drhd_count == 0)
 		pr_warn(FW_BUG "No DRHD structure found in DMAR table\n");
@@ -954,6 +1005,43 @@ static int map_iommu(struct intel_iommu *iommu, u64 phys_addr)
 		goto unmap;
 	}
 
+#ifdef CONFIG_INTEL_IOMMU_WORKAROUND
+	if (ats_with_iommu_swizzle) { // || disable_device_tlb_support
+
+		pr_info("%s: Original cap:%llx ecap:%llx\n",
+			iommu->name, iommu->cap, iommu->ecap);
+
+		if (ats_with_iommu_swizzle) {
+			if(cap_mgaw(iommu->cap) > 47) {
+				pr_warn("ATS swizzle: %s: Reducing mgaw from %d to 48\n",
+					iommu->name, (unsigned int)cap_mgaw(iommu->cap) + 1);
+				iommu->cap &= 0xFFFFFFFFFFC0FFFF; /* Clear mgaw bits */
+				iommu->cap |= 0x2F0000; /* Set mgaw to 48 (47 + 1) */
+			}
+			if (cap_sagaw(iommu->cap) & 0x8) {
+				pr_warn("ATS swizzle: %s: Removing sagaw 5-level support from sagaw %x\n",
+					iommu->name, (unsigned int)cap_sagaw(iommu->cap));
+				iommu->cap &= ~BIT_ULL(11);
+			}
+			if (cap_5lp_support(iommu->cap)) {
+				pr_warn("ATS swizzle: %s: Removing first level 5-level paging support\n",
+					iommu->name);
+				iommu->cap &= ~BIT_ULL(60);
+			}
+		}
+
+		/* Skip this check for now. Enable it when we move to SPR silicon
+		if (disable_device_tlb_support) {
+			pr_warn("%s: Disabling IOMMU Device TLB support\n",
+				iommu->name);
+			iommu->ecap &= ~BIT_ULL(2);
+		}
+		*/
+
+		pr_info("%s: Updated cap:%llx ecap:%llx\n",
+			iommu->name, iommu->cap, iommu->ecap);
+	}
+#endif
 	/* the registers might be more than one page */
 	map_size = max_t(int, ecap_max_iotlb_offset(iommu->ecap),
 			 cap_max_fault_reg_offset(iommu->cap));
@@ -1348,6 +1436,22 @@ void qi_flush_iotlb(struct intel_iommu *iommu, u16 did, u64 addr,
 	qi_submit_sync(&desc, iommu);
 }
 
+#ifdef CONFIG_INTEL_IOMMU_WORKAROUND
+
+void qi_fix_descriptor(struct qi_desc* desc)
+{
+	if (ats_with_iommu_swizzle) {
+		pr_info_once("ATS swizzle: Flushing all addresses for every Dev TLB invalidation\n");
+		pr_info_once("ATS swizzle: descriptor qw1 before swap: %llx\n", desc->qw1);
+		/* Set all bits except reserved (48 bit addr) - clear bit 23-Addr[47] */
+		desc->qw1 = 0xF8FFFFFF7F0000;
+		pr_info_once("ATS swizzle: descriptor qw1 after swap: %llx\n", desc->qw1);
+	}
+}
+#else
+void qi_fix_descriptor(struct qi_desc* desc) {}
+#endif
+
 void qi_flush_dev_iotlb(struct intel_iommu *iommu, u16 sid, u16 pfsid,
 			u16 qdep, u64 addr, unsigned mask)
 {
@@ -1366,6 +1470,8 @@ void qi_flush_dev_iotlb(struct intel_iommu *iommu, u16 sid, u16 pfsid,
 		   QI_DIOTLB_TYPE | QI_DEV_IOTLB_PFSID(pfsid);
 	desc.qw2 = 0;
 	desc.qw3 = 0;
+
+	qi_fix_descriptor(&desc);
 
 	qi_submit_sync(&desc, iommu);
 }
