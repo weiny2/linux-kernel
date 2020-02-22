@@ -6,6 +6,7 @@
 #include <linux/ctype.h>
 #include <linux/kernel.h>
 #include <linux/file.h>
+#include <linux/console.h>
 #include <asm/processor.h>
 #include <asm/irq_regs.h>
 #ifdef CONFIG_X86
@@ -975,27 +976,18 @@ extern int kdb_id(int, const char **);
 void 
 svos_cmds_init(void)
 {	
+	// Quiet warnings about the console being locked
+	atomic_inc(&ignore_console_lock_warning);
 	kdb_register("iob", KDB_FUNCTION svKDBio, "<port> [<value>]",
 				 "Read or write the given port", 0);
 	kdb_register("iow", KDB_FUNCTION svKDBio, "<port> [<value>]",
 				 "Read or write the given port", 0);
 	kdb_register("iol", KDB_FUNCTION svKDBio, "<port> [<value>]",
 				 "Read or write the given port", 0);
-#if 0 //skip for now
-	kdb_register("rdpci", KDB_FUNCTION svKDBpci, "<B> <D> [<Fn>] [<Reg>] [<Cnt>]",
-				"PCI regs for Bus Dev Func", 0);
-	kdb_register("wrpci", KDB_FUNCTION svKDBwpci, "<B> <D> [<Fn>] [<Reg>] [<Val>]", 
-				   "Write PCI reg for Bus Dev Func", 0); 
-#endif
 	kdb_register("rdmsr", KDB_FUNCTION svKDBrdmsr, "<msr#>",
 				 "Read MSR (UNPROTECTED)", 0);
-#ifdef CONFIG_X86_64
 	kdb_register("wrmsr", KDB_FUNCTION svKDBwrmsr, "<msr#> <value>",
 				 "Write MSR (UNPROTECTED)", 0);
-#else
-	kdb_register("wrmsr", KDB_FUNCTION svKDBwrmsr, "<msr#> <Hi> <Lo>",
-				 "Write MSR (UNPROTECTED)", 0);
-#endif
 	kdb_register("rdlapic", KDB_FUNCTION svKDBrdlapic, " ",
 				 "local apic dump", 0);
 	kdb_register("wrlapic", KDB_FUNCTION svKDBwrlapic, " ",
@@ -1008,11 +1000,9 @@ svos_cmds_init(void)
 	kdb_register_flags("id" , KDB_FUNCTION kdb_id, "<addr>",
 				"disassemble instruction at address", 1, KDB_REPEAT_NO_ARGS);
 
-
 	kdb_register("bpc", KDB_FUNCTION kdb_bpC,"",   "Clear All Breakpoint", 0);
 	kdb_register("bpd", KDB_FUNCTION kdb_bpD,"",   "Disable All Breakpoint", 0);
     	kdb_register("bpe", KDB_FUNCTION kdb_bpE,"",   "Enable All Breakpoint", 0);
-
 	kdb_register_flags("ssr", KDB_FUNCTION kdb_ssr, "", "Single Step With Register Dump", 1, KDB_REPEAT_NO_ARGS);
 	kdb_register_flags("ms", KDB_FUNCTION kdb_ms, "<addr> <pattern> <length>","Search for <pattern> starting at <address>", 1, KDB_REPEAT_NO_ARGS);
 	kdb_register_flags("mf", KDB_FUNCTION kdb_mf, "<addr> <pattern> <length>","Fill memory with <pattern> starting at <address>", 1, KDB_REPEAT_NO_ARGS);
@@ -1021,7 +1011,7 @@ svos_cmds_init(void)
 	kdb_register_flags("sout", KDB_FUNCTION kdb_sout, "", "Step out of function call", 1, KDB_REPEAT_NO_ARGS);
 	kdb_register_flags("soutr", KDB_FUNCTION kdb_sout, "", "Step out of function call with register dump", 1, KDB_REPEAT_NO_ARGS);
 	kdb_register_flags("cpuid", KDB_FUNCTION kdb_cpuid, "","Display the cpu model, family and features.", 1, KDB_REPEAT_NO_ARGS);
-
+	atomic_dec(&ignore_console_lock_warning);
 }
 
 //
