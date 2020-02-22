@@ -378,6 +378,7 @@ struct rdt_membw {
 	u32		delay_linear;
 	bool		mba_sc;
 	u32		*mb_map;
+	bool		per_thread;
 };
 
 static inline bool is_llc_occupancy_enabled(void)

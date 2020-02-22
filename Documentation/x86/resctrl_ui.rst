@@ -138,6 +138,11 @@ with respect to allocation:
 		non-linear. This field is purely informational
 		only.
 
+"per_thread":
+		Indicates if per thread memory bandwidth allocation
+		is supported. This field is purely informational
+		only.
+
 If RDT monitoring is available there will be an "L3_MON" directory
 with the following files:
 
