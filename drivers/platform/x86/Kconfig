@@ -1243,8 +1243,6 @@ config INTEL_SMARTCONNECT
 	  This driver checks to determine whether the device has Intel Smart
 	  Connect enabled, and if so disables it.
 
-source "drivers/platform/x86/intel_speed_select_if/Kconfig"
-
 config INTEL_TURBO_MAX_3
 	bool "Intel Turbo Boost Max Technology 3.0 enumeration driver"
 	depends on X86_64 && SCHED_MC_PRIO
@@ -1377,6 +1375,16 @@ config INTEL_PMT_TELEM
 
 	 For more information, see
 	 <file:Documentation/ABI/testing/sysfs-class-intel_pmt_telem>
+
+config INTEL_PMT_CRASHLOG
+	tristate "Intel PMT crashlog driver"
+	help
+	 The Intel Platform Monitoring Technology (PMT) crashlog driver provides
+	 access to hardware crashlog capabilities on devices that support the
+	 feature.
+
+	 For more information, see
+	 <file:Documentation/ABI/testing/sysfs-class-intel_pmt_crashlog>
 
 endif # X86_PLATFORM_DEVICES
 
