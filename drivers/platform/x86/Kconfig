@@ -1236,6 +1236,15 @@ config INTEL_CTA_TELEM
 	 For more information, see
 	 <file:Documentation/ABI/testing/sysfs-class-cta_telem>
 
+config INTEL_CTA_CRASHLOG
+	tristate "Intel CTA crashlog driver"
+	help
+	 The Intel CTA crashlog driver provides access to hardware crashlog
+	 capabilities on devices that support the feature.
+
+	 For more information, see
+	 <file:Documentation/ABI/testing/sysfs-class-cta_crashlog>
+
 config MLX_PLATFORM
 	tristate "Mellanox Technologies platform support"
 	depends on I2C && REGMAP
