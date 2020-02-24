@@ -360,22 +360,33 @@ def gen_manifest(skip_fetch,fetch_single,fetch_all,blacklist,whitelist,enable_li
     manifest=fetch_remotes(manifest,skip_fetch,fetch_single,fetch_all)
     return manifest
 
-def is_valid_line(cfg_line):
+def parse_config_line(cfg_line):
     """
-    Examines a line of a config file to ensure that it is not whitespace, is
-    not preceded by a # character, and can be split into a name/value pair.
+    Examines a line of text to obtain settings inside a config file.
+    Returns a dictionary containing the key-value pair of the setting,
+    or an empty dictionary if no setting was found.
     """
-    return all([bool(cfg_line), 
-                not cfg_line.isspace(),
-                not cfg_line.startswith("#"),
-                len(cfg_line.split("=")) == 2])
+    # Special case: line is commented and contains "is not set" means "n".
+    re_match = re.match("#(.*) is not set", cfg_line)
+    if re_match:
+        return {re_match.group(1).strip() : "n"}
+    if len(cfg_line.split("=")) == 2:
+        name, value = cfg_line.split("=")
+        return {name.strip() : value.strip()}
+    return {}
+
+def combine_dicts(d1, d2):
+    return {**d1, **d2}
 
 def parse_config_file(cfg_file):
     """
     Parses a config file into a dictionary of options and values.
     """
+    result_dict = {}
     with open(cfg_file) as f:
-        return {k : v for k, v in map(lambda s : s.split("="), filter(is_valid_line, f))}
+        for line in f:
+            result_dict = combine_dicts(result_dict, parse_config_line(line))
+    return result_dict
 
 def validate_config(cfg_file, all_options, branch_tracker):
     """
