@@ -123,6 +123,16 @@ static int set_new_tls(struct task_struct *p, unsigned long tls)
 		return do_set_thread_area_64(p, ARCH_SET_FS, tls);
 }
 
+/* Clear PASID MSR/state for the forked/cloned thread. */
+static void clear_task_pasid(struct task_struct *task)
+{
+	/*
+	 * Clear the xfeatures bit in the PASID state so that the MSR will be
+	 * initialized to its init state (0) by XRSTORS.
+	 */
+	task->thread.fpu.state.xsave.header.xfeatures &= ~XFEATURE_MASK_PASID;
+}
+
 int copy_thread_tls(unsigned long clone_flags, unsigned long sp,
 		    unsigned long arg, struct task_struct *p, unsigned long tls)
 {
@@ -175,6 +185,9 @@ int copy_thread_tls(unsigned long clone_flags, unsigned long sp,
 #ifdef CONFIG_X86_32
 	task_user_gs(p) = get_user_gs(current_pt_regs());
 #endif
+
+	if (static_cpu_has(X86_FEATURE_ENQCMD))
+		clear_task_pasid(p);
 
 	/* Set a new TLS for the child thread? */
 	if (clone_flags & CLONE_SETTLS)
