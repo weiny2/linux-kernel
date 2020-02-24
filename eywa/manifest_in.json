@@ -3739,6 +3739,36 @@
             ],
             "status": "intel confidential",
             "stuck_at_ref": ""
+        },
+        {
+            "branch": "fixwakeup_patch",
+            "branch_type": "expiring",
+            "config_options": [],
+            "contributor": [
+                {
+                    "name": "Xi Pardee",
+                    "email": "xi.pardee@intel.com"
+                }
+            ],
+            "description": "fix wakeup issue",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Xi Pardee",
+                    "email": "xi.pardee@intel.com"
+                }
+            ],
+            "jira": "NEXT-1830",
+            "name": "fixwakeup_patch",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/otc-power-management-enabling-team/otc-power-kernel.git",
+            "sdl_contact": [
+                {
+                    "name": "Charles Prestopine",
+                    "email": "charles.d.prestopine@intel.com"
+                }
+            ],
+            "status": "public",
+            "stuck_at_ref": ""
         }
     ]
 }
