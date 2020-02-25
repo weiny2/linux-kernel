@@ -1,0 +1,4 @@
+config VPU
+	tristate "Support for VPU driver"
+	help
+	  VPU driver

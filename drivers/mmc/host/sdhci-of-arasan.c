@@ -73,6 +73,7 @@ struct sdhci_arasan_soc_ctl_field {
 struct sdhci_arasan_soc_ctl_map {
 	struct sdhci_arasan_soc_ctl_field	baseclkfreq;
 	struct sdhci_arasan_soc_ctl_field	clockmultiplier;
+	struct sdhci_arasan_soc_ctl_field	support64b;
 	bool					hiword_update;
 };
 
@@ -152,6 +153,12 @@ static const struct sdhci_arasan_soc_ctl_map intel_lgm_emmc_soc_ctl_map = {
 static const struct sdhci_arasan_soc_ctl_map intel_lgm_sdxc_soc_ctl_map = {
 	.baseclkfreq = { .reg = 0x80, .width = 8, .shift = 2 },
 	.clockmultiplier = { .reg = 0, .width = -1, .shift = -1 },
+	.hiword_update = false,
+};
+static const struct sdhci_arasan_soc_ctl_map thunderbay_soc_ctl_map = {
+	.baseclkfreq = { .reg = 0x0, .width = 8, .shift = 14 },
+	.clockmultiplier = { .reg = 0x4, .width = 8, .shift = 14 },
+	.support64b = { .reg = 0x4, .width = 1, .shift = 24 },
 	.hiword_update = false,
 };
 
@@ -429,6 +436,24 @@ static struct sdhci_arasan_of_data intel_lgm_sdxc_data = {
 	.pdata = &sdhci_arasan_cqe_pdata,
 };
 
+static const struct sdhci_pltfm_data sdhci_arasan_thunderbay_pdata = {
+	.ops = &sdhci_arasan_cqe_ops,
+	.quirks = SDHCI_QUIRK_CAP_CLOCK_BASE_BROKEN |
+		SDHCI_QUIRK_32BIT_DMA_ADDR |
+		SDHCI_QUIRK_32BIT_DMA_SIZE |
+		SDHCI_QUIRK_32BIT_ADMA_SIZE,
+	.quirks2 = SDHCI_QUIRK2_PRESET_VALUE_BROKEN |
+		SDHCI_QUIRK2_CLOCK_DIV_ZERO_BROKEN |
+		SDHCI_QUIRK2_STOP_WITH_TC |
+		SDHCI_QUIRK2_BROKEN_64_BIT_DMA |
+		SDHCI_QUIRK2_CAPS_BIT63_FOR_HS400,
+};
+
+static struct sdhci_arasan_of_data sdhci_arasan_thunderbay_data = {
+	.soc_ctl_map = &thunderbay_soc_ctl_map,
+	.pdata = &sdhci_arasan_thunderbay_pdata,
+};
+
 #ifdef CONFIG_PM_SLEEP
 /**
  * sdhci_arasan_suspend - Suspend method for the driver
@@ -537,6 +562,10 @@ static const struct of_device_id sdhci_arasan_of_match[] = {
 	{
 		.compatible = "intel,lgm-sdhci-5.1-sdxc",
 		.data = &intel_lgm_sdxc_data,
+	},
+	{
+		.compatible = "intel,thunderbay-sdhci-5.1",
+		.data = &sdhci_arasan_thunderbay_data,
 	},
 	/* Generic compatible below here */
 	{
@@ -794,6 +823,27 @@ static void sdhci_arasan_update_clockmultiplier(struct sdhci_host *host,
 	}
 
 	sdhci_arasan_syscon_write(host, &soc_ctl_map->clockmultiplier, value);
+}
+
+static void sdhci_arasan_update_support64b(struct sdhci_host *host, u32 value)
+{
+	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
+	struct sdhci_arasan_data *sdhci_arasan = sdhci_pltfm_priv(pltfm_host);
+	const struct sdhci_arasan_soc_ctl_map *soc_ctl_map =
+		sdhci_arasan->soc_ctl_map;
+
+	/* Having a map is optional */
+	if (!soc_ctl_map)
+		return;
+
+	/* If we have a map, we expect to have a syscon */
+	if (!sdhci_arasan->soc_ctl_base) {
+		pr_warn("%s: Have regmap, but no soc-ctl-syscon\n",
+			mmc_hostname(host->mmc));
+		return;
+	}
+
+	sdhci_arasan_syscon_write(host, &soc_ctl_map->support64b, value);
 }
 
 /**
@@ -1226,6 +1276,11 @@ static int sdhci_arasan_probe(struct platform_device *pdev)
 				    "rockchip,rk3399-sdhci-5.1"))
 		sdhci_arasan_update_clockmultiplier(host, 0x0);
 
+	if (of_device_is_compatible(pdev->dev.of_node,
+				    "intel,thunderbay-sdhci-5.1")) {
+		sdhci_arasan_update_clockmultiplier(host, 0x0);
+		sdhci_arasan_update_support64b(host, 0x0);
+	}
 	sdhci_arasan_update_baseclkfreq(host);
 
 	ret = sdhci_arasan_register_sdclk(sdhci_arasan, clk_xin, &pdev->dev);
@@ -1279,11 +1334,14 @@ static int sdhci_arasan_probe(struct platform_device *pdev)
 					sdhci_arasan_hs400_enhanced_strobe;
 		host->mmc_host_ops.start_signal_voltage_switch =
 					sdhci_arasan_voltage_switch;
-		sdhci_arasan->has_cqe = true;
-		host->mmc->caps2 |= MMC_CAP2_CQE;
 
-		if (!of_property_read_bool(np, "disable-cqe-dcmd"))
-			host->mmc->caps2 |= MMC_CAP2_CQE_DCMD;
+		if (of_property_read_bool(np, "supports-cqe")) {
+			sdhci_arasan->has_cqe = true;
+			host->mmc->caps2 |= MMC_CAP2_CQE;
+
+			if (!of_property_read_bool(np, "disable-cqe-dcmd"))
+				host->mmc->caps2 |= MMC_CAP2_CQE_DCMD;
+		}
 	}
 
 	ret = sdhci_arasan_add_host(sdhci_arasan);

@@ -61,3 +61,4 @@ obj-$(CONFIG_KEEMBAY_IPC)	+= keembay-ipc/
 obj-$(CONFIG_XLINK_CORE)	+= xlink-core/
 obj-$(CONFIG_XLINK_CORE)	+= xlink-pcie/
 obj-$(CONFIG_XLINK_IPC)		+= xlink-ipc/
+obj-$(CONFIG_VPU)		+= vpu/
