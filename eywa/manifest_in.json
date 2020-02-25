@@ -3597,7 +3597,7 @@
                 }
             ],
             "description": "Introduces resctrl selftest in Intel Next.",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Ravi Shankar",
