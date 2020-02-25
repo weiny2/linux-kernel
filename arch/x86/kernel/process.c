@@ -109,6 +109,14 @@ int arch_dup_task_struct(struct task_struct *dst, struct task_struct *src)
 }
 
 /*
+ * Clean up some bloated areas before freeing up task_struct
+ */
+void arch_release_task_struct(struct task_struct *tsk)
+{
+	free_xstate_exp(&tsk->thread.fpu);
+}
+
+/*
  * Free current thread data structures etc..
  */
 void exit_thread(struct task_struct *tsk)

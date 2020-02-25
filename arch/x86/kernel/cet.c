@@ -48,7 +48,7 @@ static unsigned long cet_get_shstk_addr(void)
 	} else {
 		struct cet_user_state *p;
 
-		p = get_xsave_addr(&fpu->state.xsave, XFEATURE_CET_USER);
+		p = get_xsave_addr(fpu, XFEATURE_CET_USER);
 		if (p)
 			ssp = p->user_ssp;
 	}
@@ -242,7 +242,7 @@ int cet_restore_signal(bool ia32, struct sc_ext *sc_ext)
 	if (!cet->shstk_enabled && !cet->ibt_enabled)
 		return 0;
 
-	cet_user_state = get_xsave_addr(&current->thread.fpu.state.xsave,
+	cet_user_state = get_xsave_addr(&current->thread.fpu,
 					XFEATURE_CET_USER);
 	if (!cet_user_state)
 		return -1;

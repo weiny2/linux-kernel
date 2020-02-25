@@ -20,6 +20,7 @@
 
 #define XSAVE_YMM_SIZE	    256
 #define XSAVE_YMM_OFFSET    (XSAVE_HDR_SIZE + XSAVE_HDR_OFFSET)
+#define XSAVE_FIRST_EXT_OFFSET XSAVE_YMM_OFFSET
 
 /* All currently supported user features */
 #define SUPPORTED_XFEATURES_MASK_USER (XFEATURE_MASK_FP | \
@@ -30,7 +31,8 @@
 				       XFEATURE_MASK_Hi16_ZMM	 | \
 				       XFEATURE_MASK_PKRU | \
 				       XFEATURE_MASK_BNDREGS | \
-				       XFEATURE_MASK_BNDCSR)
+				       XFEATURE_MASK_BNDCSR | \
+				       XFEATURE_MASK_XTILE)
 
 /* All currently supported supervisor features */
 #define SUPPORTED_XFEATURES_MASK_SUPERVISOR (XFEATURE_MASK_CET_USER | \
@@ -46,6 +48,9 @@
 /* All supervisor states including supported and unsupported states. */
 #define ALL_XFEATURES_MASK_SUPERVISOR (SUPPORTED_XFEATURES_MASK_SUPERVISOR | \
 				       UNSUPPORTED_XFEATURES_MASK_SUPERVISOR)
+
+/* The features with huge xstate size */
+#define XFEATURE_MASK_HUGESTATE (XFEATURE_MASK_XTILE_DATA)
 
 #ifdef CONFIG_X86_64
 #define REX_PREFIX	"0x48, "
@@ -65,18 +70,29 @@ static inline u64 xfeatures_mask_user(void)
 	return xfeatures_mask_all & SUPPORTED_XFEATURES_MASK_USER;
 }
 
+extern u64 xstate_area_mask;
+extern u64 xstate_exp_area_mask;
 extern u64 xstate_fx_sw_bytes[USER_XSTATE_FX_SW_WORDS];
 
 extern void __init update_regset_xstate_info(unsigned int size,
 					     u64 xstate_mask);
 
-void *get_xsave_addr(struct xregs_state *xsave, int xfeature_nr);
+void *get_xsave_addr(struct fpu *fpu, int xfeature_nr);
+int alloc_xstate_exp(struct fpu *fpu);
+void free_xstate_exp(struct fpu *fpu);
+
 const void *get_xsave_field_ptr(int xfeature_nr);
 int using_compacted_format(void);
-int copy_xstate_to_kernel(void *kbuf, struct xregs_state *xsave, unsigned int offset, unsigned int size);
-int copy_xstate_to_user(void __user *ubuf, struct xregs_state *xsave, unsigned int offset, unsigned int size);
-int copy_kernel_to_xstate(struct xregs_state *xsave, const void *kbuf);
-int copy_user_to_xstate(struct xregs_state *xsave, const void __user *ubuf);
+int copy_xstate_comp_to_kernel(void *kbuf, struct fpu *fpu,
+			       unsigned int offset, unsigned int size);
+int copy_xstate_comp_to_user(void __user *ubuf, struct fpu *fpu,
+			     unsigned int offset, unsigned int size);
+int copy_kernel_to_xstate_comp(struct fpu *fpu, const void *kbuf);
+int copy_user_to_xstate_comp(struct fpu *fpu, const void __user *ubuf);
+int copy_xstate_to_regset(void *kbuf, void __user *ubuf, struct fpu *fpu,
+			  unsigned int count);
+int copy_regset_to_xstate(struct fpu *fpu, const void *kbuf,
+			  const void __user *ubuf, unsigned int count);
 
 /* Validate an xstate header supplied by userspace (ptrace or sigreturn) */
 int validate_xstate_header_from_user(const struct xstate_header *hdr);
