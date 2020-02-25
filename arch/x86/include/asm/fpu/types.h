@@ -146,6 +146,12 @@ struct reg_512_bit {
 	u8	regbytes[512/8];
 };
 
+struct lbr_entry {
+	u64		lbr_from;
+	u64		lbr_to;
+	u64		lbr_info;
+};
+
 /*
  * State component 2:
  *
@@ -227,6 +233,21 @@ struct avx_512_hi16_state {
 struct pkru_state {
 	u32				pkru;
 	u32				pad;
+} __packed;
+
+#define ARCH_LBR_NR_ENTRIES		32
+/*
+ * State component 15: Architectural LBR configuration state.
+ * Regardless of the number of LBRs supported by the processor,
+ * the size of the LBR state save region is constant.
+ */
+struct arch_lbr_state {
+	u64				lbr_ctl;
+	u64				lbr_depth;
+	u64				ler_from;
+	u64				ler_to;
+	u64				ler_info;
+	struct lbr_entry		lbr_entry[ARCH_LBR_NR_ENTRIES];
 } __packed;
 
 struct xstate_header {
