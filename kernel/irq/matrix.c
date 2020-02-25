@@ -146,6 +146,23 @@ static unsigned int matrix_find_best_cpu(struct irq_matrix *m,
 	return best_cpu;
 }
 
+#ifdef CONFIG_SVOS
+void irq_matrix_assign_cpu(struct irq_matrix *m, unsigned int cpu, unsigned int bit)
+{
+	struct cpumap *cm = per_cpu_ptr(m->maps, cpu);
+
+	if (WARN_ON_ONCE(bit < m->alloc_start || bit >= m->alloc_end))
+		return;
+	if (WARN_ON_ONCE(test_and_set_bit(bit, cm->alloc_map)))
+		return;
+	cm->allocated++;
+	m->total_allocated++;
+	cm->available--;
+	m->global_available--;
+	trace_irq_matrix_assign(bit, smp_processor_id(), m, cm);
+}
+#endif
+
 /* Find the best CPU which has the lowest number of managed IRQs allocated */
 static unsigned int matrix_find_best_cpu_managed(struct irq_matrix *m,
 						const struct cpumask *msk)
