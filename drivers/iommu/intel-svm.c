@@ -19,6 +19,7 @@
 #include <linux/mm_types.h>
 #include <linux/ioasid.h>
 #include <asm/page.h>
+#include <asm/fpu/api.h>
 
 #include "intel-pasid.h"
 
@@ -226,6 +227,24 @@ static LIST_HEAD(global_svm_list);
 	list_for_each_entry((sdev), &(svm)->devs, list)	\
 		if ((d) != (sdev)->dev) {} else
 
+static void ia32_pasid_set(u64 pasid)
+{
+	/* Update IA32_PASID MSR or its FPU state for the current task. */
+	fpu__pasid_write(pasid | MSR_IA32_PASID_VALID_MASK);
+}
+
+static void ia32_pasid_clear(void)
+{
+	/*
+	 * Set the IA32_PASID MSR to its init state (i.e. 0). 0 in the valid
+	 * bit 31 indicates the MSR doesn't contain a valid PASID.
+	 */
+	fpu__pasid_write(IA32_PASID_INIT_STATE);
+}
+
+#define user_enqcmd(flags)	(cpu_feature_enabled(X86_FEATURE_ENQCMD) &&  \
+				 !((flags) & SVM_FLAG_SUPERVISOR_MODE))
+
 int intel_svm_bind_mm(struct device *dev, int *pasid, int flags, struct svm_dev_ops *ops)
 {
 	struct intel_iommu *iommu = intel_svm_device_to_iommu(dev);
@@ -248,6 +267,13 @@ int intel_svm_bind_mm(struct device *dev, int *pasid, int flags, struct svm_dev_
 			return -EINVAL;
 	} else
 		pasid_max = 1 << 20;
+
+	/*
+	 * If the ENQCMD feature is enabled, the maximum PASID value must be
+	 * limited by the maximum PASID value supported in the IA32_PASID MSR.
+	 */
+	if (cpu_feature_enabled(X86_FEATURE_ENQCMD))
+		pasid_max = min((u64)pasid_max, MSR_IA32_PASID_VALUE_MASK);
 
 	if (flags & SVM_FLAG_SUPERVISOR_MODE) {
 		if (!ecap_srs(iommu->ecap))
@@ -400,6 +426,10 @@ int intel_svm_bind_mm(struct device *dev, int *pasid, int flags, struct svm_dev_
 
  success:
 	*pasid = svm->pasid;
+	/* Set IA32_PASID MSR for user task. */
+	if (user_enqcmd(flags))
+		ia32_pasid_set(svm->pasid);
+
 	ret = 0;
  out:
 	mutex_unlock(&pasid_mutex);
@@ -432,6 +462,9 @@ int intel_svm_unbind_mm(struct device *dev, int pasid)
 
 	for_each_svm_dev(sdev, svm, dev) {
 		ret = 0;
+		/* Clear IA32_PASID MSR for user task. */
+		if (user_enqcmd(svm->flags))
+			ia32_pasid_clear();
 		sdev->users--;
 		if (!sdev->users) {
 			list_del_rcu(&sdev->list);

@@ -56,7 +56,8 @@ struct svm_dev_ops {
  *
  * This function attempts to enable PASID support for the given device.
  * If the @pasid argument is non-%NULL, a PASID is allocated for access
- * to the MM of the current process.
+ * to the MM of the current process and the current task sets the PASID
+ * in its IA32_PASID MSR.
  *
  * By using a %NULL value for the @pasid argument, this function can
  * be used to simply validate that PASID support is available for the
@@ -86,7 +87,8 @@ extern int intel_svm_bind_mm(struct device *dev, int *pasid, int flags,
  * longer requires access to the address space of a given process.
  *
  * If the use count for the PASID in question reaches zero, the
- * PASID is revoked and may no longer be used by hardware.
+ * PASID is revoked and may no longer be used by hardware, and all
+ * tasks in the current process clear their IA32_PASID MSRs.
  *
  * Device drivers are required to ensure that no access (including
  * page requests) is currently outstanding for the PASID in question,

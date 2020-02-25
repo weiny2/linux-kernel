@@ -37,6 +37,7 @@ static const char *xfeature_names[] =
 	"AVX-512 ZMM_Hi256"		,
 	"Processor Trace (unused)"	,
 	"Protection Keys User registers",
+	"PASID state",
 	"unknown xstate feature"	,
 	"Control-flow User registers"	,
 	"Control-flow Kernel registers"	,
@@ -54,7 +55,7 @@ static short xsave_cpuid_features[] __initdata = {
 	X86_FEATURE_AVX512F,
 	X86_FEATURE_INTEL_PT,
 	X86_FEATURE_PKU,
-	-1,		   /* Unused */
+	X86_FEATURE_ENQCMD,
 	X86_FEATURE_SHSTK, /* XFEATURE_CET_USER */
 	X86_FEATURE_SHSTK, /* XFEATURE_CET_KERNEL */
 };
@@ -322,6 +323,7 @@ static void __init print_xstate_features(void)
 	print_xstate_feature(XFEATURE_MASK_ZMM_Hi256);
 	print_xstate_feature(XFEATURE_MASK_Hi16_ZMM);
 	print_xstate_feature(XFEATURE_MASK_PKRU);
+	print_xstate_feature(XFEATURE_MASK_PASID);
 	print_xstate_feature(XFEATURE_MASK_CET_USER);
 	print_xstate_feature(XFEATURE_MASK_CET_KERNEL);
 }
@@ -571,6 +573,7 @@ static void check_xstate_against_struct(int nr)
 	XCHECK_SZ(sz, nr, XFEATURE_ZMM_Hi256, struct avx_512_zmm_uppers_state);
 	XCHECK_SZ(sz, nr, XFEATURE_Hi16_ZMM,  struct avx_512_hi16_state);
 	XCHECK_SZ(sz, nr, XFEATURE_PKRU,      struct pkru_state);
+	XCHECK_SZ(sz, nr, XFEATURE_PASID,     struct ia32_pasid_state);
 	XCHECK_SZ(sz, nr, XFEATURE_CET_USER,   struct cet_user_state);
 	XCHECK_SZ(sz, nr, XFEATURE_CET_KERNEL, struct cet_kernel_state);
 
@@ -1323,3 +1326,49 @@ int proc_pid_arch_status(struct seq_file *m, struct pid_namespace *ns,
 	return 0;
 }
 #endif /* CONFIG_PROC_PID_ARCH_STATUS */
+
+/*
+ * Write the current task's 64-bit IA32_PASID MSR/PASID state.
+ * @pasid:	 PASID value.
+ */
+void fpu__pasid_write(u64 pasid)
+{
+	fpregs_lock();
+
+	/*
+	 * If the MSR is active and owned by the current task's FPU, it can
+	 * be directly written.
+	 *
+	 * Otherwise, write the fpstate and/or xfeatures bit.
+	 */
+	if (!test_thread_flag(TIF_NEED_FPU_LOAD)) {
+		wrmsrl(MSR_IA32_PASID, pasid);
+	} else {
+		struct xregs_state *xsave = &current->thread.fpu.state.xsave;
+
+		/*
+		 * If pasid value is init state (i.e. 0), clear the xfeatures
+		 * bit for the fpstate so that the MSR will be initialized to
+		 * its init state by init optimization in XRSTORS.
+		 *
+		 * Otherwise, directly write pasid to the fpstate. Set the
+		 * xfeatures bit so that the fpstate will be restored to
+		 * the MSR without triggering init optimization in XRSTORS.
+		 */
+		if (pasid == IA32_PASID_INIT_STATE) {
+			xsave->header.xfeatures &= ~XFEATURE_MASK_PASID;
+		} else {
+			struct ia32_pasid_state *ppasid_state;
+
+			xsave->header.xfeatures |= XFEATURE_MASK_PASID;
+			ppasid_state = get_xsave_addr(xsave, XFEATURE_PASID);
+			/*
+			 * ppasid_state shouldn't be NULL because XFEATURE_PASID
+			 * must be supported when this function is called.
+			 */
+			WARN_ON_ONCE(!ppasid_state);
+			ppasid_state->pasid = pasid;
+		}
+	}
+	fpregs_unlock();
+}

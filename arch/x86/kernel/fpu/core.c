@@ -352,6 +352,38 @@ void fpu__clear_all(struct fpu *fpu)
 }
 
 /*
+ * fpu PASID state is cleared for new task after the copy from the parent
+ * is performed.
+ */
+void fpu__clear_pasid(struct task_struct *task)
+{
+	struct xregs_state *xsave = &task->thread.fpu.state.xsave;
+
+	/*
+	 * When a new task is forked or cloned, the new task's fpstate
+	 * including the PASID state was copied from the task's parent.
+	 * To enforce the new task to set a valid PASID (via an API
+	 * provided by device driver) before running ENQCMD instruction,
+	 * the PASID state needs to be cleared first. If the task doesn't
+	 * set a valid PASID, the ENQCMD instruction will generate #GP.
+	 *
+	 * To avoid loading the PASID state into the MSR, clear the
+	 * xfeatures bit for the PASID state so that the task's
+	 * IA32_PASID MSR will be initialized to its init state (i.e. 0)
+	 * by init optimization in XRSTORS.
+	 *
+	 * It's unnecessary to clear the PASID state in the fpstate because
+	 * XRSTORS will not load the state due to init optimization.
+	 *
+	 * And since the fpstate is not valid yet, the xfeatures bit can be
+	 * directly cleared.
+	 */
+	WARN_ON_FPU(fpregs_state_valid(&task->thread.fpu, smp_processor_id()));
+
+	xsave->header.xfeatures &= ~XFEATURE_MASK_PASID;
+}
+
+/*
  * Load FPU context before returning to userspace.
  */
 void switch_fpu_return(void)

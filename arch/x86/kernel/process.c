@@ -89,12 +89,23 @@ EXPORT_PER_CPU_SYMBOL_GPL(__tss_limit_invalid);
  */
 int arch_dup_task_struct(struct task_struct *dst, struct task_struct *src)
 {
+	int ret;
+
 	memcpy(dst, src, arch_task_struct_size);
 #ifdef CONFIG_VM86
 	dst->thread.vm86 = NULL;
 #endif
 
-	return fpu__copy(dst, src);
+	ret = fpu__copy(dst, src);
+
+	/*
+	 * Clear the PASID state to enforce the task to set the state
+	 * if running ENQCMD instruction.
+	 */
+	if (static_cpu_has(X86_FEATURE_ENQCMD))
+		fpu__clear_pasid(dst);
+
+	return ret;
 }
 
 /*
