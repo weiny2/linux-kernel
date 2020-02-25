@@ -57,3 +57,7 @@ obj-y				+= cardreader/
 obj-$(CONFIG_PVPANIC)   	+= pvpanic.o
 obj-$(CONFIG_HABANA_AI)		+= habanalabs/
 obj-$(CONFIG_XILINX_SDFEC)	+= xilinx_sdfec.o
+obj-$(CONFIG_KEEMBAY_IPC)	+= keembay-ipc/
+obj-$(CONFIG_XLINK_CORE)	+= xlink-core/
+obj-$(CONFIG_XLINK_CORE)	+= xlink-pcie/
+obj-$(CONFIG_XLINK_IPC)		+= xlink-ipc/

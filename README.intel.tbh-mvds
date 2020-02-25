@@ -1,0 +1,29 @@
+Ingredient Summary
+==================
+
+What part(s)/IP block(s)/feature(s) are enabled by this code?
+-------------------------------------------------------------
+
+This code adds supports for the following features to the Keem Bay and Thunder
+Bay Harbor SoCs:
+* IPC communication
+* VPU firmware loading and booting
+
+Which platform(s) are affected by this code?
+--------------------------------------------
+
+The Keem Bay and Thunder Bay Harbor platforms.
+
+
+Are any bugs fixed or introduced by this code?
+----------------------------------------------
+
+None
+
+Configuration options
+---------------------
+
+CONFIG_KEEMBAY_IPC=y|m
+CONFIG_KEEMBAY_VPU_IPC=y|m
+
+(They depend on ARM64)

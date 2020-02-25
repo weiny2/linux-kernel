@@ -267,6 +267,32 @@ config PCIE_UNIPHIER
 	  Say Y here if you want PCIe controller support on UniPhier SoCs.
 	  This driver supports LD20 and PXs3 SoCs.
 
+config PCIE_THUNDERBAY
+        bool
+
+config PCIE_THUNDERBAY_HOST
+        bool "Intel Thunder Bay PCIe controller Host mode (EXPERIMENTAL)"
+        depends on ARM64 || COMPILE_TEST
+        depends on OF && HAS_IOMEM
+        depends on PCI && PCI_MSI_IRQ_DOMAIN
+        select PCIE_DW_HOST
+        select PCIE_THUNDERBAY
+        help
+          Say Y here to enable support for the PCIe controller in Thunder Bay
+          to work in host mode.
+
+config PCIE_THUNDERBAY_EP
+        bool "Intel Thunder Bay PCIe controller Endpoint mode (EXPERIMENTAL)"
+        depends on ARM64 || COMPILE_TEST
+        depends on OF && HAS_IOMEM
+        depends on PCI && PCI_MSI_IRQ_DOMAIN
+        depends on PCI_ENDPOINT
+        select PCIE_DW_EP
+        select PCIE_THUNDERBAY
+        help
+          Say Y here to enable support for the PCIe controller in Thunder Bay
+          to work in endpoint mode.
+
 config PCIE_AL
 	bool "Amazon Annapurna Labs PCIe controller"
 	depends on OF && (ARM64 || COMPILE_TEST)
