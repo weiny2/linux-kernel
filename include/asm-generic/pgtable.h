@@ -1190,6 +1190,46 @@ static inline bool arch_has_pfn_modify_check(void)
 }
 #endif /* !_HAVE_ARCH_PFN_MODIFY_ALLOWED */
 
+#ifdef CONFIG_MMU
+#ifndef CONFIG_ARCH_HAS_SHSTK
+static inline bool arch_copy_pte_mapping(vm_flags_t vm_flags)
+{
+	return false;
+}
+
+static inline pte_t pte_set_vma_features(pte_t pte, struct vm_area_struct *vma)
+{
+	return pte;
+}
+
+static inline bool pte_exclusive(pte_t pte, struct vm_area_struct *vma)
+{
+	return pte_dirty(pte);
+}
+
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE
+static inline pmd_t pmd_set_vma_features(pmd_t pmd, struct vm_area_struct *vma)
+{
+	return pmd;
+}
+
+static inline bool pmd_exclusive(pmd_t pmd, struct vm_area_struct *vma)
+{
+	return pmd_dirty(pmd);
+}
+#endif
+#else
+bool arch_copy_pte_mapping(vm_flags_t vm_flags);
+pte_t pte_set_vma_features(pte_t pte, struct vm_area_struct *vma);
+bool pte_exclusive(pte_t pte, struct vm_area_struct *vma);
+
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE
+pmd_t pmd_set_vma_features(pmd_t pmd, struct vm_area_struct *vma);
+bool pmd_exclusive(pmd_t pmd, struct vm_area_struct *vma);
+#endif
+#endif
+#endif /* CONFIG_MMU */
+
 /*
  * Architecture PAGE_KERNEL_* fallbacks
  *
