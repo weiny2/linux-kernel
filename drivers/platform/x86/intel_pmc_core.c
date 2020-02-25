@@ -193,7 +193,7 @@ static const struct pmc_bit_map cnp_pfear_map[] = {
 	{"Fuse",                BIT(6)},
 	/*
 	 * Reserved for Cannon Lake but valid for Ice Lake, Comet Lake,
-	 * Tiger Lake, Elkhart Lake and Jasper Lake.
+	 * Tiger Lake, Elkhart Lake, Jasper Lake and Rocket Lake.
 	 */
 	{"SBR8",		BIT(7)},
 
@@ -240,7 +240,7 @@ static const struct pmc_bit_map cnp_pfear_map[] = {
 	{"HDA_PGD6",            BIT(4)},
 	/*
 	 * Reserved for Cannon Lake but valid for Ice Lake, Comet Lake,
-	 * Tiger Lake, ELkhart Lake and Jasper Lake.
+	 * Tiger Lake, ELkhart Lake, Jasper Lake and Rocket Lake.
 	 */
 	{"PSF6",		BIT(5)},
 	{"PSF7",		BIT(6)},
@@ -273,7 +273,10 @@ static const struct pmc_bit_map *ext_icl_pfear_map[] = {
 };
 
 static const struct pmc_bit_map tgl_pfear_map[] = {
-	/* Tiger Lake, Elkhart Lake and Jasper Lake generation onwards only */
+	/*
+	 * Tiger Lake, Elkhart Lake, Jasper Lake and Rocket Lake generation
+	 * onwards only.
+	 */
 	{"PSF9",		BIT(0)},
 	{"RES_66",		BIT(1)},
 	{"RES_67",		BIT(2)},
@@ -612,6 +615,12 @@ static int pmc_core_check_read_lock_bit(void)
 	return value & BIT(pmcdev->map->pm_read_disable_bit);
 }
 
+static void pmc_core_slps0_display(struct pmc_dev *pmcdev, struct device *dev,
+                                   struct seq_file *s);
+static void pmc_core_lpm_display(struct pmc_dev *pmcdev, struct device *dev,
+                                 struct seq_file *s, u32 offset,
+                                 const char *str,
+                                 const struct pmc_bit_map **maps);
 #if IS_ENABLED(CONFIG_DEBUG_FS)
 static bool slps0_dbg_latch;
 
@@ -1140,6 +1149,8 @@ static const struct x86_cpu_id intel_pmc_core_ids[] = {
 	INTEL_CPU_FAM6(TIGERLAKE, tgl_reg_map),
 	INTEL_CPU_FAM6(ATOM_TREMONT, tgl_reg_map),
 	INTEL_CPU_FAM6(ATOM_TREMONT_L, tgl_reg_map),
+	INTEL_CPU_FAM6(ROCKETLAKE_L, tgl_reg_map),
+	INTEL_CPU_FAM6(ROCKETLAKE, tgl_reg_map),
 	{}
 };
 
@@ -1326,7 +1337,7 @@ static int pmc_core_resume(struct device *dev)
 	if (pmcdev->map->slps0_dbg_maps)
 		pmc_core_slps0_display(pmcdev, dev, NULL);
 	if (pmcdev->map->lpm_sts)
-		pmc_core_lpm_display(pmcdev, dev, NULL, "STATUS", offset, maps);
+		pmc_core_lpm_display(pmcdev, dev, NULL, offset, "STATUS", maps);
 
 	return 0;
 }
