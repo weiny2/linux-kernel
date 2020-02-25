@@ -589,7 +589,8 @@ void isst_clos_display_information(int cpu, FILE *outf, int clos,
 }
 
 void isst_clos_display_clos_information(int cpu, FILE *outf,
-					int clos_enable, int type)
+					int clos_enable, int type,
+					int state, int cap)
 {
 	char header[256];
 	char value[256];
@@ -605,12 +606,32 @@ void isst_clos_display_clos_information(int cpu, FILE *outf,
 	snprintf(header, sizeof(header), "core-power");
 	format_and_print(outf, 4, header, NULL);
 
+	snprintf(header, sizeof(header), "support-status");
+	if (cap)
+		snprintf(value, sizeof(value), "supported");
+	else
+		snprintf(value, sizeof(value), "unsupported");
+	format_and_print(outf, 5, header, value);
+
 	snprintf(header, sizeof(header), "enable-status");
-	snprintf(value, sizeof(value), "%d", clos_enable);
+	if (state)
+		snprintf(value, sizeof(value), "enabled");
+	else
+		snprintf(value, sizeof(value), "disabled");
+	format_and_print(outf, 5, header, value);
+
+	snprintf(header, sizeof(header), "clos-enable-status");
+	if (clos_enable)
+		snprintf(value, sizeof(value), "enabled");
+	else
+		snprintf(value, sizeof(value), "disabled");
 	format_and_print(outf, 5, header, value);
 
 	snprintf(header, sizeof(header), "priority-type");
-	snprintf(value, sizeof(value), "%d", type);
+	if (type)
+		snprintf(value, sizeof(value), "ordered");
+	else
+		snprintf(value, sizeof(value), "proportional");
 	format_and_print(outf, 5, header, value);
 
 	format_and_print(outf, 1, NULL, NULL);
