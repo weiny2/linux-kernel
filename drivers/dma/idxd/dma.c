@@ -154,7 +154,7 @@ dma_cookie_t idxd_dma_tx_submit(struct dma_async_tx_descriptor *tx)
 
 	cookie = dma_cookie_assign(tx);
 
-	rc = idxd_submit_desc(wq, desc);
+	rc = idxd_submit_desc(wq, desc, IDXD_OP_BLOCK);
 	if (rc < 0) {
 		idxd_free_desc(wq, desc);
 		return rc;

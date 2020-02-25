@@ -286,6 +286,10 @@ config INTEL_IDXD
 	depends on PCI && X86_64
 	select DMA_ENGINE
 	select SBITMAP
+	select INTEL_IOMMU_SVM
+	select PCI_PRI
+	select PCI_PASID
+	select PCI_IOV
 	help
 	  Enable support for the Intel(R) data accelerators present
 	  in Intel Xeon CPU.

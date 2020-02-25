@@ -298,10 +298,19 @@ int idxd_wq_map_portal(struct idxd_wq *wq)
 	start = pci_resource_start(pdev, IDXD_WQ_BAR);
 	start = start + wq->id * IDXD_PORTAL_SIZE;
 
-	wq->dportal = devm_ioremap(dev, start, IDXD_PORTAL_SIZE);
-	if (!wq->dportal)
-		return -ENOMEM;
-	dev_dbg(dev, "wq %d portal mapped at %p\n", wq->id, wq->dportal);
+	if (wq_dedicated(wq)) {
+		wq->portal = devm_ioremap(dev, start, IDXD_PORTAL_SIZE);
+		if (!wq->portal)
+			return -ENOMEM;
+		dev_dbg(dev, "dedicated wq %d portal mapped at %p\n",
+			wq->id, wq->portal);
+	} else {
+		wq->portal = devm_cmdmem_remap(dev, start, IDXD_PORTAL_SIZE);
+		if (!wq->portal)
+			return -ENOMEM;
+		dev_dbg(dev, "shared wq %d portal mapped at %p\n",
+			wq->id, wq->portal);
+	}
 
 	return 0;
 }
@@ -310,7 +319,63 @@ void idxd_wq_unmap_portal(struct idxd_wq *wq)
 {
 	struct device *dev = &wq->idxd->pdev->dev;
 
-	devm_iounmap(dev, wq->dportal);
+	if (wq_dedicated(wq))
+		devm_iounmap(dev, wq->portal);
+	else
+		devm_cmdmem_unmap(dev, wq->portal);
+}
+
+int idxd_wq_set_pasid(struct idxd_wq *wq, int pasid)
+{
+	struct idxd_device *idxd = wq->idxd;
+	int rc;
+	union wqcfg wqcfg;
+	unsigned int offset;
+
+	lockdep_assert_held(&idxd->dev_lock);
+
+	rc = idxd_wq_disable(wq);
+	if (rc < 0)
+		return rc;
+
+	offset = idxd->wqcfg_offset + wq->id * sizeof(wqcfg);
+	offset += sizeof(u32) * 2;
+	wqcfg.bits[2] = ioread32(idxd->reg_base + offset);
+	wqcfg.pasid_en = 1;
+	wqcfg.pasid = pasid;
+	iowrite32(wqcfg.bits[2], idxd->reg_base + offset);
+
+	rc = idxd_wq_enable(wq);
+	if (rc < 0)
+		return rc;
+
+	return 0;
+}
+
+int idxd_wq_disable_pasid(struct idxd_wq *wq)
+{
+	struct idxd_device *idxd = wq->idxd;
+	int rc;
+	union wqcfg wqcfg;
+	unsigned int offset;
+
+	lockdep_assert_held(&idxd->dev_lock);
+
+	rc = idxd_wq_disable(wq);
+	if (rc < 0)
+		return rc;
+
+	offset = idxd->wqcfg_offset + wq->id * sizeof(wqcfg);
+	wqcfg.bits[2] = ioread32(idxd->reg_base + offset);
+	wqcfg.pasid_en = 0;
+	wqcfg.pasid = 0;
+	iowrite32(wqcfg.bits[2], idxd->reg_base + offset);
+
+	rc = idxd_wq_enable(wq);
+	if (rc < 0)
+		return rc;
+
+	return 0;
 }
 
 /* Device control bits */
@@ -454,6 +519,35 @@ int idxd_device_reset(struct idxd_device *idxd)
 	return rc;
 }
 
+int idxd_device_drain_pasid(struct idxd_device *idxd, int pasid)
+{
+	int rc;
+	struct device *dev = &idxd->pdev->dev;
+	u32 operand, status;
+
+	lockdep_assert_held(&idxd->dev_lock);
+
+	dev_dbg(dev, "Drain pasid %d\n", pasid);
+
+	operand = pasid;
+	dev_dbg(dev, "cmd: %u operand: %#x\n", IDXD_CMD_DRAIN_PASID, operand);
+	rc = idxd_cmd_send(idxd, IDXD_CMD_DRAIN_PASID, operand);
+	if (rc < 0)
+		return rc;
+
+	rc = idxd_cmd_wait(idxd, &status, IDXD_DRAIN_TIMEOUT);
+	if (rc < 0)
+		return rc;
+
+	if (status != IDXD_CMDSTS_SUCCESS) {
+		dev_dbg(dev, "pasid drain failed: %#x\n", status);
+		return -ENXIO;
+	}
+
+	dev_dbg(dev, "pasid %d drained\n", pasid);
+	return 0;
+}
+
 /* Device configuration bits */
 static void idxd_group_config_write(struct idxd_group *group)
 {
@@ -539,10 +633,20 @@ static int idxd_wq_config_write(struct idxd_wq *wq)
 	wq->wqcfg.wq_thresh = wq->threshold;
 
 	/* byte 8-11 */
-	wq->wqcfg.priv = !!(wq->type == IDXD_WQT_KERNEL);
-	wq->wqcfg.mode = 1;
+	wq->wqcfg.priv = wq->type == IDXD_WQT_KERNEL ? 1 : 0;
+	if (wq_dedicated(wq))
+		wq->wqcfg.mode = 1;
+
+	if (idxd->pasid_enabled) {
+		wq->wqcfg.pasid_en = 1;
+		wq->wqcfg.pasid = idxd->pasid;
+	}
 
 	wq->wqcfg.priority = wq->priority;
+
+	if (idxd->hw.gen_cap.block_on_fault &&
+	    test_bit(WQ_FLAG_BOF, &wq->flags))
+		wq->wqcfg.bof = 1;
 
 	/* bytes 12-15 */
 	wq->wqcfg.max_xfer_shift = idxd->hw.gen_cap.max_xfer_shift;
@@ -651,8 +755,8 @@ static int idxd_wqs_setup(struct idxd_device *idxd)
 		if (!wq->size)
 			continue;
 
-		if (!wq_dedicated(wq)) {
-			dev_warn(dev, "No shared workqueue support.\n");
+		if (!wq_dedicated(wq) && !idxd->pasid_enabled) {
+			dev_warn(dev, "No pasid support but shared queue.\n");
 			return -EINVAL;
 		}
 
