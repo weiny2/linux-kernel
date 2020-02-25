@@ -3597,14 +3597,14 @@
                 }
             ],
             "description": "Introduces resctrl selftest in Intel Next.",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Ravi Shankar",
                     "email": "ravi.v.shankar@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1834",
             "name": "resctrl_selftest",
             "repourl": "ssh://git-amr-4.devtools.intel.com:29418/enabling_cldemote_in_linux_kerne-linux_git.git",
             "sdl_contact": [
@@ -3818,7 +3818,7 @@
             "description": "Multi-Key Total Memory Encryption (MKTME) partial enabling",
             "enabled": false,
             "ip_owner": [],
-            "jira": "",
+            "jira": "NEXT-1833",
             "name": "MKTME",
             "repourl": "ssh://git@gitlab.devtools.intel.com:29418/otc-clk-server/mktme/mktme_intel_next.git",
             "sdl_contact": [],
