@@ -64,10 +64,10 @@
 #define MAX_ASID_AVAILABLE ((1 << CR3_AVAIL_PCID_BITS) - 2)
 
 /*
- * 6 because 6 should be plenty and struct tlb_state will fit in two cache
+ * 8 because 8 should be plenty and struct tlb_state will fit in two cache
  * lines.
  */
-#define TLB_NR_DYN_ASIDS	6
+#define TLB_NR_DYN_ASIDS	8
 
 /*
  * Given @asid, compute kPCID
@@ -566,23 +566,24 @@ struct flush_tlb_info {
 #define local_flush_tlb() __flush_tlb()
 
 #define flush_tlb_mm(mm)						\
-		flush_tlb_mm_range(mm, 0UL, TLB_FLUSH_ALL, 0UL, true)
+		flush_tlb_mm_range(mm, 0UL, TLB_FLUSH_ALL, 0UL, true, false)
 
 #define flush_tlb_range(vma, start, end)				\
 	flush_tlb_mm_range((vma)->vm_mm, start, end,			\
 			   ((vma)->vm_flags & VM_HUGETLB)		\
 				? huge_page_shift(hstate_vma(vma))	\
-				: PAGE_SHIFT, false)
+				: PAGE_SHIFT, false, false)
 
 extern void flush_tlb_all(void);
 extern void flush_tlb_mm_range(struct mm_struct *mm, unsigned long start,
 				unsigned long end, unsigned int stride_shift,
-				bool freed_tables);
+				bool freed_tables, bool pmd_tlb_range);
 extern void flush_tlb_kernel_range(unsigned long start, unsigned long end);
 
 static inline void flush_tlb_page(struct vm_area_struct *vma, unsigned long a)
 {
-	flush_tlb_mm_range(vma->vm_mm, a, a + PAGE_SIZE, PAGE_SHIFT, false);
+	flush_tlb_mm_range(vma->vm_mm, a, a + PAGE_SIZE, PAGE_SHIFT,
+			   false, false);
 }
 
 void native_flush_tlb_others(const struct cpumask *cpumask,
