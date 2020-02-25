@@ -3815,7 +3815,7 @@
                     "email": "alison.schofield@intel.com"
                 }
             ],
-            "description": "Multi-Key Total Memory Encryption (MKTME)\npartial enabling",
+            "description": "Multi-Key Total Memory Encryption (MKTME) partial enabling",
             "enabled": true,
             "ip_owner": [],
             "jira": "",
