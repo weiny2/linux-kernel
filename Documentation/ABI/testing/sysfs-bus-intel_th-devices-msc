@@ -40,3 +40,11 @@ Description:	(RW) Trigger window switch for the MSC's buffer, in
 		triggering a window switch for the buffer. Returns an error in any
 		other operating mode or attempts to write something other than "1".
 
+What:		/sys/bus/intel_th/devices/<intel_th_id>-msc<msc-id>/modes
+Date:		May 2019
+KernelVersion:	5.2
+Contact:	Alexander Shishkin <alexander.shishkin@linux.intel.com>
+Description:	(RO) Lists all possible modes, that is, values that can be
+		written to the "mode" file described above. This includes
+		the hardware operating modes ("single", "multi", etc) and
+		all the buffer drivers that are currently loaded.
