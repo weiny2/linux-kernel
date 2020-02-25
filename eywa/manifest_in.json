@@ -3805,7 +3805,7 @@
             "branch_type": "expiring",
             "config_options": [
                 {
-                    "name": "X86_INTEL_MKTME",
+                    "name": "CONFIG_X86_INTEL_MKTME",
                     "value": "y"
                 }
             ],
