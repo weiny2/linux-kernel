@@ -136,6 +136,8 @@
 #define X86_CR4_CET		_BITUL(X86_CR4_CET_BIT)
 #define X86_CR4_UINT_BIT	25 /* enable User Interrupt support */
 #define X86_CR4_UINT		_BITUL(X86_CR4_UINT_BIT)
+#define X86_CR4_LASS_BIT	27 /* enable LASS support */
+#define X86_CR4_LASS		_BITUL(X86_CR4_LASS_BIT)
 
 /*
  * x86-64 Task Priority Register, CR8
