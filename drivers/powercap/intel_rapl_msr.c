@@ -43,7 +43,63 @@ static struct rapl_if_priv rapl_msr_priv = {
 	.regs[RAPL_DOMAIN_PLATFORM] = {
 		MSR_PLATFORM_POWER_LIMIT, MSR_PLATFORM_ENERGY_STATUS, 0, 0, 0},
 	.limits[RAPL_DOMAIN_PACKAGE] = 2,
+	.limits[RAPL_DOMAIN_PLATFORM] = 2,
 };
+
+#define MSR_ENERGY_STATUS_REPORTING     0x60F
+
+static void check_rapl_support(void)
+{
+	struct reg_action ra;
+
+	if (boot_cpu_data.x86_model != INTEL_FAM6_SKYLAKE_X)
+		return;
+
+	if (rdmsrl_safe_on_cpu(0, MSR_ENERGY_STATUS_REPORTING, &ra.value))
+		return;
+
+	/* 2-Die CPX, slave Die does not support RAPL */
+	rapl_msr_priv.ignore_slave_die = true;
+	pr_info("RAPL not supported on Slave Die\n");
+}
+
+static bool cpu_has_rapl(unsigned int cpu)
+{
+	if (rapl_msr_priv.ignore_slave_die && topology_die_id(cpu))
+		return false;
+
+	return true;
+}
+
+static int cpu_enable_rapl(unsigned int cpu)
+{
+	struct reg_action ra;
+
+	if (!rapl_msr_priv.ignore_slave_die)
+		return 0;
+
+	if (rdmsrl_safe_on_cpu(cpu, MSR_ENERGY_STATUS_REPORTING, &ra.value))
+		goto err;
+
+	if (!!(ra.value & 1))
+		return 0;
+
+	ra.value |= 1;
+	if (wrmsrl_safe_on_cpu(cpu, MSR_ENERGY_STATUS_REPORTING, ra.value))
+		goto err;
+	msleep(1);
+
+	if (rdmsrl_safe_on_cpu(cpu, MSR_ENERGY_STATUS_REPORTING, &ra.value))
+		goto err;
+	if (!(ra.value & 1))
+		goto err;
+
+	pr_info("Enable RAPL support on CPU %d\n", cpu);
+	return 0;
+err:
+	pr_err("failed to enable RAPL on CPU %d\n", cpu);
+	return -ENODEV;
+}
 
 /* Handles CPU hotplug on multi-socket systems.
  * If a CPU goes online as the first CPU of the physical package
@@ -56,8 +112,15 @@ static int rapl_cpu_online(unsigned int cpu)
 {
 	struct rapl_package *rp;
 
+	/* Skip CPUs that do not have RAPL support */
+	if (!cpu_has_rapl(cpu))
+		return 0;
+
 	rp = rapl_find_package_domain(cpu, &rapl_msr_priv);
 	if (!rp) {
+		if (cpu_enable_rapl(cpu))
+			return -ENODEV;
+
 		rp = rapl_add_package(cpu, &rapl_msr_priv);
 		if (IS_ERR(rp))
 			return PTR_ERR(rp);
@@ -136,14 +199,13 @@ static int rapl_msr_probe(struct platform_device *pdev)
 		return PTR_ERR(rapl_msr_priv.control_type);
 	}
 
+	check_rapl_support();
+
 	ret = cpuhp_setup_state(CPUHP_AP_ONLINE_DYN, "powercap/rapl:online",
 				rapl_cpu_online, rapl_cpu_down_prep);
 	if (ret < 0)
 		goto out;
 	rapl_msr_priv.pcap_rapl_online = ret;
-
-	/* Don't bail out if PSys is not supported */
-	rapl_add_platform_domain(&rapl_msr_priv);
 
 	return 0;
 
@@ -156,7 +218,6 @@ out:
 static int rapl_msr_remove(struct platform_device *pdev)
 {
 	cpuhp_remove_state(rapl_msr_priv.pcap_rapl_online);
-	rapl_remove_platform_domain(&rapl_msr_priv);
 	powercap_unregister_control_type(rapl_msr_priv.control_type);
 	return 0;
 }

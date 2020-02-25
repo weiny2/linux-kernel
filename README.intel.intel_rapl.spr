@@ -1,0 +1,7 @@
+powercap/intel_rapl enabling for Sapphire Rapids
+
+Added platform stubs for SPR. If new RAPL-related features
+are introduced in SPR, additional functionality may be added.
+
+Note: this has been "coded to spec" and not tested extensively on bare-metal
+SPR platforms.
