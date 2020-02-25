@@ -1448,6 +1448,10 @@ static const struct pci_device_id pxa2xx_spi_pci_compound_match[] = {
 	{ PCI_VDEVICE(INTEL, 0x34aa), LPSS_CNL_SSP },
 	{ PCI_VDEVICE(INTEL, 0x34ab), LPSS_CNL_SSP },
 	{ PCI_VDEVICE(INTEL, 0x34fb), LPSS_CNL_SSP },
+	/* ICL-N */
+	{ PCI_VDEVICE(INTEL, 0x38aa), LPSS_CNL_SSP },
+	{ PCI_VDEVICE(INTEL, 0x38ab), LPSS_CNL_SSP },
+	{ PCI_VDEVICE(INTEL, 0x38fb), LPSS_CNL_SSP },
 	/* EHL */
 	{ PCI_VDEVICE(INTEL, 0x4b2a), LPSS_BXT_SSP },
 	{ PCI_VDEVICE(INTEL, 0x4b2b), LPSS_BXT_SSP },
@@ -1456,6 +1460,11 @@ static const struct pci_device_id pxa2xx_spi_pci_compound_match[] = {
 	{ PCI_VDEVICE(INTEL, 0x4daa), LPSS_CNL_SSP },
 	{ PCI_VDEVICE(INTEL, 0x4dab), LPSS_CNL_SSP },
 	{ PCI_VDEVICE(INTEL, 0x4dfb), LPSS_CNL_SSP },
+	/* TGL-H */
+	{ PCI_VDEVICE(INTEL, 0x43aa), LPSS_CNL_SSP },
+	{ PCI_VDEVICE(INTEL, 0x43ab), LPSS_CNL_SSP },
+	{ PCI_VDEVICE(INTEL, 0x43fb), LPSS_CNL_SSP },
+	{ PCI_VDEVICE(INTEL, 0x43fd), LPSS_CNL_SSP },
 	/* APL */
 	{ PCI_VDEVICE(INTEL, 0x5ac2), LPSS_BXT_SSP },
 	{ PCI_VDEVICE(INTEL, 0x5ac4), LPSS_BXT_SSP },

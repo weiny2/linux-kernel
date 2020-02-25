@@ -178,6 +178,8 @@ struct tb_regs_switch_header {
 #define ROUTER_CS_4				0x04
 #define ROUTER_CS_5				0x05
 #define ROUTER_CS_5_SLP				BIT(0)
+#define ROUTER_CS_5_WOP				BIT(1)
+#define ROUTER_CS_5_WOU				BIT(2)
 #define ROUTER_CS_5_C3S				BIT(23)
 #define ROUTER_CS_5_PTO				BIT(24)
 #define ROUTER_CS_5_UTO				BIT(25)
@@ -186,6 +188,8 @@ struct tb_regs_switch_header {
 #define ROUTER_CS_6				0x06
 #define ROUTER_CS_6_SLPR			BIT(0)
 #define ROUTER_CS_6_TNS				BIT(1)
+#define ROUTER_CS_6_WOPS			BIT(2)
+#define ROUTER_CS_6_WOUS			BIT(3)
 #define ROUTER_CS_6_HCI				BIT(18)
 #define ROUTER_CS_6_CR				BIT(25)
 #define ROUTER_CS_7				0x07
@@ -288,10 +292,31 @@ struct tb_regs_port_header {
 #define LANE_ADP_CS_1_CURRENT_WIDTH_SHIFT	20
 
 /* USB4 port registers */
+#define PORT_CS_1				0x01
+#define PORT_CS_1_ADDRESS_MASK			GENMASK(7, 0)
+#define PORT_CS_1_LENGTH_SHIFT			8
+#define PORT_CS_1_TARGET_MASK			GENMASK(18, 16)
+#define PORT_CS_1_TARGET_SHIFT			16
+#define PORT_CS_1_RETIMER_INDEX_SHIFT		20
+#define PORT_CS_1_WNR_WRITE			BIT(24)
+#define PORT_CS_1_NR				BIT(25)
+#define PORT_CS_1_RC				BIT(26)
+#define PORT_CS_1_PND				BIT(31)
+#define PORT_CS_2				0x02
 #define PORT_CS_18				0x12
 #define PORT_CS_18_BE				BIT(8)
+#define PORT_CS_18_TCM				BIT(9)
+#define PORT_CS_18_WOU4S			BIT(18)
 #define PORT_CS_19				0x13
 #define PORT_CS_19_PC				BIT(3)
+#define PORT_CS_19_WOU4				BIT(18)
+
+/* USB4 sideband registers common for routers and retimers */
+#define USB4_SB_VENDOR_ID			0x00
+#define USB4_SB_PRODUCT_ID			0x01
+#define USB4_SB_OPCODE				0x08
+#define USB4_SB_METADATA			0x09
+#define USB4_SB_DATA				0x12
 
 /* Display Port adapter registers */
 #define ADP_DP_CS_0				0x00
@@ -385,6 +410,8 @@ struct tb_regs_hop {
 #define TB_LC_PORT_ATTR_BE		BIT(12)
 
 #define TB_LC_SX_CTRL			0x96
+#define TB_LC_SX_CTRL_WOU4		BIT(5)
+#define TB_LC_SX_CTRL_WOP		BIT(6)
 #define TB_LC_SX_CTRL_L1C		BIT(16)
 #define TB_LC_SX_CTRL_L2C		BIT(20)
 #define TB_LC_SX_CTRL_UPSTREAM		BIT(30)

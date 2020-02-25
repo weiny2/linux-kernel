@@ -4914,18 +4914,45 @@ struct ec_response_usb_pd_control_v1 {
 #define USBC_PD_CC_NO_UFP	1 /* No UFP accessory connected */
 #define USBC_PD_CC_AUDIO_ACC	2 /* Audio accessory connected */
 #define USBC_PD_CC_DEBUG_ACC	3 /* Debug accessory connected */
-#define USBC_PD_CC_UFP_ATTACHED	4 /* UFP attached to usbc */
-#define USBC_PD_CC_DFP_ATTACHED	5 /* DPF attached to usbc */
+#define USBC_PD_CC_UFP_ATTACHED	4 /* Upstream Facing Port attached to usbc */
+#define USBC_PD_CC_DFP_ATTACHED	5 /* Downstream Facing Port attached to usbc */
 
-struct ec_response_usb_pd_control_v2 {
+enum pd_cc_states {
+	PD_CC_NONE,
+
+	/* From DFP perspective */
+	PD_CC_NO_UFP,
+	PD_CC_AUDIO_ACC,
+	PD_CC_DEBUG_ACC,
+	PD_CC_UFP_ATTACHED,
+
+	/* From UFP perspective */
+	PD_CC_DFP_ATTACHED
+};
+
+#define MODE_DP_PIN_A BIT(0)
+#define MODE_DP_PIN_B BIT(1)
+#define MODE_DP_PIN_C BIT(2)
+#define MODE_DP_PIN_D BIT(3)
+#define MODE_DP_PIN_E BIT(4)
+#define MODE_DP_PIN_F BIT(5)
+
+#define USB_PD_MUX_TBT_ACTIVE_CABLE	BIT(0) /* Active/Passive Cable */
+#define USB_PD_MUX_TBT_CABLE_TYPE	BIT(1) /* Optical/Non-optical cable */
+#define USB_PD_MUX_TBT_ADAPTER		BIT(2) /* 2nd or 3rd Gen TBT device */
+#define USB_PD_MUX_TBT_LINK		BIT(3) /* Active Link Training */
+
+struct ec_response_usb_pd_control_v3 {
 	uint8_t enabled;
 	uint8_t role;
 	uint8_t polarity;
 	char state[32];
 	uint8_t cc_state; /* USBC_PD_CC_*Encoded cc state */
 	uint8_t dp_mode;  /* Current DP pin mode (MODE_DP_PIN_[A-E]) */
-	/* CL:1500994 Current cable type */
-	uint8_t reserved_cable_type;
+	uint8_t cable_type; /* USBC_CABLE_TYPE_*cable_type */
+	uint8_t tbt_flags; /* USB_PD_MUX_*tbt_flags */
+	uint8_t tbt_cable_speed;
+	uint8_t tbt_cable_gen; /* tbt_rounded_support */
 } __ec_align1;
 
 #define EC_CMD_USB_PD_PORTS 0x0102
@@ -5207,11 +5234,13 @@ struct ec_params_usb_pd_mux_info {
 } __ec_align1;
 
 /* Flags representing mux state */
-#define USB_PD_MUX_USB_ENABLED       BIT(0) /* USB connected */
-#define USB_PD_MUX_DP_ENABLED        BIT(1) /* DP connected */
-#define USB_PD_MUX_POLARITY_INVERTED BIT(2) /* CC line Polarity inverted */
-#define USB_PD_MUX_HPD_IRQ           BIT(3) /* HPD IRQ is asserted */
-#define USB_PD_MUX_HPD_LVL           BIT(4) /* HPD level is asserted */
+#define USB_PD_MUX_USB_ENABLED		BIT(0) /* USB connected */
+#define USB_PD_MUX_DP_ENABLED		BIT(1) /* DP connected */
+#define USB_PD_MUX_POLARITY_INVERTED	BIT(2) /* CC line Polarity inverted */
+#define USB_PD_MUX_HPD_IRQ		BIT(3) /* HPD IRQ is asserted */
+#define USB_PD_MUX_HPD_LVL		BIT(4) /* HPD level is asserted */
+#define USB_PD_MUX_SAFE_MODE		BIT(5) /* TCSS safe mode */
+#define USB_PD_MUX_TBT_COMPAT_ENABLED	BIT(6) /* TBT Compat Enabled */
 
 struct ec_response_usb_pd_mux_info {
 	uint8_t flags; /* USB_PD_MUX_*-encoded USB mux state */
@@ -5836,6 +5865,52 @@ struct ec_params_charger_control {
  */
 #define EC_PRIVATE_HOST_COMMAND_VALUE(command) \
 	(EC_CMD_BOARD_SPECIFIC_BASE + (command))
+
+/*****************************************************************************/
+/* Locate peripheral chips
+ *
+ * Return values:
+ * EC_RES_UNAVAILABLE: The chip type is supported but not found on system.
+ * EC_RES_INVALID_PARAM: The chip type was unrecognized.
+ * EC_RES_OVERFLOW: The index number exceeded the number of chip instances.
+ */
+#define EC_CMD_LOCATE_CHIP 0x0126
+
+enum ec_chip_type {
+	EC_CHIP_TYPE_CBI_EEPROM = 0,
+	EC_CHIP_TYPE_TCPC = 1,
+	EC_CHIP_TYPE_COUNT,
+	EC_CHIP_TYPE_MAX = 0xFF,
+};
+
+enum ec_bus_type {
+	EC_BUS_TYPE_I2C = 0,
+	EC_BUS_TYPE_EMBEDDED = 1,
+	EC_BUS_TYPE_COUNT,
+	EC_BUS_TYPE_MAX = 0xFF,
+};
+
+struct ec_i2c_info {
+	uint16_t port;  /* Physical port for device */
+	uint16_t addr;  /* 7-bit (or 10-bit) address */
+};
+
+struct ec_params_locate_chip {
+	uint8_t type;           /* enum ec_chip_type */
+	uint8_t index;          /* Specifies one instance of chip type */
+	/* Used for type specific parameters in future */
+	union {
+		uint16_t reserved;
+	};
+} __ec_align2;
+
+struct ec_response_locate_chip {
+	uint8_t bus_type;       /* enum ec_bus_type */
+	uint8_t reserved;       /* Aligning the following union to 2 bytes */
+	union {
+		struct ec_i2c_info i2c_info;
+	};
+} __ec_align2;
 
 /*****************************************************************************/
 /*

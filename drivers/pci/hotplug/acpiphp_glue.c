@@ -672,7 +672,8 @@ static void trim_stale_devices(struct pci_dev *dev)
 		list_for_each_entry_safe_reverse(child, tmp, &bus->devices, bus_list)
 			trim_stale_devices(child);
 
-		pm_runtime_put(&dev->dev);
+		pm_runtime_mark_last_busy(&dev->dev);
+		pm_runtime_put_autosuspend(&dev->dev);
 	}
 }
 
@@ -714,8 +715,10 @@ static void acpiphp_check_bridge(struct acpiphp_bridge *bridge)
 		}
 	}
 
-	if (bridge->pci_dev)
-		pm_runtime_put(&bridge->pci_dev->dev);
+	if (bridge->pci_dev) {
+		pm_runtime_mark_last_busy(&bridge->pci_dev->dev);
+		pm_runtime_put_autosuspend(&bridge->pci_dev->dev);
+	}
 }
 
 /*
