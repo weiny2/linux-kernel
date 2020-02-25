@@ -3799,6 +3799,31 @@
             ],
             "status": "intel confidential",
             "stuck_at_ref": ""
+        },
+        {
+            "branch": "my_inext",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "X86_INTEL_MKTME",
+                    "value": "y"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Alison Schofield",
+                    "email": "alison.schofield@intel.com"
+                }
+            ],
+            "description": "Multi-Key Total Memory Encryption (MKTME)\npartial enabling",
+            "enabled": true,
+            "ip_owner": [],
+            "jira": "",
+            "name": "MKTME",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/otc-clk-server/mktme/mktme_intel_next.git",
+            "sdl_contact": [],
+            "status": "public",
+            "stuck_at_ref": ""
         }
     ]
 }
