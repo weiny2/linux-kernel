@@ -678,6 +678,21 @@ config IOSF_MBI_DEBUG
 
 	  If you don't require the option or are in doubt, say N.
 
+config INTEL_HFI
+	bool "Intel Hardware Feedback Interface"
+	depends on CPU_SUP_INTEL && SCHED_MC_PRIO && X86_THERMAL_VECTOR
+	select X86_INTEL_PSTATE
+	---help---
+	  Select this option to enable the Hardware Feedback Interface in
+	  a Lakefield system. If selected, hardware provides guidance to the OS
+	  scheduler to perform optimal task placement. The feedback
+	  provided by the HFI feeds the scheduler to update the CPU priority
+	  when using asymmetric packing of tasks. Depending on the operating
+	  conditions of the system the prority of CPUs may change during
+	  runtime.
+
+	  To support Intel hybrid processors, say Y.
+
 config X86_RDC321X
 	bool "RDC R-321x SoC"
 	depends on X86_32

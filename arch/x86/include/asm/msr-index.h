@@ -689,12 +689,14 @@
 
 #define PACKAGE_THERM_STATUS_PROCHOT		(1 << 0)
 #define PACKAGE_THERM_STATUS_POWER_LIMIT	(1 << 10)
+#define PACKAGE_THERM_STATUS_HFI_UPDATED	(1 << 26)
 
 #define MSR_IA32_PACKAGE_THERM_INTERRUPT	0x000001b2
 
 #define PACKAGE_THERM_INT_HIGH_ENABLE		(1 << 0)
 #define PACKAGE_THERM_INT_LOW_ENABLE		(1 << 1)
 #define PACKAGE_THERM_INT_PLN_ENABLE		(1 << 24)
+#define PACKAGE_THERM_INT_HFI_ENABLE		(1 << 25)
 
 /* Thermal Thresholds Support */
 #define THERM_INT_THRESHOLD0_ENABLE    (1 << 15)
@@ -937,6 +939,7 @@
 #define MSR_VM_IGNNE                    0xc0010115
 #define MSR_VM_HSAVE_PA                 0xc0010117
 
+
 /* Control-flow Enforcement Technology MSRs */
 #define MSR_IA32_U_CET		0x6a0 /* user mode cet setting */
 #define MSR_IA32_S_CET		0x6a2 /* kernel mode cet setting */
@@ -952,7 +955,11 @@
 #define MSR_IA32_CET_ENDBR_EN		0x0000000000000004ULL
 #define MSR_IA32_CET_LEG_IW_EN		0x0000000000000008ULL
 #define MSR_IA32_CET_NO_TRACK_EN	0x0000000000000010ULL
-#define MSR_IA32_CET_WAIT_ENDBR	0x00000000000000800UL
+#define MSR_IA32_CET_WAIT_ENDBR		0x00000000000000800UL
 #define MSR_IA32_CET_BITMAP_MASK	0xfffffffffffff000ULL
+
+/* Hardware Feedback Interface */
+#define MSR_IA32_HW_FEEDBACK_PTR        0x17d0
+#define MSR_IA32_HW_FEEDBACK_CONFIG     0x17d1
 
 #endif /* _ASM_X86_MSR_INDEX_H */

@@ -84,4 +84,6 @@ extern u64 x86_read_arch_cap_msr(void);
 void init_ia32_feat_ctl(struct cpuinfo_x86 *c);
 #endif
 
+extern const char *intel_get_hybrid_cpu_type_name(u8 cpu_type);
+
 #endif /* ARCH_X86_CPU_H */
