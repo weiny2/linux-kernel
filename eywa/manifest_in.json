@@ -3751,7 +3751,7 @@
                 }
             ],
             "description": "fix wakeup issue",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Xi Pardee",
