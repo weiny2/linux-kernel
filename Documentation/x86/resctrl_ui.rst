@@ -148,6 +148,11 @@ with respect to allocation:
 		Configurable on systems that support both modes by
 		writing "min" or "max" to the file.
 
+"per_thread":
+		Indicates if per thread memory bandwidth allocation
+		is supported. This field is purely informational
+		only.
+
 If RDT monitoring is available there will be an "L3_MON" directory
 with the following files:
 

@@ -1008,6 +1008,15 @@ static int rdt_delay_linear_show(struct kernfs_open_file *of,
 	return 0;
 }
 
+static int rdt_bw_per_thread_show(struct kernfs_open_file *of,
+				  struct seq_file *seq, void *v)
+{
+	struct rdt_resource *r = of->kn->parent->priv;
+
+	seq_printf(seq, "%s\n", r->membw.per_thread ? "enabled" : "disabled");
+	return 0;
+}
+
 static int max_threshold_occ_show(struct kernfs_open_file *of,
 				  struct seq_file *seq, void *v)
 {
@@ -1653,6 +1662,13 @@ static struct rftype res_common_files[] = {
 		.kf_ops		= &rdtgroup_kf_single_ops,
 		.seq_show	= rdt_thread_throttle_mode_show,
 		.fflags		= RF_UNINITIALIZED,
+	},
+	{
+		.name		= "per_thread",
+		.mode		= 0444,
+		.kf_ops		= &rdtgroup_kf_single_ops,
+		.seq_show	= rdt_bw_per_thread_show,
+		.fflags		= RF_CTRL_INFO | RFTYPE_RES_MB,
 	},
 	{
 		.name		= "max_threshold_occupancy",

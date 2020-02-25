@@ -299,6 +299,11 @@ static bool __get_mem_config_intel(struct rdt_resource *r)
 	r->alloc_capable = true;
 	r->alloc_enabled = true;
 
+	if (static_cpu_has(X86_FEATURE_MBA_PER_THREAD))
+		r->membw.per_thread = true;
+	else
+		r->membw.per_thread = false;
+
 	return true;
 }
 
@@ -322,6 +327,8 @@ static bool __rdt_get_mem_config_amd(struct rdt_resource *r)
 
 	r->alloc_capable = true;
 	r->alloc_enabled = true;
+
+	r->membw.per_thread = false;
 
 	return true;
 }
