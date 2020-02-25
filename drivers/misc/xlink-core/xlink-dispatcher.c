@@ -80,7 +80,7 @@ static int event_enqueue(struct event_queue *queue, struct xlink_event *event)
 {
 	int rc = -1;
 	mutex_lock(&queue->lock);
-	if(queue->count < queue->capacity) {
+	if(queue->count < ((queue->capacity/10)*7)) {
 		list_add_tail(&event->list, &queue->head);
 		queue->count++;
 		rc = 0;
@@ -281,7 +281,7 @@ enum xlink_error xlink_dispatcher_event_add(enum xlink_event_origin origin,
 	rc = event_enqueue(&disp[id].queue, event);
 	if (rc) {
 		mutex_unlock(&disp[id].lock);
-		return X_LINK_ERROR;
+		return X_LINK_CHAN_FULL;
 	}
 	// notify dispatcher tx thread of new event
 	up(&disp[id].event_sem);

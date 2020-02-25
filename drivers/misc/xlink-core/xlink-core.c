@@ -26,7 +26,7 @@
 
 // xlink version number
 #define XLINK_VERSION_MAJOR	0
-#define XLINK_VERSION_MINOR	95
+#define XLINK_VERSION_MINOR	96
 
 // timeout in milliseconds used to wait for the reay message from the VPU
 #ifdef CONFIG_XLINK_PSS
@@ -88,7 +88,6 @@ struct keembay_xlink_dev {
  * because we lack a reference to our platform_device.
  */
 static struct keembay_xlink_dev *xlink;
-
 struct xlink_event *xlink_create_event(enum xlink_event_type type,
 		struct xlink_handle *handle, uint16_t chan,
 		uint32_t size, uint32_t timeout)
@@ -105,7 +104,6 @@ struct xlink_event *xlink_create_event(enum xlink_event_type type,
 	new_event->header.chan = chan;
 	new_event->header.size = size;
 	new_event->header.timeout = timeout;
-
 	return new_event;
 }
 

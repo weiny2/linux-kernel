@@ -31,6 +31,9 @@
 #include "xlink-dispatcher.h"
 #include "xlink-platform.h"
 
+#define THR_UPR 85
+#define THR_LWR 80
+
 // timeout used for open channel
 #define OPEN_CHANNEL_TIMEOUT_MSEC 5000
 
@@ -92,6 +95,7 @@ struct open_channel {
 	int32_t rx_fill_level;
 	int32_t tx_fill_level;
 	int32_t tx_packet_level;
+	int32_t tx_up_limit;
 	struct completion opened;
 	struct completion pkt_available;
 	struct completion pkt_consumed;
@@ -200,13 +204,23 @@ static int is_channel_for_device_type(uint16_t chan,
 static int is_enough_space_in_channel(struct open_channel *opchan,
 		uint32_t size)
 {
-	if (opchan->tx_packet_level >= XLINK_PACKET_QUEUE_CAPACITY ||
-		opchan->tx_fill_level + size > opchan->chan->size) {
-		printk(KERN_DEBUG "Not enough space in channel 0x%x for %u: PKT %u, \
-				FILL %u SIZE %u\n", opchan->id, size,
-				opchan->tx_packet_level, opchan->tx_fill_level,
-				opchan->chan->size);
+	if (opchan->tx_packet_level >= ((XLINK_PACKET_QUEUE_CAPACITY/100)*THR_UPR)) {
+		printk(KERN_DEBUG "Packet queue limit reached\n");
 		return 0;
+	}
+	if(opchan->tx_up_limit == 0){
+		if((opchan->tx_fill_level + size) > ((opchan->chan->size/100)*THR_UPR) ) {
+			opchan->tx_up_limit = 1;
+			return 0;
+		}
+	}
+	if(opchan->tx_up_limit == 1){
+		if((opchan->tx_fill_level + size) < ((opchan->chan->size/100)*THR_LWR)) {
+			opchan->tx_up_limit = 0;
+			return 1;
+		} else {
+			return 0;
+		}
 	}
 	return 1;
 }
@@ -296,8 +310,6 @@ static int release_packet_from_channel(struct open_channel *opchan,
 	list_del(&pkt->list);
 	queue->count--;
 	opchan->rx_fill_level -= pkt->length;
-	if (opchan->rx_fill_level < 0)
-		opchan->rx_fill_level = 0;
 	if (size) {
 		*size = pkt->length;
 	}
@@ -334,6 +346,7 @@ static int multiplexer_open_channel(uint16_t chan)
 	opchan->rx_fill_level = 0;
 	opchan->tx_fill_level = 0;
 	opchan->tx_packet_level = 0;
+	opchan->tx_up_limit = 0;
 	init_completion(&opchan->opened);
 	init_completion(&opchan->pkt_available);
 	init_completion(&opchan->pkt_consumed);
@@ -497,11 +510,13 @@ enum xlink_error xlink_multiplexer_tx(struct xlink_event *event, int *event_queu
 							}
 						}
 					} else {
-						rc = X_LINK_ERROR;
+						rc = X_LINK_CHAN_FULL;
 						break;
 					}
 				}
 				if (rc == X_LINK_SUCCESS) {
+					opchan->tx_fill_level += event->header.size;
+					opchan->tx_packet_level++;
 					rc = xlink_dispatcher_event_add(EVENT_TX, event);
 					if (rc == X_LINK_SUCCESS) {
 						*event_queued = 1;
@@ -866,11 +881,7 @@ enum xlink_error xlink_multiplexer_rx(struct xlink_event *event)
 		} else {
 			event->header.timeout = opchan->chan->timeout;
 			opchan->tx_fill_level -= event->header.size;
-			if (opchan->tx_fill_level < 0)
-				opchan->tx_fill_level = 0;
 			opchan->tx_packet_level--;
-			if (opchan->tx_packet_level < 0)
-				opchan->tx_packet_level = 0;;
 			event->header.type = XLINK_RELEASE_RESP;
 			xlink_dispatcher_event_add(EVENT_RX, event);
 			//complete regardless of mode/timeout
@@ -924,8 +935,7 @@ enum xlink_error xlink_multiplexer_rx(struct xlink_event *event)
 		if (!opchan) {
 			rc = X_LINK_COMMUNICATION_FAIL;
 		} else {
-			opchan->tx_fill_level += event->header.size;
-			opchan->tx_packet_level++;
+			xlink_destroy_event(event); // event is handled and can now be freed
 			// printk(KERN_DEBUG "Write of size %u on channel 0x%x, tx fill level = %u out of %u\n",
 			// 		event->header.size, chan, opchan->tx_fill_level,
 			// 		opchan->chan->size);
@@ -935,18 +945,21 @@ enum xlink_error xlink_multiplexer_rx(struct xlink_event *event)
 	case XLINK_READ_RESP:
 	case XLINK_READ_TO_BUFFER_RESP:
 	case XLINK_RELEASE_RESP:
+		xlink_destroy_event(event); // event is handled and can now be freed
 		break;
 	case XLINK_OPEN_CHANNEL_RESP:
 		opchan = get_channel(chan);
 		if (!opchan) {
 			rc = X_LINK_COMMUNICATION_FAIL;
 		} else {
+			xlink_destroy_event(event); // event is handled and can now be freed
 			complete(&opchan->opened);
 		}
 		release_channel(opchan);
 		break;
 	case XLINK_CLOSE_CHANNEL_RESP:
 	case XLINK_PING_RESP:
+		xlink_destroy_event(event); // event is handled and can now be freed
 		break;
 	default:
 		rc = X_LINK_ERROR;
