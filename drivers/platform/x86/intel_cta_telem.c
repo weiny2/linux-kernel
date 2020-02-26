@@ -349,4 +349,5 @@ module_exit(cta_telem_exit);
 
 MODULE_AUTHOR("David E. Box <david.e.box@linux.intel.com>");
 MODULE_DESCRIPTION("Intel CTA Telemetry driver");
+MODULE_ALIAS("platform:" TELEM_DRV_NAME);
 MODULE_LICENSE("GPL v2");
