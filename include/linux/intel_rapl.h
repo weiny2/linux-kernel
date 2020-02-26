@@ -76,8 +76,10 @@ struct rapl_power_limit {
 
 struct rapl_package;
 
+#define RAPL_DOMAIN_NAME_LENGTH 16
+
 struct rapl_domain {
-	const char *name;
+	char name[RAPL_DOMAIN_NAME_LENGTH];
 	enum rapl_domain_type id;
 	u64 regs[RAPL_DOMAIN_REG_MAX];
 	struct powercap_zone power_zone;
@@ -117,6 +119,7 @@ struct rapl_if_priv {
 	enum cpuhp_state pcap_rapl_online;
 	u64 reg_unit;
 	u64 regs[RAPL_DOMAIN_MAX][RAPL_DOMAIN_REG_MAX];
+	bool ignore_slave_die;
 	int limits[RAPL_DOMAIN_MAX];
 	int (*read_raw)(int cpu, struct reg_action *ra);
 	int (*write_raw)(int cpu, struct reg_action *ra);
@@ -148,8 +151,5 @@ struct rapl_package {
 struct rapl_package *rapl_find_package_domain(int cpu, struct rapl_if_priv *priv);
 struct rapl_package *rapl_add_package(int cpu, struct rapl_if_priv *priv);
 void rapl_remove_package(struct rapl_package *rp);
-
-int rapl_add_platform_domain(struct rapl_if_priv *priv);
-void rapl_remove_platform_domain(struct rapl_if_priv *priv);
 
 #endif /* __INTEL_RAPL_H__ */

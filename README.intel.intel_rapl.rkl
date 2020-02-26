@@ -1,0 +1,7 @@
+powercap/intel_rapl enabling for RocketLake
+
+Added platform stubs for RocketLake mobile and desktop. If new RAPL-related
+features are introduced, additional functionality may be added.
+
+Note: this has been "coded to spec" and not tested extensively on bare-metal
+RKL platforms.
