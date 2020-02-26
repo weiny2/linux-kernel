@@ -2758,7 +2758,7 @@
                 }
             ],
             "description": "Intel Converged Telemetry Architecture support for TGL",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Van De Groenendaal, Johan",
@@ -2773,9 +2773,9 @@
                     "email": "ramamurthy.krithivas@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1836",
             "name": "cta",
-            "repourl": "ssh://git-amr-3.devtools.intel.com:29418/otc_linux_debox1-dev.git",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/debox1/linux-kernel-dev.git",
             "sdl_contact": [
                 {
                     "name": "Prestopine, Charles D",
