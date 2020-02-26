@@ -18,6 +18,7 @@
 #include <linux/backing-dev.h>
 #include "btt.h"
 #include "nd.h"
+#include "pmem.h"
 
 enum log_ent_request {
 	LOG_NEW_ENT = 0,
@@ -1108,10 +1109,10 @@ static int btt_data_read(struct arena_info *arena, struct page *page,
 {
 	int ret;
 	u64 nsoff = to_namespace_offset(arena, lba);
-	void *mem = kmap_atomic(page);
+	void *mem = pmem_map_atomic(page);
 
 	ret = arena_read_bytes(arena, nsoff, mem + off, len, NVDIMM_IO_ATOMIC);
-	kunmap_atomic(mem);
+	pmem_unmap_atomic(mem);
 
 	return ret;
 }
@@ -1121,20 +1122,20 @@ static int btt_data_write(struct arena_info *arena, u32 lba,
 {
 	int ret;
 	u64 nsoff = to_namespace_offset(arena, lba);
-	void *mem = kmap_atomic(page);
+	void *mem = pmem_map_atomic(page);
 
 	ret = arena_write_bytes(arena, nsoff, mem + off, len, NVDIMM_IO_ATOMIC);
-	kunmap_atomic(mem);
+	pmem_unmap_atomic(mem);
 
 	return ret;
 }
 
 static void zero_fill_data(struct page *page, unsigned int off, u32 len)
 {
-	void *mem = kmap_atomic(page);
+	void *mem = pmem_map_atomic(page);
 
 	memset(mem + off, 0, len);
-	kunmap_atomic(mem);
+	pmem_unmap_atomic(mem);
 }
 
 #ifdef CONFIG_BLK_DEV_INTEGRITY
@@ -1163,7 +1164,7 @@ static int btt_rw_integrity(struct btt *btt, struct bio_integrity_payload *bip,
 		 */
 
 		cur_len = min(len, bv.bv_len);
-		mem = kmap_atomic(bv.bv_page);
+		mem = pmem_map_atomic(bv.bv_page);
 		if (rw)
 			ret = arena_write_bytes(arena, meta_nsoff,
 					mem + bv.bv_offset, cur_len,
@@ -1173,7 +1174,7 @@ static int btt_rw_integrity(struct btt *btt, struct bio_integrity_payload *bip,
 					mem + bv.bv_offset, cur_len,
 					NVDIMM_IO_ATOMIC);
 
-		kunmap_atomic(mem);
+		pmem_unmap_atomic(mem);
 		if (ret)
 			return ret;
 

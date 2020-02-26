@@ -6,6 +6,8 @@
 #include <linux/types.h>
 #include <linux/pfn_t.h>
 #include <linux/fs.h>
+#include <linux/pkeys.h>
+#include <linux/highmem.h>
 
 /* this definition is in it's own header for tools/testing/nvdimm to consume */
 struct pmem_device {
@@ -28,6 +30,18 @@ struct pmem_device {
 
 long __pmem_direct_access(struct pmem_device *pmem, pgoff_t pgoff,
 		long nr_pages, void **kaddr, pfn_t *pfn);
+
+static inline void *pmem_map_atomic(struct page *page)
+{
+	update_pmem_key(1, 1);
+	return kmap_atomic(page);
+}
+
+static inline void pmem_unmap_atomic(void *addr)
+{
+	update_pmem_key(0, 0);
+	kunmap_atomic(addr);
+}
 
 #ifdef CONFIG_MEMORY_FAILURE
 static inline bool test_and_clear_pmem_poison(struct page *page)

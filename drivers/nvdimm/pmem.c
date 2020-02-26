@@ -103,10 +103,10 @@ static void write_pmem(void *pmem_addr, struct page *page,
 	void *mem;
 
 	while (len) {
-		mem = kmap_atomic(page);
+		mem = pmem_map_atomic(page);
 		chunk = min_t(unsigned int, len, PAGE_SIZE - off);
 		memcpy_flushcache(pmem_addr, mem + off, chunk);
-		kunmap_atomic(mem);
+		pmem_unmap_atomic(mem);
 		len -= chunk;
 		off = 0;
 		page++;
@@ -122,10 +122,10 @@ static blk_status_t read_pmem(struct page *page, unsigned int off,
 	void *mem;
 
 	while (len) {
-		mem = kmap_atomic(page);
+		mem = pmem_map_atomic(page);
 		chunk = min_t(unsigned int, len, PAGE_SIZE - off);
 		rem = memcpy_mcsafe(mem + off, pmem_addr, chunk);
-		kunmap_atomic(mem);
+		pmem_unmap_atomic(mem);
 		if (rem)
 			return BLK_STS_IOERR;
 		len -= chunk;

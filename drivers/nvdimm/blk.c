@@ -12,6 +12,7 @@
 #include <linux/nd.h>
 #include <linux/sizes.h>
 #include "nd.h"
+#include "pmem.h"
 
 static u32 nsblk_meta_size(struct nd_namespace_blk *nsblk)
 {
@@ -89,10 +90,10 @@ static int nd_blk_rw_integrity(struct nd_namespace_blk *nsblk,
 		 */
 
 		cur_len = min(len, bv.bv_len);
-		iobuf = kmap_atomic(bv.bv_page);
+		iobuf = pmem_map_atomic(bv.bv_page);
 		err = ndbr->do_io(ndbr, dev_offset, iobuf + bv.bv_offset,
 				cur_len, rw);
-		kunmap_atomic(iobuf);
+		pmem_unmap_atomic(iobuf);
 		if (err)
 			return err;
 
@@ -143,9 +144,9 @@ static int nsblk_do_bvec(struct nd_namespace_blk *nsblk,
 		if (dev_offset == SIZE_MAX)
 			return -EIO;
 
-		iobuf = kmap_atomic(page);
+		iobuf = pmem_map_atomic(page);
 		err = ndbr->do_io(ndbr, dev_offset, iobuf + off, cur_len, rw);
-		kunmap_atomic(iobuf);
+		pmem_unmap_atomic(iobuf);
 		if (err)
 			return err;
 
