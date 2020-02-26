@@ -391,11 +391,13 @@ struct rdt_cache {
  * @THREAD_THROTTLE_MAX_ONLY:	Memory bandwidth is throttled at the core
  *				always using smallest bandwidth percentage
  *				assigned to threads, aka "max throttling"
+ * @THREAD_THROTTLE_PER_THREAD:	Memory bandwidth is throttled at the thread
  */
 enum membw_throttle_mode {
 	THREAD_THROTTLE_UNDEFINED = 0,
 	THREAD_THROTTLE_MIN_MAX,
 	THREAD_THROTTLE_MAX_ONLY,
+	THREAD_THROTTLE_PER_THREAD,
 };
 
 /**

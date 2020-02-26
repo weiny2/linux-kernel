@@ -304,7 +304,10 @@ static bool __get_mem_config_intel(struct rdt_resource *r)
 	}
 	r->data_width = 3;
 
-	if (mba_cfg_supports_min_max_intel()) {
+	if (boot_cpu_has(X86_FEATURE_PER_THREAD_MBA)) {
+		r->membw.arch_throttle_mode = THREAD_THROTTLE_PER_THREAD;
+		thread_throttle_mode_init_ro();
+	} else if (mba_cfg_supports_min_max_intel()) {
 		r->membw.arch_throttle_mode = THREAD_THROTTLE_MIN_MAX;
 		thread_throttle_mode_init_rw();
 	} else {
