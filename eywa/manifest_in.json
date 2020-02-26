@@ -274,8 +274,8 @@
             "enabled": true,
             "ip_owner": [
                 {
-                    "name": "Boyd, James A",
-                    "email": "james.a.boyd@intel.com"
+                    "name": "Revanth Rajashekar",
+                    "email": "revanth.rajashekar@intel.com"
                 }
             ],
             "jira": "NEXT-1776",
@@ -283,8 +283,8 @@
             "repourl": "ssh://git-gar-1.devtools.intel.com:29418/otc_nvme_linux-kernel",
             "sdl_contact": [
                 {
-                    "name": "N,Shyjumon",
-                    "email": "shyjumon.n@intel.com"
+                    "name": "Revanth Rajashekar",
+                    "email": "revanth.rajashekar@intel.com"
                 }
             ],
             "status": "intel confidential",
