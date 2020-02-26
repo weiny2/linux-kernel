@@ -1038,11 +1038,22 @@ static int max_threshold_occ_show(struct kernfs_open_file *of,
  * with the maximum delay value that from the software interface will be
  * the minimum of the bandwidth percentages assigned to the hardware threads
  * sharing the core.
+ *
+ * Some systems (identified by X86_FEATURE_PER_THREAD_MBA enumerated via CPUID)
+ * support per-thread MBA. On these systems hardware doesn't apply the minimum
+ * or maximum delay value to all threads in a core. Instead, a thread is
+ * allocated with the delay value that is assigned to the thread.
  */
 static int rdt_thread_throttle_mode_show(struct kernfs_open_file *of,
 					 struct seq_file *seq, void *v)
 {
 	unsigned int throttle_mode = 0;
+
+	if (static_cpu_has(X86_FEATURE_PER_THREAD_MBA)) {
+		seq_puts(seq, "per-thread\n");
+
+		return 0;
+	}
 
 	if (mba_cfg_supports_min_max_intel())
 		throttle_mode = mba_cfg_msr & MBA_THROTTLE_MODE_MASK;
