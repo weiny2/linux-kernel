@@ -148,6 +148,10 @@ with respect to allocation:
 		Configurable on systems that support both modes by
 		writing "min" or "max" to the file.
 
+		Some systems support MBA per thread that each hardware
+		thread uses the delay value assigned to it. On these
+		systems, this read-only file shows "per-thread".
+
 If RDT monitoring is available there will be an "L3_MON" directory
 with the following files:
 
