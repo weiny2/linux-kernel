@@ -3826,7 +3826,7 @@
             "stuck_at_ref": ""
         },
         {
-            "branch": "mtrr-v5.6-rc3",
+            "branch": "mtrr-v5.6-rc3-02",
             "branch_type": "expiring",
             "config_options": [],
             "contributor": [
@@ -3856,7 +3856,7 @@
                     "email": "ashok.raj@intel.com"
                 }
             ],
-            "status": "public",
+            "status": "intel confidential",
             "stuck_at_ref": ""
         },
         {
