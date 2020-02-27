@@ -151,4 +151,13 @@ int pks_key_alloc(const char *const pkey_user);
 void pks_key_free(int pkey);
 #define pks_key_free pks_key_free
 
+#if defined(CONFIG_PKS_TESTING)
+bool pks_test_armed(void);
+#else
+static inline bool pks_test_armed(void)
+{
+	return false;
+}
+#endif
+
 #endif /*_ASM_X86_PKEYS_H */
