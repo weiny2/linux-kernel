@@ -3840,7 +3840,7 @@
                 }
             ],
             "description": "Configure IOMMU MTRRs and PAT field",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Ashok Raj",
