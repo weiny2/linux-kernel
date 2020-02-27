@@ -300,3 +300,6 @@ obj-$(CONFIG_OBJAGG) += objagg.o
 
 # KUnit tests
 obj-$(CONFIG_LIST_KUNIT_TEST) += list-test.o
+
+# PKS test
+obj-$(CONFIG_PKS_TESTING) += pks/

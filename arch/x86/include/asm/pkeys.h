@@ -144,4 +144,14 @@ enum {
 
 void update_ia32_pkrs(void *unused);
 void update_pmem_key(int ad, int wd);
+
+#if defined(CONFIG_PKS_TESTING)
+bool pks_test_armed(void);
+#else
+static inline bool pks_test_armed(void)
+{
+	return false;
+}
+#endif
+
 #endif /*_ASM_X86_PKEYS_H */
