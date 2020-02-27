@@ -476,6 +476,7 @@ static __always_inline void setup_pks(struct cpuinfo_x86 *c)
 	if (!cpu_feature_enabled(X86_FEATURE_PKS))
 		return;
 
+	pr_info("x86: Enable Supervisor Protection Keys (PKS)\n");
 	cr4_set_bits(X86_CR4_PKS);
 
 #ifdef CONFIG_ARCH_HAS_PKEYS
