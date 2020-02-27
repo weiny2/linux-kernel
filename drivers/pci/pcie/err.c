@@ -186,9 +186,9 @@ static pci_ers_result_t reset_link(struct pci_dev *dev,
 	return status;
 }
 
-void pcie_do_recovery(struct pci_dev *dev,
-		      enum pci_channel_state state,
-		      pci_ers_result_t (*reset_cb)(struct pci_dev *pdev))
+pci_ers_result_t pcie_do_recovery(struct pci_dev *dev,
+			enum pci_channel_state state,
+			pci_ers_result_t (*reset_cb)(struct pci_dev *pdev))
 {
 	pci_ers_result_t status = PCI_ERS_RESULT_CAN_RECOVER;
 	struct pci_bus *bus;
@@ -240,11 +240,13 @@ void pcie_do_recovery(struct pci_dev *dev,
 	pci_aer_clear_device_status(dev);
 	pci_cleanup_aer_uncorrect_error_status(dev);
 	pci_info(dev, "device recovery successful\n");
-	return;
+	return status;
 
 failed:
 	pci_uevent_ers(dev, PCI_ERS_RESULT_DISCONNECT);
 
 	/* TODO: Should kernel panic here? */
 	pci_info(dev, "device recovery failed\n");
+
+	return status;
 }
