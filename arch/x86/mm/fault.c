@@ -18,6 +18,7 @@
 #include <linux/uaccess.h>		/* faulthandler_disabled()	*/
 #include <linux/efi.h>			/* efi_recover_from_page_fault()*/
 #include <linux/mm_types.h>
+#include <linux/pkeys.h>
 
 #include <asm/cpufeature.h>		/* boot_cpu_has, ...		*/
 #include <asm/traps.h>			/* dotraplinkage, ...		*/
@@ -1149,6 +1150,25 @@ static int fault_in_kernel_space(unsigned long address)
 	return address >= TASK_SIZE_MAX;
 }
 
+#ifdef CONFIG_PKS_TESTING
+bool pks_test_callback(irqentry_state_t *irq_state);
+static bool handle_pks_testing(unsigned long hw_error_code, irqentry_state_t *irq_state)
+{
+	/*
+	 * If we get a protection key exception it could be because we
+	 * are running the PKS test.  If so, pks_test_callback() will
+	 * clear the protection mechanism and return true to indicate
+	 * the fault was handled.
+	 */
+	return (hw_error_code & X86_PF_PK) && pks_test_callback(irq_state);
+}
+#else
+static bool handle_pks_testing(unsigned long hw_error_code, irqentry_state_t *irq_state)
+{
+	return false;
+}
+#endif
+
 /*
  * Called for all faults where 'address' is part of the kernel address
  * space.  Might get called for faults that originate from *code* that
@@ -1165,6 +1185,9 @@ do_kern_addr_fault(struct pt_regs *regs, unsigned long hw_error_code,
 	if (!IS_ENABLED(CONFIG_ARCH_HAS_SUPERVISOR_PKEYS) ||
 	    !cpu_feature_enabled(X86_FEATURE_PKS))
 		WARN_ON_ONCE(hw_error_code & X86_PF_PK);
+
+	if (handle_pks_testing(hw_error_code, irq_state))
+		return;
 
 #ifdef CONFIG_X86_32
 	/*

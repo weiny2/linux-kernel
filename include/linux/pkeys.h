@@ -47,7 +47,6 @@ static inline bool arch_pkeys_enabled(void)
 static inline void copy_init_pkru_to_fpregs(void)
 {
 }
-
 #endif /* ! CONFIG_ARCH_HAS_PKEYS */
 
 #ifndef CONFIG_ARCH_HAS_SUPERVISOR_PKEYS

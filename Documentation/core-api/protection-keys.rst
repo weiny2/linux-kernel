@@ -163,3 +163,4 @@ of WRPKRU.  So to quote from the WRPKRU text:
 	until all prior executions of WRPKRU have completed execution
 	and updated the PKRU register.
 
+Example code can be found in lib/pks/pks_test.c
