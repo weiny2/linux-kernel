@@ -18,6 +18,7 @@
 #include <linux/uaccess.h>		/* faulthandler_disabled()	*/
 #include <linux/efi.h>			/* efi_recover_from_page_fault()*/
 #include <linux/mm_types.h>
+#include <linux/pkeys.h>
 
 #include <asm/cpufeature.h>		/* boot_cpu_has, ...		*/
 #include <asm/traps.h>			/* dotraplinkage, ...		*/
@@ -1105,11 +1106,18 @@ do_kern_addr_fault(struct pt_regs *regs, unsigned long hw_error_code,
 		   unsigned long address)
 {
 	/*
-	 * Protection keys exceptions only happen on user pages.  We
-	 * have no user pages in the kernel portion of the address
-	 * space, so do not expect them here.
+	 * If we get a protection key exception it could be because we are
+	 * running the PKS test.  If so, pks_test_armed_and_clear() will clear
+	 * the protection mechanism and we can safely return.
+	 *
+	 * Otherwise we warn the user that something has gone wrong and
+	 * continue with the fault.
 	 */
-	WARN_ON_ONCE(hw_error_code & X86_PF_PK);
+	if (hw_error_code & X86_PF_PK) {
+		if (pks_test_armed_and_clear())
+			return;
+		WARN_ON_ONCE(hw_error_code & X86_PF_PK);
+	}
 
 	/* Was the fault spurious, caused by lazy TLB invalidation? */
 	if (spurious_kernel_fault(hw_error_code, address))
