@@ -3816,7 +3816,7 @@
                 }
             ],
             "description": "Multi-Key Total Memory Encryption (MKTME) partial enabling",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [],
             "jira": "NEXT-1833",
             "name": "MKTME",
