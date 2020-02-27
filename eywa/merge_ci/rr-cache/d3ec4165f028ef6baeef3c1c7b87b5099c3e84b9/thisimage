@@ -662,17 +662,12 @@ static void pmc_core_lpm_display(struct pmc_dev *pmcdev, struct device *dev,
 				 const char *str,
 				 const struct pmc_bit_map **maps)
 {
-	u32 *lpm_regs;
-	int index, idx, len = 32, bit_mask;
+	int index, idx, len = 32, bit_mask, arr_size = 0;
 
-	if (!maps)
-		return;
+	for (index = 0; maps[index]; index++)
+		arr_size++;
 
-	if(!pmcdev)
-		return;
-
-	if (!s)
-		return;
+	u32 lpm_regs[arr_size];
 
 	for (index = 0; maps[index]; index++) {
 		lpm_regs[index] = pmc_core_reg_read(pmcdev, offset);
