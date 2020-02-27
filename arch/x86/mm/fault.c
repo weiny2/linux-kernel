@@ -18,6 +18,7 @@
 #include <linux/uaccess.h>		/* faulthandler_disabled()	*/
 #include <linux/efi.h>			/* efi_recover_from_page_fault()*/
 #include <linux/mm_types.h>
+#include <linux/pkeys.h>
 
 #include <asm/cpufeature.h>		/* boot_cpu_has, ...		*/
 #include <asm/traps.h>			/* dotraplinkage, ...		*/
@@ -987,6 +988,14 @@ static int spurious_kernel_fault_check(unsigned long error_code, pte_t *pte)
 	bool is_write = (error_code & X86_PF_WRITE);
 
 	if (error_code & X86_PF_PK) {
+		/*
+		 * If we get a protection key exception it could be because we are
+		 * running the PKS test.  If so, pks_test_armed_and_clear() will clear
+		 * the protection mechanism and we can safely return.
+		 */
+		if (pks_test_armed_and_clear())
+			return 1;
+
 		if (global_pkey_is_enabled(pte, is_write))
 			return 1;
 
