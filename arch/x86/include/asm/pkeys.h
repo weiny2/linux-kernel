@@ -150,4 +150,13 @@ static inline void __pks_sched_in(void) { }
 static inline void pks_update(u32 pks_val) { }
 #endif /* CONFIG_ARCH_HAS_SUPERVISOR_PKEYS */
 
+#if defined(CONFIG_PKS_TESTING)
+bool pks_test_armed(void);
+#else
+static inline bool pks_test_armed(void)
+{
+	return false;
+}
+#endif
+
 #endif /*_ASM_X86_PKEYS_H */

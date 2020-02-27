@@ -2329,6 +2329,16 @@ config HYPERV_TESTING
 	help
 	  Select this option to enable Hyper-V vmbus testing.
 
+config PKS_TESTING
+	bool "PKey(S)upervisor testing"
+	default n
+	depends on X86_INTEL_MEMORY_PROTECTION_KEYS
+	help
+	  Select this option to enable testing of PKS core software and
+	  hardware.  The PKS core provides a mechanism to allocate keys as well
+	  as maintain the protection settings across context switches.
+	  Answer N if you don't know what supervisor keys are.
+
 endmenu # "Kernel Testing and Coverage"
 
 endmenu # Kernel hacking
