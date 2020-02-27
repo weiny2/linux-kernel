@@ -173,4 +173,13 @@ static inline void pks_update_protection(int pkey, unsigned long protection,
 }
 #endif /* CONFIG_ARCH_HAS_SUPERVISOR_PKEYS */
 
+#if defined(CONFIG_PKS_TESTING)
+bool pks_test_armed_and_clear(u32 *val);
+#else
+static inline bool pks_test_armed_and_clear(u32 *val)
+{
+	return false;
+}
+#endif
+
 #endif /*_ASM_X86_PKEYS_H */
