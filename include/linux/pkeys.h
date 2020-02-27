@@ -55,6 +55,11 @@ static inline void update_local_sup_key(u8 key, int ad, int wd)
 {
 }
 
+static inline bool pks_test_armed(void)
+{
+	return false;
+}
+
 #endif /* ! CONFIG_ARCH_HAS_PKEYS */
 
 #endif /* _LINUX_PKEYS_H */
