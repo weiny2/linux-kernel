@@ -121,7 +121,8 @@ PTE adds this additional protection to the page.
 
 Kernel users intending to use PKS support should check (depend on)
 ARCH_HAS_SUPERVISOR_PKEYS and add their config to ARCH_ENABLE_SUPERVISOR_PKEYS
-to turn on this support within the core.
+to turn on this support within the core.  See the test configuration option
+'PKS_TEST' for an example.
 
         int pks_key_alloc(const char * const pkey_user);
         #define PAGE_KERNEL_PKEY(pkey)
@@ -171,3 +172,5 @@ text:
 	affected by PKRU register will not execute (even transiently)
 	until all prior executions of WRPKRU have completed execution
 	and updated the PKRU register.
+
+Example code can be found in lib/pks/pks_test.c
