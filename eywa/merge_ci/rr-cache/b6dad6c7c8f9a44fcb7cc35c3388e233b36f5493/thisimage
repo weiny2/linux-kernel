@@ -46,6 +46,7 @@
 #include <asm/traps.h>
 #include <asm/desc.h>
 #include <asm/fpu/internal.h>
+#include <asm/cpu.h>
 #include <asm/cpu_entry_area.h>
 #include <asm/mce.h>
 #include <asm/fixmap.h>
@@ -260,7 +261,6 @@ do_trap(int trapnr, int signr, char *str, struct pt_regs *regs,
 {
 	struct task_struct *tsk = current;
 
-
 	if (!do_trap_no_signal(tsk, trapnr, str, regs, error_code))
 		return;
 
@@ -310,21 +310,21 @@ DO_ERROR(X86_TRAP_SS,     SIGBUS,           0, NULL, "stack segment",       stac
 
 dotraplinkage void do_alignment_check(struct pt_regs *regs, long error_code)
 {
-	unsigned int trapnr = X86_TRAP_AC;
-	char str[] = "alignment check";
-	int signr = SIGBUS;
+	char *str = "alignment check";
 
 	RCU_LOCKDEP_WARN(!rcu_is_watching(), "entry code didn't wake RCU");
 
-	if (notify_die(DIE_TRAP, str, regs, error_code, trapnr, signr) == NOTIFY_STOP)
+	if (notify_die(DIE_TRAP, str, regs, error_code, X86_TRAP_AC, SIGBUS) == NOTIFY_STOP)
 		return;
 
-	if (!user_mode(regs) && split_lock_detect_enabled)
-		panic("Split lock detected\n");
+	if (!user_mode(regs))
+		die("Split lock detected\n", regs, error_code);
 
-	cond_local_irq_enable(regs);
+	local_irq_enable();
 
-	/* Handle #AC generated in any other cases. */
+	if (handle_user_split_lock(regs, error_code))
+		return;
+
 	do_trap(X86_TRAP_AC, SIGBUS, "alignment check", regs,
 		error_code, BUS_ADRALN, NULL);
 }

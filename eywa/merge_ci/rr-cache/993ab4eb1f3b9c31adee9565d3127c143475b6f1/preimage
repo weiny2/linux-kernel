@@ -19,12 +19,8 @@
 #include <asm/microcode_intel.h>
 #include <asm/hwcap2.h>
 #include <asm/elf.h>
-<<<<<<<
 #include <asm/cpu_device_id.h>
 #include <asm/cmdline.h>
-=======
-#include <asm/mktme.h>
->>>>>>>
 
 #ifdef CONFIG_X86_64
 #include <linux/topology.h>
@@ -554,38 +550,6 @@ detect_keyid_bits:
 		mktme_status = MKTME_ENABLED;
 	}
 
-#ifdef CONFIG_X86_INTEL_MKTME
-	if (mktme_status == MKTME_ENABLED && nr_keyids) {
-		__mktme_nr_keyids = nr_keyids;
-		__mktme_keyid_shift = c->x86_phys_bits - keyid_bits;
-
-		/*
-		 * Mask out bits claimed from KeyID from physical address mask.
-		 *
-		 * For instance, if a CPU enumerates 52 physical address bits
-		 * and number of bits claimed for KeyID is 6, bits 51:46 of
-		 * physical address is unusable.
-		 */
-		__mktme_keyid_mask = GENMASK_ULL(c->x86_phys_bits - 1, mktme_keyid_shift());
-		physical_mask &= ~mktme_keyid_mask();
-
-	} else {
-		/*
-		 * Reset __PHYSICAL_MASK.
-		 * Maybe needed if there's inconsistent configuration
-		 * between CPUs.
-		 *
-		 * FIXME: broken for hotplug.
-		 * We must not allow onlining secondary CPUs with non-matching
-		 * configuration.
-		 */
-		physical_mask = (1ULL << __PHYSICAL_MASK_SHIFT) - 1;
-		__mktme_keyid_mask = 0;
-		__mktme_keyid_shift = 0;
-		__mktme_nr_keyids = 0;
-	}
-#endif
-
 	/*
 	 * KeyID bits effectively lower the number of physical address
 	 * bits.  Update cpuinfo_x86::x86_phys_bits accordingly.
@@ -1001,6 +965,7 @@ static const struct cpu_dev intel_cpu_dev = {
 
 cpu_dev_register(intel_cpu_dev);
 
+<<<<<<<
 #undef pr_fmt
 #define pr_fmt(fmt) "x86/split lock detection: " fmt
 
@@ -1173,7 +1138,7 @@ void __init cpu_set_core_cap_bits(struct cpuinfo_x86 *c)
 
 	if (ia32_core_caps & MSR_IA32_CORE_CAPS_SPLIT_LOCK_DETECT)
 		split_lock_setup();
-}
+=======
 static const char * const intel_family_hybrid_cpu_types[] = {
 	"Intel Non-hybrid",
 	"Intel Hybrid Quark",
@@ -1194,4 +1159,5 @@ const char *intel_get_hybrid_cpu_type_name(u8 cpu_type)
 	 * Please see the INTEL_FAM6_HYBRID_* definitions.
 	 */
 	return intel_family_hybrid_cpu_types[cpu_type >> 4];
+>>>>>>>
 }
