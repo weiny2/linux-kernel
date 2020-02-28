@@ -188,7 +188,7 @@ static int kmb_ocs_aes_set_key(struct crypto_skcipher *tfm, const u8 *in_key,
 			key_len != AES_KEYSIZE_256) {
 		//TODO: handle fallback for AES_192??
 		//see omap_aes_setkey() in omap-aes.c
-		crypto_skcipher_set_flags(tfm, CRYPTO_TFM_RES_BAD_KEY_LEN);
+		pr_info("Bad input key len\n");
 		return -EINVAL;
 	}
 
@@ -200,13 +200,11 @@ static int kmb_ocs_aes_set_key(struct crypto_skcipher *tfm, const u8 *in_key,
 static int kmb_ocs_aes_aead_set_key(struct crypto_aead *tfm, const u8 *in_key,
 		       unsigned int key_len)
 {
-	u32 *flags = &tfm->base.crt_flags;
-
 	if (key_len != AES_KEYSIZE_128 &&
 			key_len != AES_KEYSIZE_256) {
 		//TODO: handle fallback for AES_192??
 		//see omap_aes_setkey() in omap-aes.c
-		*flags |= CRYPTO_TFM_RES_BAD_KEY_LEN;
+		pr_info("Bad input key len\n");
 		return -EINVAL;
 	}
 

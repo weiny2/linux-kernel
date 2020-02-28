@@ -548,13 +548,15 @@ int ocs_aes_gcm_op(const dma_addr_t src_descriptor, const uint32_t src_size,
 		/* DMA: Fetch AAD */
 		OCS_IOWRITE32(aad_descriptor, kmb_ocs_aes_dev->base_reg +
 				AES_A_DMA_NEXT_SRC_DESCR_OFFSET);
+		OCS_IOWRITE32(aad_descriptor, kmb_ocs_aes_dev->base_reg +
+				AES_A_DMA_NEXT_DST_DESCR_OFFSET);
 		OCS_IOWRITE32(0, kmb_ocs_aes_dev->base_reg +
 				AES_A_DMA_SRC_SIZE_OFFSET);
 		/* DMA mode
 		 * bit[31] - ACTIVE
 		 * bit[25] - SRC_LINK_LIST_EN
 		 */
-		OCS_IOWRITE32(0x82000000, kmb_ocs_aes_dev->base_reg +
+		OCS_IOWRITE32(0x83000000, kmb_ocs_aes_dev->base_reg +
 				AES_A_DMA_DMA_MODE_OFFSET);
 
 		/* set LAST_GCX and LAST_ADATA bit
@@ -862,13 +864,15 @@ int ocs_aes_ccm_op(const dma_addr_t src_descriptor, const uint32_t src_size,
 		/* DMA: Fetch AAD */
 		OCS_IOWRITE32(aad_descriptor, kmb_ocs_aes_dev->base_reg +
 				AES_A_DMA_NEXT_SRC_DESCR_OFFSET);
+		OCS_IOWRITE32(aad_descriptor, kmb_ocs_aes_dev->base_reg +
+				AES_A_DMA_NEXT_DST_DESCR_OFFSET);
 		OCS_IOWRITE32(0, kmb_ocs_aes_dev->base_reg +
 				AES_A_DMA_SRC_SIZE_OFFSET);
 		/* DMA mode
 		 * bit[31] - ACTIVE
 		 * bit[25] - SRC_LINK_LIST_EN
 		 */
-		OCS_IOWRITE32(0x82000000, kmb_ocs_aes_dev->base_reg +
+		OCS_IOWRITE32(0x83000000, kmb_ocs_aes_dev->base_reg +
 				AES_A_DMA_DMA_MODE_OFFSET);
 
 		/* set LAST_GCX and LAST_ADATA bit
