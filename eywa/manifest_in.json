@@ -3647,7 +3647,7 @@
             "stuck_at_ref": ""
         },
         {
-            "branch": "dev/hemanthk/ocs_fix_warnings",
+            "branch": "dev/sbhusare/THB_HCU_crypto_driver_with_fix",
             "branch_type": "expiring",
             "config_options": [],
             "contributor": [
@@ -3661,7 +3661,7 @@
                 }
             ],
             "description": "THB crypto AES driver warning fix",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Kumaresan Sarveswaran",
