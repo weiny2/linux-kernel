@@ -2670,11 +2670,7 @@
             "branch_type": "expiring",
             "config_options": [
                 {
-                    "name": "CONFIG_INTEL_IOMMU_M2IOSF_WORKAROUND",
-                    "value": "y"
-                },
-                {
-                    "name": "CONFIG_IRQ_ICX_PI_WORKAROUND",
+                    "name": "CONFIG_INTEL_IOMMU_WORKAROUND",
                     "value": "y"
                 }
             ],
