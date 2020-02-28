@@ -3291,7 +3291,7 @@
             "stuck_at_ref": ""
         },
         {
-            "branch": "thb/dev",
+            "branch": "for-intel-next-5.6",
             "branch_type": "expiring",
             "config_options": [
                 {
@@ -3310,14 +3310,14 @@
                 }
             ],
             "description": "VPUSMM kernel module",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Yu Xu",
                     "email": "yu.xu@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1843",
             "name": "vpusmm",
             "repourl": "ssh://git@gitlab.devtools.intel.com:29418/kmb_integration/vpusmm_driver.git",
             "sdl_contact": [
