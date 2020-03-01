@@ -1210,6 +1210,47 @@ int migrate_promote_mapping(struct page *page)
 			       &m_detail);
 }
 
+DEFINE_RATELIMIT_STATE(promotion_ratelimit_state, HZ, 0);
+
+/* Restrict the rate of promotion per second in MBytes. */
+unsigned int promotion_ratelimit_mbytes_per_sec;
+
+static void setup_migration_rate_limit(struct ratelimit_state *ratelimit,
+				       unsigned int rate)
+{
+	if (rate == -1) {
+		/* Disable rate limit. */
+		ratelimit->interval = 0;
+	} else {
+		ratelimit->interval = HZ;
+		ratelimit->burst = rate << (20 - PAGE_SHIFT);
+	}
+}
+
+int promotion_ratelimit_handler(struct ctl_table *table, int write,
+				void __user *buffer, size_t *lenp,
+				loff_t *ppos)
+{
+	int ret;
+
+	ret = proc_dointvec_minmax(table, write, buffer, lenp, ppos);
+	if (!ret)
+		setup_migration_rate_limit(&promotion_ratelimit_state,
+					   promotion_ratelimit_mbytes_per_sec);
+
+	return ret;
+}
+
+/*
+ * Decrease the counter of rate limit if page migration fails.
+ * This makes the rate limit more accurate.
+ */
+static void decrease_ratelimit(struct ratelimit_state *ratelimit)
+{
+	if (ratelimit && ratelimit->printed)
+		ratelimit->printed--;
+}
+
 int promote_page(struct page *page, bool caller_locked_page)
 {
 	int err;
@@ -1217,6 +1258,10 @@ int promote_page(struct page *page, bool caller_locked_page)
 	if (!PageLRU(page) ||
 	    next_promotion_node(page_to_nid(page)) == NUMA_NO_NODE)
 		return -EINVAL;
+
+	if (!__ratelimit(&promotion_ratelimit_state))
+		return -EPERM;
+
 	/*
 	 * Try to lock page right away.
 	 * This function is usually called by file
@@ -1236,6 +1281,8 @@ int promote_page(struct page *page, bool caller_locked_page)
 
 	err = migrate_promote_mapping(page);
 	if (err != MIGRATEPAGE_SUCCESS) {
+		decrease_ratelimit(&promotion_ratelimit_state);
+
 		/* putback_lru_page() drops this reference.*/
 		get_page(page);
 
