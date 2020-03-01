@@ -1204,6 +1204,7 @@ const char * const vmstat_text[] = {
 	"nr_vmscan_immediate_reclaim",
 	"nr_dirtied",
 	"nr_written",
+	"nr_accessed",
 	"nr_kernel_misc_reclaimable",
 #ifdef CONFIG_NUMA_BALANCING
 	"numa_try_migrate",

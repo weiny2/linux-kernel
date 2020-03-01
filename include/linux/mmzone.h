@@ -249,6 +249,7 @@ enum node_stat_item {
 	NR_VMSCAN_IMMEDIATE,	/* Prioritise for reclaim when writeback ends */
 	NR_DIRTIED,		/* page dirtyings since bootup */
 	NR_WRITTEN,		/* page writings since bootup */
+	NR_ACCESSED,	/* mark_page_accessed() calls */
 	NR_KERNEL_MISC_RECLAIMABLE,	/* reclaimable non-slab kernel pages */
 #ifdef CONFIG_NUMA_BALANCING
 	NUMA_TRY_MIGRATE,	/* pages to try to migrate via NUMA balancing */
