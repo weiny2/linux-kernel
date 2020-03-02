@@ -586,6 +586,7 @@ static __init int setup_disable_ibt(char *s)
 	return 1;
 }
 __setup("no_cet_ibt", setup_disable_ibt);
+#endif
 
 #ifdef CONFIG_X86_INTEL_RAR
 static __init int setup_disable_rar(char *s)
