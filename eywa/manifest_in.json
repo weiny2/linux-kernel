@@ -1095,7 +1095,7 @@
                 }
             ],
             "description": "TGL, JSL and RKL PMC core driver changes and new AVX512 cpuid support",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Mark Charney",
