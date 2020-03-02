@@ -206,7 +206,14 @@ enum zone_stat_item {
 	NR_ZSPAGES,		/* allocated in zsmalloc */
 #endif
 	NR_FREE_CMA_PAGES,
-	NR_VM_ZONE_STAT_ITEMS };
+#define HMEM_MIGRATE(__hmem_name)      __hmem_name ## _SRC, __hmem_name ## _DEST
+	HMEM_MIGRATE_UNKNOWN,
+	HMEM_MIGRATE_FIRST_ENTRY = HMEM_MIGRATE_UNKNOWN,
+	HMEM_MIGRATE(MR_HMEM_RECLAIM_DEMOTE),
+	HMEM_MIGRATE(MR_HMEM_RECLAIM_PROMOTE),
+	HMEM_MIGRATE(MR_HMEM_AUTONUMA_PROMOTE),
+	NR_VM_ZONE_STAT_ITEMS
+};
 
 enum node_stat_item {
 	NR_LRU_BASE,
@@ -243,6 +250,9 @@ enum node_stat_item {
 	NR_DIRTIED,		/* page dirtyings since bootup */
 	NR_WRITTEN,		/* page writings since bootup */
 	NR_KERNEL_MISC_RECLAIMABLE,	/* reclaimable non-slab kernel pages */
+#ifdef CONFIG_NUMA_BALANCING
+	NUMA_TRY_MIGRATE,	/* pages to try to migrate via NUMA balancing */
+#endif
 	NR_VM_NODE_STAT_ITEMS
 };
 
@@ -780,6 +790,13 @@ typedef struct pglist_data {
 	struct deferred_split deferred_split_queue;
 #endif
 
+#ifdef CONFIG_NUMA_BALANCING
+	unsigned long numa_ts;
+	unsigned long numa_try;
+	unsigned long numa_threshold_ts;
+	unsigned long numa_threshold_try;
+	unsigned long numa_threshold;
+#endif
 	/* Fields commonly accessed by the page reclaim scanner */
 
 	/*

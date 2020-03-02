@@ -33,6 +33,7 @@
 #include <linux/oom.h>
 #include <linux/numa.h>
 #include <linux/page_owner.h>
+#include <linux/sched/sysctl.h>
 
 #include <asm/tlb.h>
 #include <asm/pgalloc.h>
@@ -1557,6 +1558,10 @@ vm_fault_t do_huge_pmd_numa_page(struct vm_fault *vmf, pmd_t pmd)
 	if (unlikely(!pmd_same(pmd, *vmf->pmd)))
 		goto out_unlock;
 
+	/* Only migrate if accessed twice */
+	if (pmd_young(*vmf->pmd))
+		flags |= TNF_YOUNG;
+
 	/*
 	 * If there are potential migrations, wait for completion and retry
 	 * without disrupting NUMA hinting information. Do not relock and
@@ -1590,7 +1595,7 @@ vm_fault_t do_huge_pmd_numa_page(struct vm_fault *vmf, pmd_t pmd)
 	 * page_table_lock if at all possible
 	 */
 	page_locked = trylock_page(page);
-	target_nid = mpol_misplaced(page, vma, haddr);
+	target_nid = mpol_misplaced(page, vma, haddr, flags);
 	if (target_nid == NUMA_NO_NODE) {
 		/* If the page was locked, there are no parallel migrations */
 		if (page_locked)
@@ -1967,17 +1972,39 @@ int change_huge_pmd(struct vm_area_struct *vma, pmd_t *pmd,
 	}
 #endif
 
-	/*
-	 * Avoid trapping faults against the zero page. The read-only
-	 * data is likely to be read-cached on the local CPU and
-	 * local/remote hits to the zero page are not interesting.
-	 */
-	if (prot_numa && is_huge_zero_pmd(*pmd))
-		goto unlock;
+	if (prot_numa) {
+		struct page *page;
+		/*
+		 * Avoid trapping faults against the zero page. The read-only
+		 * data is likely to be read-cached on the local CPU and
+		 * local/remote hits to the zero page are not interesting.
+		 */
+		if (is_huge_zero_pmd(*pmd))
+			goto unlock;
 
-	if (prot_numa && pmd_protnone(*pmd))
-		goto unlock;
+		if (pmd_protnone(*pmd)) {
+			if (!(sysctl_numa_balancing_mode &
+			      NUMA_BALANCING_MEMORY_TIERING))
+				goto unlock;
 
+			/*
+			 * PMD young bit is used to record whether the
+			 * page is accessed in last scan period
+			 */
+			if (pmd_young(*pmd))
+				set_pmd_at(mm, addr, pmd, pmd_mkold(*pmd));
+			goto unlock;
+		}
+
+		page = pmd_page(*pmd);
+		/*
+		 * Skip if normal numa balancing is disabled and no
+		 * faster memory node to promote to
+		 */
+		if (!(sysctl_numa_balancing_mode & NUMA_BALANCING_NORMAL) &&
+		    next_promotion_node(page_to_nid(page)) == -1)
+			goto unlock;
+	}
 	/*
 	 * In case prot_numa, we are under down_read(mmap_sem). It's critical
 	 * to not clear pmd intermittently to avoid race with MADV_DONTNEED
@@ -3044,11 +3071,21 @@ void set_pmd_migration_entry(struct page_vma_mapped_walk *pvmw,
 	pmdp_invalidate(vma, address, pvmw->pmd);
 	if (pmd_dirty(pmdval))
 		set_page_dirty(page);
-	entry = make_migration_entry(page, pmd_write(pmdval));
-	pmdswp = swp_entry_to_pmd(entry);
-	if (pmd_soft_dirty(pmdval))
-		pmdswp = pmd_swp_mksoft_dirty(pmdswp);
-	set_pmd_at(mm, address, pvmw->pmd, pmdswp);
+	/* Clean MADV_FREE page, discard instead of migrate */
+	if (PageAnon(page) && !PageSwapBacked(page) && !PageDirty(page)) {
+		pmd_clear(pvmw->pmd);
+		zap_deposited_table(mm, pvmw->pmd);
+		/* Invalidate as we cleared the pmd */
+		mmu_notifier_invalidate_range(mm, address,
+					      address + HPAGE_PMD_SIZE);
+		add_mm_counter(mm, MM_ANONPAGES, -HPAGE_PMD_NR);
+	} else {
+		entry = make_migration_entry(page, pmd_write(pmdval));
+		pmdswp = swp_entry_to_pmd(entry);
+		if (pmd_soft_dirty(pmdval))
+			pmdswp = pmd_swp_mksoft_dirty(pmdswp);
+		set_pmd_at(mm, address, pvmw->pmd, pmdswp);
+	}
 	page_remove_rmap(page, true);
 	put_page(page);
 }

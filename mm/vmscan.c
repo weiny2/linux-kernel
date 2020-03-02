@@ -57,6 +57,7 @@
 
 #include <linux/swapops.h>
 #include <linux/balloon_compaction.h>
+#include <linux/sched/sysctl.h>
 
 #include "internal.h"
 
@@ -312,7 +313,7 @@ unsigned long zone_reclaimable_pages(struct zone *zone)
 
 	nr = zone_page_state_snapshot(zone, NR_ZONE_INACTIVE_FILE) +
 		zone_page_state_snapshot(zone, NR_ZONE_ACTIVE_FILE);
-	if (get_nr_swap_pages() > 0)
+	if (reclaim_anon_pages(NULL, zone_to_nid(zone)))
 		nr += zone_page_state_snapshot(zone, NR_ZONE_INACTIVE_ANON) +
 			zone_page_state_snapshot(zone, NR_ZONE_ACTIVE_ANON);
 
@@ -1242,6 +1243,33 @@ static unsigned long shrink_page_list(struct list_head *page_list,
 		case PAGEREF_RECLAIM:
 		case PAGEREF_RECLAIM_CLEAN:
 			; /* try to reclaim the page below */
+		}
+
+		if (!PageHuge(page)) {
+			int rc = migrate_demote_mapping(page);
+
+			/*
+			 * -ENOMEM on a THP may indicate either migration is
+			 * unsupported or there was not enough contiguous
+			 * space. Split the THP into base pages and retry the
+			 * head immediately. The tail pages will be considered
+			 * individually within the current loop's page list.
+			 */
+			if (rc == -ENOMEM && PageTransHuge(page) &&
+			    !split_huge_page_to_list(page, page_list))
+				rc = migrate_demote_mapping(page);
+
+			if (rc == MIGRATEPAGE_SUCCESS) {
+				unlock_page(page);
+				if (likely(put_page_testzero(page)))
+					goto free_it;
+				/*
+				 * Speculative reference will free this page,
+				 * so leave it off the LRU.
+				 */
+				nr_reclaimed++;
+				continue;
+			}
 		}
 
 		/*
@@ -2257,7 +2285,7 @@ static void get_scan_count(struct lruvec *lruvec, struct scan_control *sc,
 	enum lru_list lru;
 
 	/* If we have no swap space, do not bother scanning anon pages. */
-	if (!sc->may_swap || mem_cgroup_get_nr_swap_pages(memcg) <= 0) {
+	if (!sc->may_swap || !reclaim_anon_pages(memcg, pgdat->node_id)) {
 		scan_balance = SCAN_FILE;
 		goto out;
 	}
@@ -2561,7 +2589,8 @@ static void shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc)
 	 * Even if we did not try to evict anon pages at all, we want to
 	 * rebalance the anon lru active/inactive ratio.
 	 */
-	if (total_swap_pages && inactive_is_low(lruvec, LRU_INACTIVE_ANON))
+	if (reclaim_anon_pages(lruvec_memcg(lruvec), lruvec_pgdat(lruvec)->node_id) &&
+	    inactive_is_low(lruvec, LRU_INACTIVE_ANON))
 		shrink_active_list(SWAP_CLUSTER_MAX, lruvec,
 				   sc, LRU_ACTIVE_ANON);
 }
@@ -2631,7 +2660,7 @@ static inline bool should_continue_reclaim(struct pglist_data *pgdat,
 	 */
 	pages_for_compaction = compact_gap(sc->order);
 	inactive_lru_pages = node_page_state(pgdat, NR_INACTIVE_FILE);
-	if (get_nr_swap_pages() > 0)
+	if (reclaim_anon_pages(NULL, pgdat->node_id))
 		inactive_lru_pages += node_page_state(pgdat, NR_INACTIVE_ANON);
 
 	return inactive_lru_pages > pages_for_compaction;
@@ -3386,7 +3415,7 @@ static void age_active_anon(struct pglist_data *pgdat,
 	struct mem_cgroup *memcg;
 	struct lruvec *lruvec;
 
-	if (!total_swap_pages)
+	if (!reclaim_anon_pages(NULL, pgdat->node_id))
 		return;
 
 	lruvec = mem_cgroup_lruvec(NULL, pgdat);
@@ -3434,8 +3463,11 @@ static bool pgdat_balanced(pg_data_t *pgdat, int order, int classzone_idx)
 {
 	int i;
 	unsigned long mark = -1;
+	unsigned long promote_ratelimit;
 	struct zone *zone;
 
+	promote_ratelimit = sysctl_numa_balancing_rate_limit <<
+		(20 - PAGE_SHIFT);
 	/*
 	 * Check watermarks bottom-up as lower zones are more likely to
 	 * meet watermarks.
@@ -3447,6 +3479,9 @@ static bool pgdat_balanced(pg_data_t *pgdat, int order, int classzone_idx)
 			continue;
 
 		mark = high_wmark_pages(zone);
+		if (sysctl_numa_balancing_mode & NUMA_BALANCING_MEMORY_TIERING &&
+		    next_migration_node(pgdat->node_id) != -1)
+			mark += promote_ratelimit;
 		if (zone_watermark_ok_safe(zone, order, mark, classzone_idx))
 			return true;
 	}
@@ -3854,8 +3889,23 @@ static void kswapd_try_to_sleep(pg_data_t *pgdat, int alloc_order, int reclaim_o
 		 */
 		set_pgdat_percpu_threshold(pgdat, calculate_normal_threshold);
 
-		if (!kthread_should_stop())
-			schedule();
+		if (!kthread_should_stop()) {
+			/*
+			 * In memory tiering mode, try harder to
+			 * recover from kswapd failures, because
+			 * direct reclaiming may be not triggered.
+			 */
+			if (sysctl_numa_balancing_mode & NUMA_BALANCING_MEMORY_TIERING &&
+			    next_migration_node(pgdat->node_id) != -1 &&
+			    pgdat->kswapd_failures >= MAX_RECLAIM_RETRIES) {
+				remaining = schedule_timeout(10 * HZ);
+				if (!remaining) {
+					pgdat->kswapd_classzone_idx = ZONE_MOVABLE;
+					pgdat->kswapd_order = 0;
+				}
+			} else
+				schedule();
+		}
 
 		set_pgdat_percpu_threshold(pgdat, calculate_pressure_threshold);
 	} else {
