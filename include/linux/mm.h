@@ -198,6 +198,10 @@ static inline void __mm_zero_struct_page(struct page *page)
 
 extern int sysctl_max_map_count;
 
+extern int hmem_enable_pagecache_write_fault_promotion;
+
+extern int sysctl_enable_swapcache_promotion;
+
 extern unsigned long sysctl_user_reserve_kbytes;
 extern unsigned long sysctl_admin_reserve_kbytes;
 

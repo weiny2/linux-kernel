@@ -212,6 +212,7 @@ enum zone_stat_item {
 	HMEM_MIGRATE(MR_HMEM_RECLAIM_DEMOTE),
 	HMEM_MIGRATE(MR_HMEM_RECLAIM_PROMOTE),
 	HMEM_MIGRATE(MR_HMEM_AUTONUMA_PROMOTE),
+	HMEM_MIGRATE(MR_HMEM_SWAPCACHE_PROMOTE),
 	NR_VM_ZONE_STAT_ITEMS
 };
 
@@ -249,6 +250,11 @@ enum node_stat_item {
 	NR_VMSCAN_IMMEDIATE,	/* Prioritise for reclaim when writeback ends */
 	NR_DIRTIED,		/* page dirtyings since bootup */
 	NR_WRITTEN,		/* page writings since bootup */
+	NR_ACCESSED,	/* mark_page_accessed() calls */
+	NR_PROMOTE_ISOLATE_FAIL,/* page that fail to be isolated for promotion */
+	NR_PROMOTE_RATELIMIT,   /* Rate-limited page when promotion */
+	NR_PROMOTE_FAIL,        /* page that fail to be promoted */
+	NR_PROMOTED,            /* page that is promoted successfully */
 	NR_KERNEL_MISC_RECLAIMABLE,	/* reclaimable non-slab kernel pages */
 #ifdef CONFIG_NUMA_BALANCING
 	NUMA_TRY_MIGRATE,	/* pages to try to migrate via NUMA balancing */

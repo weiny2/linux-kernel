@@ -1161,6 +1161,8 @@ const char * const vmstat_text[] = {
 	"hmem_reclaim_promote_dst",
 	"hmem_autonuma_promote_src",
 	"hmem_autonuma_promote_dst",
+	"hmem_swapcache_promote_src",
+	"hmem_swapcache_promote_dst",
 
 	/* enum numa_stat_item counters */
 #ifdef CONFIG_NUMA
@@ -1204,6 +1206,11 @@ const char * const vmstat_text[] = {
 	"nr_vmscan_immediate_reclaim",
 	"nr_dirtied",
 	"nr_written",
+	"nr_accessed",
+	"nr_promote_isolate_fail",
+	"nr_promote_ratelimit",
+	"nr_promote_fail",
+	"nr_promoted",
 	"nr_kernel_misc_reclaimable",
 #ifdef CONFIG_NUMA_BALANCING
 	"numa_try_migrate",
@@ -1266,6 +1273,11 @@ const char * const vmstat_text[] = {
 #ifdef CONFIG_MIGRATION
 	"pgmigrate_success",
 	"pgmigrate_fail",
+	"pgmigrate_fail_dst_node_fail",
+	"pgmigrate_fail_numa_isolate_fail",
+	"pgmigrate_fail_nomem_fail",
+	"pgmigrate_fail_refcount_fail",
+	"pgmigrate_success_pagecache_wrflt",
 #endif
 #ifdef CONFIG_COMPACTION
 	"compact_migrate_scanned",

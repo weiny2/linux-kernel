@@ -58,6 +58,7 @@
 #include <linux/swapops.h>
 #include <linux/balloon_compaction.h>
 #include <linux/sched/sysctl.h>
+#include <linux/ratelimit.h>
 
 #include "internal.h"
 
@@ -1245,7 +1246,10 @@ static unsigned long shrink_page_list(struct list_head *page_list,
 			; /* try to reclaim the page below */
 		}
 
-		if (!PageHuge(page)) {
+#ifdef CONFIG_MIGRATION
+		if (!PageHuge(page) &&
+		    (next_migration_node(page_to_nid(page)) >= 0) &&
+		    __ratelimit(&demotion_ratelimit_state)) {
 			int rc = migrate_demote_mapping(page);
 
 			/*
@@ -1271,6 +1275,7 @@ static unsigned long shrink_page_list(struct list_head *page_list,
 				continue;
 			}
 		}
+#endif
 
 		/*
 		 * Anonymous process memory has backing store?

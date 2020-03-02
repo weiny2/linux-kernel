@@ -74,6 +74,18 @@ ratelimit_set_flags(struct ratelimit_state *rs, unsigned long flags)
 extern struct ratelimit_state printk_ratelimit_state;
 
 extern int ___ratelimit(struct ratelimit_state *rs, const char *func);
+
+#ifdef CONFIG_MIGRATION
+extern unsigned int promotion_ratelimit_mbytes_per_sec;
+extern unsigned int demotion_ratelimit_mbytes_per_sec;
+extern struct ratelimit_state demotion_ratelimit_state;
+
+extern int promotion_ratelimit_handler(struct ctl_table *table, int write,
+			void __user *buffer, size_t *lenp, loff_t *ppos);
+extern int demotion_ratelimit_handler(struct ctl_table *table, int write,
+			void __user *buffer, size_t *lenp, loff_t *ppos);
+#endif
+
 #define __ratelimit(state) ___ratelimit(state, __func__)
 
 #ifdef CONFIG_PRINTK

@@ -107,6 +107,8 @@ EXPORT_SYMBOL(mem_map);
 void *high_memory;
 EXPORT_SYMBOL(high_memory);
 
+int sysctl_enable_swapcache_promotion;
+
 /*
  * Randomize the address space (stacks, mmaps, brk, etc.).
  *
@@ -2890,6 +2892,9 @@ vm_fault_t do_swap_page(struct vm_fault *vmf)
 	int locked;
 	int exclusive = 0;
 	vm_fault_t ret = 0;
+	struct migrate_detail m_detail = {};
+	bool swapcache_hit = false;
+	int target_nid = -1;
 
 	if (!pte_unmap_same(vma->vm_mm, vmf->pmd, vmf->pte, vmf->orig_pte))
 		goto out;
@@ -2915,6 +2920,10 @@ vm_fault_t do_swap_page(struct vm_fault *vmf)
 	delayacct_set_flag(DELAYACCT_PF_SWAPIN);
 	page = lookup_swap_cache(entry, vma, vmf->address);
 	swapcache = page;
+
+	/* skip THP for now */
+	if (page && !PageTransHuge(page))
+		swapcache_hit = true;
 
 	if (!page) {
 		struct swap_info_struct *si = swp_swap_info(entry);
@@ -3073,7 +3082,29 @@ vm_fault_t do_swap_page(struct vm_fault *vmf)
 	/* No need to invalidate - it was non-present before */
 	update_mmu_cache(vma, vmf->address, vmf->pte);
 unlock:
+	if (swapcache_hit == true && sysctl_enable_swapcache_promotion) {
+		target_nid = next_promotion_node(page_to_nid(page));
+
+		 /*
+		  * To prepare for the migration, take one reference here
+		  * inside the protection of page table lock, as there is
+		  * posssibility the page could be unmapped and freed after
+		  * going out of the following pte_unmap_unock()
+		  */
+		if (target_nid != -1)
+			get_page(page);
+	}
 	pte_unmap_unlock(vmf->pte, vmf->ptl);
+
+	/* Imply swapcache_hit == true && sysctl_enable_swapcache_promotion */
+	if (target_nid != -1) {
+		m_detail.reason = MR_PROMOTION;
+		m_detail.h_reason = MR_HMEM_SWAPCACHE_PROMOTE;
+
+		migrate_prep_local();
+		_migrate_misplaced_page(page, vma, target_nid, &m_detail);
+	}
+
 out:
 	return ret;
 out_nomap:

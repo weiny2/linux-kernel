@@ -1768,6 +1768,7 @@ repeat:
 	sbinfo = SHMEM_SB(inode->i_sb);
 	charge_mm = vma ? vma->vm_mm : current->mm;
 
+find_page:
 	page = find_lock_entry(mapping, index);
 	if (xa_is_value(page)) {
 		error = shmem_swapin_page(inode, index, &page,
@@ -1779,8 +1780,15 @@ repeat:
 		return error;
 	}
 
-	if (page && sgp == SGP_WRITE)
-		mark_page_accessed(page);
+	if (page && sgp == SGP_WRITE) {
+		int ret, migration_viable;
+
+		migration_viable = mark_page_accessed(page);
+		ret = promote_viable_page(page, true, migration_viable);
+		/* If promoted, 'page' is gone. New location must be found. */
+		if (ret == PAGE_ACCESSED_PROMOTE_SUCCESS)
+			goto find_page;
+	}
 
 	/* fallocated page? */
 	if (page && !PageUptodate(page)) {
@@ -2562,6 +2570,7 @@ static ssize_t shmem_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 				break;
 		}
 
+read_find_page:
 		error = shmem_getpage(inode, index, &page, sgp);
 		if (error) {
 			if (error == -EINVAL)
@@ -2602,8 +2611,15 @@ static ssize_t shmem_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 			/*
 			 * Mark the page accessed if we read the beginning.
 			 */
-			if (!offset)
-				mark_page_accessed(page);
+			if (!offset) {
+				int migration_viable;
+
+				migration_viable = mark_page_accessed(page);
+				ret = promote_viable_page(page, false, migration_viable);
+				/* If promoted, 'page' is gone. New location must be found. */
+				if (ret == PAGE_ACCESSED_PROMOTE_SUCCESS)
+					goto read_find_page;
+			}
 		} else {
 			page = ZERO_PAGE(0);
 			get_page(page);

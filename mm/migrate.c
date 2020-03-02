@@ -403,6 +403,9 @@ int migrate_page_move_mapping(struct address_space *mapping,
 	int dirty;
 	int expected_count = expected_page_refs(mapping, page) + extra_count;
 
+	if (page_count(page) != expected_count)
+		count_vm_events(PGMIGRATE_REFCOUNT_FAIL, hpage_nr_pages(page));
+
 	if (!mapping) {
 		/* Anonymous page without mapping */
 		if (page_count(page) != expected_count)
@@ -1160,6 +1163,8 @@ static int migrate_mapping(struct page *page, int next_nid,
 		return -ENOSYS;
 	if (PageTransHuge(page) && !thp_migration_supported())
 		return -ENOMEM;
+	if (PageWriteback(page))
+		return -EACCES;
 
 	if (m_detail->reason == MR_PROMOTION)
 		pr_info_once("promote page from %d to %d\n",
@@ -1206,6 +1211,142 @@ int migrate_promote_mapping(struct page *page)
 
 	return migrate_mapping(page, next_promotion_node(page_to_nid(page)),
 			       &m_detail);
+}
+
+DEFINE_RATELIMIT_STATE(promotion_ratelimit_state, HZ, 0);
+/* No rate limit for demotion by default. */
+DEFINE_RATELIMIT_STATE(demotion_ratelimit_state, 0, 0);
+
+/* restrict the rate of promotion and demotion per second in mbytes. */
+unsigned int promotion_ratelimit_mbytes_per_sec;
+unsigned int demotion_ratelimit_mbytes_per_sec;
+
+static void setup_migration_rate_limit(struct ratelimit_state *ratelimit,
+				       unsigned int rate)
+{
+	if (rate == -1) {
+		/* Disable rate limit. */
+		ratelimit->interval = 0;
+	} else {
+		ratelimit->interval = HZ;
+		ratelimit->burst = rate << (20 - PAGE_SHIFT);
+	}
+}
+
+int promotion_ratelimit_handler(struct ctl_table *table, int write,
+				void __user *buffer, size_t *lenp,
+				loff_t *ppos)
+{
+	int ret;
+
+	ret = proc_dointvec_minmax(table, write, buffer, lenp, ppos);
+	if (!ret)
+		setup_migration_rate_limit(&promotion_ratelimit_state,
+					   promotion_ratelimit_mbytes_per_sec);
+
+	return ret;
+}
+
+int demotion_ratelimit_handler(struct ctl_table *table, int write,
+				void __user *buffer, size_t *lenp,
+				loff_t *ppos)
+{
+	int ret;
+
+	ret = proc_dointvec_minmax(table, write, buffer, lenp, ppos);
+	if (!ret)
+		setup_migration_rate_limit(&demotion_ratelimit_state,
+					   demotion_ratelimit_mbytes_per_sec);
+
+	return ret;
+}
+
+/*
+ * Decrease the counter of rate limit if page migration fails.
+ * This makes the rate limit more accurate.
+ */
+static void decrease_ratelimit(struct ratelimit_state *ratelimit)
+{
+	if (ratelimit && ratelimit->printed)
+		ratelimit->printed--;
+}
+
+int promote_page(struct page *page, bool caller_locked_page)
+{
+	int err;
+
+	if (!PageLRU(page) ||
+	    next_promotion_node(page_to_nid(page)) == NUMA_NO_NODE)
+		return -EINVAL;
+
+	if (!__ratelimit(&promotion_ratelimit_state)) {
+		inc_node_page_state(page, NR_PROMOTE_RATELIMIT);
+		return -EPERM;
+	}
+
+	/*
+	 * Try to lock page right away.
+	 * This function is usually called by file
+	 * reads/writes. If blocking while locking
+	 * the page, reads/writes performance will
+	 * likely drop.
+	 */
+	if (!caller_locked_page && !trylock_page(page))
+		return -EBUSY;
+
+	err = isolate_lru_page(page);
+	if (err) {
+		inc_node_page_state(page, NR_PROMOTE_ISOLATE_FAIL);
+		goto unlock_ret;
+	}
+
+	/* Drop reference acquired by isolate_lru_page() */
+	put_page(page);
+
+	err = migrate_promote_mapping(page);
+	if (err != MIGRATEPAGE_SUCCESS) {
+		inc_node_page_state(page, NR_PROMOTE_FAIL);
+
+		decrease_ratelimit(&promotion_ratelimit_state);
+
+		/* putback_lru_page() drops this reference.*/
+		get_page(page);
+
+		/* Put the page back into LRU list when migration fails. */
+		putback_lru_page(page);
+	} else
+		inc_node_page_state(page, NR_PROMOTED);
+
+unlock_ret:
+	/* Restore lock state to that at function entry. */
+	if (!caller_locked_page)
+		unlock_page(page);
+
+	return err;
+}
+
+int promote_viable_page(struct page *page,
+			bool caller_locked_page, int migration_viable)
+{
+	int ret;
+
+	if (migration_viable != PAGE_MIGRATION_VIABLE)
+		return PAGE_ACCESSED_PROMOTE_NO_NEED;
+
+	ret = promote_page(page, caller_locked_page);
+	if (ret != MIGRATEPAGE_SUCCESS)
+		return PAGE_ACCESSED_PROMOTE_FAIL;
+
+	/*
+	 * If the page is locked before promotion,
+	 * unlock it if it's promoted successfully.
+	 */
+	if (caller_locked_page)
+		unlock_page(page);
+
+	put_page(page);
+
+	return PAGE_ACCESSED_PROMOTE_SUCCESS;
 }
 
 /*
@@ -1544,6 +1685,9 @@ retry:
 					}
 				}
 				nr_failed++;
+
+				count_vm_events(PGMIGRATE_NOMEM_FAIL,
+						hpage_nr_pages(page));
 				goto out;
 			case -EAGAIN:
 				retry++;
@@ -1995,6 +2139,8 @@ static int numamigrate_isolate_page(pg_data_t *pgdat, struct page *page)
 
 	/* Avoid migrating to a node that is nearly full */
 	if (!migrate_balanced_pgdat(pgdat, compound_order(page))) {
+		count_vm_events(PGMIGRATE_DST_NODE_FULL_FAIL,
+				hpage_nr_pages(page));
 		if (sysctl_numa_balancing_mode & NUMA_BALANCING_MEMORY_TIERING) {
 			int z;
 
@@ -2047,10 +2193,9 @@ bool pmd_trans_migrating(pmd_t pmd)
  * node. Caller is expected to have an elevated reference count on
  * the page that will be dropped by this function before returning.
  */
-int migrate_misplaced_page(struct page *page, struct vm_area_struct *vma,
-			   int node)
+int _migrate_misplaced_page(struct page *page, struct vm_area_struct *vma,
+			   int node, struct migrate_detail *m_detail)
 {
-	struct migrate_detail m_detail = {};
 	pg_data_t *pgdat = NODE_DATA(node);
 	int isolated;
 	int nr_remaining;
@@ -2072,19 +2217,15 @@ int migrate_misplaced_page(struct page *page, struct vm_area_struct *vma,
 		goto out;
 
 	isolated = numamigrate_isolate_page(pgdat, page);
-	if (!isolated)
+	if (!isolated) {
+		count_vm_events(PGMIGRATE_NUMA_ISOLATE_FAIL,
+					hpage_nr_pages(page));
 		goto out;
+	}
 
 	list_add(&page->lru, &migratepages);
-	/* Promote from slow memory node to fast memory node */
-	if (next_migration_node(node) != -1 &&
-	    next_promotion_node(page_to_nid(page)) != -1) {
-		m_detail.reason = MR_PROMOTION;
-		m_detail.h_reason = MR_HMEM_AUTONUMA_PROMOTE;
-	} else
-		m_detail.reason = MR_NUMA_MISPLACED;
 	nr_remaining = migrate_pages(&migratepages, alloc_misplaced_dst_page,
-				     NULL, node, MIGRATE_ASYNC, &m_detail);
+				     NULL, node, MIGRATE_ASYNC, m_detail);
 	if (nr_remaining) {
 		if (!list_empty(&migratepages)) {
 			list_del(&page->lru);
@@ -2102,6 +2243,29 @@ out:
 	put_page(page);
 	return 0;
 }
+
+int migrate_misplaced_page(struct page *page, struct vm_area_struct *vma,
+			   int node)
+{
+	struct migrate_detail m_detail = {};
+	int ret;
+
+	if (next_migration_node(node) != -1 &&
+	    next_promotion_node(page_to_nid(page)) != -1) {
+		m_detail.reason = MR_PROMOTION;
+		m_detail.h_reason = MR_HMEM_AUTONUMA_PROMOTE;
+	} else if (next_promotion_node(node) != -1 &&
+		   next_migration_node(page_to_nid(page)) != -1) {
+		m_detail.reason = MR_DEMOTION;
+		m_detail.h_reason = MR_HMEM_RECLAIM_DEMOTE;
+	} else {
+		m_detail.reason = MR_NUMA_MISPLACED;
+	}
+
+	ret = _migrate_misplaced_page(page, vma, node, &m_detail);
+	return ret;
+}
+
 #endif /* CONFIG_NUMA_BALANCING */
 
 #if defined(CONFIG_NUMA_BALANCING) && defined(CONFIG_TRANSPARENT_HUGEPAGE)
@@ -2123,14 +2287,18 @@ int migrate_misplaced_transhuge_page(struct mm_struct *mm,
 	unsigned long start = address & HPAGE_PMD_MASK;
 
 	isolated = numamigrate_isolate_page(pgdat, page);
-	if (!isolated)
+	if (!isolated) {
+		count_vm_events(PGMIGRATE_NUMA_ISOLATE_FAIL, HPAGE_PMD_NR);
 		goto out_fail;
+	}
 
 	new_page = alloc_pages_node(node,
 		(GFP_TRANSHUGE_LIGHT | __GFP_THISNODE),
 		HPAGE_PMD_ORDER);
-	if (!new_page)
+	if (!new_page) {
+		count_vm_events(PGMIGRATE_NOMEM_FAIL, HPAGE_PMD_NR);
 		goto out_fail;
+	}
 	prep_transhuge_page(new_page);
 
 	/* Prepare a page as a migration target */

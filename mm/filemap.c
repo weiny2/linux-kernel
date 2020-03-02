@@ -23,6 +23,7 @@
 #include <linux/swap.h>
 #include <linux/mman.h>
 #include <linux/pagemap.h>
+#include <linux/migrate.h>
 #include <linux/file.h>
 #include <linux/uio.h>
 #include <linux/error-injection.h>
@@ -41,6 +42,7 @@
 #include <linux/delayacct.h>
 #include <linux/psi.h>
 #include <linux/ramfs.h>
+#include <linux/migrate.h>
 #include "internal.h"
 
 #define CREATE_TRACE_POINTS
@@ -2132,8 +2134,16 @@ page_ok:
 		 * When a sequential read accesses a page several times,
 		 * only mark it as accessed the first time.
 		 */
-		if (prev_index != index || offset != prev_offset)
-			mark_page_accessed(page);
+		if (prev_index != index || offset != prev_offset) {
+			int migration_viable;
+
+			migration_viable = mark_page_accessed(page);
+			ret = promote_viable_page(page, false, migration_viable);
+
+			/* If promoted, 'page' is gone. New location must be found. */
+			if (ret == PAGE_ACCESSED_PROMOTE_SUCCESS)
+				goto find_page;
+		}
 		prev_index = index;
 
 		/*
@@ -2450,6 +2460,8 @@ static struct file *do_async_mmap_readahead(struct vm_fault *vmf,
 	return fpin;
 }
 
+int hmem_enable_pagecache_write_fault_promotion;
+
 /**
  * filemap_fault - read in file data for page fault handling
  * @vmf:	struct vm_fault containing details of the fault
@@ -2485,6 +2497,7 @@ vm_fault_t filemap_fault(struct vm_fault *vmf)
 	pgoff_t max_off;
 	struct page *page;
 	vm_fault_t ret = 0;
+	int m_ret = -1;
 
 	max_off = DIV_ROUND_UP(i_size_read(inode), PAGE_SIZE);
 	if (unlikely(offset >= max_off))
@@ -2493,8 +2506,30 @@ vm_fault_t filemap_fault(struct vm_fault *vmf)
 	/*
 	 * Do we have something in the page cache already?
 	 */
+recheck_page:
 	page = find_get_page(mapping, offset);
 	if (likely(page) && !(vmf->flags & FAULT_FLAG_TRIED)) {
+
+		/*
+		 * For page in slow memory, it will redo the
+		 * find_get_page on promotion success, or continue
+		 * on failure.
+		 *
+		 * For page in fast memory, the prmotition will fail
+		 * and continue to readahead.
+		 */
+		if (hmem_enable_pagecache_write_fault_promotion &&
+				(vmf->flags & FAULT_FLAG_WRITE))
+			m_ret = promote_page(page, 0);
+
+		if (m_ret == MIGRATEPAGE_SUCCESS) {
+#ifdef CONFIG_MIGRATION
+			count_vm_events(
+				PGMIGRATE_PAGECACHE_WRFLT_PROMOTION_SUCCESS, 1);
+#endif
+			goto recheck_page;
+		}
+
 		/*
 		 * We found the page, so try async readahead before
 		 * waiting for the lock.
@@ -3256,10 +3291,21 @@ struct page *grab_cache_page_write_begin(struct address_space *mapping,
 	if (flags & AOP_FLAG_NOFS)
 		fgp_flags |= FGP_NOFS;
 
+write_find_page:
 	page = pagecache_get_page(mapping, index, fgp_flags,
 			mapping_gfp_mask(mapping));
-	if (page)
+	if (page) {
+		int ret;
+
 		wait_for_stable_page(page);
+
+		ret = promote_page(page, true);
+		if (ret == MIGRATEPAGE_SUCCESS) {
+			unlock_page(page);
+			put_page(page);
+			goto write_find_page;
+		}
+	}
 
 	return page;
 }

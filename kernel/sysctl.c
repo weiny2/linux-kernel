@@ -1757,6 +1757,38 @@ static struct ctl_table vm_table[] = {
 		.extra2		= SYSCTL_ONE,
 	},
 #endif
+#ifdef CONFIG_MIGRATION
+	{
+		.procname	= "promotion_ratelimit_mbytes_per_sec",
+		.data		= &promotion_ratelimit_mbytes_per_sec,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= promotion_ratelimit_handler,
+		.extra1		= &neg_one,
+	},
+	{
+		.procname	= "demotion_ratelimit_mbytes_per_sec",
+		.data		= &demotion_ratelimit_mbytes_per_sec,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= demotion_ratelimit_handler,
+		.extra1		= &neg_one,
+	},
+	{
+		.procname	= "hmem_enable_pagecache_write_fault_promotion",
+		.data		= &hmem_enable_pagecache_write_fault_promotion,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec,
+	},
+	{
+		.procname	= "enable_swapcache_promotion",
+		.data		= &sysctl_enable_swapcache_promotion,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec,
+	},
+#endif
 	{ }
 };
 
