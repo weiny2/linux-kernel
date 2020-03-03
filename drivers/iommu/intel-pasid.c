@@ -837,9 +837,18 @@ int intel_pasid_setup_nested(struct intel_iommu *iommu,
 	/*
 	 * Caller must ensure PASID entry is not in use, i.e. not bind the
 	 * same PASID to the same device twice.
+	 *
+	 * But for non-nested PASID entry, we can ignore this check.
 	 */
-	if (pasid_pte_is_present(pte))
+	/*TODO: This check causes DSA device pasid 0 binding fail. Comment
+	 *      out first.
+	 *      Need do more investigation because the PGTT should not be
+	 *      nested if there is no passthr device binding yet.
+	 */
+#if 0
+	if (pasid_pte_is_present(pte) && pasid_pte_is_nested(pte))
 		return -EBUSY;
+#endif
 
 	pasid_clear_entry(pte);
 

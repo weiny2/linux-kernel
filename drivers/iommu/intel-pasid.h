@@ -97,6 +97,12 @@ static inline bool pasid_pte_is_present(struct pasid_entry *pte)
 	return READ_ONCE(pte->val[0]) & PASID_PTE_PRESENT;
 }
 
+/* Check if PGTT bits of a PASID table entry is nested. */
+static inline bool pasid_pte_is_nested(struct pasid_entry *pte)
+{
+	return ((READ_ONCE(pte->val[0]) >> 6) & 0x7) == PASID_ENTRY_PGTT_NESTED;
+}
+
 extern u32 intel_pasid_max_id;
 int intel_pasid_alloc_id(void *ptr, int start, int end, gfp_t gfp);
 void intel_pasid_free_id(int pasid);
