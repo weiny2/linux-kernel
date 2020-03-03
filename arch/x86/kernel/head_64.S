@@ -256,6 +256,90 @@ SYM_CODE_START(secondary_startup_64)
 	 * to have any identity mapped pages in the kernel page table
 	 * after the boot processor executes this code.
 	 */
+#ifdef CONFIG_X86_SLE_SUPPORT
+	/* Fixed range MTRR settings */
+	/*
+	 * 0x0     --- 0x6FFFF -- WB
+         * 0x70000 --- 0x7FFFF -- UC -- dmesg log(64KB)
+         */
+	mov $0x00060606, %edx
+	mov $0x06060606, %eax
+	mov $0x250, %ecx	/* MSR_MTRRfix64K_00000 */
+	wrmsr
+
+       /*
+        * 0x80000 --- 0x8FFFF -- UC -- dmesg log(64KB)
+        * 0x90000 --- 0x9FFFF -- WB
+        */
+	mov $0x06060606, %edx
+	mov $0x00000000, %eax
+	mov $0x258, %ecx	/* MSR_MTRRfix16K_80000 */
+	wrmsr
+
+	/* 0xA0000 --- 0xBFFFF -- UC */
+	mov $0x0, %edx
+	mov $0x0, %eax
+	mov $0x259, %ecx	/* MSR_MTRRfix16K_A0000 */
+	wrmsr
+
+	/* 0xC0000 --- 0xC7FFF -- WP */
+	mov $0x05050505, %edx
+	mov $0x05050505, %eax
+	mov $0x268, %ecx	/* MSR_MTRRfix4K_C0000 */
+	wrmsr
+
+	/* 0xC8000 --- 0xCFFFF -- WP */
+	mov $0x05050505, %edx
+	mov $0x05050505, %eax
+	mov $0x269, %ecx	/* MSR_MTRRfix4K_C8000 */
+	wrmsr
+
+	/* 0xD0000 --- 0xD7FFF -- WP */
+	mov $0x05050505, %edx
+	mov $0x05050505, %eax
+	mov $0x26a, %ecx	/* MSR_MTRRfix4K_D0000 */
+	wrmsr
+
+	/* 0xD8000 --- 0xDFFFF -- WP */
+	mov $0x05050505, %edx
+	mov $0x05050505, %eax
+	mov $0x26b, %ecx	/* MSR_MTRRfix4K_D8000 */
+	wrmsr
+
+	/* 0xE0000 --- 0xE7FFF -- WP */
+	mov $0x05050505, %edx
+	mov $0x05050505, %eax
+	mov $0x26c, %ecx	/* MSR_MTRRfix4K_E0000 */
+	wrmsr
+
+	/* 0xE8000 --- 0xEFFFF -- WP */
+	mov $0x05050505, %edx
+	mov $0x05050505, %eax
+	mov $0x26d, %ecx	/* MSR_MTRRfix4K_E8000 */
+	wrmsr
+
+	/* 0xF0000 --- 0xF7FFFF -- WP */
+	mov $0x05050505, %edx
+	mov $0x05050505, %eax
+	mov $0x26e, %ecx	/* MSR_MTRRfix4K_F0000 */
+	wrmsr
+
+	/* 0xF8000 --- 0xFFFFFF -- WP */
+	mov $0x05050505, %edx
+	mov $0x05050505, %eax
+	mov $0x26f, %ecx	/* MSR_MTRRfix4K_F8000 */
+	wrmsr
+
+	/* enable fixed range MTRR */
+	/* 0:7 - Default Memory Type
+	 * 10  - Fixed range MTRR enable/disable
+	 * 11  - MTRR enable/disable
+	 */
+	mov $0xc06,%eax		/* Enable variable range MTRRs, default UC */
+	xor %edx, %edx
+	mov $0x2ff,%ecx		/* IA32_MTRR_DEF_TYPE */
+	wrmsr
+#endif
 
 	/* Sanitize CPU configuration */
 	call verify_cpu
