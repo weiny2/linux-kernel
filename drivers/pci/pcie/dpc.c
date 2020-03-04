@@ -313,7 +313,6 @@ static struct pcie_port_service_driver dpcdriver = {
 	.service	= PCIE_PORT_SERVICE_DPC,
 	.probe		= dpc_probe,
 	.remove		= dpc_remove,
-	.reset_link	= dpc_reset_link,
 };
 
 int __init pcie_dpc_init(void)
