@@ -86,6 +86,14 @@ config OF_RESERVED_MEM
 	depends on OF_EARLY_FLATTREE
 	default y if DMA_DECLARE_COHERENT || DMA_CMA
 
+config MAX_OF_RESERVED_REGIONS
+	int "the max number of devicetree reserved memory regions"
+	depends on OF_RESERVED_MEM
+	default 32
+	help
+	  Setup the max number of devicetree reserved memory regions
+	  If unsure, leave the default value "32".
+
 config OF_RESOLVE
 	bool
 
