@@ -130,6 +130,7 @@ static int __maybe_unused three = 3;
 static int __maybe_unused four = 4;
 static unsigned long zero_ul;
 static unsigned long one_ul = 1;
+static int __maybe_unused int_max = INT_MAX;
 static unsigned long long_max = LONG_MAX;
 static int one_hundred = 100;
 static int one_thousand = 1000;
@@ -1765,6 +1766,7 @@ static struct ctl_table vm_table[] = {
 		.mode		= 0644,
 		.proc_handler	= promotion_ratelimit_handler,
 		.extra1		= &neg_one,
+		.extra2		= &int_max,
 	},
 	{
 		.procname	= "demotion_ratelimit_mbytes_per_sec",
@@ -1773,6 +1775,7 @@ static struct ctl_table vm_table[] = {
 		.mode		= 0644,
 		.proc_handler	= demotion_ratelimit_handler,
 		.extra1		= &neg_one,
+		.extra2		= &int_max,
 	},
 	{
 		.procname	= "hmem_enable_pagecache_write_fault_promotion",

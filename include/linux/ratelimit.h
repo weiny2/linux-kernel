@@ -76,8 +76,8 @@ extern struct ratelimit_state printk_ratelimit_state;
 extern int ___ratelimit(struct ratelimit_state *rs, const char *func);
 
 #ifdef CONFIG_MIGRATION
-extern unsigned int promotion_ratelimit_mbytes_per_sec;
-extern unsigned int demotion_ratelimit_mbytes_per_sec;
+extern int promotion_ratelimit_mbytes_per_sec;
+extern int demotion_ratelimit_mbytes_per_sec;
 extern struct ratelimit_state demotion_ratelimit_state;
 
 extern int promotion_ratelimit_handler(struct ctl_table *table, int write,
