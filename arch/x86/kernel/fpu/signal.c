@@ -345,6 +345,31 @@ static int copy_user_to_fpregs_zeroing(void __user *buf, u64 xbv, int fx_only)
 		return copy_user_to_fregs(buf);
 }
 
+/*
+ * When __fpu_restore_sig() gets here, supervisor states are in xregs and
+ * the xsaves buffer has random data.  User xstates are to be restored from
+ * user buffer, and supervisor states are saved here.
+ * XSAVES is not used because it is not designed for partial saving, and
+ * saving full xstates is not optimal as user xstates are to be overwritten
+ * by data from user buffer.
+ */
+static void save_supervisor_xstates(void)
+{
+	struct xregs_state *xsave = &current->thread.fpu.state.xsave;
+
+	xsave->header.xfeatures = 0;
+#ifdef CONFIG_X86_INTEL_CET
+	if (current->thread.cet.shstk_enabled) {
+		struct cet_user_state *cet;
+
+		xsave->header.xfeatures |= XFEATURE_MASK_CET_USER;
+		cet = get_xsave_addr(xsave, XFEATURE_CET_USER);
+		cet->user_cet = 0;
+		cet->user_ssp = 0;
+	}
+#endif
+}
+
 static int __fpu__restore_sig(void __user *buf, void __user *buf_fx, int size)
 {
 	struct user_i387_ia32_struct *envp = NULL;
@@ -397,8 +422,13 @@ static int __fpu__restore_sig(void __user *buf, void __user *buf_fx, int size)
 	 * to be loaded again on return to userland (overriding last_cpu avoids
 	 * the optimisation).
 	 */
-	set_thread_flag(TIF_NEED_FPU_LOAD);
+	fpregs_lock();
+	if (!test_thread_flag(TIF_NEED_FPU_LOAD)) {
+		save_supervisor_xstates();
+		set_thread_flag(TIF_NEED_FPU_LOAD);
+	}
 	__fpu_invalidate_fpregs_state(fpu);
+	fpregs_unlock();
 
 	if ((unsigned long)buf_fx % 64)
 		fx_only = 1;
@@ -428,6 +458,9 @@ static int __fpu__restore_sig(void __user *buf, void __user *buf_fx, int size)
 			ret = restore_cet_from_sigframe(0, buf);
 
 		if (!ret) {
+			if (xfeatures_mask_supervisor())
+				copy_kernel_to_xregs(&fpu->state.xsave,
+						     xfeatures_mask_supervisor());
 			fpregs_mark_activate();
 			fpregs_unlock();
 			return 0;
@@ -461,7 +494,8 @@ static int __fpu__restore_sig(void __user *buf, void __user *buf_fx, int size)
 		fpregs_lock();
 		if (unlikely(init_bv))
 			copy_kernel_to_xregs(&init_fpstate.xsave, init_bv);
-		ret = copy_kernel_to_xregs_err(&fpu->state.xsave, user_xfeatures);
+		ret = copy_kernel_to_xregs_err(&fpu->state.xsave,
+					       user_xfeatures | xfeatures_mask_supervisor());
 
 	} else if (use_fxsr()) {
 		ret = __copy_from_user(&fpu->state.fxsave, buf_fx, state_size);
