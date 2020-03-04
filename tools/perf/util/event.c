@@ -31,6 +31,7 @@
 #include "stat.h"
 #include "session.h"
 #include "bpf-event.h"
+#include "print_binary.h"
 #include "tool.h"
 #include "../perf.h"
 
@@ -54,6 +55,7 @@ static const char *perf_event__names[] = {
 	[PERF_RECORD_NAMESPACES]		= "NAMESPACES",
 	[PERF_RECORD_KSYMBOL]			= "KSYMBOL",
 	[PERF_RECORD_BPF_EVENT]			= "BPF_EVENT",
+	[PERF_RECORD_TEXT_POKE]			= "TEXT_POKE",
 	[PERF_RECORD_HEADER_ATTR]		= "ATTR",
 	[PERF_RECORD_HEADER_EVENT_TYPE]		= "EVENT_TYPE",
 	[PERF_RECORD_HEADER_TRACING_DATA]	= "TRACING_DATA",
@@ -252,6 +254,14 @@ int perf_event__process_bpf(struct perf_tool *tool __maybe_unused,
 	return machine__process_bpf(machine, event, sample);
 }
 
+int perf_event__process_text_poke(struct perf_tool *tool __maybe_unused,
+				  union perf_event *event,
+				  struct perf_sample *sample,
+				  struct machine *machine)
+{
+	return machine__process_text_poke(machine, event, sample);
+}
+
 size_t perf_event__fprintf_mmap(union perf_event *event, FILE *fp)
 {
 	return fprintf(fp, " %d/%d: [%#" PRI_lx64 "(%#" PRI_lx64 ") @ %#" PRI_lx64 "]: %c %s\n",
@@ -398,6 +408,33 @@ size_t perf_event__fprintf_bpf(union perf_event *event, FILE *fp)
 		       event->bpf.type, event->bpf.flags, event->bpf.id);
 }
 
+static int text_poke_printer(enum binary_printer_ops op, unsigned int val,
+			     void *extra __maybe_unused, FILE *fp)
+{
+	if (op == BINARY_PRINT_NUM_DATA)
+		return fprintf(fp, " %02x", val);
+	if (op == BINARY_PRINT_LINE_END)
+		return fprintf(fp, "\n");
+	return 0;
+}
+
+size_t perf_event__fprintf_text_poke(union perf_event *event, FILE *fp)
+{
+	size_t ret = fprintf(fp, " addr %#" PRI_lx64 " old len %u new len %u\n",
+			     event->text_poke.addr,
+			     event->text_poke.old_len,
+			     event->text_poke.new_len);
+
+	ret += fprintf(fp, "     old bytes:");
+	ret += binary__fprintf(event->text_poke.bytes, event->text_poke.old_len,
+			       16, text_poke_printer, NULL, fp);
+	ret += fprintf(fp, "     new bytes:");
+	ret += binary__fprintf(event->text_poke.bytes + event->text_poke.old_len,
+			       event->text_poke.new_len, 16, text_poke_printer,
+			       NULL, fp);
+	return ret;
+}
+
 size_t perf_event__fprintf(union perf_event *event, FILE *fp)
 {
 	size_t ret = fprintf(fp, "PERF_RECORD_%s",
@@ -438,6 +475,9 @@ size_t perf_event__fprintf(union perf_event *event, FILE *fp)
 		break;
 	case PERF_RECORD_BPF_EVENT:
 		ret += perf_event__fprintf_bpf(event, fp);
+		break;
+	case PERF_RECORD_TEXT_POKE:
+		ret += perf_event__fprintf_text_poke(event, fp);
 		break;
 	default:
 		ret += fprintf(fp, "\n");
