@@ -2124,7 +2124,7 @@
                 }
             ],
             "status": "public",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "9cd6111f1096b93313976bbdbe8161fc33f27cc0"
         },
         {
             "branch": "pasid",
