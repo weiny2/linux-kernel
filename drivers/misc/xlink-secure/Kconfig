@@ -1,0 +1,11 @@
+config XLINK_SECURE
+	tristate "Support for XLINK SECURE"
+	help
+	  XLINK SECURE enables the communication/control Sub-System.
+
+config XLINK_SECURE_LOCAL_HOST
+	tristate "Support for XLINK SECURE LOCAL HOST"
+	depends on XLINK_CORE && XLINK_IPC && XLINK_SECURE
+	help
+	  XLINK SECURE LOCAL HOST enables local host functionality for
+	  the communication/control Sub-System.
