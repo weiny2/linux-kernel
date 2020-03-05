@@ -1,6 +1,8 @@
 config XBAY_XLINK_PCIE_RH_DRIVER
 	tristate "XBay XLink PCIe Remote Host driver"
 	depends on PCI && (!XBAY_XLINK_PCIE_LH_DRIVER) && (XBAY_XLINK_PCIE_LH_DRIVER!=m)
+	depends on !XLINK_PCIE_RH_DRIVER
+	depends on !XLINK_PCIE_LH_DRIVER && (XLINK_PCIE_LH_DRIVER!=m)
 	help
 	  This option enables XLink PCIe Remote Host driver.
 
@@ -9,6 +11,7 @@ config XBAY_XLINK_PCIE_RH_DRIVER
 config XBAY_XLINK_PCIE_LH_DRIVER
 	tristate "XBay XLink PCIe Local Host driver"
 	depends on PCI_ENDPOINT
+	depends on !XLINK_PCIE_LH_DRIVER && (XLINK_PCIE_LH_DRIVER!=m)
 	help
 	  This option enables XLink PCIe Local Host driver.
 

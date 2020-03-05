@@ -275,6 +275,7 @@ config PCIE_TBH_HOST
         depends on ARM64 || COMPILE_TEST
         depends on OF && HAS_IOMEM
         depends on PCI && PCI_MSI_IRQ_DOMAIN
+	depends on !PCIE_THUNDERBAY_HOST
         select PCIE_DW_HOST
         select PCIE_TBH
         help
@@ -287,6 +288,7 @@ config PCIE_TBH_EP
         depends on OF && HAS_IOMEM
         depends on PCI && PCI_MSI_IRQ_DOMAIN
         depends on PCI_ENDPOINT
+	depends on !PCIE_THUNDERBAY_EP
         select PCIE_DW_EP
         select PCIE_TBH
         help
