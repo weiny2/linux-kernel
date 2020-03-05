@@ -547,6 +547,7 @@ int intel_svm_bind_gpasid(struct iommu_domain *domain,
 	struct dmar_domain *ddomain;
 	int ret = 0;
 
+pr_warn("%s, - 1\n", __func__);
 	if (WARN_ON(!iommu) || !data)
 		return -EINVAL;
 
@@ -576,6 +577,7 @@ int intel_svm_bind_gpasid(struct iommu_domain *domain,
 
 	ddomain = to_dmar_domain(domain);
 
+pr_warn("%s, - 2, pasid: %llu\n", __func__, data->hpasid);
 	/* Sanity check paging mode support match between host and guest */
 	if (data->addr_width == ADDR_WIDTH_5LEVEL &&
 	    !cap_5lp_support(iommu->cap)) {
@@ -585,6 +587,7 @@ int intel_svm_bind_gpasid(struct iommu_domain *domain,
 
 	mutex_lock(&pasid_mutex);
 	svm = ioasid_find(NULL, data->hpasid, NULL);
+pr_warn("%s, - 3.1, svm: 0x%llx\n", __func__, (unsigned long long) svm);
 	if (IS_ERR(svm)) {
 		if (data->hpasid == PASID_RID2PASID)
 			svm = NULL;
@@ -594,6 +597,7 @@ int intel_svm_bind_gpasid(struct iommu_domain *domain,
 		}
 	}
 
+pr_warn("%s, - 3.2, svm: 0x%llx\n", __func__, (unsigned long long) svm);
 	if (svm) {
 		/*
 		 * If we found svm for the PASID, there must be at
@@ -614,6 +618,7 @@ int intel_svm_bind_gpasid(struct iommu_domain *domain,
 		}
 		mmput(current->mm);
 
+pr_warn("%s, - 4.11\n", __func__);
 		for_each_svm_dev(sdev, svm, dev) {
 			/* In case of multiple sub-devices of the same pdev
 			 * assigned, we should allow multiple bind calls with
@@ -622,7 +627,9 @@ int intel_svm_bind_gpasid(struct iommu_domain *domain,
 			sdev->users++;
 			goto out;
 		}
+pr_warn("%s, - 4.12\n", __func__);
 	} else {
+pr_warn("%s, - 4.21\n", __func__);
 		/* We come here when PASID has never been bond to a device. */
 		svm = kzalloc(sizeof(*svm), GFP_KERNEL);
 		if (!svm) {
@@ -663,6 +670,7 @@ int intel_svm_bind_gpasid(struct iommu_domain *domain,
 			pr_warn("Failed to set priv for %llu, %d\n", data->hpasid, ret);
 		INIT_LIST_HEAD_RCU(&svm->devs);
 		mmput(svm->mm);
+pr_warn("%s, - 4.22, svm: 0x%llx, svm->pasid: %d\n", __func__, (unsigned long long) svm, svm->pasid);
 	}
 	sdev = kzalloc(sizeof(*sdev), GFP_KERNEL);
 	if (!sdev) {
@@ -675,6 +683,7 @@ int intel_svm_bind_gpasid(struct iommu_domain *domain,
 	}
 	sdev->dev = dev;
 	sdev->users = 1;
+pr_warn("%s, - 5, sdev: 0x%llx, dev: %s\n", __func__, (unsigned long long) sdev, dev_name(dev));
 
 	/* Set up device context entry for PASID if not enabled already */
 	ret = intel_iommu_enable_pasid(iommu, sdev->dev);
@@ -693,6 +702,7 @@ int intel_svm_bind_gpasid(struct iommu_domain *domain,
 		goto out;
 	}
 
+pr_warn("%s, - 6\n", __func__);
 	/*
 	 * For guest bind, we need to set up PASID table entry as follows:
 	 * - FLPM matches guest paging mode
@@ -725,8 +735,10 @@ int intel_svm_bind_gpasid(struct iommu_domain *domain,
 
 	init_rcu_head(&sdev->rcu);
 	list_add_rcu(&sdev->list, &svm->devs);
+pr_warn("%s, - 7\n", __func__);
  out:
 	mutex_unlock(&pasid_mutex);
+pr_warn("%s, - end, ret: %d\n", __func__, ret);
 	return ret;
 }
 
@@ -737,6 +749,7 @@ int intel_svm_unbind_gpasid(struct device *dev, int pasid)
 	struct intel_svm *svm;
 	int ret = -EINVAL;
 
+pr_warn("%s, - 1\n", __func__);
 	if (WARN_ON(!iommu))
 		return -EINVAL;
 
@@ -745,6 +758,7 @@ int intel_svm_unbind_gpasid(struct device *dev, int pasid)
 		pasid = PASID_RID2PASID;
 
 	svm = ioasid_find(NULL, pasid, NULL);
+pr_warn("%s, - 2, svm: 0x%llx\n", __func__, (unsigned long long) svm);
 	if (!svm) {
 		ret = -EINVAL;
 		goto out;
@@ -755,10 +769,13 @@ int intel_svm_unbind_gpasid(struct device *dev, int pasid)
 		goto out;
 	}
 
+pr_warn("%s, - 3, svm->pasid: %d\n", __func__, svm->pasid);
 	for_each_svm_dev(sdev, svm, dev) {
 		ret = 0;
+pr_warn("%s, - 4.1 sdev: 0x%llx, dev: %s\n", __func__, (unsigned long long) sdev, dev_name(sdev->dev));
 		sdev->users--;
 		if (!sdev->users) {
+pr_warn("%s, - 4.2 sdev: 0x%llx, dev: %s\n", __func__, (unsigned long long) sdev, dev_name(sdev->dev));
 			list_del_rcu(&sdev->list);
 			/* Drain in flight PRQ for the PASID since it
 			 * may get reused soon, we don't want to
@@ -792,6 +809,7 @@ int intel_svm_unbind_gpasid(struct device *dev, int pasid)
 				if (ret)
 					pr_warn("clear priv failed %d, %d\n",
 						pasid, ret);
+pr_warn("%s, - 4.3, pasid: %d, ret: %d\n", __func__, pasid, ret);
 				kfree(svm);
 			}
 		}
@@ -800,6 +818,7 @@ int intel_svm_unbind_gpasid(struct device *dev, int pasid)
 out:
 	mutex_unlock(&pasid_mutex);
 
+pr_warn("%s, - end, ret: %d\n", __func__, ret);
 	return ret;
 }
 
