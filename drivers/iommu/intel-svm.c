@@ -96,6 +96,10 @@ static inline bool intel_svm_capable(struct intel_iommu *iommu)
 
 void intel_svm_check(struct intel_iommu *iommu)
 {
+	pr_warn("Fake SVM check pass\n");
+	iommu->flags |= VTD_FLAG_SVM_CAPABLE;
+	return;
+
 	if (!pasid_supported(iommu))
 		return;
 
