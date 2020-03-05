@@ -2989,7 +2989,7 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": "35b1d67e1ecedc73ba8b24f71ddf4053a61d9c50"
+            "stuck_at_ref": ""
         },
         {
             "branch": "chall_linus_tgpio",
