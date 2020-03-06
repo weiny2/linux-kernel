@@ -1498,7 +1498,7 @@
             "stuck_at_ref": ""
         },
         {
-            "branch": "sep_socwatch_linux_5_5",
+            "branch": "sep_socwatch_linux_5_6",
             "branch_type": "public",
             "config_options": [
                 {
@@ -1549,14 +1549,14 @@
                 }
             ],
             "description": "SoCWatch and SEP drivers for both native and ACRN hypervisor",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
-                    "name": "Gautam Upadhyaya",
-                    "email": "gautam.upadhyaya@intel.com"
+                    "name": "Benmlih, Faycal",
+                    "email": "faycal.benmlih@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1849",
             "name": "socwatch",
             "repourl": "git://github.com/mchinth/linux.git",
             "sdl_contact": [
@@ -1565,7 +1565,7 @@
                     "email": "alexei.v.kalinin@intel.com"
                 }
             ],
-            "status": "intel confidential",
+            "status": "public",
             "stuck_at_ref": ""
         },
         {
