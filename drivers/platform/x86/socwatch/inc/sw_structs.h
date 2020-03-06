@@ -5,7 +5,7 @@
  *
  * GPL LICENSE SUMMARY
  *
- * Copyright(c) 2014 - 2019 Intel Corporation.
+ * Copyright(c) 2014 - 2020 Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -24,7 +24,7 @@
  *
  * BSD LICENSE
  *
- * Copyright(c) 2014 - 2019 Intel Corporation.
+ * Copyright(c) 2014 - 2020 Intel Corporation.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -342,7 +342,7 @@ struct sw_driver_pch_mailbox_io_descriptor {
 
 #pragma pack(push, 1)
 typedef struct sw_driver_io_descriptor {
-	pw_u16_t collection_type;
+	pw_u16_t collection_type; /* One of 'enum sw_io_type' */
 	/* TODO: specify READ/WRITE */
 	pw_s16_t collection_command; /* One of 'enum sw_io_cmd' */
 	pw_u16_t counter_size_in_bytes; /* The number of bytes to READ or WRITE */

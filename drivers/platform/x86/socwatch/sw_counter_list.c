@@ -5,7 +5,7 @@
  *
  * GPL LICENSE SUMMARY
  *
- * Copyright(c) 2014 - 2020 Intel Corporation.
+ * Copyright(c) 2020 Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -24,7 +24,7 @@
  *
  * BSD LICENSE
  *
- * Copyright(c) 2014 - 2020 Intel Corporation.
+ * Copyright(c) 2020 Intel Corporation.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -53,14 +53,78 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef __SW_VERSION_H__
-#define __SW_VERSION_H__ 1
+#include "sw_internal.h"
 
-/*
- * SOCWatch driver version
- */
-#define SW_DRIVER_VERSION_MAJOR 2
-#define SW_DRIVER_VERSION_MINOR 11
-#define SW_DRIVER_VERSION_OTHER 1
+#include "sw_counter_list.h"
+#include "sw_counter_info.h"
 
-#endif /* __SW_VERSION_H__ */
+static pw_u8_t *msr_search_array = NULL;
+static pw_u64_t msr_search_array_size = 0;
+
+static pw_u64_t get_msr_search_array_size_i(void) {
+
+	if (msr_search_array) {
+		return msr_search_array_size;
+	} else {
+		return 0;
+	}
+}
+
+static int sw_init_msr_search_array_i(void) {
+
+	pw_u64_t i = 0, max_msr_value = 0;//, msr_array_size = 0;
+	pw_u64_t msr_list_size = sizeof(msr_info_list) / sizeof(msr_info_list[0]);
+
+	// TODO: Probably sort msr_info_list rather than assuming it is sorted.
+
+	// Since 'msr_info_list' is sorted, the last entry should be the highest MSR
+	// address
+	max_msr_value = msr_info_list[msr_list_size-1];
+	pw_pr_debug("max msr value: %llx\n", max_msr_value);
+
+	// TODO: Optimize the memory usage by making msr_search_array a bit vector
+	msr_search_array_size = max_msr_value + 1;
+	msr_search_array = sw_kmalloc(msr_search_array_size * sizeof(pw_u8_t),
+			GFP_KERNEL);
+
+	if (msr_search_array == NULL) {
+		return -PW_ERROR;
+	}
+
+	memset(msr_search_array, 0, msr_search_array_size);
+
+	for (i = 0; i < msr_list_size; ++i) {
+		msr_search_array[msr_info_list[i]] = 1;
+	}
+
+	return PW_SUCCESS;
+}
+
+int sw_counter_init_search_lists(void) {
+
+	return sw_init_msr_search_array_i();
+}
+
+static void sw_destroy_msr_search_array_i(void) {
+
+	if (msr_search_array == NULL) {
+		return;
+	}
+
+	sw_kfree(msr_search_array);
+	msr_search_array = NULL;
+	msr_search_array_size = 0;
+}
+
+void sw_counter_destroy_search_lists(void) {
+
+	sw_destroy_msr_search_array_i();
+}
+
+bool sw_counter_is_valid_msr(pw_u64_t msr_id) {
+
+	if (msr_id >= get_msr_search_array_size_i()) {
+		return false;
+	}
+	return msr_search_array[msr_id];
+}

@@ -5,7 +5,7 @@
  *
  * GPL LICENSE SUMMARY
  *
- * Copyright(c) 2014 - 2019 Intel Corporation.
+ * Copyright(c) 2014 - 2020 Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -24,7 +24,7 @@
  *
  * BSD LICENSE
  *
- * Copyright(c) 2014 - 2019 Intel Corporation.
+ * Copyright(c) 2014 - 2020 Intel Corporation.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -68,6 +68,7 @@
 #include "sw_telem.h"
 #include "sw_cta.h"
 #include "sw_ops_provider.h"
+#include "sw_counter_list.h"
 
 /*
  * Compile time constants.
@@ -203,6 +204,11 @@ int sw_mailbox_descriptor_reset_func_i(const struct sw_driver_io_descriptor *des
 bool sw_socperf_available_i(void);
 
 /*
+ * Validate functions.
+ */
+bool sw_is_valid_msr_i(const struct sw_driver_io_descriptor *descriptor);
+
+/*
  * Helper functions.
  */
 u32 sw_platform_configdb_read32(u32 address);
@@ -221,7 +227,8 @@ static const struct sw_hw_ops s_hw_ops[] = {
 		.write = &sw_write_msr_info_i,
 		.print = &sw_print_msr_io_descriptor,
 		.reset = NULL,
-		.available = NULL
+		.available = NULL,
+		.valid = &sw_is_valid_msr_i
 	},
 	[SW_IO_IPC] = {
 		.name = "IPC",
@@ -1159,4 +1166,21 @@ void sw_free_ops_providers(void)
 			(*op->unreg)(); /* Return value is don't care */
 		}
 	}
+}
+
+bool sw_is_valid_msr_i(const struct sw_driver_io_descriptor *descriptor)
+{
+	pw_u64_t msr_addr = 0;
+	if (!descriptor) {
+		return false;
+	}
+
+	msr_addr = descriptor->msr_descriptor.address;
+	pw_pr_debug("MSR address to check = 0x%llx\n", msr_addr);
+
+	if (!sw_counter_is_valid_msr(msr_addr)) {
+		pw_pr_error("MSR address '0x%llx' is not valid!\n", msr_addr);
+		return false;
+	}
+	return true;
 }

@@ -5,7 +5,7 @@
  *
  * GPL LICENSE SUMMARY
  *
- * Copyright(c) 2014 - 2019 Intel Corporation.
+ * Copyright(c) 2020 Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -24,7 +24,7 @@
  *
  * BSD LICENSE
  *
- * Copyright(c) 2014 - 2019 Intel Corporation.
+ * Copyright(c) 2020 Intel Corporation.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -53,99 +53,16 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _PW_TYPES_H_
-#define _PW_TYPES_H_
+#ifndef _SW_COUNTER_INFO_H_
+#define _SW_COUNTER_INFO_H_ 1
 
-#if defined(__linux__) || defined(__APPLE__) || defined(__QNX__)
+static pw_u64_t msr_info_list[] = {
+   0x10, 0x17, 0xcd, 0xce, 0xe2, 0xe7, 0xe8, 0x198, 0x199, 0x19c, 0x1a2, 0x1ad,
+   0x1b1, 0x30a, 0x30b, 0x38d, 0x38f, 0x3f8, 0x3f9, 0x3fa, 0x3fc, 0x3fd, 0x3fe,
+   0x3ff, 0x601, 0x606, 0x60a, 0x60b, 0x60c, 0x60d, 0x610, 0x611, 0x619, 0x630,
+   0x631, 0x632, 0x633, 0x634, 0x635, 0x64f, 0x659, 0x65a, 0x65b, 0x660, 0x661,
+   0x662, 0x664, 0x66c, 0x690, 0x6b0, 0x6b1, 0x770, 0x771, 0x772, 0x774, 0x17d0,
+   0x17d1,
+};
 
-#ifndef __KERNEL__
-/*
- * Called from Ring-3.
- */
-#include <stdint.h> /* Grab 'uint64_t' etc. */
-#include <unistd.h> /* Grab 'pid_t' */
-/*
- * UNSIGNED types...
- */
-typedef uint8_t  u8;
-typedef uint16_t u16;
-typedef uint32_t u32;
-typedef uint64_t u64;
-/*
- * SIGNED types...
- */
-typedef int8_t s8;
-typedef int16_t s16;
-typedef int32_t s32;
-typedef int64_t s64;
-
-#else /* __KERNEL__ */
-#if !defined(__APPLE__)
-#include <linux/types.h>
-#else /* __APPLE__ */
-#include <sys/types.h>
-#include <stdint.h> /* Grab 'uint64_t' etc. */
-
-typedef uint8_t  u8;
-typedef uint16_t u16;
-typedef uint32_t u32;
-typedef uint64_t u64;
-/*
-* SIGNED types...
-*/
-typedef int8_t s8;
-typedef int16_t s16;
-typedef int32_t s32;
-typedef int64_t s64;
-#endif /* __APPLE__ */
-#endif /* __KERNEL__ */
-
-#elif defined(_WIN32)
-typedef __int32 int32_t;
-typedef unsigned __int32 uint32_t;
-typedef __int64 int64_t;
-typedef unsigned __int64 uint64_t;
-
-/*
- * UNSIGNED types...
- */
-typedef unsigned char u8;
-typedef unsigned short u16;
-typedef unsigned int u32;
-typedef unsigned long long u64;
-
-/*
- * SIGNED types...
- */
-typedef signed char s8;
-typedef signed short s16;
-typedef signed int s32;
-typedef signed long long s64;
-typedef s32 pid_t;
-typedef s32 ssize_t;
-
-#endif /* _WIN32 */
-
-/* ************************************
- * Common to both operating systems.
- * ************************************
- */
-/*
- * UNSIGNED types...
- */
-typedef u8 pw_u8_t;
-typedef u16 pw_u16_t;
-typedef u32 pw_u32_t;
-typedef u64 pw_u64_t;
-
-/*
- * SIGNED types...
- */
-typedef s8 pw_s8_t;
-typedef s16 pw_s16_t;
-typedef s32 pw_s32_t;
-typedef s64 pw_s64_t;
-
-typedef pid_t pw_pid_t;
-
-#endif /* _PW_TYPES_H_ */
+#endif //_SW_COUNTER_INFO_H_

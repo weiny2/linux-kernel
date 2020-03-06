@@ -5,7 +5,7 @@
  *
  * GPL LICENSE SUMMARY
  *
- * Copyright(c) 2014 - 2019 Intel Corporation.
+ * Copyright(c) 2020 Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -24,7 +24,7 @@
  *
  * BSD LICENSE
  *
- * Copyright(c) 2014 - 2019 Intel Corporation.
+ * Copyright(c) 2020 Intel Corporation.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -53,99 +53,22 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _PW_TYPES_H_
-#define _PW_TYPES_H_
-
-#if defined(__linux__) || defined(__APPLE__) || defined(__QNX__)
-
-#ifndef __KERNEL__
-/*
- * Called from Ring-3.
- */
-#include <stdint.h> /* Grab 'uint64_t' etc. */
-#include <unistd.h> /* Grab 'pid_t' */
-/*
- * UNSIGNED types...
- */
-typedef uint8_t  u8;
-typedef uint16_t u16;
-typedef uint32_t u32;
-typedef uint64_t u64;
-/*
- * SIGNED types...
- */
-typedef int8_t s8;
-typedef int16_t s16;
-typedef int32_t s32;
-typedef int64_t s64;
-
-#else /* __KERNEL__ */
-#if !defined(__APPLE__)
-#include <linux/types.h>
-#else /* __APPLE__ */
-#include <sys/types.h>
-#include <stdint.h> /* Grab 'uint64_t' etc. */
-
-typedef uint8_t  u8;
-typedef uint16_t u16;
-typedef uint32_t u32;
-typedef uint64_t u64;
-/*
-* SIGNED types...
-*/
-typedef int8_t s8;
-typedef int16_t s16;
-typedef int32_t s32;
-typedef int64_t s64;
-#endif /* __APPLE__ */
-#endif /* __KERNEL__ */
-
-#elif defined(_WIN32)
-typedef __int32 int32_t;
-typedef unsigned __int32 uint32_t;
-typedef __int64 int64_t;
-typedef unsigned __int64 uint64_t;
+#ifndef _SW_COUNTER_LIST_H_
+#define _SW_COUNTER_LIST_H_ 1
 
 /*
- * UNSIGNED types...
+ * Initialize the various search lists created from sets of white-listed
+ * counters
  */
-typedef unsigned char u8;
-typedef unsigned short u16;
-typedef unsigned int u32;
-typedef unsigned long long u64;
+int sw_counter_init_search_lists(void);
+/*
+ * Destroy the created search lists
+ */
+void sw_counter_destroy_search_lists(void);
 
 /*
- * SIGNED types...
+ * Check whether the MSR is present in the white-list
  */
-typedef signed char s8;
-typedef signed short s16;
-typedef signed int s32;
-typedef signed long long s64;
-typedef s32 pid_t;
-typedef s32 ssize_t;
+bool sw_counter_is_valid_msr(pw_u64_t msr_id);
 
-#endif /* _WIN32 */
-
-/* ************************************
- * Common to both operating systems.
- * ************************************
- */
-/*
- * UNSIGNED types...
- */
-typedef u8 pw_u8_t;
-typedef u16 pw_u16_t;
-typedef u32 pw_u32_t;
-typedef u64 pw_u64_t;
-
-/*
- * SIGNED types...
- */
-typedef s8 pw_s8_t;
-typedef s16 pw_s16_t;
-typedef s32 pw_s32_t;
-typedef s64 pw_s64_t;
-
-typedef pid_t pw_pid_t;
-
-#endif /* _PW_TYPES_H_ */
+#endif /* _SW_COUNTER_LIST_H_ */

@@ -68,6 +68,11 @@
 #include <trace/events/timer.h>
 #include <trace/events/power.h>
 #include <trace/events/sched.h>
+#if KERNEL_VERSION(3, 18, 0) <= LINUX_VERSION_CODE
+#include <linux/ktime.h>
+#include <linux/timekeeping.h>
+#endif /* KERNEL_VERSION(3, 18, 0) <= LINUX_VERSION_CODE */
+
 #if KERNEL_VERSION(3, 14, 0) <= LINUX_VERSION_CODE
 #include <asm/trace/irq_vectors.h> /* for the various APIC vector tracepoints
 				    *  (e.g. "thermal_apic",
@@ -707,9 +712,15 @@ static inline u64 sw_tscval(void)
 
 u64 sw_timestamp(void)
 {
+#if KERNEL_VERSION(3, 18, 0) <= LINUX_VERSION_CODE
 	struct timespec64 ts;
+
 	ktime_get_real_ts64(&ts);
-	timespec64_to_ns(&ts);
+#else /* KERNEL_VERSION(3, 18, 0) > LINUX_VERSION_CODE */
+	struct timespec ts;
+
+	getnstimeofday(&ts);
+#endif /* KERNEL_VERSION(3, 18, 0) <= LINUX_VERSION_CODE */
 	return (ts.tv_sec * 1000000000ULL + ts.tv_nsec);
 }
 

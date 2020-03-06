@@ -5,7 +5,7 @@
  *
  * GPL LICENSE SUMMARY
  *
- * Copyright(c) 2014 - 2019 Intel Corporation.
+ * Copyright(c) 2014 - 2020 Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -24,7 +24,7 @@
  *
  * BSD LICENSE
  *
- * Copyright(c) 2014 - 2019 Intel Corporation.
+ * Copyright(c) 2014 - 2020 Intel Corporation.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -69,6 +69,7 @@
 #include "sw_collector.h"
 #include "sw_file_ops.h"
 #include "sw_version.h"
+#include "sw_counter_list.h"
 
 /* -------------------------------------------------
  * Compile time constants.
@@ -120,6 +121,10 @@ static long sw_get_available_name_id_mappings_i(
 	size_t local_len);
 static enum sw_driver_collection_cmd sw_get_collection_cmd_i(void);
 static bool sw_should_flush_buffer_i(void);
+
+static long sw_validate_driver_io_descriptor_i(struct sw_driver_io_descriptor
+		*descriptor);
+static long sw_validate_driver_infos_i(struct sw_driver_interface_msg *msg);
 
 /* -------------------------------------------------
  * Data structures.
@@ -396,11 +401,16 @@ int sw_init_data_structures_i(void)
 		sw_destroy_data_structures_i();
 		return -PW_ERROR;
 	}
+	if (sw_counter_init_search_lists()) {
+		sw_destroy_data_structures_i();
+		return -PW_ERROR;
+	}
 	return PW_SUCCESS;
 }
 
 void sw_destroy_data_structures_i(void)
 {
+	sw_counter_destroy_search_lists();
 	sw_free_hw_ops();
 	sw_destroy_per_cpu_buffers();
 	sw_destroy_collector_lists_i();
@@ -662,6 +672,69 @@ static int sw_post_config_i(const struct sw_hw_ops *op, void *priv)
 	return -EIO;
 }
 
+/*
+ * If this descriptor's collector has a validate function, call it passing in
+ * this descriptor.
+ */
+static long
+sw_validate_driver_io_descriptor_i(struct sw_driver_io_descriptor *descriptor)
+{
+	sw_hw_op_valid_func_t validate_func = NULL;
+	const struct sw_hw_ops *ops =
+		sw_get_hw_ops_for(descriptor->collection_type);
+
+	if (ops == NULL) {
+		pw_pr_error("NULL ops found in validate_driver_io_desc: type %d\n",
+			    descriptor->collection_type);
+		return -PW_ERROR;
+	}
+	validate_func = ops->valid;
+
+	if (validate_func) {
+		bool retval = (*validate_func)(descriptor);
+
+		if (!retval) {
+			pw_pr_error("(*validate) return value for collector type %d: %d\n",
+				    descriptor->collection_type, retval);
+			return -PW_ERROR;
+		}
+	}
+	return PW_SUCCESS;
+}
+
+/*
+ * Validate the various hw ops requested are for allowed counter addresses
+ * present in the respective white-lists.
+ */
+static long
+sw_validate_driver_infos_i(struct sw_driver_interface_msg *msg)
+{
+	int i = 0;
+	struct sw_driver_interface_info *info = NULL;
+	struct sw_driver_io_descriptor *descriptor = NULL;
+	pw_u16_t num_infos = 0;
+	char *__data = (char *)msg->infos;
+	size_t dst_idx = 0;
+
+	num_infos = msg->num_infos;
+
+	for (; num_infos > 0; --num_infos) {
+		info = (struct sw_driver_interface_info *)&__data[dst_idx];
+		dst_idx += (SW_DRIVER_INTERFACE_INFO_HEADER_SIZE() +
+					    info->num_io_descriptors *
+						    sizeof(struct sw_driver_io_descriptor));
+
+		for (i = 0,
+			descriptor = (struct sw_driver_io_descriptor *)info->descriptors;
+			 i < info->num_io_descriptors; ++i, ++descriptor) {
+			if (sw_validate_driver_io_descriptor_i(descriptor)) {
+				return -PW_ERROR;
+			}
+		}
+	}
+	return PW_SUCCESS;
+}
+
 /**
  * sw_set_driver_infos_i - Process the collection config data passed down
  *                         from the client.
@@ -710,6 +783,14 @@ sw_set_driver_infos_i(struct sw_driver_interface_msg __user *remote_msg,
 	 * collections. Clear out any previous config values.
 	 */
 	sw_destroy_collector_lists_i();
+	/*
+	 * Confirm the various hw ops requested are for allowed counter addresses
+	 * present in the respective white-lists before allocating any collector nodes.
+	 */
+	if (sw_validate_driver_infos_i(local_msg)) {
+		/* Error message printed in the respective validate functions */
+		return -EACCES; /* Permission denied */
+	}
 
 	/*
 	 * Did the user specify a min polling interval?
@@ -1278,8 +1359,18 @@ static long sw_unlocked_handle_ioctl_i(unsigned int ioctl_num,
 			goto ret_immediate_io;
 		}
 		/*
+		 * Confirm the immediate I/O op requested is for allowed counter
+		 * addresses present in the respective white-lists before doing the
+		 * actual I/O call.
+		 */
+		if (sw_validate_driver_io_descriptor_i(local_descriptor)) {
+			/* Error message printed in the respective validate functions */
+			retVal = -EACCES; /* Permission denied */
+			goto ret_immediate_io;
+		}
+		/*
 		 * Initialize the descriptor -- 'MMIO' and 'IPC' reads may need
-		 * an "ioremap_nocache"
+		 * an "ioremap"
 		 */
 		if (sw_init_driver_io_descriptor(local_descriptor)) {
 			pw_pr_error(
@@ -1336,7 +1427,7 @@ static long sw_unlocked_handle_ioctl_i(unsigned int ioctl_num,
 ret_immediate_io_reset:
 		/*
 		 * Reset the descriptor -- 'MMIO' and 'IPC' reads may have
-		 * performed an "ioremap_nocache" which now needs to be
+		 * performed an "ioremap" which now needs to be
 		 * unmapped.
 		 */
 		if (sw_reset_driver_io_descriptor(local_descriptor)) {

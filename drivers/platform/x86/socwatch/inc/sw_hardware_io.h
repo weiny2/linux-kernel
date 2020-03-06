@@ -5,7 +5,7 @@
  *
  * GPL LICENSE SUMMARY
  *
- * Copyright(c) 2014 - 2019 Intel Corporation.
+ * Copyright(c) 2014 - 2020 Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -24,7 +24,7 @@
  *
  * BSD LICENSE
  *
- * Copyright(c) 2014 - 2019 Intel Corporation.
+ * Copyright(c) 2014 - 2020 Intel Corporation.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -70,6 +70,8 @@ typedef int (*sw_io_desc_reset_func_t)
 typedef bool (*sw_io_desc_available_func_t)(void);
 typedef bool (*sw_hw_op_post_config_func_t)(void);
 typedef bool (*sw_hw_op_reg_unreg_func_t)(void);
+typedef bool (*sw_hw_op_valid_func_t)
+	(const struct sw_driver_io_descriptor *descriptor);
 
 /**
  * struct sw_hw_ops - Operations for each of the HW collection mechanisms
@@ -89,7 +91,7 @@ typedef bool (*sw_hw_op_reg_unreg_func_t)(void);
  */
 struct sw_hw_ops {
 	const char *name;
-	sw_hw_op_reg_unreg_func_t	reg;
+	sw_hw_op_reg_unreg_func_t		reg;
 	sw_io_desc_init_func_t       	init;
 	sw_hardware_op_func_t        	read;
 	sw_hardware_op_func_t        	write;
@@ -97,7 +99,8 @@ struct sw_hw_ops {
 	sw_io_desc_reset_func_t      	reset;
 	sw_io_desc_available_func_t  	available;
 	sw_hw_op_post_config_func_t  	post_config;
-	sw_hw_op_reg_unreg_func_t	unreg;
+	sw_hw_op_reg_unreg_func_t		unreg;
+	sw_hw_op_valid_func_t			valid;
 };
 
 bool sw_is_valid_hw_op_id(int id);
