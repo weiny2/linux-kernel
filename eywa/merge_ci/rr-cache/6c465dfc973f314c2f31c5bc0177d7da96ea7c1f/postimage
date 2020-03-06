@@ -267,7 +267,7 @@ config PCIE_UNIPHIER
 	  Say Y here if you want PCIe controller support on UniPhier SoCs.
 	  This driver supports LD20 and PXs3 SoCs.
 
-iconfig PCIE_THUNDERBAY
+config PCIE_THUNDERBAY
         bool
 
 config PCIE_THUNDERBAY_HOST
