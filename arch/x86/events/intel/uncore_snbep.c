@@ -382,9 +382,6 @@
 #define SNR_IMC_MMIO_MEM0_OFFSET		0xd8
 #define SNR_IMC_MMIO_MEM0_MASK			0x7FF
 
-/* ICX CHA */
-#define ICX_CHA_MSR_OFFSET			0xe
-
 /* ICX IIO */
 #define ICX_IIO_MSR_PMON_CTL0			0xa58
 #define ICX_IIO_MSR_PMON_CTR0			0xa51
@@ -4913,6 +4910,13 @@ void snr_uncore_mmio_init(void)
 
 /* ICX uncore support */
 
+static unsigned icx_cha_msr_offsets[] = {
+	0x0,   0xe,   0x1c,  0x2a,  0x38,  0x46,  0x54,  0x62,  0x70,
+	0x7e,  0x8c,  0x9a,  0xa8,  0xb6,  0xc4,  0xd2,  0xe0,  0xee,
+	0x10a, 0x118, 0x126, 0x134, 0x142, 0x150, 0x15e, 0x16c, 0x17a,
+	0x188,
+};
+
 static int icx_cha_hw_config(struct intel_uncore_box *box, struct perf_event *event)
 {
 	struct hw_perf_event_extra *reg1 = &event->hw.extra_reg;
@@ -4920,7 +4924,7 @@ static int icx_cha_hw_config(struct intel_uncore_box *box, struct perf_event *ev
 
 	if (tie_en) {
 		reg1->reg = HSWEP_C0_MSR_PMON_BOX_FILTER0 +
-			    ICX_CHA_MSR_OFFSET * box->pmu->pmu_idx;
+			    icx_cha_msr_offsets[box->pmu->pmu_idx];
 		reg1->config = event->attr.config1 & SKX_CHA_MSR_PMON_BOX_FILTER_TID;
 		reg1->idx = 0;
 	}
@@ -4945,7 +4949,7 @@ static struct intel_uncore_type icx_uncore_chabox = {
 	.event_ctl		= HSWEP_C0_MSR_PMON_CTL0,
 	.perf_ctr		= HSWEP_C0_MSR_PMON_CTR0,
 	.box_ctl		= HSWEP_C0_MSR_PMON_BOX_CTL,
-	.msr_offset		= ICX_CHA_MSR_OFFSET,
+	.msr_offsets		= icx_cha_msr_offsets,
 	.event_mask		= HSWEP_S_MSR_PMON_RAW_EVENT_MASK,
 	.event_mask_ext		= SNR_CHA_RAW_EVENT_MASK_EXT,
 	.constraints		= skx_uncore_chabox_constraints,
@@ -5116,7 +5120,11 @@ out:
 
 void icx_uncore_cpu_init(void)
 {
-	icx_uncore_chabox.num_boxes = icx_count_chabox();
+	u64 num_boxes = icx_count_chabox();
+
+	if (WARN_ON(num_boxes > ARRAY_SIZE(icx_cha_msr_offsets)))
+		return;
+	icx_uncore_chabox.num_boxes = num_boxes;
 	uncore_generate_types_rb_tree(&uncore_msr_uncores,
 				      icx_msr_uncores);
 }
