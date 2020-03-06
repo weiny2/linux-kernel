@@ -113,7 +113,7 @@ static int acpi_send_edr_status(struct pci_dev *pdev, struct pci_dev *edev,
 	struct acpi_device *adev = ACPI_COMPANION(&pdev->dev);
 	u32 ost_status;
 
-	pci_dbg(pdev, "Sending EDR status :%#x\n", status);
+	pci_info(pdev, "Sending EDR status :%#x\n", status);
 
 	ost_status =  PCI_DEVID(edev->bus->number, edev->devfn);
 	ost_status = (ost_status << 16) | status;
@@ -148,7 +148,7 @@ static void edr_handle_event(acpi_handle handle, u32 event, void *data)
 		return;
 	}
 
-	pci_dbg(pdev, "Reported EDR dev: %s\n", pci_name(edev));
+	pci_info(pdev, "Reported EDR dev: %s\n", pci_name(edev));
 
 	/*
 	 * If port does not support DPC, just send the OST:
@@ -177,7 +177,7 @@ static void edr_handle_event(acpi_handle handle, u32 event, void *data)
 	 */
 	estate = pcie_do_recovery(edev, pci_channel_io_frozen, dpc_reset_link);
 
-	pci_dbg(edev, "DPC port successfully recovered\n");
+	pci_info(edev, "DPC port successfully recovered\n");
 send_ost:
 
 	/*
@@ -199,7 +199,7 @@ void pci_acpi_add_edr_notifier(struct pci_dev *pdev)
 	acpi_status astatus;
 
 	if (!adev) {
-		pci_dbg(pdev, "No valid ACPI node, so skip EDR init\n");
+		pci_info(pdev, "No valid ACPI node, so skip EDR init\n");
 		return;
 	}
 
@@ -217,7 +217,7 @@ void pci_acpi_add_edr_notifier(struct pci_dev *pdev)
 	 */
 	if (!pcie_aer_get_firmware_first(pdev) || pcie_ports_dpc_native ||
 	    (host->native_dpc)) {
-		pci_dbg(pdev, "OS handles AER/DPC, so skip EDR init\n");
+		pci_info(pdev, "OS handles AER/DPC, so skip EDR init\n");
 		return;
 	}
 
@@ -232,7 +232,7 @@ void pci_acpi_add_edr_notifier(struct pci_dev *pdev)
 		acpi_remove_notify_handler(adev->handle, ACPI_SYSTEM_NOTIFY,
 					   edr_handle_event);
 
-	pci_dbg(pdev, "EDR notifier is added successfully\n");
+	pci_info(pdev, "EDR notifier is added successfully\n");
 
 	return;
 }
@@ -244,7 +244,7 @@ void pci_acpi_remove_edr_notifier(struct pci_dev *pdev)
 	if (!adev)
 		return;
 
-	pci_dbg(pdev, "EDR notifier is removed successfully\n");
+	pci_info(pdev, "EDR notifier is removed successfully\n");
 
 	acpi_remove_notify_handler(adev->handle, ACPI_SYSTEM_NOTIFY,
 				   edr_handle_event);
