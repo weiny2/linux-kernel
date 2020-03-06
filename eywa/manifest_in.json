@@ -1717,7 +1717,7 @@
                 },
                 {
                     "name": "CONFIG_PCIE_EDR",
-                    "value": "n"
+                    "value": "y"
                 }
             ],
             "contributor": [
