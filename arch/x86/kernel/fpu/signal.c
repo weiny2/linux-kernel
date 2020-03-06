@@ -347,6 +347,39 @@ static int copy_user_to_fpregs_zeroing(void __user *buf, u64 xbv, int fx_only)
 		return copy_user_to_fregs(buf);
 }
 
+/* The init state of the IA32_PASID MSR is 0 */
+#define IA32_PASID_INIT_STATE  0
+
+/* Write pasid to fpstate. */
+static void fpu__pasid_state_write(u64 pasid)
+{
+	struct xregs_state *xsave = &current->thread.fpu.state.xsave;
+
+	/*
+	 * If pasid value is init state (i.e. 0), clear the xfeatures
+	 * bit for the fpstate so that the MSR will be initialized to
+	 * its init state by init optimization in XRSTORS.
+	 *
+	 * Otherwise, directly write pasid to the fpstate. Set the
+	 * xfeatures bit so that the fpstate will be restored to
+	 * the MSR without triggering init optimization in XRSTORS.
+	 */
+	if (pasid == IA32_PASID_INIT_STATE) {
+		xsave->header.xfeatures &= ~XFEATURE_MASK_PASID;
+	} else {
+		struct ia32_pasid_state *ppasid_state;
+
+		xsave->header.xfeatures |= XFEATURE_MASK_PASID;
+		ppasid_state = get_xsave_addr(xsave, XFEATURE_PASID);
+		/*
+		 * ppasid_state shouldn't be NULL because XFEATURE_ENQCMD
+		 * must be supported when this function is called.
+		 */
+		WARN_ON(!ppasid_state);
+		ppasid_state->pasid = pasid;
+	}
+}
+
 /*
  * When __fpu_restore_sig() gets here, supervisor states are in xregs and
  * the xsaves buffer has random data.  User xstates are to be restored from
@@ -371,6 +404,12 @@ static void save_supervisor_xstates(void)
 		cet->user_ssp = 0;
 	}
 #endif
+	if (static_cpu_has(X86_FEATURE_ENQCMD)) {
+		u64 pasid;
+
+		rdmsrl(MSR_IA32_PASID, pasid);
+		fpu__pasid_state_write(pasid);
+	}
 }
 
 static int __fpu__restore_sig(void __user *buf, void __user *buf_fx, int size)
