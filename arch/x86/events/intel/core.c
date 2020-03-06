@@ -5532,6 +5532,8 @@ __init int intel_pmu_init(void)
 	case INTEL_FAM6_KABYLAKE:
 	case INTEL_FAM6_COMETLAKE_L:
 	case INTEL_FAM6_COMETLAKE:
+	case INTEL_FAM6_ROCKETLAKE_L:
+	case INTEL_FAM6_ROCKETLAKE:
 		x86_add_quirk(intel_pebs_isolation_quirk);
 		x86_pmu.late_ack = true;
 		memcpy(hw_cache_event_ids, skl_hw_cache_event_ids, sizeof(hw_cache_event_ids));
