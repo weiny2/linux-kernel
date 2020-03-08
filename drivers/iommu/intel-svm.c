@@ -227,6 +227,7 @@ static const struct mmu_notifier_ops intel_mmuops = {
 
 static DEFINE_MUTEX(pasid_mutex);
 static LIST_HEAD(global_svm_list);
+static bool pasid_rid2pasid_allocated = false;
 
 #define for_each_svm_dev(sdev, svm, d)			\
 	list_for_each_entry((sdev), &(svm)->devs, list)	\
@@ -635,8 +636,17 @@ int intel_svm_bind_gpasid(struct iommu_domain *domain,
 		svm->mm = get_task_mm(current);
 		if (data->hpasid != PASID_RID2PASID)
 			svm->pasid = data->hpasid;
-		else
+		else {
+			if (!pasid_rid2pasid_allocated) {
+				pr_warn("Allocate PASID 0 to track guest IOVA page table binding\n");
+				/* Allocate PASID 0 to track gIOVA page table binding */
+				if (ioasid_alloc(NULL, PASID_RID2PASID, PASID_RID2PASID, NULL) == INVALID_IOASID)
+					pr_err("Failed to allocate host RID2PASID, unbind_gpasid may fail for gIOVA page table unbinding\n");
+				else
+					pasid_rid2pasid_allocated = true;
+			}
 			svm->pasid = PASID_RID2PASID;
+		}
 		if (data->flags & IOMMU_SVA_GPASID_VAL) {
 			svm->gpasid = data->gpasid;
 			svm->flags |= SVM_FLAG_GUEST_PASID;
@@ -648,7 +658,9 @@ int intel_svm_bind_gpasid(struct iommu_domain *domain,
 			kfree(svm);
 			goto out;
 		}
-		ioasid_set_data(data->hpasid, svm);
+		ret = ioasid_set_data(data->hpasid, svm);
+		if (ret)
+			pr_warn("Failed to set priv for %llu, %d\n", data->hpasid, ret);
 		INIT_LIST_HEAD_RCU(&svm->devs);
 		mmput(svm->mm);
 	}
@@ -729,6 +741,9 @@ int intel_svm_unbind_gpasid(struct device *dev, int pasid)
 		return -EINVAL;
 
 	mutex_lock(&pasid_mutex);
+	if (pasid == -1)
+		pasid = PASID_RID2PASID;
+
 	svm = ioasid_find(NULL, pasid, NULL);
 	if (!svm) {
 		ret = -EINVAL;
@@ -773,7 +788,10 @@ int intel_svm_unbind_gpasid(struct device *dev, int pasid)
 				ioasid_remove_notifier(pasid,
 						       &svm_ioasid_notifier);
 
-				ioasid_set_data(pasid, NULL);
+				ret = ioasid_set_data(pasid, NULL);
+				if (ret)
+					pr_warn("clear priv failed %d, %d\n",
+						pasid, ret);
 				kfree(svm);
 			}
 		}
