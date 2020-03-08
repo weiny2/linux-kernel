@@ -177,13 +177,18 @@ static int dlb_pf_create_sched_domain(struct dlb_hw *hw,
 				      struct dlb_create_sched_domain_args *args,
 				      struct dlb_cmd_response *resp)
 {
-	return 0;
+	return dlb_hw_create_sched_domain(hw, args, resp, false, 0);
 }
 
 static int dlb_pf_get_num_resources(struct dlb_hw *hw,
 				    struct dlb_get_num_resources_args *args)
 {
 	return dlb_hw_get_num_resources(hw, args, false, 0);
+}
+
+static int dlb_pf_reset_domain(struct dlb_dev *dev, u32 id)
+{
+	return dlb_reset_domain(&dev->hw, id, false, 0);
 }
 
 /*******************************/
@@ -202,4 +207,5 @@ struct dlb_device_ops dlb_pf_ops = {
 	.init_hardware = dlb_pf_init_hardware,
 	.create_sched_domain = dlb_pf_create_sched_domain,
 	.get_num_resources = dlb_pf_get_num_resources,
+	.reset_domain = dlb_pf_reset_domain,
 };

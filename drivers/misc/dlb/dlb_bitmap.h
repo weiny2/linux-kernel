@@ -116,6 +116,108 @@ static inline int dlb_bitmap_zero(struct dlb_bitmap *bitmap)
 }
 
 /**
+ * dlb_bitmap_set_range() - set a range of bitmap entries
+ * @bitmap: pointer to dlb_bitmap structure.
+ * @bit: starting bit index.
+ * @len: length of the range.
+ *
+ * Return:
+ * Returns 0 upon success, < 0 otherwise.
+ *
+ * Errors:
+ * EINVAL - bitmap is NULL or is uninitialized, or the range exceeds the bitmap
+ *	    length.
+ */
+static inline int dlb_bitmap_set_range(struct dlb_bitmap *bitmap,
+				       unsigned int bit,
+				       unsigned int len)
+{
+	if (!bitmap || !bitmap->map)
+		return -EINVAL;
+
+	if (bitmap->len <= bit)
+		return -EINVAL;
+
+	bitmap_set(bitmap->map, bit, len);
+
+	return 0;
+}
+
+/**
+ * dlb_bitmap_clear_range() - clear a range of bitmap entries
+ * @bitmap: pointer to dlb_bitmap structure.
+ * @bit: starting bit index.
+ * @len: length of the range.
+ *
+ * Return:
+ * Returns 0 upon success, < 0 otherwise.
+ *
+ * Errors:
+ * EINVAL - bitmap is NULL or is uninitialized, or the range exceeds the bitmap
+ *	    length.
+ */
+static inline int dlb_bitmap_clear_range(struct dlb_bitmap *bitmap,
+					 unsigned int bit,
+					 unsigned int len)
+{
+	if (!bitmap || !bitmap->map)
+		return -EINVAL;
+
+	if (bitmap->len <= bit)
+		return -EINVAL;
+
+	bitmap_clear(bitmap->map, bit, len);
+
+	return 0;
+}
+
+/**
+ * dlb_bitmap_find_set_bit_range() - find a range of set bits
+ * @bitmap: pointer to dlb_bitmap structure.
+ * @len: length of the range.
+ *
+ * This function looks for a range of set bits of length @len.
+ *
+ * Return:
+ * Returns the base bit index upon success, < 0 otherwise.
+ *
+ * Errors:
+ * ENOENT - unable to find a length *len* range of set bits.
+ * EINVAL - bitmap is NULL or is uninitialized, or len is invalid.
+ */
+static inline int dlb_bitmap_find_set_bit_range(struct dlb_bitmap *bitmap,
+						unsigned int len)
+{
+	struct dlb_bitmap *complement_mask = NULL;
+	int ret;
+
+	if (!bitmap || !bitmap->map || len == 0)
+		return -EINVAL;
+
+	if (bitmap->len < len)
+		return -ENOENT;
+
+	ret = dlb_bitmap_alloc(&complement_mask, bitmap->len);
+	if (ret)
+		return ret;
+
+	dlb_bitmap_zero(complement_mask);
+
+	bitmap_complement(complement_mask->map, bitmap->map, bitmap->len);
+
+	ret = bitmap_find_next_zero_area(complement_mask->map,
+					 complement_mask->len,
+					 0,
+					 len,
+					 0);
+
+	dlb_bitmap_free(complement_mask);
+
+	/* No set bit range of length len? */
+	return (ret >= (int)bitmap->len) ? -ENOENT : ret;
+}
+
+/**
  * dlb_bitmap_count() - returns the number of set bits
  * @bitmap: pointer to dlb_bitmap structure.
  *
