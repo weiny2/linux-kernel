@@ -62,14 +62,171 @@ static int dlb_reset_device(struct pci_dev *pdev)
 /****** Devfs callbacks ******/
 /*****************************/
 
+static int dlb_open_domain_device_file(struct dlb_dev *dev, struct file *f)
+{
+	struct dlb_domain_dev *domain;
+	u32 domain_id;
+
+	domain_id = DLB_FILE_ID_FROM_DEV_T(dlb_dev_number_base,
+					   f->f_inode->i_rdev);
+
+	if (domain_id >= DLB_MAX_NUM_DOMAINS) {
+		dev_err(dev->dlb_device,
+			"[%s()] Internal error\n", __func__);
+		return -EINVAL;
+	}
+
+	dev_dbg(dev->dlb_device,
+		"Opening domain %d's device file\n", domain_id);
+
+	domain = &dev->sched_domains[domain_id];
+
+	/* Race condition: thread A opens a domain file just after
+	 * thread B does the last close and resets the domain.
+	 */
+	if (!domain->status)
+		return -ENOENT;
+
+	f->private_data = domain->status;
+
+	domain->status->refcnt++;
+
+	return 0;
+}
+
 static int dlb_open(struct inode *i, struct file *f)
 {
+	struct dlb_dev *dev;
+	int ret = 0;
+
+	dev = container_of(f->f_inode->i_cdev, struct dlb_dev, cdev);
+
+	mutex_lock(&dev->resource_mutex);
+
+	if (!IS_DLB_DEV_FILE(dlb_dev_number_base, f->f_inode->i_rdev))
+		ret = dlb_open_domain_device_file(dev, f);
+
+	mutex_unlock(&dev->resource_mutex);
+
+	return ret;
+}
+
+int dlb_add_domain_device_file(struct dlb_dev *dlb_dev, u32 domain_id)
+{
+	struct dlb_status *status;
+	struct device *dev;
+
+	dev_dbg(dlb_dev->dlb_device,
+		"Creating domain %d's device file\n", domain_id);
+
+	status = devm_kzalloc(dlb_dev->dlb_device, sizeof(*status), GFP_KERNEL);
+	if (!status)
+		return -ENOMEM;
+
+	status->valid = true;
+	status->refcnt = 0;
+
+	/* Create a new device in order to create a /dev/ domain node. This
+	 * device is a child of the DLB PCI device.
+	 */
+	dev = device_create(dlb_class,
+			    dlb_dev->dlb_device->parent,
+			    MKDEV(MAJOR(dlb_dev->dev_number),
+				  MINOR(dlb_dev->dev_number) + domain_id),
+			    dlb_dev,
+			    "dlb%d/domain%d",
+			    DLB_DEV_ID_FROM_DEV_T(dlb_dev_number_base,
+						  dlb_dev->dev_number),
+			    domain_id);
+
+	if (IS_ERR_VALUE(PTR_ERR(dev))) {
+		dev_err(dlb_dev->dlb_device,
+			"%s: device_create() returned %ld\n",
+			dlb_driver_name, PTR_ERR(dev));
+
+		devm_kfree(dlb_dev->dlb_device, status);
+		return PTR_ERR(dev);
+	}
+
+	dlb_dev->sched_domains[domain_id].status = status;
+
 	return 0;
+}
+
+static int dlb_close_domain_device_file(struct dlb_dev *dev,
+					struct dlb_status *status,
+					u32 domain_id)
+{
+	bool valid = status->valid;
+	int ret = 0;
+
+	devm_kfree(dev->dlb_device, status);
+
+	/* Check if the domain was reset, its device file destroyed, and its
+	 * memory released during FLR handling.
+	 */
+	if (!valid)
+		return 0;
+
+	dev->sched_domains[domain_id].status = NULL;
+
+	device_destroy(dlb_class,
+		       MKDEV(MAJOR(dev->dev_number),
+			     MINOR(dev->dev_number) +
+			     domain_id));
+
+	ret = dev->ops->reset_domain(dev, domain_id);
+
+	if (ret) {
+		dev->domain_reset_failed = true;
+		dev_err(dev->dlb_device,
+			"Internal error: Domain reset failed. To recover, reset the device.\n");
+	}
+
+	return ret;
 }
 
 static int dlb_close(struct inode *i, struct file *f)
 {
-	return 0;
+	struct dlb_status *status = f->private_data;
+	struct dlb_dev *dev;
+	int ret = 0;
+
+	dev = container_of(f->f_inode->i_cdev, struct dlb_dev, cdev);
+
+	mutex_lock(&dev->resource_mutex);
+
+	if (!IS_DLB_DEV_FILE(dlb_dev_number_base, f->f_inode->i_rdev)) {
+		struct dlb_domain_dev *domain;
+		u32 domain_id;
+
+		domain_id = DLB_FILE_ID_FROM_DEV_T(dlb_dev_number_base,
+						   f->f_inode->i_rdev);
+
+		if (domain_id >= DLB_MAX_NUM_DOMAINS) {
+			dev_err(dev->dlb_device,
+				"[%s()] Internal error\n", __func__);
+			ret = -1;
+			goto end;
+		}
+
+		domain = &dev->sched_domains[domain_id];
+
+		dev_dbg(dev->dlb_device,
+			"Closing domain %d's device file\n", domain_id);
+
+		status->refcnt--;
+
+		if (status->refcnt == 0)
+			ret = dlb_close_domain_device_file(dev,
+							   status,
+							   domain_id);
+	}
+
+end:
+	mutex_unlock(&dev->resource_mutex);
+
+	return ret;
 }
 
 static ssize_t dlb_read(struct file *f,
@@ -303,6 +460,7 @@ dlb_dev_kzalloc_fail:
 static void dlb_remove(struct pci_dev *pdev)
 {
 	struct dlb_dev *dlb_dev;
+	int i;
 
 	/* Undo all the dlb_probe() operations */
 	dev_dbg(&pdev->dev, "Cleaning up the DLB driver for removal\n");
@@ -313,6 +471,26 @@ static void dlb_remove(struct pci_dev *pdev)
 	dlb_dev->ops->free_driver_state(dlb_dev);
 
 	dlb_resource_free(&dlb_dev->hw);
+
+	/* If a domain is created without its device file ever being opened, it
+	 * needs to be destroyed here.
+	 */
+	for (i = 0; i < DLB_MAX_NUM_DOMAINS; i++) {
+		struct dlb_status *status;
+
+		status = dlb_dev->sched_domains[i].status;
+
+		if (!status)
+			continue;
+
+		if (status->refcnt == 0)
+			device_destroy(dlb_class,
+				       MKDEV(MAJOR(dlb_dev->dev_number),
+					     MINOR(dlb_dev->dev_number) +
+						i));
+
+		devm_kfree(dlb_dev->dlb_device, status);
+	}
 
 	dlb_dev->ops->device_destroy(dlb_dev, dlb_class);
 
