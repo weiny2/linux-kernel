@@ -13,6 +13,7 @@
 #include <linux/uaccess.h>
 
 #include "dlb_main.h"
+#include "dlb_resource.h"
 
 #define TO_STR2(s) #s
 #define TO_STR(s) TO_STR2(s)
@@ -32,6 +33,23 @@ struct list_head dlb_dev_list = LIST_HEAD_INIT(dlb_dev_list);
 
 static struct class *dlb_class;
 static dev_t dlb_dev_number_base;
+
+static int dlb_reset_device(struct pci_dev *pdev)
+{
+	int ret;
+
+	ret = pci_save_state(pdev);
+	if (ret)
+		return ret;
+
+	ret = __pci_reset_function_locked(pdev);
+	if (ret)
+		return ret;
+
+	pci_restore_state(pdev);
+
+	return 0;
+}
 
 /*****************************/
 /****** Devfs callbacks ******/
@@ -220,10 +238,28 @@ static int dlb_probe(struct pci_dev *pdev,
 	if (ret)
 		goto dma_set_mask_fail;
 
+	ret = dlb_reset_device(pdev);
+	if (ret)
+		goto dlb_reset_fail;
+
+	ret = dlb_dev->ops->init_driver_state(dlb_dev);
+	if (ret)
+		goto init_driver_state_fail;
+
+	ret = dlb_resource_init(&dlb_dev->hw);
+	if (ret)
+		goto resource_init_fail;
+
+	dlb_dev->ops->init_hardware(dlb_dev);
+
 	dlb_set_id_in_use(dlb_dev->id, true);
 
 	return 0;
 
+resource_init_fail:
+	dlb_dev->ops->free_driver_state(dlb_dev);
+init_driver_state_fail:
+dlb_reset_fail:
 dma_set_mask_fail:
 	dlb_dev->ops->device_destroy(dlb_dev, dlb_class);
 device_add_fail:
@@ -255,6 +291,10 @@ static void dlb_remove(struct pci_dev *pdev)
 	dlb_dev = pci_get_drvdata(pdev);
 
 	dlb_set_id_in_use(dlb_dev->id, false);
+
+	dlb_dev->ops->free_driver_state(dlb_dev);
+
+	dlb_resource_free(&dlb_dev->hw);
 
 	dlb_dev->ops->device_destroy(dlb_dev, dlb_class);
 
