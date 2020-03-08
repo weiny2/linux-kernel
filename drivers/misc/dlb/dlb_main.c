@@ -71,6 +71,40 @@ static const struct file_operations dlb_fops = {
 	.write   = dlb_write,
 };
 
+static void dlb_assign_ops(struct dlb_dev *dlb_dev,
+			   const struct pci_device_id *pdev_id)
+{
+	dlb_dev->type = pdev_id->driver_data;
+
+	switch (pdev_id->driver_data) {
+	case DLB_PF:
+		dlb_dev->ops = &dlb_pf_ops;
+		break;
+	}
+}
+
+static inline void dlb_set_device_revision(struct dlb_dev *dlb_dev)
+{
+	switch (boot_cpu_data.x86_stepping) {
+	case 0:
+		dlb_dev->revision = DLB_REV_A0;
+		break;
+	case 1:
+		dlb_dev->revision = DLB_REV_A1;
+		break;
+	case 2:
+		dlb_dev->revision = DLB_REV_A2;
+		break;
+	case 3:
+		dlb_dev->revision = DLB_REV_A3;
+		break;
+	default:
+		/* Treat all revisions >= 4 as B0 */
+		dlb_dev->revision = DLB_REV_B0;
+		break;
+	}
+}
+
 DEFINE_IDA(dlb_ids);
 
 static int dlb_alloc_id(void)
@@ -118,9 +152,13 @@ static int dlb_probe(struct pci_dev *pdev,
 	list_add(&dlb_dev->list, &dlb_dev_list);
 	mutex_unlock(&dlb_driver_lock);
 
+	dlb_assign_ops(dlb_dev, pdev_id);
+
 	pci_set_drvdata(pdev, dlb_dev);
 
 	dlb_dev->pdev = pdev;
+
+	dlb_set_device_revision(dlb_dev);
 
 	dlb_dev->id = dlb_alloc_id();
 	if (dlb_dev->id < 0) {
@@ -160,8 +198,33 @@ static int dlb_probe(struct pci_dev *pdev,
 	if (pci_enable_pcie_error_reporting(pdev))
 		dev_err(&pdev->dev, "[%s()] Failed to enable AER\n", __func__);
 
+	ret = dlb_dev->ops->map_pci_bar_space(dlb_dev, pdev);
+	if (ret)
+		goto map_pci_bar_fail;
+
+	ret = dlb_dev->ops->cdev_add(dlb_dev, dlb_dev_number_base, &dlb_fops);
+	if (ret)
+		goto cdev_add_fail;
+
+	ret = dlb_dev->ops->device_create(dlb_dev, pdev, dlb_class);
+	if (ret)
+		goto device_add_fail;
+
+	ret = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(64));
+	if (ret)
+		goto dma_set_mask_fail;
+
 	return 0;
 
+dma_set_mask_fail:
+	dlb_dev->ops->device_destroy(dlb_dev, dlb_class);
+device_add_fail:
+	dlb_dev->ops->cdev_del(dlb_dev);
+cdev_add_fail:
+	dlb_dev->ops->unmap_pci_bar_space(dlb_dev, pdev);
+map_pci_bar_fail:
+	pci_disable_pcie_error_reporting(pdev);
+	pci_release_regions(pdev);
 pci_request_regions_fail:
 	pci_disable_device(pdev);
 pci_enable_device_fail:
@@ -184,6 +247,12 @@ static void dlb_remove(struct pci_dev *pdev)
 	dev_dbg(&pdev->dev, "Cleaning up the DLB driver for removal\n");
 	dlb_dev = pci_get_drvdata(pdev);
 
+	dlb_dev->ops->device_destroy(dlb_dev, dlb_class);
+
+	dlb_dev->ops->cdev_del(dlb_dev);
+
+	dlb_dev->ops->unmap_pci_bar_space(dlb_dev, pdev);
+
 	pci_disable_pcie_error_reporting(pdev);
 
 	pci_release_regions(pdev);
@@ -200,7 +269,7 @@ static void dlb_remove(struct pci_dev *pdev)
 }
 
 static struct pci_device_id dlb_id_table[] = {
-	{ PCI_DEVICE_DATA(INTEL, DLB_PF, NULL) },
+	{ PCI_DEVICE_DATA(INTEL, DLB_PF, DLB_PF) },
 	{ 0 }
 };
 MODULE_DEVICE_TABLE(pci, dlb_id_table);

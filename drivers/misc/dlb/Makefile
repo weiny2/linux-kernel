@@ -4,5 +4,6 @@
 
 obj-$(CONFIG_INTEL_DLB) := dlb.o
 
-dlb-objs :=  \
-  dlb_main.o \
+dlb-objs :=    \
+  dlb_main.o   \
+  dlb_pf_ops.o \
