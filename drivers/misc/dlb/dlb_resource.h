@@ -35,6 +35,23 @@ int dlb_resource_init(struct dlb_hw *hw);
 void dlb_resource_free(struct dlb_hw *hw);
 
 /**
+ * dlb_hw_get_num_resources() - query the PCI function's available resources
+ * @arg: pointer to resource counts.
+ * @vf_request: indicates whether this request came from a VF.
+ * @vf_id: If vf_request is true, this contains the VF's ID.
+ *
+ * This function returns the number of available resources for the PF or for a
+ * VF.
+ *
+ * Return:
+ * Returns 0 upon success, -EINVAL if vf_request is true and vf_id is invalid.
+ */
+int dlb_hw_get_num_resources(struct dlb_hw *hw,
+			     struct dlb_get_num_resources_args *arg,
+			     bool vf_request,
+			     unsigned int vf_id);
+
+/**
  * dlb_disable_dp_vasr_feature() - disable directed pipe VAS reset hardware
  * @hw: dlb_hw handle for a particular device.
  *

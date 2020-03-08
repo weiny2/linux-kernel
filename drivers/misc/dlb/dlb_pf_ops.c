@@ -169,6 +169,23 @@ static void dlb_pf_init_hardware(struct dlb_dev *dlb_dev)
 	dlb_disable_dp_vasr_feature(&dlb_dev->hw);
 }
 
+/*****************************/
+/****** IOCTL callbacks ******/
+/*****************************/
+
+static int dlb_pf_create_sched_domain(struct dlb_hw *hw,
+				      struct dlb_create_sched_domain_args *args,
+				      struct dlb_cmd_response *resp)
+{
+	return 0;
+}
+
+static int dlb_pf_get_num_resources(struct dlb_hw *hw,
+				    struct dlb_get_num_resources_args *args)
+{
+	return dlb_hw_get_num_resources(hw, args, false, 0);
+}
+
 /*******************************/
 /****** DLB PF Device Ops ******/
 /*******************************/
@@ -183,4 +200,6 @@ struct dlb_device_ops dlb_pf_ops = {
 	.cdev_add = dlb_pf_cdev_add,
 	.cdev_del = dlb_pf_cdev_del,
 	.init_hardware = dlb_pf_init_hardware,
+	.create_sched_domain = dlb_pf_create_sched_domain,
+	.get_num_resources = dlb_pf_get_num_resources,
 };
