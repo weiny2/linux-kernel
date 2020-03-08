@@ -58,7 +58,17 @@ static int dlb_ioctl_create_sched_domain(struct dlb_dev *dev,
 
 	mutex_lock(&dev->resource_mutex);
 
+	if (dev->domain_reset_failed) {
+		response.status = DLB_ST_DOMAIN_RESET_FAILED;
+		ret = -EINVAL;
+		goto unlock;
+	}
+
 	ret = dev->ops->create_sched_domain(&dev->hw, &arg, &response);
+	if (ret)
+		goto unlock;
+
+	ret = dlb_add_domain_device_file(dev, response.id);
 	if (ret)
 		goto unlock;
 

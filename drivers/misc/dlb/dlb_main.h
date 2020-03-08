@@ -24,6 +24,14 @@ static const char dlb_driver_name[] = KBUILD_MODNAME;
 #define DLB_NUM_DEV_FILES_PER_DEVICE (DLB_MAX_NUM_DOMAINS + 1)
 #define DLB_MAX_NUM_DEVICE_FILES (DLB_MAX_NUM_DEVICES * \
 				  DLB_NUM_DEV_FILES_PER_DEVICE)
+/* This macro returns an ID from 0 to DLB_NUM_DEV_FILES_PER_DEVICE, inclusive */
+#define DLB_FILE_ID_FROM_DEV_T(base, file) ((MINOR(file) - MINOR(base)) % \
+					    DLB_NUM_DEV_FILES_PER_DEVICE)
+/* This macro returns an ID from 0 to DLB_MAX_NUM_DEVICES, inclusive */
+#define DLB_DEV_ID_FROM_DEV_T(base, file) ((MINOR(file) - MINOR(base)) / \
+					   DLB_NUM_DEV_FILES_PER_DEVICE)
+#define IS_DLB_DEV_FILE(base, file) (DLB_FILE_ID_FROM_DEV_T(base, file) == \
+				     DLB_MAX_NUM_DOMAINS)
 
 enum dlb_device_type {
 	DLB_PF,
@@ -52,9 +60,19 @@ struct dlb_device_ops {
 				   struct dlb_cmd_response *resp);
 	int (*get_num_resources)(struct dlb_hw *hw,
 				 struct dlb_get_num_resources_args *args);
+	int (*reset_domain)(struct dlb_dev *dev, u32 domain_id);
 };
 
 extern struct dlb_device_ops dlb_pf_ops;
+
+struct dlb_status {
+	u8 valid;
+	u32 refcnt;
+};
+
+struct dlb_domain_dev {
+	struct dlb_status *status;
+};
 
 struct dlb_dev {
 	int id;
@@ -67,10 +85,26 @@ struct dlb_dev {
 	dev_t dev_number;
 	struct list_head list;
 	struct device *dlb_device;
+	struct dlb_domain_dev sched_domains[DLB_MAX_NUM_DOMAINS];
+	u8 domain_reset_failed;
 	/* The resource mutex serializes access to driver data structures and
 	 * hardware registers.
 	 */
 	struct mutex resource_mutex;
 };
+
+int dlb_add_domain_device_file(struct dlb_dev *dlb_dev, u32 domain_id);
+
+#define DLB_HW_ERR(hw, ...) do {		    \
+	struct dlb_dev *dev;			    \
+	dev = container_of(hw, struct dlb_dev, hw); \
+	dev_err(dev->dlb_device, __VA_ARGS__);	    \
+} while (0)
+
+#define DLB_HW_DBG(hw, ...) do {		    \
+	struct dlb_dev *dev;			    \
+	dev = container_of(hw, struct dlb_dev, hw); \
+	dev_dbg(dev->dlb_device, __VA_ARGS__);	    \
+} while (0)
 
 #endif /* __DLB_MAIN_H */
