@@ -35,6 +35,8 @@ struct dlb_dev;
 struct dlb_device_ops {
 	int (*map_pci_bar_space)(struct dlb_dev *dev, struct pci_dev *pdev);
 	void (*unmap_pci_bar_space)(struct dlb_dev *dev, struct pci_dev *pdev);
+	int (*init_driver_state)(struct dlb_dev *dev);
+	void (*free_driver_state)(struct dlb_dev *dev);
 	int (*device_create)(struct dlb_dev *dlb_dev,
 			     struct pci_dev *pdev,
 			     struct class *dlb_class);
@@ -44,6 +46,7 @@ struct dlb_device_ops {
 			dev_t base,
 			const struct file_operations *fops);
 	void (*cdev_del)(struct dlb_dev *dlb_dev);
+	void (*init_hardware)(struct dlb_dev *dev);
 };
 
 extern struct dlb_device_ops dlb_pf_ops;
@@ -59,6 +62,10 @@ struct dlb_dev {
 	dev_t dev_number;
 	struct list_head list;
 	struct device *dlb_device;
+	/* The resource mutex serializes access to driver data structures and
+	 * hardware registers.
+	 */
+	struct mutex resource_mutex;
 };
 
 #endif /* __DLB_MAIN_H */
