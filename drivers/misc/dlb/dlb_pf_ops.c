@@ -3,6 +3,7 @@
 
 #include "dlb_main.h"
 #include "dlb_regs.h"
+#include "dlb_resource.h"
 
 /********************************/
 /****** PCI BAR management ******/
@@ -80,6 +81,17 @@ pci_iomap_bar2_fail:
 /****** Driver management ******/
 /*******************************/
 
+static int dlb_pf_init_driver_state(struct dlb_dev *dlb_dev)
+{
+	mutex_init(&dlb_dev->resource_mutex);
+
+	return 0;
+}
+
+static void dlb_pf_free_driver_state(struct dlb_dev *dlb_dev)
+{
+}
+
 static int dlb_pf_cdev_add(struct dlb_dev *dlb_dev,
 			   dev_t base,
 			   const struct file_operations *fops)
@@ -152,6 +164,11 @@ static void dlb_pf_device_destroy(struct dlb_dev *dlb_dev,
 				DLB_MAX_NUM_DOMAINS));
 }
 
+static void dlb_pf_init_hardware(struct dlb_dev *dlb_dev)
+{
+	dlb_disable_dp_vasr_feature(&dlb_dev->hw);
+}
+
 /*******************************/
 /****** DLB PF Device Ops ******/
 /*******************************/
@@ -159,8 +176,11 @@ static void dlb_pf_device_destroy(struct dlb_dev *dlb_dev,
 struct dlb_device_ops dlb_pf_ops = {
 	.map_pci_bar_space = dlb_pf_map_pci_bar_space,
 	.unmap_pci_bar_space = dlb_pf_unmap_pci_bar_space,
+	.init_driver_state = dlb_pf_init_driver_state,
+	.free_driver_state = dlb_pf_free_driver_state,
 	.device_create = dlb_pf_device_create,
 	.device_destroy = dlb_pf_device_destroy,
 	.cdev_add = dlb_pf_cdev_add,
 	.cdev_del = dlb_pf_cdev_del,
+	.init_hardware = dlb_pf_init_hardware,
 };
