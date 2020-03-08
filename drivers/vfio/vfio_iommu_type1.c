@@ -97,6 +97,8 @@ struct vfio_group {
 	struct iommu_group	*iommu_group;
 	struct list_head	next;
 	bool			mdev_group;	/* An mdev group */
+	/* gIOVA page table is bound to host */
+	bool			giova_pgtbl_bound;
 };
 
 struct vfio_iova {
@@ -2014,6 +2016,9 @@ done:
 	return ret;
 }
 
+static long vfio_unbind_giova_pgtbl(struct iommu_domain *domain,
+				    struct vfio_group *group);
+
 static void vfio_iommu_type1_detach_group(void *iommu_data,
 					  struct iommu_group *iommu_group)
 {
@@ -2054,6 +2059,16 @@ static void vfio_iommu_type1_detach_group(void *iommu_data,
 		group = find_iommu_group(domain, iommu_group);
 		if (!group)
 			continue;
+
+		pr_info("Detach group: 0x%llx from domain\n", (unsigned long long) group);
+		if (iommu->nesting && group->giova_pgtbl_bound) {
+			long ret;
+
+			pr_info("Detach group from a nesting iommu\n");
+			ret = vfio_unbind_giova_pgtbl(domain->domain, group);
+			if (ret)
+				pr_err("Failed to unbind gIOVA page table on nesting domain, ret: %ld", ret);
+		}
 
 		vfio_iommu_detach_group(domain, group);
 		list_del(&group->next);
@@ -2390,10 +2405,12 @@ static int vfio_bind_gpasid_fn(struct device *dev, void *data)
 	struct domain_capsule *dc = (struct domain_capsule *)data;
 	struct iommu_gpasid_bind_data *gbind_data =
 		(struct iommu_gpasid_bind_data *) dc->data;
+	int ret;
+	bool giova_bind = (gbind_data->hpasid == -1) ? true : false;
 
 	if (dc->group->mdev_group) {
 		dev_dbg(dev, "%s: data: %llx\n", __func__, (u64)data);
-		if (gbind_data->hpasid == -1) {
+		if (giova_bind) {
 			gbind_data->hpasid =
 				iommu_aux_get_pasid(dc->domain, dev);
 		}
@@ -2401,12 +2418,20 @@ static int vfio_bind_gpasid_fn(struct device *dev, void *data)
 		iommu_add_device_fault_data(vfio_mdev_get_iommu_device(dev),
 						gbind_data->hpasid, dev);
 
-		return iommu_sva_bind_gpasid(dc->domain,
+		ret = iommu_sva_bind_gpasid(dc->domain,
 			vfio_mdev_get_iommu_device(dev), gbind_data);
+
 	} else {
-		return iommu_sva_bind_gpasid(dc->domain,
+		ret = iommu_sva_bind_gpasid(dc->domain,
 						dev, gbind_data);
 	}
+
+	if (giova_bind && ret == 0) {
+		pr_warn("%s, set giova_pgtbl_bound for group: 0x%llx\n", __func__, (unsigned long long) dc->group);
+		dc->group->giova_pgtbl_bound = true;
+	}
+
+	return ret;
 }
 
 static int vfio_unbind_gpasid_fn(struct device *dev, void *data)
@@ -2414,10 +2439,12 @@ static int vfio_unbind_gpasid_fn(struct device *dev, void *data)
 	struct domain_capsule *dc = (struct domain_capsule *)data;
 	struct iommu_gpasid_bind_data *gbind_data =
 		(struct iommu_gpasid_bind_data *) dc->data;
+	int ret;
+	bool giova_bind = (gbind_data->hpasid == -1) ? true : false;
 
 	if (dc->group->mdev_group) {
 		dev_dbg(dev, "%s: data: %llx\n", __func__, (u64)data);
-		if (gbind_data->hpasid == -1) {
+		if (giova_bind) {
 			gbind_data->hpasid =
 				iommu_aux_get_pasid(dc->domain, dev);
 		}
@@ -2425,13 +2452,35 @@ static int vfio_unbind_gpasid_fn(struct device *dev, void *data)
 					vfio_mdev_get_iommu_device(dev),
 					gbind_data->hpasid);
 
-		return iommu_sva_unbind_gpasid(dc->domain,
+		ret =iommu_sva_unbind_gpasid(dc->domain,
 					vfio_mdev_get_iommu_device(dev),
 					gbind_data->hpasid);
 	} else {
-		return iommu_sva_unbind_gpasid(dc->domain, dev,
+		ret = iommu_sva_unbind_gpasid(dc->domain, dev,
 						gbind_data->hpasid);
 	}
+
+	if (giova_bind && ret == 0) {
+		pr_warn("%s, unset giova_pgtbl_bound for group: 0x%llx\n", __func__, (unsigned long long) dc->group);
+		dc->group->giova_pgtbl_bound = false;
+	}
+
+	return ret;
+}
+
+static long vfio_unbind_giova_pgtbl(struct iommu_domain *domain,
+				    struct vfio_group *group)
+{
+	struct iommu_gpasid_bind_data gbind_data = { .hpasid = 0, };
+	struct domain_capsule dc = { .domain = domain,
+				     .group = group,
+				     .data = &gbind_data,
+				    };
+	long ret;
+
+	ret = iommu_group_for_each_dev(group->iommu_group, &dc,
+					vfio_unbind_gpasid_fn);
+	return ret;
 }
 
 /**
