@@ -273,3 +273,60 @@ void dlb_disable_dp_vasr_feature(struct dlb_hw *hw)
 
 	DLB_CSR_WR(hw, DLB_DP_DIR_CSR_CTRL, r0.val);
 }
+
+int dlb_hw_get_num_resources(struct dlb_hw *hw,
+			     struct dlb_get_num_resources_args *arg,
+			     bool vf_request,
+			     unsigned int vf_id)
+{
+	struct dlb_function_resources *rsrcs;
+	struct dlb_bitmap *map;
+
+	if (vf_request && vf_id >= DLB_MAX_NUM_VFS)
+		return -EINVAL;
+
+	if (vf_request)
+		rsrcs = &hw->vf[vf_id];
+	else
+		rsrcs = &hw->pf;
+
+	arg->num_sched_domains = rsrcs->num_avail_domains;
+
+	arg->num_ldb_queues = rsrcs->num_avail_ldb_queues;
+
+	arg->num_ldb_ports = rsrcs->num_avail_ldb_ports;
+
+	arg->num_dir_ports = rsrcs->num_avail_dir_pq_pairs;
+
+	map = rsrcs->avail_aqed_freelist_entries;
+
+	arg->num_atomic_inflights = dlb_bitmap_count(map);
+
+	arg->max_contiguous_atomic_inflights =
+		dlb_bitmap_longest_set_range(map);
+
+	map = rsrcs->avail_hist_list_entries;
+
+	arg->num_hist_list_entries = dlb_bitmap_count(map);
+
+	arg->max_contiguous_hist_list_entries =
+		dlb_bitmap_longest_set_range(map);
+
+	map = rsrcs->avail_qed_freelist_entries;
+
+	arg->num_ldb_credits = dlb_bitmap_count(map);
+
+	arg->max_contiguous_ldb_credits = dlb_bitmap_longest_set_range(map);
+
+	map = rsrcs->avail_dqed_freelist_entries;
+
+	arg->num_dir_credits = dlb_bitmap_count(map);
+
+	arg->max_contiguous_dir_credits = dlb_bitmap_longest_set_range(map);
+
+	arg->num_ldb_credit_pools = rsrcs->num_avail_ldb_credit_pools;
+
+	arg->num_dir_credit_pools = rsrcs->num_avail_dir_credit_pools;
+
+	return 0;
+}

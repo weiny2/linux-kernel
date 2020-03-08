@@ -47,6 +47,11 @@ struct dlb_device_ops {
 			const struct file_operations *fops);
 	void (*cdev_del)(struct dlb_dev *dlb_dev);
 	void (*init_hardware)(struct dlb_dev *dev);
+	int (*create_sched_domain)(struct dlb_hw *hw,
+				   struct dlb_create_sched_domain_args *args,
+				   struct dlb_cmd_response *resp);
+	int (*get_num_resources)(struct dlb_hw *hw,
+				 struct dlb_get_num_resources_args *args);
 };
 
 extern struct dlb_device_ops dlb_pf_ops;

@@ -12,15 +12,22 @@
 #include <linux/pm_runtime.h>
 #include <linux/uaccess.h>
 
+#include "dlb_ioctl.h"
 #include "dlb_main.h"
 #include "dlb_resource.h"
 
 #define TO_STR2(s) #s
 #define TO_STR(s) TO_STR2(s)
 
+#define DRV_VERSION \
+	TO_STR(DLB_VERSION_MAJOR_NUMBER) "." \
+	TO_STR(DLB_VERSION_MINOR_NUMBER) "." \
+	TO_STR(DLB_VERSION_REVISION_NUMBER)
+
 MODULE_LICENSE("Dual BSD/GPL");
 MODULE_AUTHOR("Copyright(c) 2017-2020 Intel Corporation");
 MODULE_DESCRIPTION("Intel(R) Dynamic Load Balancer Driver");
+MODULE_VERSION(DRV_VERSION);
 
 static const char
 dlb_driver_copyright[] = "Copyright(c) 2017-2020 Intel Corporation";
@@ -81,12 +88,29 @@ static ssize_t dlb_write(struct file *f,
 	return 0;
 }
 
+static long dlb_ioctl(struct file *f, unsigned int cmd, unsigned long arg)
+{
+	struct dlb_dev *dev;
+
+	dev = container_of(f->f_inode->i_cdev, struct dlb_dev, cdev);
+
+	if (_IOC_TYPE(cmd) != DLB_IOC_MAGIC) {
+		dev_err(dev->dlb_device,
+			"[%s()] Bad magic number!\n", __func__);
+		return -EINVAL;
+	}
+
+	return dlb_ioctl_dispatcher(dev, cmd, arg);
+}
+
 static const struct file_operations dlb_fops = {
 	.owner   = THIS_MODULE,
 	.open    = dlb_open,
 	.release = dlb_close,
 	.read    = dlb_read,
 	.write   = dlb_write,
+	.unlocked_ioctl = dlb_ioctl,
+	.compat_ioctl = compat_ptr_ioctl,
 };
 
 static void dlb_assign_ops(struct dlb_dev *dlb_dev,
@@ -332,7 +356,10 @@ static int __init dlb_init_module(void)
 {
 	int err;
 
-	pr_info("%s\n", dlb_driver_name);
+	pr_info("%s - version %d.%d.%d\n", dlb_driver_name,
+		DLB_VERSION_MAJOR_NUMBER,
+		DLB_VERSION_MINOR_NUMBER,
+		DLB_VERSION_REVISION_NUMBER);
 	pr_info("%s\n", dlb_driver_copyright);
 
 	dlb_class = class_create(THIS_MODULE, dlb_driver_name);

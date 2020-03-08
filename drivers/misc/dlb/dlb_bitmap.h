@@ -115,4 +115,66 @@ static inline int dlb_bitmap_zero(struct dlb_bitmap *bitmap)
 	return 0;
 }
 
+/**
+ * dlb_bitmap_count() - returns the number of set bits
+ * @bitmap: pointer to dlb_bitmap structure.
+ *
+ * This function looks for a single set bit.
+ *
+ * Return:
+ * Returns the number of set bits upon success, <0 otherwise.
+ *
+ * Errors:
+ * EINVAL - bitmap is NULL or is uninitialized.
+ */
+static inline int dlb_bitmap_count(struct dlb_bitmap *bitmap)
+{
+	if (!bitmap || !bitmap->map)
+		return -EINVAL;
+
+	return bitmap_weight(bitmap->map, bitmap->len);
+}
+
+/**
+ * dlb_bitmap_longest_set_range() - returns longest contiguous range of set bits
+ * @bitmap: pointer to dlb_bitmap structure.
+ *
+ * Return:
+ * Returns the bitmap's longest contiguous range of of set bits upon success,
+ * <0 otherwise.
+ *
+ * Errors:
+ * EINVAL - bitmap is NULL or is uninitialized.
+ */
+static inline int dlb_bitmap_longest_set_range(struct dlb_bitmap *bitmap)
+{
+	unsigned int bits_per_long;
+	unsigned int i, j;
+	int max_len, len;
+
+	if (!bitmap || !bitmap->map)
+		return -EINVAL;
+
+	if (dlb_bitmap_count(bitmap) == 0)
+		return 0;
+
+	max_len = 0;
+	len = 0;
+	bits_per_long = sizeof(unsigned long) * BITS_PER_BYTE;
+
+	for (i = 0; i < BITS_TO_LONGS(bitmap->len); i++) {
+		for (j = 0; j < bits_per_long; j++) {
+			if ((i * bits_per_long + j) >= bitmap->len)
+				break;
+
+			len = (test_bit(j, &bitmap->map[i])) ? len + 1 : 0;
+
+			if (len > max_len)
+				max_len = len;
+		}
+	}
+
+	return max_len;
+}
+
 #endif /*  __DLB_BITMAP_H */
