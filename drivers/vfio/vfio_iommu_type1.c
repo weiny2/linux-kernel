@@ -2460,6 +2460,11 @@ static int vfio_unbind_gpasid_fn(struct device *dev, void *data)
 						gbind_data->hpasid);
 	}
 
+	/*
+	 * Revisit: this flag is per group, so better to set it after
+	 * looping all devices in a group. This setting may need to be
+	 * placed in vfio_iommu_for_each_dev.
+	 */
 	if (giova_bind && ret == 0) {
 		pr_warn("%s, unset giova_pgtbl_bound for group: 0x%llx\n", __func__, (unsigned long long) dc->group);
 		dc->group->giova_pgtbl_bound = false;
@@ -2552,6 +2557,11 @@ static int vfio_cache_inv_fn(struct device *dev, void *data)
 	struct iommu_cache_invalidate_info *cache_inv_info =
 		(struct iommu_cache_invalidate_info *) dc->data;
 
+	/*
+	 * Revisit: for gIOVA over nesting, its first level page table
+	 * caches should be flushed by RID2PASID or default PASID. So
+	 * should also take care about it.
+	 */
 	if (dc->group->mdev_group)
 		return iommu_cache_invalidate(dc->domain,
 			vfio_mdev_get_iommu_device(dev), cache_inv_info);
