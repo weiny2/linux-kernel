@@ -2137,7 +2137,7 @@
                 }
             ],
             "description": "Handling pasid in svm binding/unbinding and #GP",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Ravi V. Shankar",
