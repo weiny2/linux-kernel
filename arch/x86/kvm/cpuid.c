@@ -408,6 +408,8 @@ static inline void do_cpuid_7_mask(struct kvm_cpuid_entry2 *entry, int index)
 		if (boot_cpu_has(X86_FEATURE_SPEC_CTRL_SSBD) ||
 		    boot_cpu_has(X86_FEATURE_AMD_SSBD))
 			entry->edx |= F(SPEC_CTRL_SSBD);
+		if (boot_cpu_has(X86_FEATURE_ARCH_LBR))
+			entry->edx |= F(ARCH_LBR);
 		/*
 		 * We emulate ARCH_CAPABILITIES in software even
 		 * if the host doesn't support it.
@@ -680,6 +682,11 @@ static inline int __do_cpuid_func(struct kvm_cpuid_entry2 *entry, u32 function,
 		}
 		break;
 	}
+	/* Architectural LBR */
+	case 0x1c:
+		if (boot_cpu_has(X86_FEATURE_ARCH_LBR))
+			do_host_cpuid(entry, function, 0);
+		break;
 	/* Intel PT */
 	case 0x14: {
 		int t, times = entry->eax;
