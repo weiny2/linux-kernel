@@ -3,6 +3,7 @@
  * Copyright(c) 2013-2015 Intel Corporation. All rights reserved.
  */
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
+#include <linux/syscore_ops.h>
 #include <linux/libnvdimm.h>
 #include <linux/sched/mm.h>
 #include <linux/vmalloc.h>
@@ -1289,6 +1290,33 @@ static const struct file_operations nvdimm_fops = {
 	.llseek = noop_llseek,
 };
 
+static void trigger_fw_activate(struct nvdimm_bus_descriptor *nd_desc)
+{
+	if (!nd_desc->fw_ops)
+		return;
+	nd_desc->fw_ops->activate(nd_desc);
+}
+
+static void nvdimm_syscore_quiesced(void)
+{
+	struct nvdimm_bus *nvdimm_bus;
+
+	mutex_lock(&nvdimm_bus_list_mutex);
+	list_for_each_entry(nvdimm_bus, &nvdimm_bus_list, list) {
+		struct nvdimm_bus_descriptor *nd_desc = nvdimm_bus->nd_desc;
+		struct device *dev = &nvdimm_bus->dev;
+
+		nvdimm_bus_lock(dev);
+		trigger_fw_activate(nd_desc);
+		nvdimm_bus_unlock(dev);
+	}
+	mutex_unlock(&nvdimm_bus_list_mutex);
+}
+
+static struct syscore_ops nvdimm_syscore_ops = {
+	.quiesced = nvdimm_syscore_quiesced,
+};
+
 int __init nvdimm_bus_init(void)
 {
 	int rc;
@@ -1316,6 +1344,8 @@ int __init nvdimm_bus_init(void)
 	rc = driver_register(&nd_bus_driver.drv);
 	if (rc)
 		goto err_nd_bus;
+
+	register_syscore_ops(&nvdimm_syscore_ops);
 
 	return 0;
 
