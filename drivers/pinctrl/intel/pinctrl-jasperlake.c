@@ -2,7 +2,7 @@
 /*
  * Intel Jasper Lake PCH pinctrl/GPIO driver
  *
- * Copyright (C) 2019, Intel Corporation
+ * Copyright (C) 2020, Intel Corporation
  * Author: Andy Shevchenko <andriy.shevchenko@linux.intel.com>
  */
 
@@ -14,26 +14,30 @@
 
 #include "pinctrl-intel.h"
 
-#define JSP_PAD_OWN	0x020
-#define JSP_PADCFGLOCK	0x080
-#define JSP_HOSTSW_OWN	0x0b0
-#define JSP_GPI_IS	0x100
-#define JSP_GPI_IE	0x120
+#define JSL_PAD_OWN	0x020
+#define JSL_PADCFGLOCK	0x080
+#define JSL_HOSTSW_OWN	0x0b0
+#define JSL_GPI_IS	0x100
+#define JSL_GPI_IE	0x120
 
-#define JSP_GPP(r, s, e)				\
+#define JSL_NO_GPIO	-1
+
+#define JSL_GPP(r, s, e, g)				\
 	{						\
 		.reg_num = (r),				\
 		.base = (s),				\
 		.size = ((e) - (s) + 1),		\
+		.gpio_base = (g),			\
 	}
 
-#define JSP_COMMUNITY(s, e, g)				\
+#define JSL_COMMUNITY(b, s, e, g)			\
 	{						\
-		.padown_offset = JSP_PAD_OWN,		\
-		.padcfglock_offset = JSP_PADCFGLOCK,	\
-		.hostown_offset = JSP_HOSTSW_OWN,	\
-		.is_offset = JSP_GPI_IS,		\
-		.ie_offset = JSP_GPI_IE,		\
+		.barno = (b),				\
+		.padown_offset = JSL_PAD_OWN,		\
+		.padcfglock_offset = JSL_PADCFGLOCK,	\
+		.hostown_offset = JSL_HOSTSW_OWN,	\
+		.is_offset = JSL_GPI_IS,		\
+		.ie_offset = JSL_GPI_IE,		\
 		.pin_base = (s),			\
 		.npins = ((e) - (s) + 1),		\
 		.gpps = (g),				\
@@ -41,7 +45,7 @@
 	}
 
 /* Jasper Lake */
-static const struct pinctrl_pin_desc jsp_community0_pins[] = {
+static const struct pinctrl_pin_desc jsl_pins[] = {
 	/* GPP_F */
 	PINCTRL_PIN(0, "CNV_BRI_DT_UART0_RTSB"),
 	PINCTRL_PIN(1, "CNV_BRI_RSP_UART0_RXD"),
@@ -130,261 +134,212 @@ static const struct pinctrl_pin_desc jsp_community0_pins[] = {
 	PINCTRL_PIN(80, "HDA_SDI_1"),
 	PINCTRL_PIN(81, "I2S1_SFRM"),
 	PINCTRL_PIN(82, "I2S1_TXD"),
-};
-
-static const struct intel_padgroup jsp_community0_gpps[] = {
-	JSP_GPP(0, 0, 19),	/* GPP_F */
-	JSP_GPP(1, 20, 45),	/* GPP_B */
-	JSP_GPP(2, 46, 66),	/* GPP_A */
-	JSP_GPP(3, 67, 74),	/* GPP_S */
-	JSP_GPP(4, 75, 82),	/* GPP_R */
-};
-
-static const struct intel_community jsp_community0[] = {
-	JSP_COMMUNITY(0, 82, jsp_community0_gpps),
-};
-
-static const struct intel_pinctrl_soc_data jsp_community0_soc_data = {
-	.uid = "0",
-	.pins = jsp_community0_pins,
-	.npins = ARRAY_SIZE(jsp_community0_pins),
-	.communities = jsp_community0,
-	.ncommunities = ARRAY_SIZE(jsp_community0),
-};
-
-static const struct pinctrl_pin_desc jsp_community1_pins[] = {
 	/* GPP_H */
-	PINCTRL_PIN(0, "GPPC_H_0"),
-	PINCTRL_PIN(1, "SD_PWR_EN_B"),
-	PINCTRL_PIN(2, "MODEM_CLKREQ"),
-	PINCTRL_PIN(3, "SX_EXIT_HOLDOFFB"),
-	PINCTRL_PIN(4, "I2C2_SDA"),
-	PINCTRL_PIN(5, "I2C2_SCL"),
-	PINCTRL_PIN(6, "I2C3_SDA"),
-	PINCTRL_PIN(7, "I2C3_SCL"),
-	PINCTRL_PIN(8, "I2C4_SDA"),
-	PINCTRL_PIN(9, "I2C4_SCL"),
-	PINCTRL_PIN(10, "CPU_VCCIO_PWR_GATEB"),
-	PINCTRL_PIN(11, "I2S2_SCLK"),
-	PINCTRL_PIN(12, "I2S2_SFRM"),
-	PINCTRL_PIN(13, "I2S2_TXD"),
-	PINCTRL_PIN(14, "I2S2_RXD"),
-	PINCTRL_PIN(15, "I2S1_SCLK"),
-	PINCTRL_PIN(16, "GPPC_H_16"),
-	PINCTRL_PIN(17, "GPPC_H_17"),
-	PINCTRL_PIN(18, "GPPC_H_18"),
-	PINCTRL_PIN(19, "GPPC_H_19"),
-	PINCTRL_PIN(20, "GPPC_H_20"),
-	PINCTRL_PIN(21, "GPPC_H_21"),
-	PINCTRL_PIN(22, "GPPC_H_22"),
-	PINCTRL_PIN(23, "GPPC_H_23"),
+	PINCTRL_PIN(83, "GPPC_H_0"),
+	PINCTRL_PIN(84, "SD_PWR_EN_B"),
+	PINCTRL_PIN(85, "MODEM_CLKREQ"),
+	PINCTRL_PIN(86, "SX_EXIT_HOLDOFFB"),
+	PINCTRL_PIN(87, "I2C2_SDA"),
+	PINCTRL_PIN(88, "I2C2_SCL"),
+	PINCTRL_PIN(89, "I2C3_SDA"),
+	PINCTRL_PIN(90, "I2C3_SCL"),
+	PINCTRL_PIN(91, "I2C4_SDA"),
+	PINCTRL_PIN(92, "I2C4_SCL"),
+	PINCTRL_PIN(93, "CPU_VCCIO_PWR_GATEB"),
+	PINCTRL_PIN(94, "I2S2_SCLK"),
+	PINCTRL_PIN(95, "I2S2_SFRM"),
+	PINCTRL_PIN(96, "I2S2_TXD"),
+	PINCTRL_PIN(97, "I2S2_RXD"),
+	PINCTRL_PIN(98, "I2S1_SCLK"),
+	PINCTRL_PIN(99, "GPPC_H_16"),
+	PINCTRL_PIN(100, "GPPC_H_17"),
+	PINCTRL_PIN(101, "GPPC_H_18"),
+	PINCTRL_PIN(102, "GPPC_H_19"),
+	PINCTRL_PIN(103, "GPPC_H_20"),
+	PINCTRL_PIN(104, "GPPC_H_21"),
+	PINCTRL_PIN(105, "GPPC_H_22"),
+	PINCTRL_PIN(106, "GPPC_H_23"),
 	/* GPP_D */
-	PINCTRL_PIN(24, "SPI1_CSB"),
-	PINCTRL_PIN(25, "SPI1_CLK"),
-	PINCTRL_PIN(26, "SPI1_MISO_IO_1"),
-	PINCTRL_PIN(27, "SPI1_MOSI_IO_0"),
-	PINCTRL_PIN(28, "ISH_I2C0_SDA"),
-	PINCTRL_PIN(29, "ISH_I2C0_SCL"),
-	PINCTRL_PIN(30, "ISH_I2C1_SDA"),
-	PINCTRL_PIN(31, "ISH_I2C1_SCL"),
-	PINCTRL_PIN(32, "ISH_SPI_CSB"),
-	PINCTRL_PIN(33, "ISH_SPI_CLK"),
-	PINCTRL_PIN(34, "ISH_SPI_MISO"),
-	PINCTRL_PIN(35, "ISH_SPI_MOSI"),
-	PINCTRL_PIN(36, "ISH_UART0_RXD"),
-	PINCTRL_PIN(37, "ISH_UART0_TXD"),
-	PINCTRL_PIN(38, "ISH_UART0_RTSB"),
-	PINCTRL_PIN(39, "ISH_UART0_CTSB"),
-	PINCTRL_PIN(40, "SPI1_IO_2"),
-	PINCTRL_PIN(41, "SPI1_IO_3"),
-	PINCTRL_PIN(42, "I2S_MCLK"),
-	PINCTRL_PIN(43, "CNV_MFUART2_RXD"),
-	PINCTRL_PIN(44, "CNV_MFUART2_TXD"),
-	PINCTRL_PIN(45, "CNV_PA_BLANKING"),
-	PINCTRL_PIN(46, "I2C5_SDA"),
-	PINCTRL_PIN(47, "I2C5_SCL"),
-	PINCTRL_PIN(48, "GSPI2_CLK_LOOPBK"),
-	PINCTRL_PIN(49, "SPI1_CLK_LOOPBK"),
+	PINCTRL_PIN(107, "SPI1_CSB"),
+	PINCTRL_PIN(108, "SPI1_CLK"),
+	PINCTRL_PIN(109, "SPI1_MISO_IO_1"),
+	PINCTRL_PIN(110, "SPI1_MOSI_IO_0"),
+	PINCTRL_PIN(111, "ISH_I2C0_SDA"),
+	PINCTRL_PIN(112, "ISH_I2C0_SCL"),
+	PINCTRL_PIN(113, "ISH_I2C1_SDA"),
+	PINCTRL_PIN(114, "ISH_I2C1_SCL"),
+	PINCTRL_PIN(115, "ISH_SPI_CSB"),
+	PINCTRL_PIN(116, "ISH_SPI_CLK"),
+	PINCTRL_PIN(117, "ISH_SPI_MISO"),
+	PINCTRL_PIN(118, "ISH_SPI_MOSI"),
+	PINCTRL_PIN(119, "ISH_UART0_RXD"),
+	PINCTRL_PIN(120, "ISH_UART0_TXD"),
+	PINCTRL_PIN(121, "ISH_UART0_RTSB"),
+	PINCTRL_PIN(122, "ISH_UART0_CTSB"),
+	PINCTRL_PIN(123, "SPI1_IO_2"),
+	PINCTRL_PIN(124, "SPI1_IO_3"),
+	PINCTRL_PIN(125, "I2S_MCLK"),
+	PINCTRL_PIN(126, "CNV_MFUART2_RXD"),
+	PINCTRL_PIN(127, "CNV_MFUART2_TXD"),
+	PINCTRL_PIN(128, "CNV_PA_BLANKING"),
+	PINCTRL_PIN(129, "I2C5_SDA"),
+	PINCTRL_PIN(130, "I2C5_SCL"),
+	PINCTRL_PIN(131, "GSPI2_CLK_LOOPBK"),
+	PINCTRL_PIN(132, "SPI1_CLK_LOOPBK"),
 	/* vGPIO */
-	PINCTRL_PIN(50, "CNV_BTEN"),
-	PINCTRL_PIN(51, "CNV_WCEN"),
-	PINCTRL_PIN(52, "CNV_BT_HOST_WAKEB"),
-	PINCTRL_PIN(53, "CNV_BT_IF_SELECT"),
-	PINCTRL_PIN(54, "vCNV_BT_UART_TXD"),
-	PINCTRL_PIN(55, "vCNV_BT_UART_RXD"),
-	PINCTRL_PIN(56, "vCNV_BT_UART_CTS_B"),
-	PINCTRL_PIN(57, "vCNV_BT_UART_RTS_B"),
-	PINCTRL_PIN(58, "vCNV_MFUART1_TXD"),
-	PINCTRL_PIN(59, "vCNV_MFUART1_RXD"),
-	PINCTRL_PIN(60, "vCNV_MFUART1_CTS_B"),
-	PINCTRL_PIN(61, "vCNV_MFUART1_RTS_B"),
-	PINCTRL_PIN(62, "vUART0_TXD"),
-	PINCTRL_PIN(63, "vUART0_RXD"),
-	PINCTRL_PIN(64, "vUART0_CTS_B"),
-	PINCTRL_PIN(65, "vUART0_RTS_B"),
-	PINCTRL_PIN(66, "vISH_UART0_TXD"),
-	PINCTRL_PIN(67, "vISH_UART0_RXD"),
-	PINCTRL_PIN(68, "vISH_UART0_CTS_B"),
-	PINCTRL_PIN(69, "vISH_UART0_RTS_B"),
-	PINCTRL_PIN(70, "vCNV_BT_I2S_BCLK"),
-	PINCTRL_PIN(71, "vCNV_BT_I2S_WS_SYNC"),
-	PINCTRL_PIN(72, "vCNV_BT_I2S_SDO"),
-	PINCTRL_PIN(73, "vCNV_BT_I2S_SDI"),
-	PINCTRL_PIN(74, "vI2S2_SCLK"),
-	PINCTRL_PIN(75, "vI2S2_SFRM"),
-	PINCTRL_PIN(76, "vI2S2_TXD"),
-	PINCTRL_PIN(77, "vI2S2_RXD"),
-	PINCTRL_PIN(78, "vSD3_CD_B"),
+	PINCTRL_PIN(133, "CNV_BTEN"),
+	PINCTRL_PIN(134, "CNV_WCEN"),
+	PINCTRL_PIN(135, "CNV_BT_HOST_WAKEB"),
+	PINCTRL_PIN(136, "CNV_BT_IF_SELECT"),
+	PINCTRL_PIN(137, "vCNV_BT_UART_TXD"),
+	PINCTRL_PIN(138, "vCNV_BT_UART_RXD"),
+	PINCTRL_PIN(139, "vCNV_BT_UART_CTS_B"),
+	PINCTRL_PIN(140, "vCNV_BT_UART_RTS_B"),
+	PINCTRL_PIN(141, "vCNV_MFUART1_TXD"),
+	PINCTRL_PIN(142, "vCNV_MFUART1_RXD"),
+	PINCTRL_PIN(143, "vCNV_MFUART1_CTS_B"),
+	PINCTRL_PIN(144, "vCNV_MFUART1_RTS_B"),
+	PINCTRL_PIN(145, "vUART0_TXD"),
+	PINCTRL_PIN(146, "vUART0_RXD"),
+	PINCTRL_PIN(147, "vUART0_CTS_B"),
+	PINCTRL_PIN(148, "vUART0_RTS_B"),
+	PINCTRL_PIN(149, "vISH_UART0_TXD"),
+	PINCTRL_PIN(150, "vISH_UART0_RXD"),
+	PINCTRL_PIN(151, "vISH_UART0_CTS_B"),
+	PINCTRL_PIN(152, "vISH_UART0_RTS_B"),
+	PINCTRL_PIN(153, "vCNV_BT_I2S_BCLK"),
+	PINCTRL_PIN(154, "vCNV_BT_I2S_WS_SYNC"),
+	PINCTRL_PIN(155, "vCNV_BT_I2S_SDO"),
+	PINCTRL_PIN(156, "vCNV_BT_I2S_SDI"),
+	PINCTRL_PIN(157, "vI2S2_SCLK"),
+	PINCTRL_PIN(158, "vI2S2_SFRM"),
+	PINCTRL_PIN(159, "vI2S2_TXD"),
+	PINCTRL_PIN(160, "vI2S2_RXD"),
+	PINCTRL_PIN(161, "vSD3_CD_B"),
 	/* GPP_C */
-	PINCTRL_PIN(79, "GPPC_C_0"),
-	PINCTRL_PIN(80, "GPPC_C_1"),
-	PINCTRL_PIN(81, "GPPC_C_2"),
-	PINCTRL_PIN(82, "GPPC_C_3"),
-	PINCTRL_PIN(83, "GPPC_C_4"),
-	PINCTRL_PIN(84, "GPPC_C_5"),
-	PINCTRL_PIN(85, "SUSWARNB_SUSPWRDNACK"),
-	PINCTRL_PIN(86, "SUSACKB"),
-	PINCTRL_PIN(87, "UART0_RXD"),
-	PINCTRL_PIN(88, "UART0_TXD"),
-	PINCTRL_PIN(89, "UART0_RTSB"),
-	PINCTRL_PIN(90, "UART0_CTSB"),
-	PINCTRL_PIN(91, "UART1_RXD"),
-	PINCTRL_PIN(92, "UART1_TXD"),
-	PINCTRL_PIN(93, "UART1_RTSB"),
-	PINCTRL_PIN(94, "UART1_CTSB"),
-	PINCTRL_PIN(95, "I2C0_SDA"),
-	PINCTRL_PIN(96, "I2C0_SCL"),
-	PINCTRL_PIN(97, "I2C1_SDA"),
-	PINCTRL_PIN(98, "I2C1_SCL"),
-	PINCTRL_PIN(99, "UART2_RXD"),
-	PINCTRL_PIN(100, "UART2_TXD"),
-	PINCTRL_PIN(101, "UART2_RTSB"),
-	PINCTRL_PIN(102, "UART2_CTSB"),
-};
-
-static const struct intel_padgroup jsp_community1_gpps[] = {
-	JSP_GPP(0, 0, 23),	/* GPP_H */
-	JSP_GPP(1, 24, 49),	/* GPP_D */
-	JSP_GPP(2, 50, 78),	/* vGPIO */
-	JSP_GPP(3, 79, 102),	/* GPP_C */
-};
-
-static const struct intel_community jsp_community1[] = {
-	JSP_COMMUNITY(0, 102, jsp_community1_gpps),
-};
-
-static const struct intel_pinctrl_soc_data jsp_community1_soc_data = {
-	.uid = "1",
-	.pins = jsp_community1_pins,
-	.npins = ARRAY_SIZE(jsp_community1_pins),
-	.communities = jsp_community1,
-	.ncommunities = ARRAY_SIZE(jsp_community1),
-};
-
-static const struct pinctrl_pin_desc jsp_community4_pins[] = {
+	PINCTRL_PIN(162, "GPPC_C_0"),
+	PINCTRL_PIN(163, "GPPC_C_1"),
+	PINCTRL_PIN(164, "GPPC_C_2"),
+	PINCTRL_PIN(165, "GPPC_C_3"),
+	PINCTRL_PIN(166, "GPPC_C_4"),
+	PINCTRL_PIN(167, "GPPC_C_5"),
+	PINCTRL_PIN(168, "SUSWARNB_SUSPWRDNACK"),
+	PINCTRL_PIN(169, "SUSACKB"),
+	PINCTRL_PIN(170, "UART0_RXD"),
+	PINCTRL_PIN(171, "UART0_TXD"),
+	PINCTRL_PIN(172, "UART0_RTSB"),
+	PINCTRL_PIN(173, "UART0_CTSB"),
+	PINCTRL_PIN(174, "UART1_RXD"),
+	PINCTRL_PIN(175, "UART1_TXD"),
+	PINCTRL_PIN(176, "UART1_RTSB"),
+	PINCTRL_PIN(177, "UART1_CTSB"),
+	PINCTRL_PIN(178, "I2C0_SDA"),
+	PINCTRL_PIN(179, "I2C0_SCL"),
+	PINCTRL_PIN(180, "I2C1_SDA"),
+	PINCTRL_PIN(181, "I2C1_SCL"),
+	PINCTRL_PIN(182, "UART2_RXD"),
+	PINCTRL_PIN(183, "UART2_TXD"),
+	PINCTRL_PIN(184, "UART2_RTSB"),
+	PINCTRL_PIN(185, "UART2_CTSB"),
+	/* HVCMOS */
+	PINCTRL_PIN(186, "L_BKLTEN"),
+	PINCTRL_PIN(187, "L_BKLTCTL"),
+	PINCTRL_PIN(188, "L_VDDEN"),
+	PINCTRL_PIN(189, "SYS_PWROK"),
+	PINCTRL_PIN(190, "SYS_RESETB"),
+	PINCTRL_PIN(191, "MLK_RSTB"),
 	/* GPP_E */
-	PINCTRL_PIN(0, "ISH_GP_0"),
-	PINCTRL_PIN(1, "ISH_GP_1"),
-	PINCTRL_PIN(2, "IMGCLKOUT_1"),
-	PINCTRL_PIN(3, "ISH_GP_2"),
-	PINCTRL_PIN(4, "IMGCLKOUT_2"),
-	PINCTRL_PIN(5, "SATA_LEDB"),
-	PINCTRL_PIN(6, "IMGCLKOUT_3"),
-	PINCTRL_PIN(7, "ISH_GP_3"),
-	PINCTRL_PIN(8, "ISH_GP_4"),
-	PINCTRL_PIN(9, "ISH_GP_5"),
-	PINCTRL_PIN(10, "ISH_GP_6"),
-	PINCTRL_PIN(11, "ISH_GP_7"),
-	PINCTRL_PIN(12, "IMGCLKOUT_4"),
-	PINCTRL_PIN(13, "DDPA_CTRLCLK"),
-	PINCTRL_PIN(14, "DDPA_CTRLDATA"),
-	PINCTRL_PIN(15, "DDPB_CTRLCLK"),
-	PINCTRL_PIN(16, "DDPB_CTRLDATA"),
-	PINCTRL_PIN(17, "DDPC_CTRLCLK"),
-	PINCTRL_PIN(18, "DDPC_CTRLDATA"),
-	PINCTRL_PIN(19, "IMGCLKOUT_5"),
-	PINCTRL_PIN(20, "CNV_BRI_DT"),
-	PINCTRL_PIN(21, "CNV_BRI_RSP"),
-	PINCTRL_PIN(22, "CNV_RGI_DT"),
-	PINCTRL_PIN(23, "CNV_RGI_RSP"),
-	/* vGPIO_4 */
-	PINCTRL_PIN(24, "CPU_PCIE_LNK_DN_0"),
-	PINCTRL_PIN(25, "CPU_PCIE_LNK_DN_1"),
-	PINCTRL_PIN(26, "CPU_PCIE_LNK_DN_2"),
-	PINCTRL_PIN(27, "CPU_PCIE_LNK_DN_3"),
-};
-
-static const struct intel_padgroup jsp_community4_gpps[] = {
-	JSP_GPP(0, 0, 23),	/* GPP_E */
-	JSP_GPP(1, 24, 27),	/* vGPIO_4 */
-};
-
-static const struct intel_community jsp_community4[] = {
-	JSP_COMMUNITY(0, 27, jsp_community4_gpps),
-};
-
-static const struct intel_pinctrl_soc_data jsp_community4_soc_data = {
-	.uid = "4",
-	.pins = jsp_community4_pins,
-	.npins = ARRAY_SIZE(jsp_community4_pins),
-	.communities = jsp_community4,
-	.ncommunities = ARRAY_SIZE(jsp_community4),
-};
-
-static const struct pinctrl_pin_desc jsp_community5_pins[] = {
+	PINCTRL_PIN(192, "ISH_GP_0"),
+	PINCTRL_PIN(193, "ISH_GP_1"),
+	PINCTRL_PIN(194, "IMGCLKOUT_1"),
+	PINCTRL_PIN(195, "ISH_GP_2"),
+	PINCTRL_PIN(196, "IMGCLKOUT_2"),
+	PINCTRL_PIN(197, "SATA_LEDB"),
+	PINCTRL_PIN(198, "IMGCLKOUT_3"),
+	PINCTRL_PIN(199, "ISH_GP_3"),
+	PINCTRL_PIN(200, "ISH_GP_4"),
+	PINCTRL_PIN(201, "ISH_GP_5"),
+	PINCTRL_PIN(202, "ISH_GP_6"),
+	PINCTRL_PIN(203, "ISH_GP_7"),
+	PINCTRL_PIN(204, "IMGCLKOUT_4"),
+	PINCTRL_PIN(205, "DDPA_CTRLCLK"),
+	PINCTRL_PIN(206, "DDPA_CTRLDATA"),
+	PINCTRL_PIN(207, "DDPB_CTRLCLK"),
+	PINCTRL_PIN(208, "DDPB_CTRLDATA"),
+	PINCTRL_PIN(209, "DDPC_CTRLCLK"),
+	PINCTRL_PIN(210, "DDPC_CTRLDATA"),
+	PINCTRL_PIN(211, "IMGCLKOUT_5"),
+	PINCTRL_PIN(212, "CNV_BRI_DT"),
+	PINCTRL_PIN(213, "CNV_BRI_RSP"),
+	PINCTRL_PIN(214, "CNV_RGI_DT"),
+	PINCTRL_PIN(215, "CNV_RGI_RSP"),
 	/* GPP_G */
-	PINCTRL_PIN(0, "SD3_CMD"),
-	PINCTRL_PIN(1, "SD3_D0"),
-	PINCTRL_PIN(2, "SD3_D1"),
-	PINCTRL_PIN(3, "SD3_D2"),
-	PINCTRL_PIN(4, "SD3_D3"),
-	PINCTRL_PIN(5, "SD3_CDB"),
-	PINCTRL_PIN(6, "SD3_CLK"),
-	PINCTRL_PIN(7, "SD3_WP"),
+	PINCTRL_PIN(216, "SD3_CMD"),
+	PINCTRL_PIN(217, "SD3_D0"),
+	PINCTRL_PIN(218, "SD3_D1"),
+	PINCTRL_PIN(219, "SD3_D2"),
+	PINCTRL_PIN(220, "SD3_D3"),
+	PINCTRL_PIN(221, "SD3_CDB"),
+	PINCTRL_PIN(222, "SD3_CLK"),
+	PINCTRL_PIN(223, "SD3_WP"),
 };
 
-static const struct intel_padgroup jsp_community5_gpps[] = {
-	JSP_GPP(0, 0, 7),	/* GPP_G */
+static const struct intel_padgroup jsl_community0_gpps[] = {
+	JSL_GPP(0, 0, 19, 320),			/* GPP_F */
+	JSL_GPP(1, 20, 45, 32),			/* GPP_B */
+	JSL_GPP(2, 46, 66, 64),			/* GPP_A */
+	JSL_GPP(3, 67, 74, 96),			/* GPP_S */
+	JSL_GPP(4, 75, 82, 128),		/* GPP_R */
 };
 
-static const struct intel_community jsp_community5[] = {
-	JSP_COMMUNITY(0, 7, jsp_community5_gpps),
+static const struct intel_padgroup jsl_community1_gpps[] = {
+	JSL_GPP(0, 83, 106, 160),		/* GPP_H */
+	JSL_GPP(1, 107, 132, 192),		/* GPP_D */
+	JSL_GPP(2, 133, 161, 224),		/* vGPIO */
+	JSL_GPP(3, 162, 185, 256),		/* GPP_C */
 };
 
-static const struct intel_pinctrl_soc_data jsp_community5_soc_data = {
-	.uid = "5",
-	.pins = jsp_community5_pins,
-	.npins = ARRAY_SIZE(jsp_community5_pins),
-	.communities = jsp_community5,
-	.ncommunities = ARRAY_SIZE(jsp_community5),
+static const struct intel_padgroup jsl_community4_gpps[] = {
+	JSL_GPP(0, 186, 191, JSL_NO_GPIO),	/* HVCMOS */
+	JSL_GPP(1, 192, 215, 288),		/* GPP_E */
 };
 
-static const struct intel_pinctrl_soc_data *jsp_soc_data_array[] = {
-	&jsp_community0_soc_data,
-	&jsp_community1_soc_data,
-	&jsp_community4_soc_data,
-	&jsp_community5_soc_data,
-	NULL
+static const struct intel_padgroup jsl_community5_gpps[] = {
+	JSL_GPP(0, 216, 223, 0),		/* GPP_G */
 };
 
-static const struct acpi_device_id jsp_pinctrl_acpi_match[] = {
-	{ "INT34C8", (kernel_ulong_t)jsp_soc_data_array },
+static const struct intel_community jsl_communities[] = {
+	JSL_COMMUNITY(0, 0, 82, jsl_community0_gpps),
+	JSL_COMMUNITY(1, 83, 185, jsl_community1_gpps),
+	JSL_COMMUNITY(2, 186, 215, jsl_community4_gpps),
+	JSL_COMMUNITY(3, 216, 223, jsl_community5_gpps),
+};
+
+static const struct intel_pinctrl_soc_data jsl_soc_data = {
+	.pins = jsl_pins,
+	.npins = ARRAY_SIZE(jsl_pins),
+	.communities = jsl_communities,
+	.ncommunities = ARRAY_SIZE(jsl_communities),
+};
+
+static const struct acpi_device_id jsl_pinctrl_acpi_match[] = {
+	{ "INT34C8", (kernel_ulong_t)&jsl_soc_data },
 	{ }
 };
-MODULE_DEVICE_TABLE(acpi, jsp_pinctrl_acpi_match);
+MODULE_DEVICE_TABLE(acpi, jsl_pinctrl_acpi_match);
 
-static INTEL_PINCTRL_PM_OPS(jsp_pinctrl_pm_ops);
+static INTEL_PINCTRL_PM_OPS(jsl_pinctrl_pm_ops);
 
-static struct platform_driver jsp_pinctrl_driver = {
-	.probe = intel_pinctrl_probe_by_uid,
+static struct platform_driver jsl_pinctrl_driver = {
+	.probe = intel_pinctrl_probe_by_hid,
 	.driver = {
 		.name = "jasperlake-pinctrl",
-		.acpi_match_table = jsp_pinctrl_acpi_match,
-		.pm = &jsp_pinctrl_pm_ops,
+		.acpi_match_table = jsl_pinctrl_acpi_match,
+		.pm = &jsl_pinctrl_pm_ops,
 	},
 };
 
-module_platform_driver(jsp_pinctrl_driver);
+module_platform_driver(jsl_pinctrl_driver);
 
 MODULE_AUTHOR("Andy Shevchenko <andriy.shevchenko@linux.intel.com>");
 MODULE_DESCRIPTION("Intel Jasper Lake PCH pinctrl/GPIO driver");
