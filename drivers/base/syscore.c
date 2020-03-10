@@ -108,6 +108,24 @@ void syscore_resume(void)
 	trace_suspend_resume(TPS("syscore_resume"), 0, false);
 }
 EXPORT_SYMBOL_GPL(syscore_resume);
+
+/**
+ * syscore_quiesced - Execute callbacks that need a quiesced system
+ *
+ * This function is executed after all syscore_suspend() callbacks have
+ * completed successfully.
+ */
+void syscore_quiesced(void)
+{
+	struct syscore_ops *ops;
+
+	list_for_each_entry(ops, &syscore_ops_list, node) {
+		if (!ops->quiesced)
+			continue;
+		ops->quiesced();
+	}
+}
+
 #endif /* CONFIG_PM_SLEEP */
 
 /**
