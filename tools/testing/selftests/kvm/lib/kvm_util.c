@@ -191,8 +191,6 @@ struct kvm_vm *_vm_create(enum vm_guest_mode mode, uint64_t phy_pages, int perm)
 	case VM_MODE_PXXV48_4K:
 #ifdef __x86_64__
 		kvm_get_cpu_address_width(&vm->pa_bits, &vm->va_bits);
-		TEST_ASSERT(vm->va_bits == 48, "Linear address width "
-			    "(%d bits) not supported", vm->va_bits);
 		vm->pgtable_levels = 4;
 		vm->page_size = 0x1000;
 		vm->page_shift = 12;
