@@ -417,6 +417,9 @@ static ssize_t firmware_activate_store(struct device *dev,
 	if (!nd_desc->fw_ops)
 		return -EOPNOTSUPP;
 
+	if (!sysfs_streq(buf, "activate"))
+		return -EINVAL;
+
 	nvdimm_bus_lock(dev);
 	state = nd_desc->fw_ops->activate_state(nd_desc);
 
