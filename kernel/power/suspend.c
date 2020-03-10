@@ -414,6 +414,8 @@ static int suspend_enter(suspend_state_t state, bool *wakeup)
 	if (error)
 		goto Platform_wake;
 
+	syscore_quiesced();
+
 	if (suspend_test(TEST_PLATFORM))
 		goto Platform_wake;
 
