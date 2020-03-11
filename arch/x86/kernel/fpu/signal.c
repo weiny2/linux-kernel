@@ -427,7 +427,8 @@ static int __fpu__restore_sig(void __user *buf, void __user *buf_fx, int size)
 	 */
 	fpregs_lock();
 	if (!test_thread_flag(TIF_NEED_FPU_LOAD)) {
-		save_supervisor_xstates();
+		if (use_xsave())
+			save_supervisor_xstates();
 		set_thread_flag(TIF_NEED_FPU_LOAD);
 	}
 	__fpu_invalidate_fpregs_state(fpu);
