@@ -504,7 +504,7 @@ static u32 thb_gpio_write_reg (struct gpio_chip *chip, unsigned int pinnr, u32 v
 static int thb_read_gpio_data(struct gpio_chip *chip, unsigned int offset, unsigned int pad_dir)
 {
 	int ret_val = -EINVAL;
-	int data_offset = 2000u;
+	int data_offset = 0x2000u;
 	u32 data_reg;
 
 	data_offset = (pad_dir > 0) ? (data_offset + 10 + (offset/32)) : (data_offset + (offset/32));
@@ -524,12 +524,10 @@ static int thb_read_gpio_data(struct gpio_chip *chip, unsigned int offset, unsig
 static int thb_write_gpio_data(struct gpio_chip *chip, unsigned int offset, unsigned int value)
 {
 	int ret_val = -EINVAL;
-//	int pad_dir = 0;
-	int data_offset = 2000u;
+	int data_offset = 0x2000u;
 	u32 data_reg;
 
 	data_offset += (offset/32);
-//	data_reg = thb_read_gpio_data(chip, offset, pad_dir);
 
 	data_reg = thb_gpio_read_reg(chip, data_offset);
 
