@@ -217,6 +217,9 @@ struct nfit_mem {
 	struct list_head list;
 	struct acpi_device *adev;
 	struct acpi_nfit_desc *acpi_desc;
+	enum nvdimm_fwa_state fwa_state;
+	enum nvdimm_fwa_result fwa_result;
+	int fwa_count;
 	char id[NFIT_DIMM_ID_LEN+1];
 	struct resource *flush_wpq;
 	unsigned long dsm_mask;
@@ -262,6 +265,9 @@ struct acpi_nfit_desc {
 	unsigned int scrub_tmo;
 	int (*blk_do_io)(struct nd_blk_region *ndbr, resource_size_t dpa,
 			void *iobuf, u64 len, int rw);
+	enum nvdimm_fwa_state fwa_state;
+	enum nvdimm_fwa_capability fwa_cap;
+	int fwa_count;
 };
 
 enum scrub_mode {

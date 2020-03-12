@@ -2034,6 +2034,26 @@ static const struct nvdimm_security_ops *acpi_nfit_get_security_ops(int family)
 	}
 }
 
+static const struct nvdimm_fw_ops *acpi_nfit_get_fw_ops(
+		struct nfit_mem *nfit_mem)
+{
+	unsigned long mask;
+	struct acpi_nfit_desc *acpi_desc = nfit_mem->acpi_desc;
+	struct nvdimm_bus_descriptor *nd_desc = &acpi_desc->nd_desc;
+
+	if (!nd_desc->fw_ops)
+		return NULL;
+
+	if (nfit_mem->family != NVDIMM_FAMILY_INTEL)
+		return NULL;
+
+	mask = nfit_mem->dsm_mask & NVDIMM_INTEL_FW_ACTIVATE_CMDMASK;
+	if (mask == NVDIMM_INTEL_FW_ACTIVATE_CMDMASK)
+		return intel_fw_ops;
+
+	return NULL;
+}
+
 static int acpi_nfit_register_dimms(struct acpi_nfit_desc *acpi_desc)
 {
 	struct nfit_mem *nfit_mem;
@@ -2108,7 +2128,8 @@ static int acpi_nfit_register_dimms(struct acpi_nfit_desc *acpi_desc)
 				acpi_nfit_dimm_attribute_groups,
 				flags, cmd_mask, flush ? flush->hint_count : 0,
 				nfit_mem->flush_wpq, &nfit_mem->id[0],
-				acpi_nfit_get_security_ops(nfit_mem->family));
+				acpi_nfit_get_security_ops(nfit_mem->family),
+				acpi_nfit_get_fw_ops(nfit_mem));
 		if (!nvdimm)
 			return -ENOMEM;
 
@@ -2183,8 +2204,10 @@ static void acpi_nfit_init_dsms(struct acpi_nfit_desc *acpi_desc)
 	if (acpi_desc->bus_cmd_force_en) {
 		nd_desc->cmd_mask = acpi_desc->bus_cmd_force_en;
 		mask = &nd_desc->bus_family_mask;
-		if (acpi_desc->family_dsm_mask[NVDIMM_BUS_FAMILY_INTEL])
+		if (acpi_desc->family_dsm_mask[NVDIMM_BUS_FAMILY_INTEL]) {
 			set_bit(NVDIMM_BUS_FAMILY_INTEL, mask);
+			nd_desc->fw_ops = intel_bus_fw_ops;
+		}
 	}
 
 	adev = to_acpi_dev(acpi_desc);
@@ -2217,6 +2240,9 @@ static void acpi_nfit_init_dsms(struct acpi_nfit_desc *acpi_desc)
 	for_each_set_bit(i, &dsm_mask, BITS_PER_LONG)
 		if (acpi_check_dsm(adev->handle, guid, 1, 1ULL << i))
 			set_bit(i, mask);
+
+	if (*mask == dsm_mask)
+		nd_desc->fw_ops = intel_bus_fw_ops;
 }
 
 static ssize_t range_index_show(struct device *dev,
