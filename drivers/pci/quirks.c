@@ -5472,3 +5472,4 @@ static void device_cmdmem_fixup(struct pci_dev *pdev)
 	pdev->cmdmem = 1;
 }
 DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_INTEL, 0x0b25, device_cmdmem_fixup);
+DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_INTEL, 0x0cfe, device_cmdmem_fixup);

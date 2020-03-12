@@ -33,12 +33,16 @@ static struct mutex idxd_idr_lock;
 static struct pci_device_id idxd_pci_tbl[] = {
 	/* DSA ver 1.0 platforms */
 	{ PCI_VDEVICE(INTEL, PCI_DEVICE_ID_INTEL_DSA_SPR0) },
+
+	/* IAX ver 1.0 platforms */
+	{ PCI_VDEVICE(INTEL, PCI_DEVICE_ID_INTEL_IAX_SPR0) },
 	{ 0, }
 };
 MODULE_DEVICE_TABLE(pci, idxd_pci_tbl);
 
 static char *idxd_name[] = {
 	"dsa",
+	"iax"
 };
 
 const char *idxd_get_dev_name(struct idxd_device *idxd)

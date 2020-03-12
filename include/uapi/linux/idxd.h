@@ -26,6 +26,14 @@
 #define IDXD_OP_FLAG_DRDBK	0x4000
 #define IDXD_OP_FLAG_DSTS	0x8000
 
+/* IAX */
+#define IDXD_OP_FLAG_RD_SRC2_AECS	0x010000
+#define IDXD_OP_FLAG_RD_SRC2_2ND	0x020000
+#define IDXD_OP_FLAG_WR_SRC2_AECS_COMP	0x040000
+#define IDXD_OP_FLAG_WR_SRC2_AECS_OVFL	0x080000
+#define IDXD_OP_FLAG_SRC2_STS		0x100000
+#define IDXD_OP_FLAG_CRC_RFC3720	0x200000
+
 /* Opcode */
 enum dsa_opcode {
 	DSA_OPCODE_NOOP = 0,
@@ -45,6 +53,26 @@ enum dsa_opcode {
 	DSA_OPCODE_DIF_STRP,
 	DSA_OPCODE_DIF_UPDT,
 	DSA_OPCODE_CFLUSH = 0x20,
+};
+
+enum iax_opcode {
+	IAX_OPCODE_NOOP = 0,
+	IAX_OPCODE_DRAIN = 2,
+	IAX_OPCODE_MEMMOVE,
+	IAX_OPCODE_DECOMPRESS = 0x42,
+	IAX_OPCODE_COMPRESS,
+	IAX_OPCODE_CRC64,
+	IAX_OPCODE_ZERO_DECOMP_32 = 0x48,
+	IAX_OPCODE_ZERO_DECOMP_16,
+	IAX_OPCODE_DECOMP_32 = 0x4c,
+	IAX_OPCODE_DECOMP_16,
+	IAX_OPCODE_SCAN = 0x50,
+	IAX_OPCODE_SET_MEMBER,
+	IAX_OPCODE_EXTRACT,
+	IAX_OPCODE_SELECT,
+	IAX_OPCODE_RLE_BURST,
+	IAX_OPCDE_FIND_UNIQUE,
+	IAX_OPCODE_EXPAND,
 };
 
 /* Completion record status */
@@ -78,6 +106,37 @@ enum dsa_completion_status {
 	DSA_COMP_HW_ERR1,
 	DSA_COMP_HW_ERR_DRB,
 	DSA_COMP_TRANSLATION_FAIL,
+};
+
+enum iax_completion_status {
+	IAX_COMP_NONE = 0,
+	IAX_COMP_SUCCESS,
+	IAX_COMP_PAGE_FAULT_IR = 0x04,
+	IAX_COMP_ANALYTICS_ERROR = 0x0a,
+	IAX_COMP_OUTBUF_OVERFLOW,
+	IAX_COMP_BAD_OPCODE = 0x10,
+	IAX_COMP_INVALID_FLAGS,
+	IAX_COMP_NOZERO_RESERVE,
+	IAX_COMP_INVALID_SIZE,
+	IAX_COMP_OVERLAP_BUFFERS = 0x16,
+	IAX_COMP_INT_HANDLE_INVAL = 0x19,
+	IAX_COMP_CRA_XLAT,
+	IAX_COMP_CRA_ALIGN,
+	IAX_COMP_ADDR_ALIGN,
+	IAX_COMP_PRIV_BAD,
+	IAX_COMP_TRAFFIC_CLASS_CONF,
+	IAX_COMP_PFAULT_RDBA,
+	IAX_COMP_HW_ERR1,
+	IAX_COMP_HW_ERR_DRB,
+	IAX_COMP_TRANSLATION_FAIL,
+	IAX_COMP_PRS_TIMEOUT,
+	IAX_COMP_WATCHDOG,
+	IAX_COMP_INVALID_COMP_FLAG = 0x30,
+	IAX_COMP_INVALID_FILTER_FLAG,
+	IAX_COMP_INVALID_INPUT_SIZE,
+	IAX_COMP_INVALID_NUM_ELEMS,
+	IAX_COMP_INVALID_SRC1_WIDTH,
+	IAX_COMP_INVALID_INVERT_OUT,
 };
 
 #define DSA_COMP_STATUS_MASK		0x7f
@@ -160,6 +219,28 @@ struct dsa_hw_desc {
 	};
 } __attribute__((packed));
 
+struct iax_hw_desc {
+	uint32_t        pasid:20;
+	uint32_t        rsvd:11;
+	uint32_t        priv:1;
+	uint32_t        flags:24;
+	uint32_t        opcode:8;
+	uint64_t        completion_addr;
+	uint64_t        src1_addr;
+	uint64_t        dst_addr;
+	uint32_t        src1_size;
+	uint16_t        int_handle;
+	union {
+		uint16_t        compr_flags;
+		uint16_t        decompr_flags;
+	};
+	uint64_t        src2_addr;
+	uint32_t        max_dst_size;
+	uint32_t        src2_size;
+	uint32_t        filter_flags;
+	uint32_t        num_inputs;
+} __attribute__((packed));
+
 struct dsa_raw_desc {
 	uint64_t	field[8];
 } __attribute__((packed));
@@ -212,6 +293,29 @@ struct dsa_completion_record {
 
 struct dsa_raw_completion_record {
 	uint64_t	field[4];
+} __attribute__((packed));
+
+struct iax_completion_record {
+	volatile uint8_t        status;
+	uint8_t                 error_code;
+	uint16_t                rsvd;
+	uint32_t                bytes_completed;
+	uint64_t                fault_addr;
+	uint32_t                invalid_flags;
+	uint32_t                rsvd2;
+	uint32_t                output_size;
+	uint8_t                 output_bits;
+	uint8_t                 rsvd3;
+	uint16_t                xor_csum;
+	uint32_t                crc;
+	uint32_t                min;
+	uint32_t                max;
+	uint32_t                sum;
+	uint64_t                rsvd4[2];
+} __attribute__((packed));
+
+struct iax_raw_completion_record {
+	uint64_t	field[8];
 } __attribute__((packed));
 
 #endif

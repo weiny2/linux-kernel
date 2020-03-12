@@ -20,7 +20,8 @@ extern struct kmem_cache *idxd_desc_pool;
 enum idxd_type {
 	IDXD_TYPE_UNKNOWN = -1,
 	IDXD_TYPE_DSA = 0,
-	IDXD_TYPE_MAX
+	IDXD_TYPE_IAX,
+	IDXD_TYPE_MAX,
 };
 
 #define IDXD_NAME_SIZE		128
@@ -110,8 +111,13 @@ struct idxd_wq {
 	u32 vec_ptr;		/* interrupt steering */
 	struct dsa_hw_desc **hw_descs;
 	int num_descs;
-	struct dsa_completion_record *compls;
+	union {
+		struct dsa_completion_record *compls;
+		struct iax_completion_record *iax_compls;
+	};
+	void *compls_raw;
 	dma_addr_t compls_addr;
+	dma_addr_t compls_addr_raw;
 	int compls_size;
 	struct idxd_desc **descs;
 	struct sbitmap sbmap;
@@ -198,9 +204,15 @@ struct idxd_device {
 
 /* IDXD software descriptor */
 struct idxd_desc {
-	struct dsa_hw_desc *hw;
+	union {
+		struct dsa_hw_desc *hw;
+		struct iax_hw_desc *iax_hw;
+	};
 	dma_addr_t desc_dma;
-	struct dsa_completion_record *completion;
+	union {
+		struct dsa_completion_record *completion;
+		struct iax_completion_record *iax_completion;
+	};
 	dma_addr_t compl_dma;
 	struct dma_async_tx_descriptor txd;
 	struct llist_node llnode;
@@ -213,6 +225,7 @@ struct idxd_desc {
 #define confdev_to_wq(dev) container_of(dev, struct idxd_wq, conf_dev)
 
 extern struct bus_type dsa_bus_type;
+extern struct bus_type iax_bus_type;
 
 static inline bool wq_dedicated(struct idxd_wq *wq)
 {
@@ -241,6 +254,8 @@ static inline void idxd_set_type(struct idxd_device *idxd)
 
 	if (pdev->device == PCI_DEVICE_ID_INTEL_DSA_SPR0)
 		idxd->type = IDXD_TYPE_DSA;
+	else if (pdev->device == PCI_DEVICE_ID_INTEL_IAX_SPR0)
+		idxd->type = IDXD_TYPE_IAX;
 	else
 		idxd->type = IDXD_TYPE_UNKNOWN;
 }
