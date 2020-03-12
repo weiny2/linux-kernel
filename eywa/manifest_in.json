@@ -4026,6 +4026,36 @@
             ],
             "status": "intel confidential",
             "stuck_at_ref": "01fd87c54bb27184c19ddf451fe32361d89c1583"
+        },
+        {
+            "branch": "lxy/vm-dos-virt",
+            "branch_type": "expiring",
+            "config_options": [],
+            "contributor": [
+                {
+                    "name": "Chenyi Qiang",
+                    "email": "chenyi.qiang@intel.com"
+                }
+            ],
+            "description": "Bus Lock VM exit & No-commit VM exit",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Shanbhogue, Vedvyas",
+                    "email": "vedvyas.shanbhogue@intel.com"
+                }
+            ],
+            "jira": "NEXT-1855",
+            "name": "kvm-vmdos",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/cqiang/spr-po-kvm.git",
+            "sdl_contact": [
+                {
+                    "name": "Xiaoyao Li",
+                    "email": "xiaoyao.li@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": ""
         }
     ]
 }
