@@ -3687,7 +3687,7 @@
                 }
             ],
             "description": "upstream DRM branch while drm-embargo is being rebased",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Rodrigo Vivi",
