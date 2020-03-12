@@ -20,7 +20,7 @@ bool test_armed = false;
 bool pass_fail = false;
 unsigned long prev_cnt = 0;
 unsigned long fault_cnt = 0;
-bool run_on_boot = false;
+bool run_on_boot = true;
 
 static pte_t *walk_table(void *ptr)
 {
