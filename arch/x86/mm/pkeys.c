@@ -233,3 +233,25 @@ void pks_sched_in(unsigned long tifn)
 
 	pks_update(current_pks);
 }
+
+/* Get new pkru or pks value with new protection bits in the key. */
+u32 get_new_pkr(u32 old_pkr, int pkey, unsigned long init_val)
+{
+	int pkey_shift = (pkey * PKRU_BITS_PER_PKEY);
+	u32 new_pkr_bits = 0;
+
+	/* Set the bits we need in PKRU:  */
+	if (init_val & PKEY_DISABLE_ACCESS)
+		new_pkr_bits |= PKRU_AD_BIT;
+	if (init_val & PKEY_DISABLE_WRITE)
+		new_pkr_bits |= PKRU_WD_BIT;
+
+	/* Shift the bits in to the correct place in PKRU for pkey: */
+	new_pkr_bits <<= pkey_shift;
+
+	/* Mask off any old bits in place: */
+	old_pkr &= ~((PKRU_AD_BIT | PKRU_WD_BIT) << pkey_shift);
+
+	/* Return old part along with new part: */
+	return old_pkr | new_pkr_bits;
+}
