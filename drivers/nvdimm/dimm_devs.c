@@ -406,6 +406,88 @@ static ssize_t security_store(struct device *dev,
 }
 static DEVICE_ATTR_RW(security);
 
+static ssize_t firmware_activate_result_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct nvdimm *nvdimm = to_nvdimm(dev);
+	enum nvdimm_fwa_result result;
+
+	if (!nvdimm->fw_ops)
+		return -EOPNOTSUPP;
+
+	nvdimm_bus_lock(dev);
+	result = nvdimm->fw_ops->activate_result(nvdimm);
+	nvdimm_bus_unlock(dev);
+
+	switch (result) {
+	case NVDIMM_FWA_RESULT_NONE:
+		return sprintf(buf, "none\n");
+	case NVDIMM_FWA_RESULT_SUCCESS:
+		return sprintf(buf, "success\n");
+	case NVDIMM_FWA_RESULT_FAIL:
+		return sprintf(buf, "fail\n");
+	case NVDIMM_FWA_RESULT_NOTSTAGED:
+		return sprintf(buf, "not_staged\n");
+	case NVDIMM_FWA_RESULT_NEEDRESET:
+		return sprintf(buf, "need_reset\n");
+	default:
+		return -ENXIO;
+	}
+}
+static DEVICE_ATTR_ADMIN_RO(firmware_activate_result);
+
+static ssize_t firmware_activate_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct nvdimm *nvdimm = to_nvdimm(dev);
+	enum nvdimm_fwa_state state;
+
+	if (!nvdimm->fw_ops)
+		return -EOPNOTSUPP;
+
+	nvdimm_bus_lock(dev);
+	state = nvdimm->fw_ops->activate_state(nvdimm);
+	nvdimm_bus_unlock(dev);
+
+	switch (state) {
+	case NVDIMM_FWA_IDLE:
+		return sprintf(buf, "idle\n");
+	case NVDIMM_FWA_BUSY:
+		return sprintf(buf, "busy\n");
+	case NVDIMM_FWA_ARMED:
+		return sprintf(buf, "armed\n");
+	default:
+		return -ENXIO;
+	}
+}
+
+static ssize_t firmware_activate_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t len)
+{
+	struct nvdimm *nvdimm = to_nvdimm(dev);
+	enum nvdimm_fwa_trigger arg;
+	int rc;
+
+	if (!nvdimm->fw_ops)
+		return -EOPNOTSUPP;
+
+	if (sysfs_streq(buf, "arm"))
+		arg = NVDIMM_FWA_ARM;
+	else if (sysfs_streq(buf, "disarm"))
+		arg = NVDIMM_FWA_DISARM;
+	else
+		return -EINVAL;
+
+	nvdimm_bus_lock(dev);
+	rc = nvdimm->fw_ops->arm(nvdimm, arg);
+	nvdimm_bus_unlock(dev);
+
+	if (rc < 0)
+		return rc;
+	return len;
+}
+static DEVICE_ATTR_ADMIN_RW(firmware_activate);
+
 static struct attribute *nvdimm_attributes[] = {
 	&dev_attr_state.attr,
 	&dev_attr_flags.attr,
@@ -413,6 +495,8 @@ static struct attribute *nvdimm_attributes[] = {
 	&dev_attr_available_slots.attr,
 	&dev_attr_security.attr,
 	&dev_attr_frozen.attr,
+	&dev_attr_firmware_activate.attr,
+	&dev_attr_firmware_activate_result.attr,
 	NULL,
 };
 
@@ -420,6 +504,17 @@ static umode_t nvdimm_visible(struct kobject *kobj, struct attribute *a, int n)
 {
 	struct device *dev = container_of(kobj, typeof(*dev), kobj);
 	struct nvdimm *nvdimm = to_nvdimm(dev);
+
+	if (a == &dev_attr_firmware_activate.attr) {
+		struct nvdimm_bus *nvdimm_bus = walk_to_nvdimm_bus(dev);
+		struct nvdimm_bus_descriptor *nd_desc = nvdimm_bus->nd_desc;
+
+		if (!nd_desc->fw_ops)
+			return 0;
+		if (!nvdimm->fw_ops)
+			return 0;
+		return a->mode;
+	}
 
 	if (a != &dev_attr_security.attr && a != &dev_attr_frozen.attr)
 		return a->mode;
