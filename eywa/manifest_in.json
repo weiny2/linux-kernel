@@ -4075,7 +4075,7 @@
                     "email": "vedvyas.shanbhogue@intel.com"
                 }
             ],
-            "jira": "NEXT-1856",
+            "jira": "NEXT-1857",
             "name": "kvm-vmdos-debug",
             "repourl": "ssh://git@gitlab.devtools.intel.com:29418/cqiang/spr-po-kvm.git",
             "sdl_contact": [
