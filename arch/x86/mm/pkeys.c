@@ -263,3 +263,44 @@ u32 get_new_pkr(u32 old_pkr, int pkey, unsigned long init_val)
 	/* Return old part along with new part: */
 	return old_pkr | new_pkr_bits;
 }
+
+/*
+ * Check if a PKS key is valid for free/update operations.
+ * Key 0 is reserved for the kernel and always invalid for the operations.
+ */
+static bool pks_key_validate(int pkey)
+{
+	if (!static_cpu_has(X86_FEATURE_PKS))
+		return false;
+
+	if (pkey >= PKS_NUM_KEYS || pkey <= PKS_KERN_DEFAULT_KEY)
+		return false;
+
+	return true;
+}
+
+/* Update current task's pkrs and local PKRS MSR. */
+int update_local_sup_key(int pkey, unsigned long protection)
+{
+	u32 current_pkrs, cpu_pkrs, new_pkrs;
+
+	if (!pks_key_validate(pkey))
+		return -EINVAL;
+
+	/* Get current's pkrs bits for pkey. */
+	current_pkrs = current->thread.pkrs;
+	new_pkrs = get_new_pkr(current_pkrs, pkey, protection);
+
+	current->thread.pkrs = new_pkrs;
+	set_thread_flag(TIF_PKS);
+
+	preempt_disable();
+	cpu_pkrs = this_cpu_read(pkrs);
+	/* Update MSR only when protections are different. */
+	if (cpu_pkrs != new_pkrs)
+		pkrs_update(new_pkrs);
+	preempt_enable();
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(update_local_sup_key);
