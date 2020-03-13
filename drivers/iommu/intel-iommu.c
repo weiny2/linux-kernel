@@ -5862,6 +5862,10 @@ static int intel_iommu_sva_invalidate(struct iommu_domain *domain,
 			break;
 		}
 
+		/* The mdev pasid has been handled in vfio */
+		if (pasid == -1)
+			pasid = PASID_RID2PASID;
+
 		switch (BIT(cache_type)) {
 		case IOMMU_CACHE_INV_TYPE_IOTLB:
 			if ((inv_info->granularity != IOMMU_INV_GRANU_PASID) &&
@@ -5893,7 +5897,7 @@ static int intel_iommu_sva_invalidate(struct iommu_domain *domain,
 		case IOMMU_CACHE_INV_TYPE_DEV_IOTLB:
 			if (info->ats_enabled) {
 				qi_flush_dev_iotlb_pasid(iommu, sid, info->pfsid,
-						inv_info->addr_info.pasid, info->ats_qdep,
+						pasid, info->ats_qdep,
 						inv_info->addr_info.addr, size,
 						granu);
 			} else
@@ -5901,7 +5905,7 @@ static int intel_iommu_sva_invalidate(struct iommu_domain *domain,
 
 			break;
 		case IOMMU_CACHE_INV_TYPE_PASID:
-			qi_flush_pasid_cache(iommu, did, granu, inv_info->pasid_info.pasid);
+			qi_flush_pasid_cache(iommu, did, granu, pasid);
 
 			break;
 		default:
