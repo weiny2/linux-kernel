@@ -175,6 +175,7 @@ struct nfit_test_fw {
 	u64 end_time;
 	bool armed;
 	bool missed_activate;
+	unsigned long last_activate;
 };
 
 struct nfit_test {
@@ -1256,6 +1257,7 @@ static int nvdimm_bus_intel_fw_activate(struct nfit_test *t,
 		else
 			fw->state = FW_STATE_NEW;
 		fw->armed = false;
+		fw->last_activate = last_activate;
 	}
 
 	return 0;
@@ -1280,9 +1282,9 @@ static int nd_intel_test_cmd_fw_activate_dimminfo(struct nfit_test *t,
 	else
 		state = ND_INTEL_FWA_IDLE;
 
-	if (!last_activate || state != ND_INTEL_FWA_IDLE)
-		result = ND_INTEL_DIMM_FWA_NONE;
-	else if (state == ND_INTEL_FWA_IDLE) {
+	result = ND_INTEL_DIMM_FWA_NONE;
+	if (state == ND_INTEL_FWA_IDLE && last_activate
+			&& fw->last_activate == last_activate) {
 		if (fw->missed_activate)
 			result = ND_INTEL_DIMM_FWA_NOTSTAGED;
 		else
