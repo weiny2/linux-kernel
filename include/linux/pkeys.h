@@ -51,6 +51,9 @@ static inline void copy_init_pkru_to_fpregs(void)
 static inline void update_pmem_key(int ad, int wd)
 {
 }
+static inline void update_local_sup_key(u8 key, int ad, int wd)
+{
+}
 
 #endif /* ! CONFIG_ARCH_HAS_PKEYS */
 

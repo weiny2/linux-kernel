@@ -244,3 +244,27 @@ void update_pmem_key(int ad, int wd)
 	on_each_cpu(update_ia32_pkrs, NULL, 1);
 }
 EXPORT_SYMBOL_GPL(update_pmem_key);
+
+/*
+ * Update the local cpu supervisor pkey
+ */
+void update_local_sup_key(u8 key, int ad, int wd)
+{
+	u64 msr = 0;
+
+	if (!cpu_feature_enabled(X86_FEATURE_PKS))
+		return;
+
+	ad &= 1;
+	wd &= 1;
+
+	rdmsrl(MSR_IA32_PKRS, msr);
+
+	msr &= ~(((1 << PKS_WD_OFFSET) | (1 << PKS_AD_OFFSET)) <<
+	        (PKS_KEY_IDX_PMEM * PKS_BITS_PER_KEY));
+	msr |= ((wd << PKS_WD_OFFSET) | (ad << PKS_AD_OFFSET)) <<
+	       (PKS_KEY_IDX_PMEM * PKS_BITS_PER_KEY);
+
+	wrmsrl(MSR_IA32_PKRS, msr);
+}
+EXPORT_SYMBOL_GPL(update_local_sup_key);

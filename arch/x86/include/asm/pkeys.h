@@ -144,4 +144,6 @@ enum {
 
 void update_ia32_pkrs(void *unused);
 void update_pmem_key(int ad, int wd);
+void update_local_sup_key(u8 key, int ad, int wd);
+
 #endif /*_ASM_X86_PKEYS_H */
