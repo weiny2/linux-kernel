@@ -2562,10 +2562,20 @@ static int vfio_cache_inv_fn(struct device *dev, void *data)
 	 * caches should be flushed by RID2PASID or default PASID. So
 	 * should also take care about it.
 	 */
-	if (dc->group->mdev_group)
+	if (dc->group->mdev_group) {
+		if (cache_inv_info->granularity == IOMMU_INV_GRANU_PASID) {
+			if (cache_inv_info->pasid_info.pasid == -1)
+				cache_inv_info->pasid_info.pasid =
+					iommu_aux_get_pasid(dc->domain, dev);
+		} else if (cache_inv_info->granularity == IOMMU_INV_GRANU_ADDR) {
+			if (cache_inv_info->addr_info.pasid == -1)
+				cache_inv_info->addr_info.pasid =
+					iommu_aux_get_pasid(dc->domain, dev);
+		}
+
 		return iommu_cache_invalidate(dc->domain,
 			vfio_mdev_get_iommu_device(dev), cache_inv_info);
-	else
+	} else
 		return iommu_cache_invalidate(dc->domain,
 						dev, cache_inv_info);
 }
