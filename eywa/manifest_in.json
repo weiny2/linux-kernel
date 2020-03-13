@@ -2254,7 +2254,7 @@
                     "email": "rajesh.s.pamujula@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1858",
             "name": "idxd",
             "repourl": "ssh://git@gitlab.devtools.intel.com:29418/otc-clk-server/linux-dsa/kernel.git",
             "sdl_contact": [
@@ -2263,7 +2263,7 @@
                     "email": "dave.jiang@intel.com"
                 }
             ],
-            "status": "intel confidential",
+            "status": "public",
             "stuck_at_ref": ""
         },
         {
