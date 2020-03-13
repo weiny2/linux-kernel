@@ -4056,6 +4056,36 @@
             ],
             "status": "intel confidential",
             "stuck_at_ref": ""
+        },
+        {
+            "branch": "lxy/bus-lock-debug-exception",
+            "branch_type": "expiring",
+            "config_options": [],
+            "contributor": [
+                {
+                    "name": "Chenyi Qiang",
+                    "email": "chenyi.qiang@intel.com"
+                }
+            ],
+            "description": "Additional KVM implementation of VMDOS which hasa dependency on kernel patches",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Shanbhogue, Vedvyas",
+                    "email": "vedvyas.shanbhogue@intel.com"
+                }
+            ],
+            "jira": "NEXT-1856",
+            "name": "kvm-vmdos-debug",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/cqiang/spr-po-kvm.git",
+            "sdl_contact": [
+                {
+                    "name": "Xiaoyao Li",
+                    "email": "xiaoyao.li@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": ""
         }
     ]
 }
