@@ -253,4 +253,45 @@ void __pks_sched_in(void)
 
 	pks_update(current_pks);
 }
+
+/*
+ * Check if a PKS key is valid for free/update operations.
+ * Key 0 is reserved for the kernel and always invalid for the operations.
+ */
+static bool pks_key_validate(int pkey)
+{
+	if (!cpu_feature_enabled(X86_FEATURE_PKS))
+		return false;
+
+	if (pkey >= PKS_NUM_KEYS || pkey <= PKS_KERN_DEFAULT_KEY)
+		return false;
+
+	return true;
+}
+
+/* Update current task's pks and local PKS MSR. */
+int pks_update_protection(int pkey, unsigned long protection)
+{
+	u32 current_pks, cpu_pks, new_pks;
+
+	if (!pks_key_validate(pkey))
+		return -EINVAL;
+
+	/* Get current's pks bits for pkey. */
+	current_pks = current->thread.pks;
+	new_pks = get_new_pkr(current_pks, pkey, protection);
+
+	current->thread.pks = new_pks;
+	set_thread_flag(TIF_PKS);
+
+	preempt_disable();
+	cpu_pks = this_cpu_read(pks);
+	/* Update MSR only when protections are different. */
+	if (cpu_pks != new_pks)
+		pks_update(new_pks);
+	preempt_enable();
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(pks_update_protection);
 #endif /* CONFIG_ARCH_HAS_SUPERVISOR_PKEYS */

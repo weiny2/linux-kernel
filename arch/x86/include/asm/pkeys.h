@@ -139,6 +139,10 @@ static inline int vma_pkey(struct vm_area_struct *vma)
 u32 get_new_pkr(u32 old_pkr, int pkey, unsigned long init_val);
 
 #ifdef CONFIG_ARCH_HAS_SUPERVISOR_PKEYS
+/*  PKS supports 16 keys. Key 0 is reserved for the kernel. */
+#define        PKS_KERN_DEFAULT_KEY    0
+#define        PKS_NUM_KEYS            16
+
 void __pks_sched_in(void);
 void pks_update(u32 pks_val);
 #else
