@@ -139,5 +139,6 @@ static inline int vma_pkey(struct vm_area_struct *vma)
 void pkrs_sched_in(void);
 void pks_init_task(struct task_struct *tsk);
 void pks_init(void);
+u32 get_new_pkr(u32 old_pkr, int pkey, unsigned long init_val);
 
 #endif /*_ASM_X86_PKEYS_H */
