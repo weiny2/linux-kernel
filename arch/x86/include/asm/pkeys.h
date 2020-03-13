@@ -136,6 +136,10 @@ static inline int vma_pkey(struct vm_area_struct *vma)
 	return (vma->vm_flags & vma_pkey_mask) >> VM_PKEY_SHIFT;
 }
 
+/*  PKS supports 16 keys. Key 0 is reserved for the kernel. */
+#define        PKS_KERN_DEFAULT_KEY    0
+#define        PKS_NUM_KEYS            16
+
 void pks_update(u32 pks_val);
 u32 get_new_pkr(u32 old_pkr, int pkey, unsigned long init_val);
 
