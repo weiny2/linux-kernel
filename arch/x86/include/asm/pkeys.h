@@ -136,6 +136,8 @@ static inline int vma_pkey(struct vm_area_struct *vma)
 	return (vma->vm_flags & vma_pkey_mask) >> VM_PKEY_SHIFT;
 }
 
+u32 get_new_pkr(u32 old_pkr, int pkey, unsigned long init_val);
+
 #ifdef CONFIG_ARCH_HAS_SUPERVISOR_PKEYS
 void __pks_sched_in(void);
 void pks_update(u32 pks_val);
