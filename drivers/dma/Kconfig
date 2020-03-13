@@ -298,6 +298,16 @@ config INTEL_IDXD
 
 	  If unsure, say N.
 
+config INTEL_IDXD_KTEST
+	tristate "Intel IDXD kernel direct API test"
+	depends on INTEL_IDXD && DMATEST
+	help
+	  Enable support for IDXD kernel direct API testing.
+
+	  Say Y if you want to perform testing for idxd KAPI.
+
+	  If unsure, say N
+
 config INTEL_IOATDMA
 	tristate "Intel I/OAT DMA support"
 	depends on PCI && X86_64
