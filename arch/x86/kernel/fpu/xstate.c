@@ -511,14 +511,14 @@ static void __init setup_xstate_comp_offsets(void)
 	}
 
 	for (i = FIRST_EXTENDED_XFEATURE; i < XFEATURE_MAX; i++) {
-		unsigned int offset;
+		unsigned int offset, prior_offset;
 		int prior_nr;
 
 		if (!xfeature_enabled(i))
 			continue;
 
 		prior_nr = retrieve_prior_xstate_comp_nr(i);
-		offset = get_xstate_comp_offset(prior_nr);
+		prior_offset = offset = get_xstate_comp_offset(prior_nr);
 		offset += xstate_sizes[prior_nr];
 
 		if (offset < XSAVE_FIRST_EXT_OFFSET)
@@ -526,6 +526,10 @@ static void __init setup_xstate_comp_offsets(void)
 
 		if (xfeature_is_aligned(i))
 			offset = ALIGN(offset, 64);
+
+		pr_info("x86/fpu: setup: cur_nr=%d, prior_nr=%d, "
+			"offset=%u, prior_offset=%u\n",
+			i, prior_nr, offset, prior_offset);
 
 		set_xstate_comp_offset(i, offset);
 	}
@@ -813,6 +817,14 @@ static void do_extra_xstate_size_checks(void)
 		 */
 		*size += xfeature_size(i);
 	}
+
+	pr_info("x86/fpu: xstate size paranoid_exp_size=%d, "
+		"fpu_kernel_xstate_exp_size=%d, "
+		"paranoid_size=%d, "
+		"fpu_kernel_xstate_size=%d\n",
+		 paranoid_exp_size, fpu_kernel_xstate_exp_size,
+		 paranoid_size, fpu_kernel_xstate_size);
+
 	XSTATE_WARN_ON(paranoid_exp_size != fpu_kernel_xstate_exp_size);
 	XSTATE_WARN_ON(paranoid_size != fpu_kernel_xstate_size);
 }
