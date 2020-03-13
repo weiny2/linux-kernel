@@ -208,3 +208,31 @@ static __init int setup_init_pkru(char *opt)
 	return 1;
 }
 __setup("init_pkru=", setup_init_pkru);
+
+/*
+ * Get a new pkey register value from the user values specified.
+ *
+ * Kernel users use the same flags as user space:
+ *     PKEY_DISABLE_ACCESS
+ *     PKEY_DISABLE_WRITE
+ */
+u32 get_new_pkr(u32 old_pkr, int pkey, unsigned long init_val)
+{
+	int pkey_shift = (pkey * PKR_BITS_PER_PKEY);
+	u32 new_pkr_bits = 0;
+
+	/* Set the bits we need in the register:  */
+	if (init_val & PKEY_DISABLE_ACCESS)
+		new_pkr_bits |= PKR_AD_BIT;
+	if (init_val & PKEY_DISABLE_WRITE)
+		new_pkr_bits |= PKR_WD_BIT;
+
+	/* Shift the bits in to the correct place: */
+	new_pkr_bits <<= pkey_shift;
+
+	/* Mask off any old bits in place: */
+	old_pkr &= ~((PKR_AD_BIT | PKR_WD_BIT) << pkey_shift);
+
+	/* Return the old part along with the new part: */
+	return old_pkr | new_pkr_bits;
+}
