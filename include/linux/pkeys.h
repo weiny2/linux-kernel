@@ -50,4 +50,11 @@ static inline void copy_init_pkru_to_fpregs(void)
 
 #endif /* ! CONFIG_ARCH_HAS_PKEYS */
 
+#ifndef CONFIG_ARCH_HAS_SUPERVISOR_PKEYS
+static inline int pks_update_protection(int pkey, unsigned long protection)
+{
+	return -EINVAL;
+}
+#endif
+
 #endif /* _LINUX_PKEYS_H */
