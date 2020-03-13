@@ -493,14 +493,14 @@ static void __init setup_xstate_comp_offsets(void)
 	}
 
 	for (i = FIRST_EXTENDED_XFEATURE; i < XFEATURE_MAX; i++) {
-		unsigned int offset;
+		unsigned int offset, prior_offset;
 		int prior_nr;
 
 		if (!xfeature_enabled(i))
 			continue;
 
 		prior_nr = retrieve_prior_xstate_comp_nr(i);
-		offset = get_xstate_comp_offset(prior_nr);
+		prior_offset = offset = get_xstate_comp_offset(prior_nr);
 		offset += xstate_sizes[prior_nr];
 
 		if (offset < XSAVE_FIRST_EXT_OFFSET)
@@ -509,6 +509,8 @@ static void __init setup_xstate_comp_offsets(void)
 		if (xfeature_is_aligned(i))
 			offset = ALIGN(offset, 64);
 
+		pr_info("setup_xstate, (nr,offset): cur(%d,%u), prior(%d,%u)\n",
+			i,offset,prior_nr,prior_offset);
 		set_xstate_comp_offset(i, offset);
 	}
 }
