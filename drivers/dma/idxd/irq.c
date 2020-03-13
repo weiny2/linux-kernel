@@ -23,6 +23,15 @@ static int irq_process_pending_llist(struct idxd_irq_entry *irq_entry,
 				     enum irq_work_type wtype,
 				     int *processed, u64 data);
 
+static bool idxd_complete_desc(struct idxd_desc *desc)
+{
+	if (desc->done && desc->completion->status) {
+		complete(desc->done);
+		return true;
+	}
+	return false;
+}
+
 static void idxd_mask_and_sync_wq_msix_vectors(struct idxd_device *idxd)
 {
 	int irqcnt = idxd->num_wq_irqs + 1;
@@ -252,7 +261,8 @@ static bool process_fault(struct idxd_desc *desc, u64 fault_addr)
 {
 	if ((u64)desc->hw == fault_addr ||
 	    (u64)desc->completion == fault_addr) {
-		idxd_dma_complete_txd(desc, IDXD_COMPLETE_DEV_FAIL);
+		if (!idxd_complete_desc(desc))
+			idxd_dma_complete_txd(desc, IDXD_COMPLETE_DEV_FAIL);
 		return true;
 	}
 
@@ -262,7 +272,8 @@ static bool process_fault(struct idxd_desc *desc, u64 fault_addr)
 static bool complete_desc(struct idxd_desc *desc)
 {
 	if (desc->completion->status) {
-		idxd_dma_complete_txd(desc, IDXD_COMPLETE_NORMAL);
+		if (!idxd_complete_desc(desc))
+			idxd_dma_complete_txd(desc, IDXD_COMPLETE_NORMAL);
 		return true;
 	}
 
@@ -291,7 +302,6 @@ static int irq_process_pending_llist(struct idxd_irq_entry *irq_entry,
 			completed = process_fault(desc, data);
 
 		if (completed) {
-			idxd_free_desc(desc->wq, desc);
 			(*processed)++;
 			if (wtype == IRQ_WORK_PROCESS_FAULT)
 				break;
@@ -327,7 +337,6 @@ static int irq_process_work_list(struct idxd_irq_entry *irq_entry,
 
 		if (completed) {
 			list_del(&desc->list);
-			idxd_free_desc(desc->wq, desc);
 			(*processed)++;
 			if (wtype == IRQ_WORK_PROCESS_FAULT)
 				break;

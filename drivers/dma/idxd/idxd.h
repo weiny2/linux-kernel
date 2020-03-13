@@ -8,6 +8,9 @@
 #include <linux/percpu-rwsem.h>
 #include <linux/wait.h>
 #include <linux/cdev.h>
+#include <linux/pci.h>
+#include <linux/irq.h>
+#include <linux/idxd.h>
 #include "registers.h"
 
 #define IDXD_DRIVER_VERSION	"1.00"
@@ -16,13 +19,6 @@ extern struct kmem_cache *idxd_desc_pool;
 
 #define IDXD_REG_TIMEOUT	50
 #define IDXD_DRAIN_TIMEOUT	5000
-
-enum idxd_type {
-	IDXD_TYPE_UNKNOWN = -1,
-	IDXD_TYPE_DSA = 0,
-	IDXD_TYPE_IAX,
-	IDXD_TYPE_MAX,
-};
 
 #define IDXD_NAME_SIZE		128
 
@@ -79,11 +75,6 @@ struct idxd_cdev {
 #define IDXD_ALLOCATED_BATCH_SIZE	128U
 #define WQ_NAME_SIZE   1024
 #define WQ_TYPE_SIZE   10
-
-enum idxd_op_type {
-	IDXD_OP_BLOCK = 0,
-	IDXD_OP_NONBLOCK = 1,
-};
 
 enum idxd_complete_type {
 	IDXD_COMPLETE_NORMAL = 0,
@@ -202,25 +193,6 @@ struct idxd_device {
 	struct dma_device dma_dev;
 };
 
-/* IDXD software descriptor */
-struct idxd_desc {
-	union {
-		struct dsa_hw_desc *hw;
-		struct iax_hw_desc *iax_hw;
-	};
-	dma_addr_t desc_dma;
-	union {
-		struct dsa_completion_record *completion;
-		struct iax_completion_record *iax_completion;
-	};
-	dma_addr_t compl_dma;
-	struct dma_async_tx_descriptor txd;
-	struct llist_node llnode;
-	struct list_head list;
-	int id;
-	struct idxd_wq *wq;
-};
-
 #define confdev_to_idxd(dev) container_of(dev, struct idxd_device, conf_dev)
 #define confdev_to_wq(dev) container_of(dev, struct idxd_wq, conf_dev)
 
@@ -275,6 +247,11 @@ static inline int idxd_wq_refcount(struct idxd_wq *wq)
 	return wq->client_count;
 };
 
+static inline struct idxd_wq *to_idxd_wq(struct dma_chan *c)
+{
+	return container_of(c, struct idxd_wq, dma_chan);
+}
+
 const char *idxd_get_dev_name(struct idxd_device *idxd);
 int idxd_register_bus_type(void);
 void idxd_unregister_bus_type(void);
@@ -314,12 +291,6 @@ void idxd_wq_unmap_portal(struct idxd_wq *wq);
 int idxd_wq_set_pasid(struct idxd_wq *wq, int pasid);
 int idxd_wq_disable_pasid(struct idxd_wq *wq);
 
-/* submission */
-int idxd_submit_desc(struct idxd_wq *wq, struct idxd_desc *desc,
-		     enum idxd_op_type optype);
-struct idxd_desc *idxd_alloc_desc(struct idxd_wq *wq, enum idxd_op_type optype);
-void idxd_free_desc(struct idxd_wq *wq, struct idxd_desc *desc);
-
 /* dmaengine */
 int idxd_register_dma_device(struct idxd_device *idxd);
 void idxd_unregister_dma_device(struct idxd_device *idxd);
@@ -336,5 +307,8 @@ void idxd_cdev_remove(void);
 int idxd_cdev_get_major(struct idxd_device *idxd);
 int idxd_wq_add_cdev(struct idxd_wq *wq);
 void idxd_wq_del_cdev(struct idxd_wq *wq);
+
+/* kdirect */
+void idxd_setup_dma_kdirect(struct idxd_device *idxd);
 
 #endif

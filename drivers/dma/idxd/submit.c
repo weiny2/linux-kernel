@@ -57,6 +57,17 @@ struct idxd_desc *idxd_alloc_desc(struct idxd_wq *wq,
 	desc = wq->descs[idx];
 	memset(desc->hw, 0, sizeof(struct dsa_hw_desc));
 	memset(desc->completion, 0, sizeof(struct dsa_completion_record));
+	desc->done = NULL;
+	if (idxd->pasid_enabled)
+		desc->hw->pasid = idxd->pasid;
+
+	/*
+	 * Descriptor completion vectors are 1-8 for MSIX. We will round
+	 * robin through the 8 vectors.
+	 */
+	wq->vec_ptr = (wq->vec_ptr % idxd->num_wq_irqs) + 1;
+	desc->hw->int_handle =  wq->vec_ptr;
+
 	return desc;
 }
 
