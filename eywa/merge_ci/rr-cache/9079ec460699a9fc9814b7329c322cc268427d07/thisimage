@@ -149,7 +149,7 @@ static void clear_task_pasid(struct task_struct *task)
 {
 	/*
 	 * Clear the xfeatures bit in the PASID state so that the MSR will be
-	 * initialized to its init state (0) by init optimization in XRSTORS.
+	 * initialized to its init state (0) by XRSTORS.
 	 */
 	task->thread.fpu.state.xsave.header.xfeatures &= ~XFEATURE_MASK_PASID;
 }
