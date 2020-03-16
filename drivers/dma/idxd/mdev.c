@@ -532,7 +532,7 @@ static int idxd_vdcm_create(struct kobject *kobj, struct mdev_device *mdev)
 		goto out;
 	}
 
-	vidxd->wq->vidxd = vidxd;
+	list_add(&vidxd->list, &vidxd->wq->vdcm_list);
 	dev_dbg(dev, "mdev creation success: %s\n", dev_name(mdev_dev(mdev)));
 
  out:
@@ -549,7 +549,7 @@ static void vdcm_vidxd_remove(struct vdcm_idxd *vidxd)
 	dev_dbg(dev, "%s: removing for wq %d\n", __func__, vidxd->wq->id);
 
 	mutex_lock(&wq->wq_lock);
-	vidxd->wq->vidxd = NULL;
+	list_del(&vidxd->list);
 	idxd_wq_put(wq);
 	mutex_unlock(&wq->wq_lock);
 	kfree(vidxd);

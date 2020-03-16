@@ -77,6 +77,7 @@ struct vdcm_idxd {
 	u64 bar_size[VIDXD_MAX_BARS];
 	u8 cfg[VIDXD_MAX_CFG_SPACE_SZ];
 	struct vdcm_idxd_pci_bar0 bar0;
+	struct list_head list;
 };
 
 static inline struct vdcm_idxd *to_vidxd(struct idxd_vdev *vdev)

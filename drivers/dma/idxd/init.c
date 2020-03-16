@@ -222,6 +222,7 @@ static int idxd_setup_internals(struct idxd_device *idxd)
 		atomic_set(&wq->dq_count, 0);
 		init_waitqueue_head(&wq->submit_waitq);
 		INIT_LIST_HEAD(&wq->uuid_list);
+		INIT_LIST_HEAD(&wq->vdcm_list);
 		wq->idxd_cdev.minor = -1;
 		rc = percpu_init_rwsem(&wq->submit_lock);
 		if (rc < 0) {

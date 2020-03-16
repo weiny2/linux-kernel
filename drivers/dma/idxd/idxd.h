@@ -123,7 +123,7 @@ struct idxd_wq {
 	struct percpu_rw_semaphore submit_lock;
 	wait_queue_head_t submit_waitq;
 	char name[WQ_NAME_SIZE + 1];
-	struct vdcm_idxd *vidxd;
+	struct list_head vdcm_list;
 	struct list_head uuid_list;
 	int uuids;
 };
@@ -349,5 +349,7 @@ void idxd_setup_dma_kdirect(struct idxd_device *idxd);
 /* mdev */
 int idxd_mdev_host_init(struct idxd_device *idxd);
 void idxd_mdev_host_release(struct idxd_device *idxd);
+void idxd_wq_vidxd_send_errors(struct idxd_wq *wq);
+void idxd_vidxd_send_errors(struct idxd_device *idxd);
 
 #endif
