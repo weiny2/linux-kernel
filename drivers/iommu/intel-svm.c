@@ -103,6 +103,7 @@ void intel_svm_check(struct intel_iommu *iommu)
 	if (!pasid_supported(iommu))
 		return;
 
+#if 0
 	if (cpu_feature_enabled(X86_FEATURE_GBPAGES) &&
 	    !cap_fl1gp_support(iommu->cap)) {
 		pr_err("%s SVM disabled, incompatible 1GB page capability\n",
@@ -116,8 +117,9 @@ void intel_svm_check(struct intel_iommu *iommu)
 		       iommu->name);
 		return;
 	}
-
+#else
 	iommu->flags |= VTD_FLAG_SVM_CAPABLE;
+#endif
 }
 
 static void intel_flush_svm_range_dev (struct intel_svm *svm, struct intel_svm_dev *sdev,
