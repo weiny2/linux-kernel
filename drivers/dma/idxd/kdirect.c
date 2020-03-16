@@ -68,7 +68,8 @@ static const void __iomem *idxd_dma_get_submission_portal(struct dma_chan *chan,
 	struct idxd_wq *wq = to_idxd_wq(chan);
 
 	*size = SZ_4K;
-	return wq->portal + idxd_get_wq_portal_offset(IDXD_PORTAL_UNLIMITED);
+	return wq->portal + idxd_get_wq_portal_offset(IDXD_PORTAL_UNLIMITED,
+						      IDXD_IRQ_MSIX);
 }
 
 static int idxd_dma_get_device_errors(struct dma_chan *chan, void *data)

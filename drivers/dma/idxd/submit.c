@@ -65,8 +65,11 @@ struct idxd_desc *idxd_alloc_desc(struct idxd_wq *wq,
 	 * Descriptor completion vectors are 1-8 for MSIX. We will round
 	 * robin through the 8 vectors.
 	 */
-	wq->vec_ptr = (wq->vec_ptr % idxd->num_wq_irqs) + 1;
-	desc->hw->int_handle =  wq->vec_ptr;
+	if (!idxd->int_handles) {
+		wq->vec_ptr = (wq->vec_ptr % idxd->num_wq_irqs) + 1;
+		desc->hw->int_handle =  wq->vec_ptr;
+	} else
+		desc->hw->int_handle = idxd->int_handles[wq->id];	
 
 	return desc;
 }
@@ -126,7 +129,6 @@ int idxd_submit_desc(struct idxd_wq *wq, struct idxd_desc *desc,
 		     enum idxd_op_type optype)
 {
 	struct idxd_device *idxd = wq->idxd;
-	int vec = desc->hw->int_handle;
 	int rc;
 	void __iomem *portal;
 
@@ -134,7 +136,8 @@ int idxd_submit_desc(struct idxd_wq *wq, struct idxd_desc *desc,
 		return -EIO;
 
 	portal = wq->portal +
-		 idxd_get_wq_portal_offset(IDXD_PORTAL_UNLIMITED);
+		 idxd_get_wq_portal_offset(IDXD_PORTAL_UNLIMITED,
+		 			   IDXD_IRQ_MSIX);
 	if (wq_dedicated(wq)) {
 		/*
 		 * The wmb() flushes writes to coherent DMA data before
@@ -153,9 +156,19 @@ int idxd_submit_desc(struct idxd_wq *wq, struct idxd_desc *desc,
 	 * Pending the descriptor to the lockless list for the irq_entry
 	 * that we designated the descriptor to.
 	 */
-	if (desc->hw->flags & IDXD_OP_FLAG_RCI)
+	if (desc->hw->flags & IDXD_OP_FLAG_RCI) {
+		int vec;
+
+		/*
+		 * If the driver is on host kernel, it would be the value
+		 * assigned to interrupt handle, which is index for MSIX
+		 * vector. If it's guest then we'll set it to 1 for now
+		 * since only 1 workqueue is exported.
+		 */
+		vec = !idxd->int_handles ? desc->hw->int_handle : 1;
 		llist_add(&desc->llnode,
 			  &idxd->irq_entries[vec].pending_llist);
+	}
 
 	return 0;
 }

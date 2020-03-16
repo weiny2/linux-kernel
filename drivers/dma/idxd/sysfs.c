@@ -4,6 +4,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/pci.h>
+#include <linux/uuid.h>
 #include <linux/device.h>
 #include <linux/io-64-nonatomic-lo-hi.h>
 #include <uapi/linux/idxd.h>
@@ -14,6 +15,7 @@ static char *idxd_wq_type_names[] = {
 	[IDXD_WQT_NONE]		= "none",
 	[IDXD_WQT_KERNEL]	= "kernel",
 	[IDXD_WQT_USER]		= "user",
+	[IDXD_WQT_MDEV]		= "mdev",
 };
 
 static void idxd_conf_device_release(struct device *dev)
@@ -76,6 +78,11 @@ static inline bool is_idxd_wq_cdev(struct idxd_wq *wq)
 	return wq->type == IDXD_WQT_USER;
 }
 
+inline bool is_idxd_wq_mdev(struct idxd_wq *wq)
+{
+	return wq->type == IDXD_WQT_MDEV ? true : false;
+}
+
 static int idxd_config_bus_match(struct device *dev,
 				 struct device_driver *drv)
 {
@@ -127,13 +134,17 @@ static int idxd_config_bus_probe(struct device *dev)
 
 		spin_lock_irqsave(&idxd->dev_lock, flags);
 
-		/* Perform IDXD configuration and enabling */
-		rc = idxd_device_config(idxd);
-		if (rc < 0) {
-			spin_unlock_irqrestore(&idxd->dev_lock, flags);
-			module_put(THIS_MODULE);
-			dev_warn(dev, "Device config failed: %d\n", rc);
-			return rc;
+		if (test_bit(IDXD_FLAG_CONFIGURABLE, &idxd->flags)) {
+			/* Perform DSA configuration and enabling */
+			rc = idxd_device_config(idxd);
+			if (rc < 0) {
+				spin_unlock_irqrestore(&idxd->dev_lock,
+						flags);
+				module_put(THIS_MODULE);
+				dev_warn(dev, "Device config failed: %d\n",
+						rc);
+				return rc;
+			}
 		}
 
 		/* start device */
@@ -218,13 +229,26 @@ static int idxd_config_bus_probe(struct device *dev)
 		}
 
 		spin_lock_irqsave(&idxd->dev_lock, flags);
-		rc = idxd_device_config(idxd);
-		if (rc < 0) {
-			spin_unlock_irqrestore(&idxd->dev_lock, flags);
-			mutex_unlock(&wq->wq_lock);
-			dev_warn(dev, "Writing WQ %d config failed: %d\n",
-				 wq->id, rc);
-			return rc;
+		if (test_bit(IDXD_FLAG_CONFIGURABLE, &idxd->flags)) {
+			rc = idxd_device_config(idxd);
+			if (rc < 0) {
+				spin_unlock_irqrestore(&idxd->dev_lock,
+						       flags);
+				mutex_unlock(&wq->wq_lock);
+				dev_warn(dev, "Writing WQ %d config failed: %d\n",
+					 wq->id, rc);
+				return rc;
+			}
+		} else {
+			rc = idxd_device_ro_config(idxd);
+			if (rc < 0) {
+				spin_unlock_irqrestore(&idxd->dev_lock,
+						       flags);
+				mutex_unlock(&wq->wq_lock);
+				dev_warn(dev, "Writing WQ %d config failed: %d\n",
+					 wq->id, rc);
+				return rc;
+			}
 		}
 
 		rc = idxd_wq_enable(wq);
@@ -1117,8 +1141,103 @@ static ssize_t wq_threshold_store(struct device *dev,
 	return count;
 }
 
+
 static struct device_attribute dev_attr_wq_threshold =
 		__ATTR(threshold, 0644, wq_threshold_show, wq_threshold_store);
+
+static ssize_t wq_uuid_store(struct device *dev,
+			     struct device_attribute *attr, const char *buf,
+			     size_t count)
+{
+	char *str;
+	int rc;
+	struct idxd_wq_uuid *entry, *n;
+	struct idxd_wq_uuid *wq_uuid;
+	struct idxd_wq *wq = container_of(dev, struct idxd_wq, conf_dev);
+	struct device *ddev = &wq->idxd->pdev->dev;
+
+	if (wq->type != IDXD_WQT_MDEV)
+		return -EPERM;
+
+	if ((count < UUID_STRING_LEN) || (count > UUID_STRING_LEN + 1))
+		return -EINVAL;
+
+	str = kstrndup(buf, count, GFP_KERNEL);
+	if (!str)
+		return -ENOMEM;
+
+	wq_uuid = devm_kzalloc(ddev, sizeof(struct idxd_wq_uuid), GFP_KERNEL);
+	if (!wq_uuid) {
+		kfree(str);
+		return -ENOMEM;
+	}
+
+	rc = guid_parse(str, &wq_uuid->uuid);
+	kfree(str);
+	if (rc)
+		return rc;
+
+	mutex_lock(&wq->wq_lock);
+	/* If user writes 0, erase entire list. */
+	if (guid_is_null(&wq_uuid->uuid)) {
+		list_for_each_entry_safe(entry, n, &wq->uuid_list, list) {
+			list_del(&entry->list);
+			devm_kfree(ddev, entry);
+			wq->uuids--;
+		}
+
+		mutex_unlock(&wq->wq_lock);
+		return count;
+	}
+
+	/* If uuid already exists, remove the old uuid. */
+	list_for_each_entry_safe(entry, n, &wq->uuid_list, list) {
+		if (guid_equal(&wq_uuid->uuid, &entry->uuid)) {
+			list_del(&entry->list);
+			devm_kfree(ddev, entry);
+			wq->uuids--;
+			mutex_unlock(&wq->wq_lock);
+			return count;
+		}
+	}
+
+	/*
+	 * At this point, we are only adding, and the wq must be on in order
+	 * to do so. A disabled wq type is ambiguous.
+	 */
+	if (wq->state != IDXD_WQ_ENABLED)
+		return -EPERM;
+	/*
+	 * If wq is shared or wq is dedicated and list empty,
+	 * put uuid into list.
+	 */
+	if (!wq_dedicated(wq) || list_empty(&wq->uuid_list)) {
+		wq->uuids++;
+		list_add(&wq_uuid->list, &wq->uuid_list);
+	} else {
+		mutex_unlock(&wq->wq_lock);
+		return -EPERM;
+	}
+
+	mutex_unlock(&wq->wq_lock);
+	return count;
+}
+
+static ssize_t wq_uuid_show(struct device *dev,
+			    struct device_attribute *attr, char *buf)
+{
+	struct idxd_wq *wq = container_of(dev, struct idxd_wq, conf_dev);
+	struct idxd_wq_uuid *entry;
+	int out = 0;
+
+	list_for_each_entry(entry, &wq->uuid_list, list)
+		out += sprintf(buf + out, "%pUl\n", &entry->uuid);
+
+	return out;
+}
+
+static struct device_attribute dev_attr_wq_uuid =
+		__ATTR(uuid, 0644, wq_uuid_show, wq_uuid_store);
 
 static ssize_t wq_type_show(struct device *dev,
 			    struct device_attribute *attr, char *buf)
@@ -1130,8 +1249,9 @@ static ssize_t wq_type_show(struct device *dev,
 		return sprintf(buf, "%s\n",
 			       idxd_wq_type_names[IDXD_WQT_KERNEL]);
 	case IDXD_WQT_USER:
-		return sprintf(buf, "%s\n",
-			       idxd_wq_type_names[IDXD_WQT_USER]);
+		return sprintf(buf, "%s\n", idxd_wq_type_names[IDXD_WQT_USER]);
+	case IDXD_WQT_MDEV:
+		return sprintf(buf, "%s\n", idxd_wq_type_names[IDXD_WQT_MDEV]);
 	case IDXD_WQT_NONE:
 	default:
 		return sprintf(buf, "%s\n",
@@ -1139,6 +1259,20 @@ static ssize_t wq_type_show(struct device *dev,
 	}
 
 	return -EINVAL;
+}
+
+static void wq_clear_uuids(struct idxd_wq *wq)
+{
+	struct idxd_wq_uuid *entry, *n;
+	struct device *dev = &wq->idxd->pdev->dev;
+
+	mutex_lock(&wq->wq_lock);
+	list_for_each_entry_safe(entry, n, &wq->uuid_list, list) {
+		list_del(&entry->list);
+		devm_kfree(dev, entry);
+		wq->uuids--;
+	}
+	mutex_unlock(&wq->wq_lock);
 }
 
 static ssize_t wq_type_store(struct device *dev,
@@ -1158,12 +1292,19 @@ static ssize_t wq_type_store(struct device *dev,
 		wq->type = IDXD_WQT_KERNEL;
 	else if (sysfs_streq(buf, idxd_wq_type_names[IDXD_WQT_USER]))
 		wq->type = IDXD_WQT_USER;
+	else if (sysfs_streq(buf, idxd_wq_type_names[IDXD_WQT_MDEV]))
+		wq->type = IDXD_WQT_MDEV;
 	else
 		return -EINVAL;
 
 	/* If we are changing queue type, clear the name */
-	if (wq->type != old_type)
+	if (wq->type != old_type) {
 		memset(wq->name, 0, WQ_NAME_SIZE + 1);
+
+		/* If changed out of MDEV type, clear uuids */
+		if (wq->type != IDXD_WQT_MDEV)
+			wq_clear_uuids(wq);
+	}
 
 	return count;
 }
@@ -1223,6 +1364,7 @@ static struct attribute *idxd_wq_attributes[] = {
 	&dev_attr_wq_type.attr,
 	&dev_attr_wq_name.attr,
 	&dev_attr_wq_cdev_minor.attr,
+	&dev_attr_wq_uuid.attr,
 	NULL,
 };
 
@@ -1286,6 +1428,16 @@ static ssize_t numa_node_show(struct device *dev,
 	return sprintf(buf, "%d\n", dev_to_node(&idxd->pdev->dev));
 }
 static DEVICE_ATTR_RO(numa_node);
+
+static ssize_t ims_size_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct idxd_device *idxd =
+		container_of(dev, struct idxd_device, conf_dev);
+
+	return sprintf(buf, "%u\n", idxd->ims_size);
+}
+static DEVICE_ATTR_RO(ims_size);
 
 static ssize_t max_batch_size_show(struct device *dev,
 				   struct device_attribute *attr, char *buf)
@@ -1472,6 +1624,7 @@ static struct attribute *idxd_device_attributes[] = {
 	&dev_attr_max_work_queues_size.attr,
 	&dev_attr_max_engines.attr,
 	&dev_attr_numa_node.attr,
+	&dev_attr_ims_size.attr,
 	&dev_attr_max_batch_size.attr,
 	&dev_attr_max_transfer_size.attr,
 	&dev_attr_op_cap.attr,

@@ -290,6 +290,10 @@ config INTEL_IDXD
 	select PCI_PRI
 	select PCI_PASID
 	select PCI_IOV
+	select MSI_IMS
+	select VFIO_PCI
+	select VFIO_MDEV
+	select VFIO_MDEV_DEVICE
 	help
 	  Enable support for the Intel(R) data accelerators present
 	  in Intel Xeon CPU.

@@ -11,6 +11,7 @@
 #include <linux/pci.h>
 #include <linux/irq.h>
 #include <linux/idxd.h>
+#include <linux/uuid.h>
 #include "registers.h"
 
 #define IDXD_DRIVER_VERSION	"1.00"
@@ -63,6 +64,7 @@ enum idxd_wq_type {
 	IDXD_WQT_NONE = 0,
 	IDXD_WQT_KERNEL,
 	IDXD_WQT_USER,
+	IDXD_WQT_MDEV,
 };
 
 struct idxd_cdev {
@@ -70,6 +72,11 @@ struct idxd_cdev {
 	struct device *dev;
 	int minor;
 	struct wait_queue_head err_queue;
+};
+
+struct idxd_wq_uuid {
+	guid_t uuid;
+	struct list_head list;
 };
 
 #define IDXD_ALLOCATED_BATCH_SIZE	128U
@@ -116,6 +123,9 @@ struct idxd_wq {
 	struct percpu_rw_semaphore submit_lock;
 	wait_queue_head_t submit_waitq;
 	char name[WQ_NAME_SIZE + 1];
+	struct vdcm_idxd *vidxd;
+	struct list_head uuid_list;
+	int uuids;
 };
 
 struct idxd_engine {
@@ -169,6 +179,7 @@ struct idxd_device {
 
 	int num_groups;
 
+	u32 ims_offset;
 	u32 msix_perm_offset;
 	u32 wqcfg_offset;
 	u32 grpcfg_offset;
@@ -176,6 +187,7 @@ struct idxd_device {
 
 	u64 max_xfer_bytes;
 	u32 max_batch_size;
+	int ims_size;
 	int max_groups;
 	int max_engines;
 	int max_tokens;
@@ -191,6 +203,11 @@ struct idxd_device {
 	struct idxd_irq_entry *irq_entries;
 
 	struct dma_device dma_dev;
+
+	struct mutex mdev_lock;
+	atomic_t num_allocated_ims;
+	int *int_handles;
+	struct sbitmap ims_sbmap;
 };
 
 #define confdev_to_idxd(dev) container_of(dev, struct idxd_device, conf_dev)
@@ -209,15 +226,23 @@ enum idxd_portal_prot {
 	IDXD_PORTAL_LIMITED,
 };
 
-static inline int idxd_get_wq_portal_offset(enum idxd_portal_prot prot)
+enum idxd_interrupt_type {
+	IDXD_IRQ_MSIX = 0,
+	IDXD_IRQ_IMS,
+};
+
+static inline int idxd_get_wq_portal_offset(enum idxd_portal_prot prot,
+		enum idxd_interrupt_type irq_type)
 {
-	return prot * 0x1000;
+	return prot * 0x1000 + irq_type * 0x2000;
 }
 
 static inline int idxd_get_wq_portal_full_offset(int wq_id,
-						 enum idxd_portal_prot prot)
+						 enum idxd_portal_prot prot,
+						 enum idxd_interrupt_type irq_type)
 {
-	return ((wq_id * 4) << PAGE_SHIFT) + idxd_get_wq_portal_offset(prot);
+	return ((wq_id * 4) << PAGE_SHIFT) +
+		idxd_get_wq_portal_offset(prot, irq_type);
 }
 
 static inline void idxd_set_type(struct idxd_device *idxd)
@@ -260,6 +285,7 @@ void idxd_cleanup_sysfs(struct idxd_device *idxd);
 int idxd_register_driver(void);
 void idxd_unregister_driver(void);
 struct bus_type *idxd_get_bus_type(struct idxd_device *idxd);
+bool is_idxd_wq_mdev(struct idxd_wq *wq);
 
 /* device interrupt control */
 irqreturn_t idxd_irq_handler(int vec, void *data);
@@ -278,8 +304,13 @@ int idxd_device_reset(struct idxd_device *idxd);
 int __idxd_device_reset(struct idxd_device *idxd);
 void idxd_device_cleanup(struct idxd_device *idxd);
 int idxd_device_config(struct idxd_device *idxd);
+int idxd_device_ro_config(struct idxd_device *idxd);
 void idxd_device_wqs_clear_state(struct idxd_device *idxd);
 int idxd_device_drain_pasid(struct idxd_device *idxd, int pasid);
+int idxd_device_abort_pasid(struct idxd_device *idxd, int pasid);
+void idxd_device_load_config(struct idxd_device *idxd);
+int idxd_device_request_int_handle(struct idxd_device *idxd,
+		int idx, int *handle);
 
 /* work queue control */
 int idxd_wq_alloc_resources(struct idxd_wq *wq);
@@ -288,8 +319,12 @@ int idxd_wq_enable(struct idxd_wq *wq);
 int idxd_wq_disable(struct idxd_wq *wq);
 int idxd_wq_map_portal(struct idxd_wq *wq);
 void idxd_wq_unmap_portal(struct idxd_wq *wq);
+int idxd_wq_abort(struct idxd_wq *wq);
 int idxd_wq_set_pasid(struct idxd_wq *wq, int pasid);
 int idxd_wq_disable_pasid(struct idxd_wq *wq);
+void idxd_wq_update_pasid(struct idxd_wq *wq, int pasid);
+void idxd_wq_update_priv(struct idxd_wq *wq, int priv);
+int idxd_wq_drain(struct idxd_wq *wq);
 
 /* dmaengine */
 int idxd_register_dma_device(struct idxd_device *idxd);
@@ -310,5 +345,9 @@ void idxd_wq_del_cdev(struct idxd_wq *wq);
 
 /* kdirect */
 void idxd_setup_dma_kdirect(struct idxd_device *idxd);
+
+/* mdev */
+int idxd_mdev_host_init(struct idxd_device *idxd);
+void idxd_mdev_host_release(struct idxd_device *idxd);
 
 #endif
