@@ -4086,6 +4086,65 @@
             ],
             "status": "intel confidential",
             "stuck_at_ref": ""
+        },
+        {
+            "branch": "hqmv2_for_intel_next-v5.6",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "    CONFIG_INTEL_HQMV2",
+                    "value": "m"
+                },
+                {
+                    "name": "    CONFIG_INTEL_HQMV2_DATAPATH",
+                    "value": "y"
+                },
+                {
+                    "name": "    CONFIG_INTEL_HQMV2_SIOV",
+                    "value": "n"
+                },
+                {
+                    "name": "    CONFIG_INTEL_IOMMU",
+                    "value": "y"
+                },
+                {
+                    "name": "    CONFIG_VFIO",
+                    "value": "y"
+                },
+                {
+                    "name": "    CONFIG_VFIO_MDEV",
+                    "value": "y"
+                },
+                {
+                    "name": "    CONFIG_VFIO_MDEV_DEVICE",
+                    "value": "y"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Gage Eads",
+                    "email": "gage.eads@intel.com"
+                }
+            ],
+            "description": "driver for Intel Hardware Queue Manager",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "McDonnell, Niall",
+                    "email": "niall.mcdonnell@intel.com"
+                }
+            ],
+            "jira": "NEXT-1859",
+            "name": "hqmv2",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/cwa/linux-kernel.git",
+            "sdl_contact": [
+                {
+                    "name": "Eads, Gage",
+                    "email": "gage.eads@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": ""
         }
     ]
 }
