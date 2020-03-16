@@ -41,6 +41,9 @@ typedef uint64_t u64;
 #define CTXT_SW_ITERATIONS		50
 #define NUM_THREADS			100
 
+#define XSAVE_CPUID			0x1
+#define XSAVE_ECX_BIT			26
+
 #define XSTATE_CPUID			0xd
 #define XSTATE_USER_STATE_SUBLEAVE	0x0
 #define TILE_CPUID			0x1d
@@ -202,6 +205,15 @@ static inline void *__get_xsave_tile_data_addr(void *data)
 
 static inline bool check_availability(void)
 {
+	u32 eax, ebx, ecx, edx;
+
+	eax = XSAVE_CPUID;
+	ecx = 0;
+
+	__cpuid(&eax, &ebx, &ecx, &edx);
+	if (!(ecx & 1<<XSAVE_ECX_BIT))
+		return false;
+
 	if (__xgetbv(0) & XFEATURE_MASK_XTILE)
 		return true;
 
