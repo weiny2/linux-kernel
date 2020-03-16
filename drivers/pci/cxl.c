@@ -14,6 +14,7 @@
 #define PCI_EXT_DVSEC_VENDOR_OFFSET	0x04
 #define PCI_EXT_DVSEC_ID_OFFSET		0x08
 #define PCI_CXL_DVSEC_ID		0
+#define PCI_CXL_DVSEC_PORT_ID		0x07
 
 #define PCI_CXL_CAP			0x0a
 #define PCI_CXL_CTRL			0x0c
@@ -35,6 +36,10 @@ static void pci_cxl_unlock(struct pci_dev *dev)
 	int pos = dev->cxl_cap;
 	u16 lock;
 
+	/* Only for Endpoints */
+	if (pci_pcie_type(dev) != PCI_EXP_TYPE_ENDPOINT)
+		return;
+
 	pci_read_config_word(dev, pos + PCI_CXL_LOCK, &lock);
 	lock &= ~PCI_CXL_CONFIG_LOCK;
 	pci_write_config_word(dev, pos + PCI_CXL_LOCK, lock);
@@ -44,6 +49,10 @@ static void pci_cxl_lock(struct pci_dev *dev)
 {
 	int pos = dev->cxl_cap;
 	u16 lock;
+
+	/* Only for Endpoints */
+	if (pci_pcie_type(dev) != PCI_EXP_TYPE_ENDPOINT)
+		return;
 
 	pci_read_config_word(dev, pos + PCI_CXL_LOCK, &lock);
 	lock |= PCI_CXL_CONFIG_LOCK;
@@ -110,7 +119,7 @@ void pci_cxl_cache_disable(struct pci_dev *dev)
 }
 EXPORT_SYMBOL_GPL(pci_cxl_cache_disable);
 
-static int pci_find_cxl_capability(struct pci_dev *dev)
+static int pci_find_cxl_capability(struct pci_dev *dev, int cxl_dvsec_id)
 {
 	int pos = 0;
 	u16 vendor;
@@ -122,7 +131,7 @@ static int pci_find_cxl_capability(struct pci_dev *dev)
 		pci_read_config_word(dev, pos + PCI_EXT_DVSEC_VENDOR_OFFSET,
 				&vendor);
 		pci_read_config_word(dev, pos + PCI_EXT_DVSEC_ID_OFFSET, &id);
-		if (vendor == PCI_VENDOR_ID_INTEL && id == PCI_CXL_DVSEC_ID)
+		if (vendor == PCI_VENDOR_ID_INTEL && id == cxl_dvsec_id)
 			return pos;
 	} while (pos);
 
@@ -132,6 +141,7 @@ static int pci_find_cxl_capability(struct pci_dev *dev)
 void pci_cxl_init(struct pci_dev *dev)
 {
 	int pos;
+	int cxl_dvsec_id;
 	u16 cap;
 
 	u16 ctrl;
@@ -144,11 +154,18 @@ void pci_cxl_init(struct pci_dev *dev)
 	if (!pci_is_pcie(dev))
 		return;
 
-	/* Only for Device 0 Function 0 */
-	if (dev->devfn)
+	/* Only for Device 0 Function 0 Endpoints */
+	if ((dev->devfn == 0) && (pci_pcie_type(dev) == PCI_EXP_TYPE_ENDPOINT))
+		cxl_dvsec_id = PCI_CXL_DVSEC_ID;
+	/* Or for upstream/downstream Ports */
+	else if ((pci_pcie_type(dev) == PCI_EXP_TYPE_ROOT_PORT ||
+		   pci_pcie_type(dev) == PCI_EXP_TYPE_UPSTREAM ||
+		   pci_pcie_type(dev) == PCI_EXP_TYPE_DOWNSTREAM))
+		cxl_dvsec_id = PCI_CXL_DVSEC_PORT_ID;
+	else
 		return;
 
-	pos = pci_find_cxl_capability(dev);
+	pos = pci_find_cxl_capability(dev, cxl_dvsec_id);
 	if (!pos)
 		return;
 
@@ -156,20 +173,34 @@ void pci_cxl_init(struct pci_dev *dev)
 
 	pci_read_config_word(dev, pos + PCI_CXL_CAP, &cap);
 
-	dev_info(&dev->dev, "CXL: Cache%c IO%c Mem%c Viral%d HDMCount %d\n",
-			(cap & PCI_CXL_CACHE) ? '+' : '-',
-			(cap & PCI_CXL_IO) ? '+' : '-',
-			(cap & PCI_CXL_MEM) ? '+' : '-',
-			(cap & PCI_CXL_VIRAL) ? '+' : '-',
-			PCI_CXL_HDM_COUNT(cap));
+	if (pci_pcie_type(dev) == PCI_EXP_TYPE_ENDPOINT) {
+		dev_info(&dev->dev, "CXL: Cache%c IO%c Mem%c Viral%c HDMCount %d\n",
+			 (cap & PCI_CXL_CACHE) ? '+' : '-',
+			 (cap & PCI_CXL_IO) ? '+' : '-',
+			 (cap & PCI_CXL_MEM) ? '+' : '-',
+			 (cap & PCI_CXL_VIRAL) ? '+' : '-',
+			 PCI_CXL_HDM_COUNT(cap));
 
-	pci_read_config_word(dev, pos + PCI_CXL_CTRL, &ctrl);
-	pci_read_config_word(dev, pos + PCI_CXL_STS, &status);
-	pci_read_config_word(dev, pos + PCI_CXL_CTRL2, &ctrl2);
-	pci_read_config_word(dev, pos + PCI_CXL_STS2, &status2);
-	pci_read_config_word(dev, pos + PCI_CXL_LOCK, &lock);
+		pci_read_config_word(dev, pos + PCI_CXL_CTRL, &ctrl);
+		pci_read_config_word(dev, pos + PCI_CXL_STS, &status);
+		pci_read_config_word(dev, pos + PCI_CXL_CTRL2, &ctrl2);
+		pci_read_config_word(dev, pos + PCI_CXL_STS2, &status2);
+		pci_read_config_word(dev, pos + PCI_CXL_LOCK, &lock);
 
-	dev_info(&dev->dev, "CXL: cap ctrl status ctrl2 status2 lock\n");
-	dev_info(&dev->dev, "CXL: %04x %04x %04x %04x %04x %04x\n",
-			cap, ctrl, status, ctrl2, status2, lock);
+		dev_info(&dev->dev, "CXL: cap ctrl status ctrl2 status2 lock\n");
+		dev_info(&dev->dev, "CXL: %04x %04x %04x %04x %04x %04x\n",
+			 cap, ctrl, status, ctrl2, status2, lock);
+	} else { /* upstream/downstream Port capabilities */
+		dev_info(&dev->dev, "CXL: Cache%c IO%c Mem%c\n",
+			 (cap & PCI_CXL_CACHE) ? '+' : '-',
+			 (cap & PCI_CXL_IO) ? '+' : '-',
+			 (cap & PCI_CXL_MEM) ? '+' : '-');
+
+		pci_read_config_word(dev, pos + PCI_CXL_CTRL, &ctrl);
+		pci_read_config_word(dev, pos + PCI_CXL_STS, &status);
+
+		dev_info(&dev->dev, "CXL: cap ctrl status\n");
+		dev_info(&dev->dev, "CXL: %04x %04x %04x\n",
+			 cap, ctrl, status);
+	}
 }
