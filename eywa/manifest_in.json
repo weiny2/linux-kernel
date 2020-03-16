@@ -232,7 +232,7 @@
                 }
             ],
             "description": "Enable split lock detection",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Ravi Shankar",
@@ -4025,7 +4025,7 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": "01fd87c54bb27184c19ddf451fe32361d89c1583"
+            "stuck_at_ref": ""
         },
         {
             "branch": "lxy/vm-dos-virt",
