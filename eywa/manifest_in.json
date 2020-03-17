@@ -2744,7 +2744,11 @@
                 },
                 {
                     "name": "CONFIG_INTEL_CTA_WATCHER",
-                    "value": "n"
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_INTEL_CTA_CRASHLOG",
+                    "value": "y"
                 }
             ],
             "contributor": [
