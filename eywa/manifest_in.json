@@ -4127,7 +4127,7 @@
                 }
             ],
             "description": "driver for Intel Hardware Queue Manager",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "McDonnell, Niall",
