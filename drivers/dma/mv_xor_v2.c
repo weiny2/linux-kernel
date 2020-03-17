@@ -706,6 +706,10 @@ static int mv_xor_v2_resume(struct platform_device *dev)
 	return 0;
 }
 
+static const struct platform_msi_ops mv_xor_v2_msi_ops = {
+	.write_msg	= mv_xor_v2_set_msi_msg,
+};
+
 static int mv_xor_v2_probe(struct platform_device *pdev)
 {
 	struct mv_xor_v2_device *xor_dev;
@@ -761,7 +765,7 @@ static int mv_xor_v2_probe(struct platform_device *pdev)
 	}
 
 	ret = platform_msi_domain_alloc_irqs(&pdev->dev, 1,
-					     mv_xor_v2_set_msi_msg);
+					     &mv_xor_v2_msi_ops);
 	if (ret)
 		goto disable_clk;
 

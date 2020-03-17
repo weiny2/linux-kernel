@@ -678,6 +678,10 @@ static void hidma_write_msi_msg(struct msi_desc *desc, struct msi_msg *msg)
 		writel(msg->data, dmadev->dev_evca + 0x120);
 	}
 }
+
+static const struct platform_msi_ops hidma_msi_ops = {
+	.write_msg	= hidma_write_msi_msg,
+};
 #endif
 
 static void hidma_free_msis(struct hidma_dev *dmadev)
@@ -703,7 +707,7 @@ static int hidma_request_msi(struct hidma_dev *dmadev,
 	struct msi_desc *failed_desc = NULL;
 
 	rc = platform_msi_domain_alloc_irqs(&pdev->dev, HIDMA_MSI_INTS,
-					    hidma_write_msi_msg);
+					    &hidma_msi_ops);
 	if (rc)
 		return rc;
 
