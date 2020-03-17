@@ -173,23 +173,32 @@ static void decode_osc_control(struct acpi_pci_root *root, char *msg, u32 word)
 			ARRAY_SIZE(pci_osc_control_bit));
 }
 
-static u8 pci_osc_uuid_str[] = "33DB4D5B-1FF7-401C-9657-7441C03DD766";
+static u8 *uuid_str_ids[] = {
+	"33DB4D5B-1FF7-401C-9657-7441C03DD766", /* PCI */
+	"68F2D50B-C469-4d8A-BD3D-941A103FD3FC", /* CXL */
+	NULL,
+};
 
 static acpi_status acpi_pci_run_osc(acpi_handle handle,
 				    const u32 *capbuf, u32 *retval)
 {
 	struct acpi_osc_context context = {
-		.uuid_str = pci_osc_uuid_str,
+		.uuid_str = NULL,
 		.rev = 1,
 		.cap.length = 12,
 		.cap.pointer = (void *)capbuf,
 	};
 	acpi_status status;
+	int i;
 
-	status = acpi_run_osc(handle, &context);
-	if (ACPI_SUCCESS(status)) {
-		*retval = *((u32 *)(context.ret.pointer + 8));
-		kfree(context.ret.pointer);
+	for (i = 0; uuid_str_ids[i] != NULL; i++) {
+		context.uuid_str = uuid_str_ids[i];
+		status = acpi_run_osc(handle, &context);
+		if (ACPI_SUCCESS(status)) {
+			*retval = *((u32 *)(context.ret.pointer + 8));
+			kfree(context.ret.pointer);
+			break;
+		}
 	}
 	return status;
 }
