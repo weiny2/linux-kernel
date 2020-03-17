@@ -4016,7 +4016,7 @@
                 }
             ],
             "jira": "NEXT-1853",
-            "name": "vmdos",
+            "name": "vmdos_split_lock",
             "repourl": "ssh://git-amr-4.devtools.intel.com:29418/enabling_cldemote_in_linux_kerne-linux_git.git",
             "sdl_contact": [
                 {
