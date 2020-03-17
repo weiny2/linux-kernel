@@ -2761,7 +2761,7 @@ static long vfio_iommu_type1_ioctl(void *iommu_data,
 	} else if (cmd == VFIO_IOMMU_BIND) {
 		struct vfio_iommu_type1_bind bind;
 		u32 version;
-		int data_size;
+		int data_size, ret;
 		void *gbind_data;
 
 		minsz = offsetofend(struct vfio_iommu_type1_bind, flags);
@@ -2792,14 +2792,20 @@ static long vfio_iommu_type1_ioctl(void *iommu_data,
 
 		switch (bind.flags & VFIO_IOMMU_BIND_MASK) {
 		case VFIO_IOMMU_BIND_GUEST_PGTBL:
-			return vfio_iommu_type1_bind_gpasid(iommu,
-							gbind_data);
+			ret = vfio_iommu_type1_bind_gpasid(iommu,
+							   gbind_data);
+			break;
 		case VFIO_IOMMU_UNBIND_GUEST_PGTBL:
-			return vfio_iommu_type1_unbind_gpasid(iommu,
-							gbind_data);
+			ret = vfio_iommu_type1_unbind_gpasid(iommu,
+							     gbind_data);
+			break;
 		default:
-			return -EINVAL;
+			ret = -EINVAL;
+			break;
 		}
+
+		kfree(gbind_data);
+		return ret;
 	} else if (cmd == VFIO_IOMMU_CACHE_INVALIDATE) {
 		struct vfio_iommu_type1_cache_invalidate cache_inv;
 		u32 version;
@@ -2836,8 +2842,10 @@ static long vfio_iommu_type1_ioctl(void *iommu_data,
 
 		mutex_lock(&iommu->lock);
 		ret = vfio_iommu_for_each_dev(iommu, vfio_cache_inv_fn,
-					    cache_info);
+						cache_info);
 		mutex_unlock(&iommu->lock);
+
+		kfree(cache_info);
 		return ret;
 	} else if (cmd == VFIO_IOMMU_PAGE_RESP) {
 		struct vfio_iommu_type1_page_resp resp;
