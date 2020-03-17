@@ -36,7 +36,9 @@ union intel_x86_pebs_dse {
 		unsigned int ld_dse:4;
 		unsigned int ld_stlb_miss:1;
 		unsigned int ld_locked:1;
-		unsigned int ld_reserved:26;
+		unsigned int ld_data_blk:1;
+		unsigned int ld_addr_blk:1;
+		unsigned int ld_reserved:24;
 	};
 	struct {
 		unsigned int st_l1d_hit:1;
@@ -197,6 +199,23 @@ static u64 load_latency_data(u64 status)
 	 */
 	if (dse.ld_locked)
 		val |= P(LOCK, LOCKED);
+
+	/*
+	 * bit 6: load was blocked since its data could not be forwarded
+	 *        from a preceding store
+	 */
+	if (dse.ld_data_blk)
+		val |= P(BLK, DATA);
+
+	/*
+	 * bit 7: load was blocked due to potential address conflict with
+	 *        a preceding store
+	 */
+	if (dse.ld_addr_blk)
+		val |= P(BLK, ADDR);
+
+	if (!dse.ld_data_blk && !dse.ld_addr_blk)
+		val |= P(BLK, NA);
 
 	return val;
 }
