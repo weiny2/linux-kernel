@@ -67,6 +67,68 @@ int dlb_hw_create_sched_domain(struct dlb_hw *hw,
 			       unsigned int vf_id);
 
 /**
+ * dlb_hw_create_ldb_pool() - create a load-balanced credit pool
+ * @hw: dlb_hw handle for a particular device.
+ * @domain_id: domain ID.
+ * @args: credit pool creation arguments.
+ * @resp: response structure.
+ * @vf_request: indicates whether this request came from a VF.
+ * @vf_id: If vf_request is true, this contains the VF's ID.
+ *
+ * This function creates a load-balanced credit pool containing the number of
+ * requested credits.
+ *
+ * Return:
+ * Returns 0 upon success, < 0 otherwise. If an error occurs, resp->status is
+ * assigned a detailed error code from enum dlb_error. If successful, resp->id
+ * contains the pool ID.
+ *
+ * Note: resp->id contains a virtual ID if vf_request is true.
+ *
+ * Errors:
+ * EINVAL - A requested resource is unavailable, the domain is not configured,
+ *	    or the domain has already been started.
+ * EFAULT - Internal error (resp->status not set).
+ */
+int dlb_hw_create_ldb_pool(struct dlb_hw *hw,
+			   u32 domain_id,
+			   struct dlb_create_ldb_pool_args *args,
+			   struct dlb_cmd_response *resp,
+			   bool vf_request,
+			   unsigned int vf_id);
+
+/**
+ * dlb_hw_create_dir_pool() - create a directed credit pool
+ * @hw: dlb_hw handle for a particular device.
+ * @domain_id: domain ID.
+ * @args: credit pool creation arguments.
+ * @resp: response structure.
+ * @vf_request: indicates whether this request came from a VF.
+ * @vf_id: If vf_request is true, this contains the VF's ID.
+ *
+ * This function creates a directed credit pool containing the number of
+ * requested credits.
+ *
+ * Return:
+ * Returns 0 upon success, < 0 otherwise. If an error occurs, resp->status is
+ * assigned a detailed error code from enum dlb_error. If successful, resp->id
+ * contains the pool ID.
+ *
+ * Note: resp->id contains a virtual ID if vf_request is true.
+ *
+ * Errors:
+ * EINVAL - A requested resource is unavailable, the domain is not configured,
+ *	    or the domain has already been started.
+ * EFAULT - Internal error (resp->status not set).
+ */
+int dlb_hw_create_dir_pool(struct dlb_hw *hw,
+			   u32 domain_id,
+			   struct dlb_create_dir_pool_args *args,
+			   struct dlb_cmd_response *resp,
+			   bool vf_request,
+			   unsigned int vf_id);
+
+/**
  * dlb_reset_domain() - reset a scheduling domain
  * @hw: dlb_hw handle for a particular device.
  * @domain_id: domain ID.
