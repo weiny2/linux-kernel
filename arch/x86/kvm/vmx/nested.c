@@ -555,6 +555,18 @@ static inline void enable_x2apic_msr_intercepts(unsigned long *msr_bitmap)
 	}
 }
 
+static void nested_vmx_update_intercept_for_msr(struct kvm_vcpu *vcpu,
+						u32 msr,
+						unsigned long *msr_bitmap_l1,
+						unsigned long *msr_bitmap_l0,
+						int type)
+{
+	if (!msr_write_intercepted_l01(vcpu, msr))
+		nested_vmx_disable_intercept_for_msr(msr_bitmap_l1,
+						     msr_bitmap_l0,
+						     msr, type);
+}
+
 /*
  * Merge L0's and L1's MSR bitmap, return false to indicate that
  * we do not use the hardware.
@@ -626,6 +638,28 @@ static inline bool nested_vmx_prepare_msr_bitmap(struct kvm_vcpu *vcpu,
 	nested_vmx_disable_intercept_for_msr(msr_bitmap_l1, msr_bitmap_l0,
 					     MSR_KERNEL_GS_BASE, MSR_TYPE_RW);
 
+	/* Pass CET MSRs to nested VM if L0 and L1 are set to pass-through. */
+	nested_vmx_update_intercept_for_msr(vcpu, MSR_IA32_U_CET,
+					    msr_bitmap_l1, msr_bitmap_l0,
+					    MSR_TYPE_RW);
+	nested_vmx_update_intercept_for_msr(vcpu, MSR_IA32_PL3_SSP,
+					    msr_bitmap_l1, msr_bitmap_l0,
+					    MSR_TYPE_RW);
+	nested_vmx_update_intercept_for_msr(vcpu, MSR_IA32_S_CET,
+					    msr_bitmap_l1, msr_bitmap_l0,
+					    MSR_TYPE_RW);
+	nested_vmx_update_intercept_for_msr(vcpu, MSR_IA32_PL0_SSP,
+					    msr_bitmap_l1, msr_bitmap_l0,
+					    MSR_TYPE_RW);
+	nested_vmx_update_intercept_for_msr(vcpu, MSR_IA32_PL1_SSP,
+					    msr_bitmap_l1, msr_bitmap_l0,
+					    MSR_TYPE_RW);
+	nested_vmx_update_intercept_for_msr(vcpu, MSR_IA32_PL2_SSP,
+					    msr_bitmap_l1, msr_bitmap_l0,
+					    MSR_TYPE_RW);
+	nested_vmx_update_intercept_for_msr(vcpu, MSR_IA32_INT_SSP_TAB,
+					    msr_bitmap_l1, msr_bitmap_l0,
+					    MSR_TYPE_RW);
 	/*
 	 * Checking the L0->L1 bitmap is trying to verify two things:
 	 *
