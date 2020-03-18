@@ -1,0 +1,38 @@
+Compute eXpress Link
+
+What IP features are eanbled by this code?
+  CXL enumeration for Devices and Ports
+  Basic PCIe UUID string identification for CXL hardware when running OSC
+  Requires CXL hardware (PCIe card)
+  Will dmesg provide output (dev_info) for success or failure
+
+This patch series implements basic Designated Vendor-Specific Extended
+Capabilities (DVSEC) decode for Compute eXpress Link devices, a new CPU
+interconnect building upon PCIe. As a basis for the CXL support it provides
+PCI init handling for detection, decode, and caching of CXL device
+capabilities.  Moreover, it makes use of the DVSEC Vendor ID and DVSEC ID so
+as to identify a CXL capable device. (PCIe r5.0, sec 7.9.6.2)
+
+DocLink: https://www.computeexpresslink.org/
+
+For your reference, a parallel series of patches have been submitted to enable
+lspci decode of CXL DVSEC and may be tracked.
+
+Link: https://lore.kernel.org/linux-pci/20200511174618.10589-1-sean.v.kelley@linux.intel.com/
+
+This patch makes use of pending DVSEC related header additions and the
+first patch of that series is included here. It can be sorted out when the
+upstream merge is done.
+
+Link: https://lore.kernel.org/linux-pci/20200508021844.6911-2-david.e.box@linux.intel.com/
+
+Sample dmesg output of a CXL Type 3 device (CXL.io, CXL.mem):
+[    2.997177] pci 0000:6b:00.0: CXL: Cache- IO+ Mem+ Viral- HDMCount 1
+[    2.997188] pci 0000:6b:00.0: CXL: cap ctrl status ctrl2 status2 lock
+[    2.997201] pci 0000:6b:00.0: CXL: 001e 0002 0000 0000 0000 0000
+
+Which Platforms are affected by this code?
+  SPR
+Are any bugs fixed or introduced by this code?
+  Third release, validated on Simics.
+  Still essentially a "hello world" in the absence of a CXL card.
