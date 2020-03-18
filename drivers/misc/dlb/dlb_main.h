@@ -43,6 +43,7 @@ struct dlb_dev;
 struct dlb_device_ops {
 	int (*map_pci_bar_space)(struct dlb_dev *dev, struct pci_dev *pdev);
 	void (*unmap_pci_bar_space)(struct dlb_dev *dev, struct pci_dev *pdev);
+	int (*mmap)(struct file *f, struct vm_area_struct *vma, u32 id);
 	void (*inc_pm_refcnt)(struct pci_dev *pdev, bool resume);
 	void (*dec_pm_refcnt)(struct pci_dev *pdev);
 	int (*init_driver_state)(struct dlb_dev *dev);
@@ -91,6 +92,12 @@ struct dlb_device_ops {
 	int (*get_num_resources)(struct dlb_hw *hw,
 				 struct dlb_get_num_resources_args *args);
 	int (*reset_domain)(struct dlb_dev *dev, u32 domain_id);
+	int (*ldb_port_owned_by_domain)(struct dlb_hw *hw,
+					u32 domain_id,
+					u32 port_id);
+	int (*dir_port_owned_by_domain)(struct dlb_hw *hw,
+					u32 domain_id,
+					u32 port_id);
 	int (*get_ldb_queue_depth)(struct dlb_hw *hw,
 				   u32 domain_id,
 				   struct dlb_get_ldb_queue_depth_args *args,
@@ -123,6 +130,11 @@ struct dlb_domain_dev {
 	struct dlb_status *status;
 };
 
+struct dlb_vma_node {
+	struct list_head list;
+	struct vm_area_struct *vma;
+};
+
 struct dlb_dev {
 	int id;
 	struct pci_dev *pdev;
@@ -137,6 +149,7 @@ struct dlb_dev {
 	struct dlb_domain_dev sched_domains[DLB_MAX_NUM_DOMAINS];
 	struct dlb_port_memory ldb_port_mem[DLB_MAX_NUM_LDB_PORTS];
 	struct dlb_port_memory dir_port_mem[DLB_MAX_NUM_DIR_PORTS];
+	struct list_head vma_list;
 	u8 domain_reset_failed;
 	/* The resource mutex serializes access to driver data structures and
 	 * hardware registers.

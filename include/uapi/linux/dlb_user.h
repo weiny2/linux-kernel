@@ -642,8 +642,35 @@ enum dlb_domain_user_interface_commands {
 	NUM_DLB_DOMAIN_CMD,
 };
 
+/*
+ * Base addresses for memory mapping the consumer queue (CQ) and popcount (PC)
+ * memory space, and producer port (PP) MMIO space. The CQ, PC, and PP
+ * addresses are per-port. Every address is page-separated (e.g. LDB PP 0 is at
+ * 0x2100000 and LDB PP 1 is at 0x2101000).
+ */
+#define DLB_LDB_CQ_BASE 0x3000000
 #define DLB_LDB_CQ_MAX_SIZE 65536
+#define DLB_LDB_CQ_OFFS(id) (DLB_LDB_CQ_BASE + (id) * DLB_LDB_CQ_MAX_SIZE)
+
+#define DLB_DIR_CQ_BASE 0x3800000
 #define DLB_DIR_CQ_MAX_SIZE 65536
+#define DLB_DIR_CQ_OFFS(id) (DLB_DIR_CQ_BASE + (id) * DLB_DIR_CQ_MAX_SIZE)
+
+#define DLB_LDB_PC_BASE 0x2300000
+#define DLB_LDB_PC_MAX_SIZE 4096
+#define DLB_LDB_PC_OFFS(id) (DLB_LDB_PC_BASE + (id) * DLB_LDB_PC_MAX_SIZE)
+
+#define DLB_DIR_PC_BASE 0x2200000
+#define DLB_DIR_PC_MAX_SIZE 4096
+#define DLB_DIR_PC_OFFS(id) (DLB_DIR_PC_BASE + (id) * DLB_DIR_PC_MAX_SIZE)
+
+#define DLB_LDB_PP_BASE 0x2100000
+#define DLB_LDB_PP_MAX_SIZE 4096
+#define DLB_LDB_PP_OFFS(id) (DLB_LDB_PP_BASE + (id) * DLB_LDB_PP_MAX_SIZE)
+
+#define DLB_DIR_PP_BASE 0x2000000
+#define DLB_DIR_PP_MAX_SIZE 4096
+#define DLB_DIR_PP_OFFS(id) (DLB_DIR_PP_BASE + (id) * DLB_DIR_PP_MAX_SIZE)
 
 /*******************/
 /* dlb ioctl codes */

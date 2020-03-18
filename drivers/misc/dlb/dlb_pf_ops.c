@@ -102,6 +102,151 @@ pci_iomap_bar2_fail:
 	return ret;
 }
 
+#define DLB_LDB_CQ_BOUND DLB_LDB_CQ_OFFS(DLB_MAX_NUM_LDB_PORTS)
+#define DLB_DIR_CQ_BOUND DLB_DIR_CQ_OFFS(DLB_MAX_NUM_DIR_PORTS)
+#define DLB_LDB_PC_BOUND DLB_LDB_PC_OFFS(DLB_MAX_NUM_LDB_PORTS)
+#define DLB_DIR_PC_BOUND DLB_DIR_PC_OFFS(DLB_MAX_NUM_DIR_PORTS)
+
+static int dlb_pf_mmap(struct file *f,
+		       struct vm_area_struct *vma,
+		       u32 domain_id)
+{
+	unsigned long bar_pgoff;
+	unsigned long offset;
+	struct dlb_dev *dev;
+	struct page *page;
+	pgprot_t pgprot;
+	u32 port_id;
+
+	dev = container_of(f->f_inode->i_cdev, struct dlb_dev, cdev);
+
+	offset = vma->vm_pgoff << PAGE_SHIFT;
+
+	if (offset >= DLB_LDB_CQ_BASE && offset < DLB_LDB_CQ_BOUND) {
+		if ((vma->vm_end - vma->vm_start) != DLB_LDB_CQ_MAX_SIZE)
+			return -EINVAL;
+
+		bar_pgoff = dev->hw.func_phys_addr >> PAGE_SHIFT;
+
+		port_id = (offset - DLB_LDB_CQ_BASE) / DLB_LDB_CQ_MAX_SIZE;
+
+		if (dev->ops->ldb_port_owned_by_domain(&dev->hw,
+						       domain_id,
+						       port_id) != 1)
+			return -EINVAL;
+
+		page = virt_to_page(dev->ldb_port_mem[port_id].cq_base);
+
+		return remap_pfn_range(vma,
+				       vma->vm_start,
+				       page_to_pfn(page),
+				       vma->vm_end - vma->vm_start,
+				       vma->vm_page_prot);
+
+	} else if (offset >= DLB_DIR_CQ_BASE && offset < DLB_DIR_CQ_BOUND) {
+		if ((vma->vm_end - vma->vm_start) != DLB_DIR_CQ_MAX_SIZE)
+			return -EINVAL;
+
+		bar_pgoff = dev->hw.func_phys_addr >> PAGE_SHIFT;
+
+		port_id = (offset - DLB_DIR_CQ_BASE) / DLB_DIR_CQ_MAX_SIZE;
+
+		if (dev->ops->dir_port_owned_by_domain(&dev->hw,
+						       domain_id,
+						       port_id) != 1)
+			return -EINVAL;
+
+		page = virt_to_page(dev->dir_port_mem[port_id].cq_base);
+
+		return remap_pfn_range(vma,
+				       vma->vm_start,
+				       page_to_pfn(page),
+				       vma->vm_end - vma->vm_start,
+				       vma->vm_page_prot);
+
+	} else if (offset >= DLB_LDB_PC_BASE && offset < DLB_LDB_PC_BOUND) {
+		if ((vma->vm_end - vma->vm_start) != DLB_LDB_PC_MAX_SIZE)
+			return -EINVAL;
+
+		bar_pgoff = dev->hw.func_phys_addr >> PAGE_SHIFT;
+
+		port_id = (offset - DLB_LDB_PC_BASE) / DLB_LDB_PC_MAX_SIZE;
+
+		if (dev->ops->ldb_port_owned_by_domain(&dev->hw,
+						       domain_id,
+						       port_id) != 1)
+			return -EINVAL;
+
+		page = virt_to_page(dev->ldb_port_mem[port_id].pc_base);
+
+		return remap_pfn_range(vma,
+				       vma->vm_start,
+				       page_to_pfn(page),
+				       vma->vm_end - vma->vm_start,
+				       vma->vm_page_prot);
+
+	} else if (offset >= DLB_DIR_PC_BASE && offset < DLB_DIR_PC_BOUND) {
+		if ((vma->vm_end - vma->vm_start) != DLB_DIR_PC_MAX_SIZE)
+			return -EINVAL;
+
+		bar_pgoff = dev->hw.func_phys_addr >> PAGE_SHIFT;
+
+		port_id = (offset - DLB_DIR_PC_BASE) / DLB_DIR_PC_MAX_SIZE;
+
+		if (dev->ops->dir_port_owned_by_domain(&dev->hw,
+						       domain_id,
+						       port_id) != 1)
+			return -EINVAL;
+
+		page = virt_to_page(dev->dir_port_mem[port_id].pc_base);
+
+		return remap_pfn_range(vma,
+				       vma->vm_start,
+				       page_to_pfn(page),
+				       vma->vm_end - vma->vm_start,
+				       vma->vm_page_prot);
+
+	} else if (offset >= DLB_LDB_PP_BASE && offset < DLB_LDB_PP_BOUND) {
+		if ((vma->vm_end - vma->vm_start) != DLB_LDB_PP_MAX_SIZE)
+			return -EINVAL;
+
+		bar_pgoff = dev->hw.func_phys_addr >> PAGE_SHIFT;
+
+		port_id = (offset - DLB_LDB_PP_BASE) / DLB_LDB_PP_MAX_SIZE;
+
+		if (dev->ops->ldb_port_owned_by_domain(&dev->hw,
+						       domain_id,
+						       port_id) != 1)
+			return -EINVAL;
+
+		pgprot = pgprot_noncached(vma->vm_page_prot);
+
+	} else if (offset >= DLB_DIR_PP_BASE && offset < DLB_DIR_PP_BOUND) {
+		if ((vma->vm_end - vma->vm_start) != DLB_DIR_PP_MAX_SIZE)
+			return -EINVAL;
+
+		bar_pgoff = dev->hw.func_phys_addr >> PAGE_SHIFT;
+
+		port_id = (offset - DLB_DIR_PP_BASE) / DLB_DIR_PP_MAX_SIZE;
+
+		if (dev->ops->dir_port_owned_by_domain(&dev->hw,
+						       domain_id,
+						       port_id) != 1)
+			return -EINVAL;
+
+		pgprot = pgprot_noncached(vma->vm_page_prot);
+
+	} else {
+		return -EINVAL;
+	}
+
+	return io_remap_pfn_range(vma,
+				  vma->vm_start,
+				  bar_pgoff + vma->vm_pgoff,
+				  vma->vm_end - vma->vm_start,
+				  pgprot);
+}
+
 /*******************************/
 /****** Driver management ******/
 /*******************************/
@@ -317,6 +462,24 @@ static int dlb_pf_query_cq_poll_mode(struct dlb_dev *dlb_dev,
 	return 0;
 }
 
+/**************************************/
+/****** Resource query callbacks ******/
+/**************************************/
+
+static int dlb_pf_ldb_port_owned_by_domain(struct dlb_hw *hw,
+					   u32 domain_id,
+					   u32 port_id)
+{
+	return dlb_ldb_port_owned_by_domain(hw, domain_id, port_id, false, 0);
+}
+
+static int dlb_pf_dir_port_owned_by_domain(struct dlb_hw *hw,
+					   u32 domain_id,
+					   u32 port_id)
+{
+	return dlb_dir_port_owned_by_domain(hw, domain_id, port_id, false, 0);
+}
+
 /*******************************/
 /****** DLB PF Device Ops ******/
 /*******************************/
@@ -324,6 +487,7 @@ static int dlb_pf_query_cq_poll_mode(struct dlb_dev *dlb_dev,
 struct dlb_device_ops dlb_pf_ops = {
 	.map_pci_bar_space = dlb_pf_map_pci_bar_space,
 	.unmap_pci_bar_space = dlb_pf_unmap_pci_bar_space,
+	.mmap = dlb_pf_mmap,
 	.inc_pm_refcnt = dlb_pf_pm_inc_refcnt,
 	.dec_pm_refcnt = dlb_pf_pm_dec_refcnt,
 	.init_driver_state = dlb_pf_init_driver_state,
@@ -342,6 +506,8 @@ struct dlb_device_ops dlb_pf_ops = {
 	.create_dir_port = dlb_pf_create_dir_port,
 	.get_num_resources = dlb_pf_get_num_resources,
 	.reset_domain = dlb_pf_reset_domain,
+	.ldb_port_owned_by_domain = dlb_pf_ldb_port_owned_by_domain,
+	.dir_port_owned_by_domain = dlb_pf_dir_port_owned_by_domain,
 	.get_ldb_queue_depth = dlb_pf_get_ldb_queue_depth,
 	.get_dir_queue_depth = dlb_pf_get_dir_queue_depth,
 	.query_cq_poll_mode = dlb_pf_query_cq_poll_mode,
