@@ -190,6 +190,78 @@ int dlb_hw_create_dir_queue(struct dlb_hw *hw,
 			    unsigned int vf_id);
 
 /**
+ * dlb_hw_create_dir_port() - create a directed port
+ * @hw: dlb_hw handle for a particular device.
+ * @domain_id: domain ID.
+ * @args: port creation arguments.
+ * @pop_count_dma_base: base address of the pop count memory. This can be
+ *			a PA or an IOVA.
+ * @cq_dma_base: base address of the CQ memory. This can be a PA or an IOVA.
+ * @resp: response structure.
+ * @vf_request: indicates whether this request came from a VF.
+ * @vf_id: If vf_request is true, this contains the VF's ID.
+ *
+ * This function creates a directed port.
+ *
+ * Return:
+ * Returns 0 upon success, < 0 otherwise. If an error occurs, resp->status is
+ * assigned a detailed error code from enum dlb_error. If successful, resp->id
+ * contains the port ID.
+ *
+ * Note: resp->id contains a virtual ID if vf_request is true.
+ *
+ * Errors:
+ * EINVAL - A requested resource is unavailable, a credit setting is invalid, a
+ *	    pool ID is invalid, a pointer address is not properly aligned, the
+ *	    domain is not configured, or the domain has already been started.
+ * EFAULT - Internal error (resp->status not set).
+ */
+int dlb_hw_create_dir_port(struct dlb_hw *hw,
+			   u32 domain_id,
+			   struct dlb_create_dir_port_args *args,
+			   uintptr_t pop_count_dma_base,
+			   uintptr_t cq_dma_base,
+			   struct dlb_cmd_response *resp,
+			   bool vf_request,
+			   unsigned int vf_id);
+
+/**
+ * dlb_hw_create_ldb_port() - create a load-balanced port
+ * @hw: dlb_hw handle for a particular device.
+ * @domain_id: domain ID.
+ * @args: port creation arguments.
+ * @pop_count_dma_base: base address of the pop count memory. This can be
+ *			 a PA or an IOVA.
+ * @cq_dma_base: base address of the CQ memory. This can be a PA or an IOVA.
+ * @resp: response structure.
+ * @vf_request: indicates whether this request came from a VF.
+ * @vf_id: If vf_request is true, this contains the VF's ID.
+ *
+ * This function creates a load-balanced port.
+ *
+ * Return:
+ * Returns 0 upon success, < 0 otherwise. If an error occurs, resp->status is
+ * assigned a detailed error code from enum dlb_error. If successful, resp->id
+ * contains the port ID.
+ *
+ * Note: resp->id contains a virtual ID if vf_request is true.
+ *
+ * Errors:
+ * EINVAL - A requested resource is unavailable, a credit setting is invalid, a
+ *	    pool ID is invalid, a pointer address is not properly aligned, the
+ *	    domain is not configured, or the domain has already been started.
+ * EFAULT - Internal error (resp->status not set).
+ */
+int dlb_hw_create_ldb_port(struct dlb_hw *hw,
+			   u32 domain_id,
+			   struct dlb_create_ldb_port_args *args,
+			   uintptr_t pop_count_dma_base,
+			   uintptr_t cq_dma_base,
+			   struct dlb_cmd_response *resp,
+			   bool vf_request,
+			   unsigned int vf_id);
+
+/**
  * dlb_reset_domain() - reset a scheduling domain
  * @hw: dlb_hw handle for a particular device.
  * @domain_id: domain ID.
@@ -291,5 +363,22 @@ int dlb_hw_get_dir_queue_depth(struct dlb_hw *hw,
 			       struct dlb_cmd_response *resp,
 			       bool vf_request,
 			       unsigned int vf_id);
+
+/**
+ * dlb_hw_enable_sparse_ldb_cq_mode() - enable sparse mode for load-balanced
+ *	ports.
+ * @hw: dlb_hw handle for a particular device.
+ *
+ * This function must be called prior to configuring scheduling domains.
+ */
+void dlb_hw_enable_sparse_ldb_cq_mode(struct dlb_hw *hw);
+
+/**
+ * dlb_hw_enable_sparse_dir_cq_mode() - enable sparse mode for directed ports
+ * @hw: dlb_hw handle for a particular device.
+ *
+ * This function must be called prior to configuring scheduling domains.
+ */
+void dlb_hw_enable_sparse_dir_cq_mode(struct dlb_hw *hw);
 
 #endif /* __DLB_RESOURCE_H */
