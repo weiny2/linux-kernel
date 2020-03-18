@@ -43,6 +43,8 @@ struct dlb_dev;
 struct dlb_device_ops {
 	int (*map_pci_bar_space)(struct dlb_dev *dev, struct pci_dev *pdev);
 	void (*unmap_pci_bar_space)(struct dlb_dev *dev, struct pci_dev *pdev);
+	void (*inc_pm_refcnt)(struct pci_dev *pdev, bool resume);
+	void (*dec_pm_refcnt)(struct pci_dev *pdev);
 	int (*init_driver_state)(struct dlb_dev *dev);
 	void (*free_driver_state)(struct dlb_dev *dev);
 	int (*device_create)(struct dlb_dev *dlb_dev,
