@@ -65,6 +65,7 @@ struct intel_padgroup {
 	unsigned int size;
 #define INTEL_GPIO_BASE_MATCH	0	/* matches with @base */
 #define INTEL_GPIO_BASE_NOMAP	(-1)	/* no GPIO mapping should be created */
+#define INTEL_GPIO_BASE_ZERO	(-2)	/* force GPIO base to be 0 */
 	int gpio_base;
 	unsigned int padown_num;
 };
