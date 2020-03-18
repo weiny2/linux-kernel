@@ -14,6 +14,7 @@
 
 #include "dlb_ioctl.h"
 #include "dlb_main.h"
+#include "dlb_mem.h"
 #include "dlb_resource.h"
 
 #define TO_STR2(s) #s
@@ -190,6 +191,9 @@ static int dlb_close_domain_device_file(struct dlb_dev *dev,
 
 	ret = dev->ops->reset_domain(dev, domain_id);
 
+	/* Free all memory associated with the domain */
+	dlb_release_domain_memory(dev, domain_id);
+
 	if (ret) {
 		dev->domain_reset_failed = true;
 		dev_err(dev->dlb_device,
@@ -260,6 +264,113 @@ static ssize_t dlb_write(struct file *f,
 	return 0;
 }
 
+/* The kernel driver inserts VMAs into the device's VMA list whenever an mmap
+ * is performed or the VMA is cloned (e.g. during fork()).
+ */
+static int dlb_insert_vma(struct dlb_dev *dev, struct vm_area_struct *vma)
+{
+	struct dlb_vma_node *node;
+
+	node = devm_kzalloc(dev->dlb_device, sizeof(*node), GFP_KERNEL);
+	if (!node)
+		return -ENOMEM;
+
+	node->vma = vma;
+
+	mutex_lock(&dev->resource_mutex);
+
+	list_add(&node->list, &dev->vma_list);
+
+	mutex_unlock(&dev->resource_mutex);
+
+	return 0;
+}
+
+/* The kernel driver deletes VMAs from the device's VMA list when the VMA is
+ * closed (e.g. during process exit).
+ */
+static void dlb_delete_vma(struct dlb_dev *dev, struct vm_area_struct *vma)
+{
+	struct dlb_vma_node *vma_node;
+	struct list_head *node;
+
+	mutex_lock(&dev->resource_mutex);
+
+	list_for_each(node, &dev->vma_list) {
+		vma_node = list_entry(node, struct dlb_vma_node, list);
+		if (vma_node->vma == vma) {
+			list_del(&vma_node->list);
+			devm_kfree(dev->dlb_device, vma_node);
+			break;
+		}
+	}
+
+	mutex_unlock(&dev->resource_mutex);
+}
+
+static void
+dlb_vma_open(struct vm_area_struct *vma)
+{
+	struct dlb_dev *dev = vma->vm_private_data;
+
+	dlb_insert_vma(dev, vma);
+}
+
+static void
+dlb_vma_close(struct vm_area_struct *vma)
+{
+	struct dlb_dev *dev = vma->vm_private_data;
+
+	dlb_delete_vma(dev, vma);
+}
+
+static const struct vm_operations_struct dlb_vma_ops = {
+	.open = dlb_vma_open,
+	.close = dlb_vma_close,
+};
+
+static int dlb_mmap(struct file *f, struct vm_area_struct *vma)
+{
+	struct dlb_dev *dev;
+	u32 domain_id;
+	int ret;
+
+	dev = container_of(f->f_inode->i_cdev, struct dlb_dev, cdev);
+
+	/* mmap operations must go through scheduling domain device files */
+	if (IS_DLB_DEV_FILE(dlb_dev_number_base, f->f_inode->i_rdev))
+		return -EINVAL;
+
+	domain_id = DLB_FILE_ID_FROM_DEV_T(dlb_dev_number_base,
+					   f->f_inode->i_rdev);
+
+	if (domain_id >= DLB_MAX_NUM_DOMAINS) {
+		dev_err(dev->dlb_device,
+			"[%s()] Internal error\n", __func__);
+		ret = -EINVAL;
+		goto end;
+	}
+
+	ret = dlb_insert_vma(dev, vma);
+	if (ret)
+		goto end;
+
+	mutex_lock(&dev->resource_mutex);
+
+	ret = dev->ops->mmap(f, vma, domain_id);
+
+	mutex_unlock(&dev->resource_mutex);
+
+	if (ret)
+		dlb_delete_vma(dev, vma);
+
+	vma->vm_ops = &dlb_vma_ops;
+	vma->vm_private_data = dev;
+
+end:
+	return ret;
+}
+
 static long dlb_ioctl(struct file *f, unsigned int cmd, unsigned long arg)
 {
 	struct dlb_dev *dev;
@@ -299,6 +410,7 @@ static const struct file_operations dlb_fops = {
 	.release = dlb_close,
 	.read    = dlb_read,
 	.write   = dlb_write,
+	.mmap    = dlb_mmap,
 	.unlocked_ioctl = dlb_ioctl,
 	.compat_ioctl = compat_ptr_ioctl,
 };
@@ -436,6 +548,8 @@ static int dlb_probe(struct pci_dev *pdev,
 	if (pci_enable_pcie_error_reporting(pdev))
 		dev_err(&pdev->dev, "[%s()] Failed to enable AER\n", __func__);
 
+	INIT_LIST_HEAD(&dlb_dev->vma_list);
+
 	ret = dlb_dev->ops->map_pci_bar_space(dlb_dev, pdev);
 	if (ret)
 		goto map_pci_bar_fail;
@@ -522,6 +636,8 @@ static void dlb_remove(struct pci_dev *pdev)
 	dlb_dev->ops->free_driver_state(dlb_dev);
 
 	dlb_resource_free(&dlb_dev->hw);
+
+	dlb_release_device_memory(dlb_dev);
 
 	/* If a domain is created without its device file ever being opened, it
 	 * needs to be destroyed here.

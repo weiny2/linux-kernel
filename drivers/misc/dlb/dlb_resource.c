@@ -360,6 +360,28 @@ dlb_get_domain_dir_pool(u32 id,
 	return NULL;
 }
 
+static struct dlb_ldb_port *dlb_get_domain_ldb_port(u32 id,
+						    bool vf_request,
+						    struct dlb_domain *domain)
+{
+	struct dlb_ldb_port *port;
+
+	if (id >= DLB_MAX_NUM_LDB_PORTS)
+		return NULL;
+
+	DLB_DOM_LIST_FOR(domain->used_ldb_ports, port)
+		if ((!vf_request && port->id.phys_id == id) ||
+		    (vf_request && port->id.virt_id == id))
+			return port;
+
+	DLB_DOM_LIST_FOR(domain->avail_ldb_ports, port)
+		if ((!vf_request && port->id.phys_id == id) ||
+		    (vf_request && port->id.virt_id == id))
+			return port;
+
+	return NULL;
+}
+
 static struct dlb_dir_pq_pair *
 dlb_get_domain_used_dir_pq(u32 id,
 			   bool vf_request,
@@ -371,6 +393,28 @@ dlb_get_domain_used_dir_pq(u32 id,
 		return NULL;
 
 	DLB_DOM_LIST_FOR(domain->used_dir_pq_pairs, port)
+		if ((!vf_request && port->id.phys_id == id) ||
+		    (vf_request && port->id.virt_id == id))
+			return port;
+
+	return NULL;
+}
+
+static struct dlb_dir_pq_pair *dlb_get_domain_dir_pq(u32 id,
+						     bool vf_request,
+						     struct dlb_domain *domain)
+{
+	struct dlb_dir_pq_pair *port;
+
+	if (id >= DLB_MAX_NUM_DIR_PORTS)
+		return NULL;
+
+	DLB_DOM_LIST_FOR(domain->used_dir_pq_pairs, port)
+		if ((!vf_request && port->id.phys_id == id) ||
+		    (vf_request && port->id.virt_id == id))
+			return port;
+
+	DLB_DOM_LIST_FOR(domain->avail_dir_pq_pairs, port)
 		if ((!vf_request && port->id.phys_id == id) ||
 		    (vf_request && port->id.virt_id == id))
 			return port;
@@ -6294,6 +6338,56 @@ int dlb_reset_domain(struct dlb_hw *hw,
 		return ret;
 
 	return 0;
+}
+
+int dlb_ldb_port_owned_by_domain(struct dlb_hw *hw,
+				 u32 domain_id,
+				 u32 port_id,
+				 bool vf_request,
+				 unsigned int vf_id)
+{
+	struct dlb_ldb_port *port;
+	struct dlb_domain *domain;
+
+	if (vf_request && vf_id >= DLB_MAX_NUM_VFS)
+		return -EINVAL;
+
+	domain = dlb_get_domain_from_id(hw, domain_id, vf_request, vf_id);
+
+	if (!domain || !domain->configured)
+		return -EINVAL;
+
+	port = dlb_get_domain_ldb_port(port_id, vf_request, domain);
+
+	if (!port)
+		return -EINVAL;
+
+	return port->domain_id.phys_id == domain->id.phys_id;
+}
+
+int dlb_dir_port_owned_by_domain(struct dlb_hw *hw,
+				 u32 domain_id,
+				 u32 port_id,
+				 bool vf_request,
+				 unsigned int vf_id)
+{
+	struct dlb_dir_pq_pair *port;
+	struct dlb_domain *domain;
+
+	if (vf_request && vf_id >= DLB_MAX_NUM_VFS)
+		return -EINVAL;
+
+	domain = dlb_get_domain_from_id(hw, domain_id, vf_request, vf_id);
+
+	if (!domain || !domain->configured)
+		return -EINVAL;
+
+	port = dlb_get_domain_dir_pq(port_id, vf_request, domain);
+
+	if (!port)
+		return -EINVAL;
+
+	return port->domain_id.phys_id == domain->id.phys_id;
 }
 
 int dlb_hw_get_num_resources(struct dlb_hw *hw,
