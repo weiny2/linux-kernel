@@ -129,6 +129,67 @@ int dlb_hw_create_dir_pool(struct dlb_hw *hw,
 			   unsigned int vf_id);
 
 /**
+ * dlb_hw_create_ldb_queue() - create a load-balanced queue
+ * @hw: dlb_hw handle for a particular device.
+ * @domain_id: domain ID.
+ * @args: queue creation arguments.
+ * @resp: response structure.
+ * @vf_request: indicates whether this request came from a VF.
+ * @vf_id: If vf_request is true, this contains the VF's ID.
+ *
+ * This function creates a load-balanced queue.
+ *
+ * Return:
+ * Returns 0 upon success, < 0 otherwise. If an error occurs, resp->status is
+ * assigned a detailed error code from enum dlb_error. If successful, resp->id
+ * contains the queue ID.
+ *
+ * Note: resp->id contains a virtual ID if vf_request is true.
+ *
+ * Errors:
+ * EINVAL - A requested resource is unavailable, the domain is not configured,
+ *	    the domain has already been started, or the requested queue name is
+ *	    already in use.
+ * EFAULT - Internal error (resp->status not set).
+ */
+int dlb_hw_create_ldb_queue(struct dlb_hw *hw,
+			    u32 domain_id,
+			    struct dlb_create_ldb_queue_args *args,
+			    struct dlb_cmd_response *resp,
+			    bool vf_request,
+			    unsigned int vf_id);
+
+/**
+ * dlb_hw_create_dir_queue() - create a directed queue
+ * @hw: dlb_hw handle for a particular device.
+ * @domain_id: domain ID.
+ * @args: queue creation arguments.
+ * @resp: response structure.
+ * @vf_request: indicates whether this request came from a VF.
+ * @vf_id: If vf_request is true, this contains the VF's ID.
+ *
+ * This function creates a directed queue.
+ *
+ * Return:
+ * Returns 0 upon success, < 0 otherwise. If an error occurs, resp->status is
+ * assigned a detailed error code from enum dlb_error. If successful, resp->id
+ * contains the queue ID.
+ *
+ * Note: resp->id contains a virtual ID if vf_request is true.
+ *
+ * Errors:
+ * EINVAL - A requested resource is unavailable, the domain is not configured,
+ *	    or the domain has already been started.
+ * EFAULT - Internal error (resp->status not set).
+ */
+int dlb_hw_create_dir_queue(struct dlb_hw *hw,
+			    u32 domain_id,
+			    struct dlb_create_dir_queue_args *args,
+			    struct dlb_cmd_response *resp,
+			    bool vf_request,
+			    unsigned int vf_id);
+
+/**
  * dlb_reset_domain() - reset a scheduling domain
  * @hw: dlb_hw handle for a particular device.
  * @domain_id: domain ID.
@@ -180,5 +241,55 @@ int dlb_hw_get_num_resources(struct dlb_hw *hw,
  * necessary to workaround a DLB VAS reset issue.
  */
 void dlb_disable_dp_vasr_feature(struct dlb_hw *hw);
+
+/**
+ * dlb_hw_get_ldb_queue_depth() - returns the depth of a load-balanced queue
+ * @hw: dlb_hw handle for a particular device.
+ * @domain_id: domain ID.
+ * @args: queue depth args
+ * @vf_request: indicates whether this request came from a VF.
+ * @vf_id: If vf_request is true, this contains the VF's ID.
+ *
+ * This function returns the depth of a load-balanced queue.
+ *
+ * Return:
+ * Returns 0 upon success, < 0 otherwise. If an error occurs, resp->status is
+ * assigned a detailed error code from enum dlb_error. If successful, resp->id
+ * contains the depth.
+ *
+ * Errors:
+ * EINVAL - Invalid domain ID or queue ID.
+ */
+int dlb_hw_get_ldb_queue_depth(struct dlb_hw *hw,
+			       u32 domain_id,
+			       struct dlb_get_ldb_queue_depth_args *args,
+			       struct dlb_cmd_response *resp,
+			       bool vf_request,
+			       unsigned int vf_id);
+
+/**
+ * dlb_hw_get_dir_queue_depth() - returns the depth of a directed queue
+ * @hw: dlb_hw handle for a particular device.
+ * @domain_id: domain ID.
+ * @args: queue depth args
+ * @vf_request: indicates whether this request came from a VF.
+ * @vf_id: If vf_request is true, this contains the VF's ID.
+ *
+ * This function returns the depth of a directed queue.
+ *
+ * Return:
+ * Returns 0 upon success, < 0 otherwise. If an error occurs, resp->status is
+ * assigned a detailed error code from enum dlb_error. If successful, resp->id
+ * contains the depth.
+ *
+ * Errors:
+ * EINVAL - Invalid domain ID or queue ID.
+ */
+int dlb_hw_get_dir_queue_depth(struct dlb_hw *hw,
+			       u32 domain_id,
+			       struct dlb_get_dir_queue_depth_args *args,
+			       struct dlb_cmd_response *resp,
+			       bool vf_request,
+			       unsigned int vf_id);
 
 #endif /* __DLB_RESOURCE_H */

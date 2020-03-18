@@ -324,6 +324,24 @@ static struct dlb_domain *dlb_get_domain_from_id(struct dlb_hw *hw,
 	return NULL;
 }
 
+static struct dlb_dir_pq_pair *
+dlb_get_domain_used_dir_pq(u32 id,
+			   bool vf_request,
+			   struct dlb_domain *domain)
+{
+	struct dlb_dir_pq_pair *port;
+
+	if (id >= DLB_MAX_NUM_DIR_PORTS)
+		return NULL;
+
+	DLB_DOM_LIST_FOR(domain->used_dir_pq_pairs, port)
+		if ((!vf_request && port->id.phys_id == id) ||
+		    (vf_request && port->id.virt_id == id))
+			return port;
+
+	return NULL;
+}
+
 static struct dlb_ldb_queue *dlb_get_ldb_queue_from_id(struct dlb_hw *hw,
 						       u32 id,
 						       bool vf_request,
@@ -349,6 +367,23 @@ static struct dlb_ldb_queue *dlb_get_ldb_queue_from_id(struct dlb_hw *hw,
 
 	DLB_FUNC_LIST_FOR(rsrcs->avail_ldb_queues, queue)
 		if (queue->id.virt_id == id)
+			return queue;
+
+	return NULL;
+}
+
+static struct dlb_ldb_queue *dlb_get_domain_ldb_queue(u32 id,
+						      bool vf_request,
+						      struct dlb_domain *domain)
+{
+	struct dlb_ldb_queue *queue;
+
+	if (id >= DLB_MAX_NUM_LDB_QUEUES)
+		return NULL;
+
+	DLB_DOM_LIST_FOR(domain->used_ldb_queues, queue)
+		if ((!vf_request && queue->id.phys_id == id) ||
+		    (vf_request && queue->id.virt_id == id))
 			return queue;
 
 	return NULL;
@@ -1150,6 +1185,294 @@ dlb_configure_dir_credit_pool(struct dlb_hw *hw,
 	pool->configured = true;
 }
 
+static int
+dlb_verify_create_ldb_queue_args(struct dlb_hw *hw,
+				 u32 domain_id,
+				 struct dlb_create_ldb_queue_args *args,
+				 struct dlb_cmd_response *resp,
+				 bool vf_request,
+				 unsigned int vf_id)
+{
+	struct dlb_freelist *aqed_freelist;
+	struct dlb_domain *domain;
+	int i;
+
+	domain = dlb_get_domain_from_id(hw, domain_id, vf_request, vf_id);
+
+	if (!domain) {
+		resp->status = DLB_ST_INVALID_DOMAIN_ID;
+		return -EINVAL;
+	}
+
+	if (!domain->configured) {
+		resp->status = DLB_ST_DOMAIN_NOT_CONFIGURED;
+		return -EINVAL;
+	}
+
+	if (domain->started) {
+		resp->status = DLB_ST_DOMAIN_STARTED;
+		return -EINVAL;
+	}
+
+	if (list_empty(&domain->avail_ldb_queues)) {
+		resp->status = DLB_ST_LDB_QUEUES_UNAVAILABLE;
+		return -EINVAL;
+	}
+
+	if (args->num_sequence_numbers) {
+		for (i = 0; i < DLB_MAX_NUM_SEQUENCE_NUMBER_GROUPS; i++) {
+			struct dlb_sn_group *group = &hw->rsrcs.sn_groups[i];
+
+			if (group->sequence_numbers_per_queue ==
+			    args->num_sequence_numbers &&
+			    !dlb_sn_group_full(group))
+				break;
+		}
+
+		if (i == DLB_MAX_NUM_SEQUENCE_NUMBER_GROUPS) {
+			resp->status = DLB_ST_SEQUENCE_NUMBERS_UNAVAILABLE;
+			return -EINVAL;
+		}
+	}
+
+	if (args->num_qid_inflights > 4096) {
+		resp->status = DLB_ST_INVALID_QID_INFLIGHT_ALLOCATION;
+		return -EINVAL;
+	}
+
+	/* Inflights must be <= number of sequence numbers if ordered */
+	if (args->num_sequence_numbers != 0 &&
+	    args->num_qid_inflights > args->num_sequence_numbers) {
+		resp->status = DLB_ST_INVALID_QID_INFLIGHT_ALLOCATION;
+		return -EINVAL;
+	}
+
+	aqed_freelist = &domain->aqed_freelist;
+
+	if (dlb_freelist_count(aqed_freelist) < args->num_atomic_inflights) {
+		resp->status = DLB_ST_ATOMIC_INFLIGHTS_UNAVAILABLE;
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int
+dlb_verify_create_dir_queue_args(struct dlb_hw *hw,
+				 u32 domain_id,
+				 struct dlb_create_dir_queue_args *args,
+				 struct dlb_cmd_response *resp,
+				 bool vf_request,
+				 unsigned int vf_id)
+{
+	struct dlb_domain *domain;
+
+	domain = dlb_get_domain_from_id(hw, domain_id, vf_request, vf_id);
+
+	if (!domain) {
+		resp->status = DLB_ST_INVALID_DOMAIN_ID;
+		return -EINVAL;
+	}
+
+	if (!domain->configured) {
+		resp->status = DLB_ST_DOMAIN_NOT_CONFIGURED;
+		return -EINVAL;
+	}
+
+	if (domain->started) {
+		resp->status = DLB_ST_DOMAIN_STARTED;
+		return -EINVAL;
+	}
+
+	/* If the user claims the port is already configured, validate the port
+	 * ID, its domain, and whether the port is configured.
+	 */
+	if (args->port_id != -1) {
+		struct dlb_dir_pq_pair *port;
+
+		port = dlb_get_domain_used_dir_pq(args->port_id,
+						  vf_request,
+						  domain);
+
+		if (!port || port->domain_id.phys_id != domain->id.phys_id ||
+		    !port->port_configured) {
+			resp->status = DLB_ST_INVALID_PORT_ID;
+			return -EINVAL;
+		}
+	}
+
+	/* If the queue's port is not configured, validate that a free
+	 * port-queue pair is available.
+	 */
+	if (args->port_id == -1 &&
+	    list_empty(&domain->avail_dir_pq_pairs)) {
+		resp->status = DLB_ST_DIR_QUEUES_UNAVAILABLE;
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static void dlb_configure_ldb_queue(struct dlb_hw *hw,
+				    struct dlb_domain *domain,
+				    struct dlb_ldb_queue *queue,
+				    struct dlb_create_ldb_queue_args *args,
+				    bool vf_request,
+				    unsigned int vf_id)
+{
+	union dlb_sys_vf_ldb_vqid_v r0 = { {0} };
+	union dlb_sys_vf_ldb_vqid2qid r1 = { {0} };
+	union dlb_sys_ldb_qid2vqid r2 = { {0} };
+	union dlb_sys_ldb_vasqid_v r3 = { {0} };
+	union dlb_lsp_qid_ldb_infl_lim r4 = { {0} };
+	union dlb_lsp_qid_aqed_active_lim r5 = { {0} };
+	union dlb_aqed_pipe_fl_lim r6 = { {0} };
+	union dlb_aqed_pipe_fl_base r7 = { {0} };
+	union dlb_chp_ord_qid_sn_map r11 = { {0} };
+	union dlb_sys_ldb_qid_cfg_v r12 = { {0} };
+	union dlb_sys_ldb_qid_v r13 = { {0} };
+	union dlb_aqed_pipe_fl_push_ptr r14 = { {0} };
+	union dlb_aqed_pipe_fl_pop_ptr r15 = { {0} };
+	union dlb_aqed_pipe_qid_fid_lim r16 = { {0} };
+	union dlb_ro_pipe_qid2grpslt r17 = { {0} };
+	struct dlb_sn_group *sn_group;
+	unsigned int offs;
+
+	/* QID write permissions are turned on when the domain is started */
+	r3.field.vasqid_v = 0;
+
+	offs = domain->id.phys_id * DLB_MAX_NUM_LDB_QUEUES + queue->id.phys_id;
+
+	DLB_CSR_WR(hw, DLB_SYS_LDB_VASQID_V(offs), r3.val);
+
+	/* Unordered QIDs get 4K inflights, ordered get as many as the number
+	 * of sequence numbers.
+	 */
+	r4.field.limit = args->num_qid_inflights;
+
+	DLB_CSR_WR(hw, DLB_LSP_QID_LDB_INFL_LIM(queue->id.phys_id), r4.val);
+
+	r5.field.limit = queue->aqed_freelist.bound -
+			 queue->aqed_freelist.base;
+
+	if (r5.field.limit > DLB_MAX_NUM_AQOS_ENTRIES)
+		r5.field.limit = DLB_MAX_NUM_AQOS_ENTRIES;
+
+	/* AQOS */
+	DLB_CSR_WR(hw, DLB_LSP_QID_AQED_ACTIVE_LIM(queue->id.phys_id), r5.val);
+
+	r6.field.freelist_disable = 0;
+	r6.field.limit = queue->aqed_freelist.bound - 1;
+
+	DLB_CSR_WR(hw, DLB_AQED_PIPE_FL_LIM(queue->id.phys_id), r6.val);
+
+	r7.field.base = queue->aqed_freelist.base;
+
+	DLB_CSR_WR(hw, DLB_AQED_PIPE_FL_BASE(queue->id.phys_id), r7.val);
+
+	r14.field.push_ptr = r7.field.base;
+	r14.field.generation = 1;
+
+	DLB_CSR_WR(hw, DLB_AQED_PIPE_FL_PUSH_PTR(queue->id.phys_id), r14.val);
+
+	r15.field.pop_ptr = r7.field.base;
+	r15.field.generation = 0;
+
+	DLB_CSR_WR(hw, DLB_AQED_PIPE_FL_POP_PTR(queue->id.phys_id), r15.val);
+
+	/* Configure SNs */
+	sn_group = &hw->rsrcs.sn_groups[queue->sn_group];
+	r11.field.mode = sn_group->mode;
+	r11.field.slot = queue->sn_slot;
+	r11.field.grp  = sn_group->id;
+
+	DLB_CSR_WR(hw, DLB_CHP_ORD_QID_SN_MAP(queue->id.phys_id), r11.val);
+
+	/* This register limits the number of inflight flows a queue can have
+	 * at one time.  It has an upper bound of 2048, but can be
+	 * over-subscribed. 512 is chosen so that a single queue doesn't use
+	 * the entire atomic storage, but can use a substantial portion if
+	 * needed.
+	 */
+	r16.field.qid_fid_limit = 512;
+
+	DLB_CSR_WR(hw, DLB_AQED_PIPE_QID_FID_LIM(queue->id.phys_id), r16.val);
+
+	r17.field.group = sn_group->id;
+	r17.field.slot = queue->sn_slot;
+
+	DLB_CSR_WR(hw, DLB_RO_PIPE_QID2GRPSLT(queue->id.phys_id), r17.val);
+
+	r12.field.sn_cfg_v = (args->num_sequence_numbers != 0);
+	r12.field.fid_cfg_v = (args->num_atomic_inflights != 0);
+
+	DLB_CSR_WR(hw, DLB_SYS_LDB_QID_CFG_V(queue->id.phys_id), r12.val);
+
+	if (vf_request) {
+		unsigned int offs;
+
+		r0.field.vqid_v = 1;
+
+		offs = vf_id * DLB_MAX_NUM_LDB_QUEUES + queue->id.virt_id;
+
+		DLB_CSR_WR(hw, DLB_SYS_VF_LDB_VQID_V(offs), r0.val);
+
+		r1.field.qid = queue->id.phys_id;
+
+		DLB_CSR_WR(hw, DLB_SYS_VF_LDB_VQID2QID(offs), r1.val);
+
+		r2.field.vqid = queue->id.virt_id;
+
+		offs = vf_id * DLB_MAX_NUM_LDB_QUEUES + queue->id.phys_id;
+
+		DLB_CSR_WR(hw, DLB_SYS_LDB_QID2VQID(offs), r2.val);
+	}
+
+	r13.field.qid_v = 1;
+
+	DLB_CSR_WR(hw, DLB_SYS_LDB_QID_V(queue->id.phys_id), r13.val);
+}
+
+static void dlb_configure_dir_queue(struct dlb_hw *hw,
+				    struct dlb_domain *domain,
+				    struct dlb_dir_pq_pair *queue,
+				    bool vf_request,
+				    unsigned int vf_id)
+{
+	union dlb_sys_dir_vasqid_v r0 = { {0} };
+	unsigned int offs;
+
+	/* QID write permissions are turned on when the domain is started */
+	r0.field.vasqid_v = 0;
+
+	offs = (domain->id.phys_id * DLB_MAX_NUM_DIR_PORTS) + queue->id.phys_id;
+
+	DLB_CSR_WR(hw, DLB_SYS_DIR_VASQID_V(offs), r0.val);
+
+	if (vf_request) {
+		union dlb_sys_vf_dir_vqid_v   r1 = { {0} };
+		union dlb_sys_vf_dir_vqid2qid r2 = { {0} };
+
+		r1.field.vqid_v = 1;
+
+		offs = (vf_id * DLB_MAX_NUM_DIR_PORTS) + queue->id.virt_id;
+
+		DLB_CSR_WR(hw, DLB_SYS_VF_DIR_VQID_V(offs), r1.val);
+
+		r2.field.qid = queue->id.phys_id;
+
+		DLB_CSR_WR(hw, DLB_SYS_VF_DIR_VQID2QID(offs), r2.val);
+	} else {
+		union dlb_sys_dir_qid_v r3 = { {0} };
+
+		r3.field.qid_v = 1;
+
+		DLB_CSR_WR(hw, DLB_SYS_DIR_QID_V(queue->id.phys_id), r3.val);
+	}
+
+	queue->queue_configured = true;
+}
+
 static bool dlb_port_find_slot(struct dlb_ldb_port *port,
 			       enum dlb_qid_map_state state,
 			       int *slot)
@@ -1307,61 +1630,6 @@ error:
 	return -EFAULT;
 }
 
-static void dlb_ldb_port_cq_enable(struct dlb_hw *hw,
-				   struct dlb_ldb_port *port)
-{
-	union dlb_lsp_cq_ldb_dsbl reg;
-
-	/* Don't re-enable the port if a removal is pending. The caller should
-	 * mark this port as enabled (if it isn't already), and when the
-	 * removal completes the port will be enabled.
-	 */
-	if (port->num_pending_removals)
-		return;
-
-	reg.field.disabled = 0;
-
-	DLB_CSR_WR(hw, DLB_LSP_CQ_LDB_DSBL(port->id.phys_id), reg.val);
-
-	dlb_flush_csr(hw);
-}
-
-static void dlb_ldb_port_cq_disable(struct dlb_hw *hw,
-				    struct dlb_ldb_port *port)
-{
-	union dlb_lsp_cq_ldb_dsbl reg;
-
-	reg.field.disabled = 1;
-
-	DLB_CSR_WR(hw, DLB_LSP_CQ_LDB_DSBL(port->id.phys_id), reg.val);
-
-	dlb_flush_csr(hw);
-}
-
-static void dlb_dir_port_cq_enable(struct dlb_hw *hw,
-				   struct dlb_dir_pq_pair *port)
-{
-	union dlb_lsp_cq_dir_dsbl reg;
-
-	reg.field.disabled = 0;
-
-	DLB_CSR_WR(hw, DLB_LSP_CQ_DIR_DSBL(port->id.phys_id), reg.val);
-
-	dlb_flush_csr(hw);
-}
-
-static void dlb_dir_port_cq_disable(struct dlb_hw *hw,
-				    struct dlb_dir_pq_pair *port)
-{
-	union dlb_lsp_cq_dir_dsbl reg;
-
-	reg.field.disabled = 1;
-
-	DLB_CSR_WR(hw, DLB_LSP_CQ_DIR_DSBL(port->id.phys_id), reg.val);
-
-	dlb_flush_csr(hw);
-}
-
 static int
 dlb_domain_attach_resources(struct dlb_hw *hw,
 			    struct dlb_function_resources *rsrcs,
@@ -1446,6 +1714,124 @@ dlb_domain_attach_resources(struct dlb_hw *hw,
 	rsrcs->num_avail_domains--;
 
 	return 0;
+}
+
+static int
+dlb_ldb_queue_attach_to_sn_group(struct dlb_hw *hw,
+				 struct dlb_ldb_queue *queue,
+				 struct dlb_create_ldb_queue_args *args)
+{
+	int slot = -1;
+	int i;
+
+	queue->sn_cfg_valid = false;
+
+	if (args->num_sequence_numbers == 0)
+		return 0;
+
+	for (i = 0; i < DLB_MAX_NUM_SEQUENCE_NUMBER_GROUPS; i++) {
+		struct dlb_sn_group *group = &hw->rsrcs.sn_groups[i];
+
+		if (group->sequence_numbers_per_queue ==
+		    args->num_sequence_numbers &&
+		    !dlb_sn_group_full(group)) {
+			slot = dlb_sn_group_alloc_slot(group);
+			if (slot >= 0)
+				break;
+		}
+	}
+
+	if (slot == -1) {
+		DLB_HW_ERR(hw,
+			   "[%s():%d] Internal error: no sequence number slots available\n",
+			   __func__, __LINE__);
+		return -EFAULT;
+	}
+
+	queue->sn_cfg_valid = true;
+	queue->sn_group = i;
+	queue->sn_slot = slot;
+	return 0;
+}
+
+static int
+dlb_ldb_queue_attach_resources(struct dlb_hw *hw,
+			       struct dlb_domain *domain,
+			       struct dlb_ldb_queue *queue,
+			       struct dlb_create_ldb_queue_args *args)
+{
+	int ret;
+
+	ret = dlb_ldb_queue_attach_to_sn_group(hw, queue, args);
+	if (ret)
+		return ret;
+
+	/* Attach QID inflights */
+	queue->num_qid_inflights = args->num_qid_inflights;
+
+	/* Attach atomic inflights */
+	queue->aqed_freelist.base = domain->aqed_freelist.base +
+				    domain->aqed_freelist.offset;
+	queue->aqed_freelist.bound = queue->aqed_freelist.base +
+				     args->num_atomic_inflights;
+	domain->aqed_freelist.offset += args->num_atomic_inflights;
+
+	return 0;
+}
+
+static void dlb_ldb_port_cq_enable(struct dlb_hw *hw,
+				   struct dlb_ldb_port *port)
+{
+	union dlb_lsp_cq_ldb_dsbl reg;
+
+	/* Don't re-enable the port if a removal is pending. The caller should
+	 * mark this port as enabled (if it isn't already), and when the
+	 * removal completes the port will be enabled.
+	 */
+	if (port->num_pending_removals)
+		return;
+
+	reg.field.disabled = 0;
+
+	DLB_CSR_WR(hw, DLB_LSP_CQ_LDB_DSBL(port->id.phys_id), reg.val);
+
+	dlb_flush_csr(hw);
+}
+
+static void dlb_ldb_port_cq_disable(struct dlb_hw *hw,
+				    struct dlb_ldb_port *port)
+{
+	union dlb_lsp_cq_ldb_dsbl reg;
+
+	reg.field.disabled = 1;
+
+	DLB_CSR_WR(hw, DLB_LSP_CQ_LDB_DSBL(port->id.phys_id), reg.val);
+
+	dlb_flush_csr(hw);
+}
+
+static void dlb_dir_port_cq_enable(struct dlb_hw *hw,
+				   struct dlb_dir_pq_pair *port)
+{
+	union dlb_lsp_cq_dir_dsbl reg;
+
+	reg.field.disabled = 0;
+
+	DLB_CSR_WR(hw, DLB_LSP_CQ_DIR_DSBL(port->id.phys_id), reg.val);
+
+	dlb_flush_csr(hw);
+}
+
+static void dlb_dir_port_cq_disable(struct dlb_hw *hw,
+				    struct dlb_dir_pq_pair *port)
+{
+	union dlb_lsp_cq_dir_dsbl reg;
+
+	reg.field.disabled = 1;
+
+	DLB_CSR_WR(hw, DLB_LSP_CQ_DIR_DSBL(port->id.phys_id), reg.val);
+
+	dlb_flush_csr(hw);
 }
 
 static int dlb_ldb_port_map_qid_static(struct dlb_hw *hw,
@@ -2245,6 +2631,195 @@ int dlb_hw_create_dir_pool(struct dlb_hw *hw,
 	return 0;
 }
 
+static void
+dlb_log_create_ldb_queue_args(struct dlb_hw *hw,
+			      u32 domain_id,
+			      struct dlb_create_ldb_queue_args *args,
+			      bool vf_request,
+			      unsigned int vf_id)
+{
+	DLB_HW_DBG(hw, "DLB create load-balanced queue arguments:\n");
+	if (vf_request)
+		DLB_HW_DBG(hw, "(Request from VF %d)\n", vf_id);
+	DLB_HW_DBG(hw, "\tDomain ID:                  %d\n",
+		   domain_id);
+	DLB_HW_DBG(hw, "\tNumber of sequence numbers: %d\n",
+		   args->num_sequence_numbers);
+	DLB_HW_DBG(hw, "\tNumber of QID inflights:    %d\n",
+		   args->num_qid_inflights);
+	DLB_HW_DBG(hw, "\tNumber of ATM inflights:    %d\n",
+		   args->num_atomic_inflights);
+}
+
+/**
+ * dlb_hw_create_ldb_queue() - Allocate and initialize a DLB LDB queue.
+ * @hw:	  Contains the current state of the DLB hardware.
+ * @args: User-provided arguments.
+ * @resp: Response to user.
+ *
+ * Return: returns < 0 on error, 0 otherwise. If the driver is unable to
+ * satisfy a request, resp->status will be set accordingly.
+ */
+int dlb_hw_create_ldb_queue(struct dlb_hw *hw,
+			    u32 domain_id,
+			    struct dlb_create_ldb_queue_args *args,
+			    struct dlb_cmd_response *resp,
+			    bool vf_request,
+			    unsigned int vf_id)
+{
+	struct dlb_ldb_queue *queue;
+	struct dlb_domain *domain;
+	int ret;
+
+	dlb_log_create_ldb_queue_args(hw, domain_id, args, vf_request, vf_id);
+
+	/* Verify that hardware resources are available before attempting to
+	 * satisfy the request. This simplifies the error unwinding code.
+	 */
+	ret = dlb_verify_create_ldb_queue_args(hw,
+					       domain_id,
+					       args,
+					       resp,
+					       vf_request,
+					       vf_id);
+	if (ret)
+		return ret;
+
+	domain = dlb_get_domain_from_id(hw, domain_id, vf_request, vf_id);
+	if (!domain) {
+		DLB_HW_ERR(hw,
+			   "[%s():%d] Internal error: domain not found\n",
+			   __func__, __LINE__);
+		return -EFAULT;
+	}
+
+	queue = DLB_DOM_LIST_HEAD(domain->avail_ldb_queues, typeof(*queue));
+
+	/* Verification should catch this. */
+	if (!queue) {
+		DLB_HW_ERR(hw,
+			   "[%s():%d] Internal error: no available ldb queues\n",
+			   __func__, __LINE__);
+		return -EFAULT;
+	}
+
+	ret = dlb_ldb_queue_attach_resources(hw, domain, queue, args);
+	if (ret < 0) {
+		DLB_HW_ERR(hw,
+			   "[%s():%d] Internal error: failed to attach the ldb queue resources\n",
+			   __func__, __LINE__);
+		return ret;
+	}
+
+	dlb_configure_ldb_queue(hw, domain, queue, args, vf_request, vf_id);
+
+	queue->num_mappings = 0;
+
+	queue->configured = true;
+
+	/* Configuration succeeded, so move the resource from the 'avail' to
+	 * the 'used' list.
+	 */
+	list_del(&queue->domain_list);
+
+	list_add(&queue->domain_list, &domain->used_ldb_queues);
+
+	resp->status = 0;
+	resp->id = (vf_request) ? queue->id.virt_id : queue->id.phys_id;
+
+	return 0;
+}
+
+static void
+dlb_log_create_dir_queue_args(struct dlb_hw *hw,
+			      u32 domain_id,
+			      struct dlb_create_dir_queue_args *args,
+			      bool vf_request,
+			      unsigned int vf_id)
+{
+	DLB_HW_DBG(hw, "DLB create directed queue arguments:\n");
+	if (vf_request)
+		DLB_HW_DBG(hw, "(Request from VF %d)\n", vf_id);
+	DLB_HW_DBG(hw, "\tDomain ID: %d\n", domain_id);
+	DLB_HW_DBG(hw, "\tPort ID:   %d\n", args->port_id);
+}
+
+/**
+ * dlb_hw_create_dir_queue() - Allocate and initialize a DLB DIR queue.
+ * @hw:	  Contains the current state of the DLB hardware.
+ * @args: User-provided arguments.
+ * @resp: Response to user.
+ *
+ * Return: returns < 0 on error, 0 otherwise. If the driver is unable to
+ * satisfy a request, resp->status will be set accordingly.
+ */
+int dlb_hw_create_dir_queue(struct dlb_hw *hw,
+			    u32 domain_id,
+			    struct dlb_create_dir_queue_args *args,
+			    struct dlb_cmd_response *resp,
+			    bool vf_request,
+			    unsigned int vf_id)
+{
+	struct dlb_dir_pq_pair *queue;
+	struct dlb_domain *domain;
+	int ret;
+
+	dlb_log_create_dir_queue_args(hw, domain_id, args, vf_request, vf_id);
+
+	/* Verify that hardware resources are available before attempting to
+	 * satisfy the request. This simplifies the error unwinding code.
+	 */
+	ret = dlb_verify_create_dir_queue_args(hw,
+					       domain_id,
+					       args,
+					       resp,
+					       vf_request,
+					       vf_id);
+	if (ret)
+		return ret;
+
+	domain = dlb_get_domain_from_id(hw, domain_id, vf_request, vf_id);
+	if (!domain) {
+		DLB_HW_ERR(hw,
+			   "[%s():%d] Internal error: domain not found\n",
+			   __func__, __LINE__);
+		return -EFAULT;
+	}
+
+	if (args->port_id != -1)
+		queue = dlb_get_domain_used_dir_pq(args->port_id,
+						   vf_request,
+						   domain);
+	else
+		queue = DLB_DOM_LIST_HEAD(domain->avail_dir_pq_pairs,
+					  typeof(*queue));
+
+	/* Verification should catch this. */
+	if (!queue) {
+		DLB_HW_ERR(hw,
+			   "[%s():%d] Internal error: no available dir queues\n",
+			   __func__, __LINE__);
+		return -EFAULT;
+	}
+
+	dlb_configure_dir_queue(hw, domain, queue, vf_request, vf_id);
+
+	/* Configuration succeeded, so move the resource from the 'avail' to
+	 * the 'used' list (if it's not already there).
+	 */
+	if (args->port_id == -1) {
+		list_del(&queue->domain_list);
+
+		list_add(&queue->domain_list, &domain->used_dir_pq_pairs);
+	}
+
+	resp->status = 0;
+
+	resp->id = (vf_request) ? queue->id.virt_id : queue->id.phys_id;
+
+	return 0;
+}
+
 static void dlb_domain_finish_unmap_port_slot(struct dlb_hw *hw,
 					      struct dlb_domain *domain,
 					      struct dlb_ldb_port *port,
@@ -2913,6 +3488,54 @@ static bool dlb_dir_queue_is_empty(struct dlb_hw *hw,
 	return dlb_dir_queue_depth(hw, queue) == 0;
 }
 
+static void dlb_log_get_dir_queue_depth(struct dlb_hw *hw,
+					u32 domain_id,
+					u32 queue_id,
+					bool vf_request,
+					unsigned int vf_id)
+{
+	DLB_HW_DBG(hw, "DLB get directed queue depth:\n");
+	if (vf_request)
+		DLB_HW_DBG(hw, "(Request from VF %d)\n", vf_id);
+	DLB_HW_DBG(hw, "\tDomain ID: %d\n", domain_id);
+	DLB_HW_DBG(hw, "\tQueue ID: %d\n", queue_id);
+}
+
+int dlb_hw_get_dir_queue_depth(struct dlb_hw *hw,
+			       u32 domain_id,
+			       struct dlb_get_dir_queue_depth_args *args,
+			       struct dlb_cmd_response *resp,
+			       bool vf_request,
+			       unsigned int vf_id)
+{
+	struct dlb_dir_pq_pair *queue;
+	struct dlb_domain *domain;
+	int id;
+
+	id = domain_id;
+
+	dlb_log_get_dir_queue_depth(hw, domain_id, args->queue_id,
+				    vf_request, vf_id);
+
+	domain = dlb_get_domain_from_id(hw, id, vf_request, vf_id);
+	if (!domain) {
+		resp->status = DLB_ST_INVALID_DOMAIN_ID;
+		return -EINVAL;
+	}
+
+	id = args->queue_id;
+
+	queue = dlb_get_domain_used_dir_pq(id, vf_request, domain);
+	if (!queue) {
+		resp->status = DLB_ST_INVALID_QID;
+		return -EINVAL;
+	}
+
+	resp->id = dlb_dir_queue_depth(hw, queue);
+
+	return 0;
+}
+
 /* Returns whether the queue is empty, including its inflight and replay
  * counts.
  */
@@ -2951,6 +3574,61 @@ static bool dlb_ldb_queue_is_empty(struct dlb_hw *hw,
 		return false;
 
 	return true;
+}
+
+static void dlb_log_get_ldb_queue_depth(struct dlb_hw *hw,
+					u32 domain_id,
+					u32 queue_id,
+					bool vf_request,
+					unsigned int vf_id)
+{
+	DLB_HW_DBG(hw, "DLB get load-balanced queue depth:\n");
+	if (vf_request)
+		DLB_HW_DBG(hw, "(Request from VF %d)\n", vf_id);
+	DLB_HW_DBG(hw, "\tDomain ID: %d\n", domain_id);
+	DLB_HW_DBG(hw, "\tQueue ID: %d\n", queue_id);
+}
+
+int dlb_hw_get_ldb_queue_depth(struct dlb_hw *hw,
+			       u32 domain_id,
+			       struct dlb_get_ldb_queue_depth_args *args,
+			       struct dlb_cmd_response *resp,
+			       bool vf_req,
+			       unsigned int vf_id)
+{
+	union dlb_lsp_qid_aqed_active_cnt r0;
+	union dlb_lsp_qid_atq_enqueue_cnt r1;
+	union dlb_lsp_qid_ldb_enqueue_cnt r2;
+	struct dlb_ldb_queue *queue;
+	struct dlb_domain *domain;
+
+	dlb_log_get_ldb_queue_depth(hw, domain_id, args->queue_id,
+				    vf_req, vf_id);
+
+	domain = dlb_get_domain_from_id(hw, domain_id, vf_req, vf_id);
+	if (!domain) {
+		resp->status = DLB_ST_INVALID_DOMAIN_ID;
+		return -EINVAL;
+	}
+
+	queue = dlb_get_domain_ldb_queue(args->queue_id, vf_req, domain);
+	if (!queue) {
+		resp->status = DLB_ST_INVALID_QID;
+		return -EINVAL;
+	}
+
+	r0.val = DLB_CSR_RD(hw,
+			    DLB_LSP_QID_AQED_ACTIVE_CNT(queue->id.phys_id));
+
+	r1.val = DLB_CSR_RD(hw,
+			    DLB_LSP_QID_ATQ_ENQUEUE_CNT(queue->id.phys_id));
+
+	r2.val = DLB_CSR_RD(hw,
+			    DLB_LSP_QID_LDB_ENQUEUE_CNT(queue->id.phys_id));
+
+	resp->id = r0.val + r1.val + r2.val;
+
+	return 0;
 }
 
 static u32 dlb_dir_cq_token_count(struct dlb_hw *hw,
