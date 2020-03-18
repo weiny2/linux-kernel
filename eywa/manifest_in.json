@@ -4149,6 +4149,36 @@
             ],
             "status": "intel confidential",
             "stuck_at_ref": ""
+        },
+        {
+            "branch": "tags/cxl-5.6.0-rc6",
+            "branch_type": "expiring",
+            "config_options": [],
+            "contributor": [
+                {
+                    "name": "Sean Kelley",
+                    "email": "sean.v.kelley@linux.intel.com"
+                }
+            ],
+            "description": "CXL Preliminary Enumeration / PCIe for A0",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Prajwal Mohan",
+                    "email": "prajwal.karur.mohan@intel.com"
+                }
+            ],
+            "jira": "NEXT-1863",
+            "name": "CXL",
+            "repourl": "ssh:// git@gitlab.devtools.intel.com:29418/svkelley/cxl-dev.git",
+            "sdl_contact": [
+                {
+                    "name": "Sean Kelley",
+                    "email": "sean.v.kelley@linux.intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": ""
         }
     ]
 }
