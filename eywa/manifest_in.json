@@ -4161,7 +4161,7 @@
                 }
             ],
             "description": "CXL Preliminary Enumeration / PCIe for A0",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Prajwal Mohan",
