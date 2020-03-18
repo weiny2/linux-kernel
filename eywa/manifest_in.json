@@ -2783,7 +2783,7 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": "cf12eac1511b3a57e7d78daa594ae22a027ab219"
+            "stuck_at_ref": ""
         },
         {
             "branch": "master",
