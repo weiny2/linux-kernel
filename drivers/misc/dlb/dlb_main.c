@@ -105,7 +105,12 @@ static int dlb_open(struct inode *i, struct file *f)
 
 	if (!IS_DLB_DEV_FILE(dlb_dev_number_base, f->f_inode->i_rdev))
 		ret = dlb_open_domain_device_file(dev, f);
+	if (ret)
+		goto end;
 
+	dev->ops->inc_pm_refcnt(dev->pdev, true);
+
+end:
 	mutex_unlock(&dev->resource_mutex);
 
 	return ret;
@@ -151,6 +156,14 @@ int dlb_add_domain_device_file(struct dlb_dev *dlb_dev, u32 domain_id)
 	dlb_dev->sched_domains[domain_id].status = status;
 
 	return 0;
+}
+
+static void dlb_reset_hardware_state(struct dlb_dev *dev)
+{
+	dlb_reset_device(dev->pdev);
+
+	/* Reinitialize any other hardware state */
+	dev->ops->init_hardware(dev);
 }
 
 static int dlb_close_domain_device_file(struct dlb_dev *dev,
@@ -222,6 +235,8 @@ static int dlb_close(struct inode *i, struct file *f)
 							   status,
 							   domain_id);
 	}
+
+	dev->ops->dec_pm_refcnt(dev->pdev);
 
 end:
 	mutex_unlock(&dev->resource_mutex);
@@ -427,6 +442,14 @@ static int dlb_probe(struct pci_dev *pdev,
 
 	dlb_dev->ops->init_hardware(dlb_dev);
 
+	/* The driver puts the device to sleep (D3hot) while there are no
+	 * scheduling domains to service. The usage counter of a PCI device at
+	 * probe time is 2, so decrement it twice here. (The PCI layer has
+	 * already called pm_runtime_enable().)
+	 */
+	dlb_dev->ops->dec_pm_refcnt(pdev);
+	dlb_dev->ops->dec_pm_refcnt(pdev);
+
 	dlb_set_id_in_use(dlb_dev->id, true);
 
 	return 0;
@@ -467,6 +490,10 @@ static void dlb_remove(struct pci_dev *pdev)
 	dlb_dev = pci_get_drvdata(pdev);
 
 	dlb_set_id_in_use(dlb_dev->id, false);
+
+	/* Undo the PM operations in dlb_probe(). */
+	dlb_dev->ops->inc_pm_refcnt(pdev, false);
+	dlb_dev->ops->inc_pm_refcnt(pdev, false);
 
 	dlb_dev->ops->free_driver_state(dlb_dev);
 
@@ -511,17 +538,56 @@ static void dlb_remove(struct pci_dev *pdev)
 	devm_kfree(&pdev->dev, dlb_dev);
 }
 
+#ifdef CONFIG_PM
+static int dlb_runtime_suspend(struct device *dev)
+{
+	struct pci_dev *pdev = container_of(dev, struct pci_dev, dev);
+	struct dlb_dev *dlb_dev = pci_get_drvdata(pdev);
+
+	dev_dbg(dlb_dev->dlb_device, "Suspending device operation\n");
+
+	/* Return and let the PCI subsystem put the device in D3hot. */
+
+	return 0;
+}
+
+static int dlb_runtime_resume(struct device *dev)
+{
+	struct pci_dev *pdev = container_of(dev, struct pci_dev, dev);
+	struct dlb_dev *dlb_dev = pci_get_drvdata(pdev);
+
+	/* The PCI subsystem put the device in D0, now reinitialize the
+	 * device's state.
+	 */
+
+	dev_dbg(dlb_dev->dlb_device, "Resuming device operation\n");
+
+	dlb_reset_hardware_state(dlb_dev);
+
+	return 0;
+}
+#endif
+
 static struct pci_device_id dlb_id_table[] = {
 	{ PCI_DEVICE_DATA(INTEL, DLB_PF, DLB_PF) },
 	{ 0 }
 };
 MODULE_DEVICE_TABLE(pci, dlb_id_table);
 
+#ifdef CONFIG_PM
+static const struct dev_pm_ops dlb_pm_ops = {
+	SET_RUNTIME_PM_OPS(dlb_runtime_suspend, dlb_runtime_resume, NULL)
+};
+#endif
+
 static struct pci_driver dlb_pci_driver = {
 	.name		 = (char *)dlb_driver_name,
 	.id_table	 = dlb_id_table,
 	.probe		 = dlb_probe,
 	.remove		 = dlb_remove,
+#ifdef CONFIG_PM
+	.driver.pm	 = &dlb_pm_ops,
+#endif
 };
 
 static int __init dlb_init_module(void)

@@ -1,9 +1,34 @@
 // SPDX-License-Identifier: (GPL-2.0-only OR BSD-3-Clause)
 /* Copyright(c) 2017-2020 Intel Corporation */
 
+#include <linux/pm_runtime.h>
+
 #include "dlb_main.h"
 #include "dlb_regs.h"
 #include "dlb_resource.h"
+
+/***********************************/
+/****** Runtime PM management ******/
+/***********************************/
+
+static void dlb_pf_pm_inc_refcnt(struct pci_dev *pdev, bool resume)
+{
+	if (resume)
+		/* Increment the device's usage count and immediately wake it
+		 * if it was suspended.
+		 */
+		pm_runtime_get_sync(&pdev->dev);
+	else
+		pm_runtime_get_noresume(&pdev->dev);
+}
+
+static void dlb_pf_pm_dec_refcnt(struct pci_dev *pdev)
+{
+	/* Decrement the device's usage count and suspend it if the
+	 * count reaches zero.
+	 */
+	pm_runtime_put_sync_suspend(&pdev->dev);
+}
 
 /********************************/
 /****** PCI BAR management ******/
@@ -198,6 +223,8 @@ static int dlb_pf_reset_domain(struct dlb_dev *dev, u32 id)
 struct dlb_device_ops dlb_pf_ops = {
 	.map_pci_bar_space = dlb_pf_map_pci_bar_space,
 	.unmap_pci_bar_space = dlb_pf_unmap_pci_bar_space,
+	.inc_pm_refcnt = dlb_pf_pm_inc_refcnt,
+	.dec_pm_refcnt = dlb_pf_pm_dec_refcnt,
 	.init_driver_state = dlb_pf_init_driver_state,
 	.free_driver_state = dlb_pf_free_driver_state,
 	.device_create = dlb_pf_device_create,
