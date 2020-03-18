@@ -189,9 +189,18 @@ static void dlb_pf_device_destroy(struct dlb_dev *dlb_dev,
 				DLB_MAX_NUM_DOMAINS));
 }
 
+static bool dlb_sparse_cq_mode_enabled;
+
 static void dlb_pf_init_hardware(struct dlb_dev *dlb_dev)
 {
 	dlb_disable_dp_vasr_feature(&dlb_dev->hw);
+
+	dlb_sparse_cq_mode_enabled = dlb_dev->revision >= DLB_REV_B0;
+
+	if (dlb_sparse_cq_mode_enabled) {
+		dlb_hw_enable_sparse_ldb_cq_mode(&dlb_dev->hw);
+		dlb_hw_enable_sparse_dir_cq_mode(&dlb_dev->hw);
+	}
 }
 
 /*****************************/
@@ -237,6 +246,32 @@ static int dlb_pf_create_dir_queue(struct dlb_hw *hw,
 	return dlb_hw_create_dir_queue(hw, id, args, resp, false, 0);
 }
 
+static int dlb_pf_create_ldb_port(struct dlb_hw *hw,
+				  u32 id,
+				  struct dlb_create_ldb_port_args *args,
+				  uintptr_t pop_count_dma_base,
+				  uintptr_t cq_dma_base,
+				  struct dlb_cmd_response *resp)
+{
+	return dlb_hw_create_ldb_port(hw, id, args,
+				      pop_count_dma_base,
+				      cq_dma_base,
+				      resp, false, 0);
+}
+
+static int dlb_pf_create_dir_port(struct dlb_hw *hw,
+				  u32 id,
+				  struct dlb_create_dir_port_args *args,
+				  uintptr_t pop_count_dma_base,
+				  uintptr_t cq_dma_base,
+				  struct dlb_cmd_response *resp)
+{
+	return dlb_hw_create_dir_port(hw, id, args,
+				      pop_count_dma_base,
+				      cq_dma_base,
+				      resp, false, 0);
+}
+
 static int dlb_pf_get_num_resources(struct dlb_hw *hw,
 				    struct dlb_get_num_resources_args *args)
 {
@@ -264,6 +299,24 @@ static int dlb_pf_get_dir_queue_depth(struct dlb_hw *hw,
 	return dlb_hw_get_dir_queue_depth(hw, id, args, resp, false, 0);
 }
 
+static int dlb_pf_query_cq_poll_mode(struct dlb_dev *dlb_dev,
+				     struct dlb_cmd_response *user_resp)
+{
+	user_resp->status = 0;
+
+	if (dlb_sparse_cq_mode_enabled) {
+		dlb_hw_enable_sparse_ldb_cq_mode(&dlb_dev->hw);
+		dlb_hw_enable_sparse_dir_cq_mode(&dlb_dev->hw);
+	}
+
+	if (dlb_sparse_cq_mode_enabled)
+		user_resp->id = DLB_CQ_POLL_MODE_SPARSE;
+	else
+		user_resp->id = DLB_CQ_POLL_MODE_STD;
+
+	return 0;
+}
+
 /*******************************/
 /****** DLB PF Device Ops ******/
 /*******************************/
@@ -285,8 +338,11 @@ struct dlb_device_ops dlb_pf_ops = {
 	.create_dir_pool = dlb_pf_create_dir_pool,
 	.create_ldb_queue = dlb_pf_create_ldb_queue,
 	.create_dir_queue = dlb_pf_create_dir_queue,
+	.create_ldb_port = dlb_pf_create_ldb_port,
+	.create_dir_port = dlb_pf_create_dir_port,
 	.get_num_resources = dlb_pf_get_num_resources,
 	.reset_domain = dlb_pf_reset_domain,
 	.get_ldb_queue_depth = dlb_pf_get_ldb_queue_depth,
 	.get_dir_queue_depth = dlb_pf_get_dir_queue_depth,
+	.query_cq_poll_mode = dlb_pf_query_cq_poll_mode,
 };

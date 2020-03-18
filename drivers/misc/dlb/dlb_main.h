@@ -76,6 +76,18 @@ struct dlb_device_ops {
 				u32 domain_id,
 				struct dlb_create_dir_queue_args *args,
 				struct dlb_cmd_response *resp);
+	int (*create_ldb_port)(struct dlb_hw *hw,
+			       u32 domain_id,
+			       struct dlb_create_ldb_port_args *args,
+			       uintptr_t pop_count_dma_base,
+			       uintptr_t cq_dma_base,
+			       struct dlb_cmd_response *resp);
+	int (*create_dir_port)(struct dlb_hw *hw,
+			       u32 domain_id,
+			       struct dlb_create_dir_port_args *args,
+			       uintptr_t pop_count_dma_base,
+			       uintptr_t cq_dma_base,
+			       struct dlb_cmd_response *resp);
 	int (*get_num_resources)(struct dlb_hw *hw,
 				 struct dlb_get_num_resources_args *args);
 	int (*reset_domain)(struct dlb_dev *dev, u32 domain_id);
@@ -87,9 +99,20 @@ struct dlb_device_ops {
 				   u32 domain_id,
 				   struct dlb_get_dir_queue_depth_args *args,
 				   struct dlb_cmd_response *resp);
+	int (*query_cq_poll_mode)(struct dlb_dev *dev,
+				  struct dlb_cmd_response *user_resp);
 };
 
 extern struct dlb_device_ops dlb_pf_ops;
+
+struct dlb_port_memory {
+	void *cq_base;
+	dma_addr_t cq_dma_base;
+	void *pc_base;
+	dma_addr_t pc_dma_base;
+	int domain_id;
+	u8 valid;
+};
 
 struct dlb_status {
 	u8 valid;
@@ -112,6 +135,8 @@ struct dlb_dev {
 	struct list_head list;
 	struct device *dlb_device;
 	struct dlb_domain_dev sched_domains[DLB_MAX_NUM_DOMAINS];
+	struct dlb_port_memory ldb_port_mem[DLB_MAX_NUM_LDB_PORTS];
+	struct dlb_port_memory dir_port_mem[DLB_MAX_NUM_DIR_PORTS];
 	u8 domain_reset_failed;
 	/* The resource mutex serializes access to driver data structures and
 	 * hardware registers.
