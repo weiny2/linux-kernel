@@ -93,6 +93,18 @@ struct dlb_device_ops {
 			    u32 domain_id,
 			    struct dlb_start_domain_args *args,
 			    struct dlb_cmd_response *resp);
+	int (*map_qid)(struct dlb_hw *hw,
+		       u32 domain_id,
+		       struct dlb_map_qid_args *args,
+		       struct dlb_cmd_response *resp);
+	int (*unmap_qid)(struct dlb_hw *hw,
+			 u32 domain_id,
+			 struct dlb_unmap_qid_args *args,
+			 struct dlb_cmd_response *resp);
+	int (*pending_port_unmaps)(struct dlb_hw *hw,
+				   u32 domain_id,
+				   struct dlb_pending_port_unmaps_args *args,
+				   struct dlb_cmd_response *resp);
 	int (*get_num_resources)(struct dlb_hw *hw,
 				 struct dlb_get_num_resources_args *args);
 	int (*reset_domain)(struct dlb_dev *dev, u32 domain_id);
@@ -159,6 +171,12 @@ struct dlb_dev {
 	 * hardware registers.
 	 */
 	struct mutex resource_mutex;
+	/* This workqueue thread is responsible for processing all CQ->QID unmap
+	 * requests.
+	 */
+	struct workqueue_struct *wq;
+	struct work_struct work;
+	u8 worker_launched;
 };
 
 int dlb_add_domain_device_file(struct dlb_dev *dlb_dev, u32 domain_id);

@@ -608,6 +608,49 @@ struct dlb_start_domain_args {
 };
 
 /*
+ * DLB_DOMAIN_CMD_MAP_QID: Map a load-balanced queue to a load-balanced port.
+ * Input parameters:
+ * - port_id: Load-balanced port ID.
+ * - qid: Load-balanced queue ID.
+ * - priority: Queue->port service priority.
+ * - padding0: Reserved for future use.
+ *
+ * Output parameters:
+ * - response: pointer to a struct dlb_cmd_response.
+ *	response.status: Detailed error code. In certain cases, such as if the
+ *		response pointer is invalid, the driver won't set status.
+ */
+struct dlb_map_qid_args {
+	/* Output parameters */
+	__u64 response;
+	/* Input parameters */
+	__u32 port_id;
+	__u32 qid;
+	__u32 priority;
+	__u32 padding0;
+};
+
+/*
+ * DLB_DOMAIN_CMD_UNMAP_QID: Unmap a load-balanced queue to a load-balanced
+ *	port.
+ * Input parameters:
+ * - port_id: Load-balanced port ID.
+ * - qid: Load-balanced queue ID.
+ *
+ * Output parameters:
+ * - response: pointer to a struct dlb_cmd_response.
+ *	response.status: Detailed error code. In certain cases, such as if the
+ *		response pointer is invalid, the driver won't set status.
+ */
+struct dlb_unmap_qid_args {
+	/* Output parameters */
+	__u64 response;
+	/* Input parameters */
+	__u32 port_id;
+	__u32 qid;
+};
+
+/*
  * DLB_DOMAIN_CMD_GET_LDB_QUEUE_DEPTH: Get a load-balanced queue's depth.
  * Input parameters:
  * - queue_id: The load-balanced queue ID.
@@ -647,6 +690,31 @@ struct dlb_get_dir_queue_depth_args {
 	__u32 padding0;
 };
 
+/*
+ * DLB_DOMAIN_CMD_PENDING_PORT_UNMAPS: Get number of queue unmap operations in
+ *	progress for a load-balanced port.
+ *
+ *	Note: This is a snapshot; the number of unmap operations in progress
+ *	is subject to change at any time.
+ *
+ * Input parameters:
+ * - port_id: Load-balanced port ID.
+ * - padding0: Reserved for future use.
+ *
+ * Output parameters:
+ * - response: pointer to a struct dlb_cmd_response.
+ *	response.status: Detailed error code. In certain cases, such as if the
+ *		response pointer is invalid, the driver won't set status.
+ *	response.id: number of unmaps in progress.
+ */
+struct dlb_pending_port_unmaps_args {
+	/* Output parameters */
+	__u64 response;
+	/* Input parameters */
+	__u32 port_id;
+	__u32 padding0;
+};
+
 enum dlb_domain_user_interface_commands {
 	DLB_DOMAIN_CMD_CREATE_LDB_POOL,
 	DLB_DOMAIN_CMD_CREATE_DIR_POOL,
@@ -655,8 +723,11 @@ enum dlb_domain_user_interface_commands {
 	DLB_DOMAIN_CMD_CREATE_LDB_PORT,
 	DLB_DOMAIN_CMD_CREATE_DIR_PORT,
 	DLB_DOMAIN_CMD_START_DOMAIN,
+	DLB_DOMAIN_CMD_MAP_QID,
+	DLB_DOMAIN_CMD_UNMAP_QID,
 	DLB_DOMAIN_CMD_GET_LDB_QUEUE_DEPTH,
 	DLB_DOMAIN_CMD_GET_DIR_QUEUE_DEPTH,
+	DLB_DOMAIN_CMD_PENDING_PORT_UNMAPS,
 
 	/* NUM_DLB_DOMAIN_CMD must be last */
 	NUM_DLB_DOMAIN_CMD,
@@ -746,6 +817,14 @@ enum dlb_domain_user_interface_commands {
 		_IOWR(DLB_IOC_MAGIC,				\
 		      DLB_DOMAIN_CMD_START_DOMAIN,		\
 		      struct dlb_start_domain_args)
+#define DLB_IOC_MAP_QID						\
+		_IOWR(DLB_IOC_MAGIC,				\
+		      DLB_DOMAIN_CMD_MAP_QID,			\
+		      struct dlb_map_qid_args)
+#define DLB_IOC_UNMAP_QID					\
+		_IOWR(DLB_IOC_MAGIC,				\
+		      DLB_DOMAIN_CMD_UNMAP_QID,			\
+		      struct dlb_unmap_qid_args)
 #define DLB_IOC_GET_LDB_QUEUE_DEPTH				\
 		_IOWR(DLB_IOC_MAGIC,				\
 		      DLB_DOMAIN_CMD_GET_LDB_QUEUE_DEPTH,	\
@@ -754,5 +833,9 @@ enum dlb_domain_user_interface_commands {
 		_IOWR(DLB_IOC_MAGIC,				\
 		      DLB_DOMAIN_CMD_GET_DIR_QUEUE_DEPTH,	\
 		      struct dlb_get_dir_queue_depth_args)
+#define DLB_IOC_PENDING_PORT_UNMAPS				\
+		_IOWR(DLB_IOC_MAGIC,				\
+		      DLB_DOMAIN_CMD_PENDING_PORT_UNMAPS,	\
+		      struct dlb_pending_port_unmaps_args)
 
 #endif /* __DLB_USER_H */

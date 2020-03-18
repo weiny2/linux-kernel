@@ -289,6 +289,85 @@ int dlb_hw_start_domain(struct dlb_hw *hw,
 			unsigned int vf_id);
 
 /**
+ * dlb_hw_map_qid() - map a load-balanced queue to a load-balanced port
+ * @hw: dlb_hw handle for a particular device.
+ * @domain_id: domain ID.
+ * @args: map QID arguments.
+ * @resp: response structure.
+ * @vf_request: indicates whether this request came from a VF.
+ * @vf_id: If vf_request is true, this contains the VF's ID.
+ *
+ * This function configures the DLB to schedule QEs from the specified queue to
+ * the specified port. Each load-balanced port can be mapped to up to 8 queues;
+ * each load-balanced queue can potentially map to all the load-balanced ports.
+ *
+ * A successful return does not necessarily mean the mapping was configured. If
+ * this function is unable to immediately map the queue to the port, it will
+ * add the requested operation to a per-port list of pending map/unmap
+ * operations, and (if it's not already running) launch a kernel thread that
+ * periodically attempts to process all pending operations. In a sense, this is
+ * an asynchronous function.
+ *
+ * This asynchronicity creates two views of the state of hardware: the actual
+ * hardware state and the requested state (as if every request completed
+ * immediately). If there are any pending map/unmap operations, the requested
+ * state will differ from the actual state. All validation is performed with
+ * respect to the pending state; for instance, if there are 8 pending map
+ * operations for port X, a request for a 9th will fail because a load-balanced
+ * port can only map up to 8 queues.
+ *
+ * Return:
+ * Returns 0 upon success, < 0 otherwise. If an error occurs, resp->status is
+ * assigned a detailed error code from enum dlb_error.
+ *
+ * Errors:
+ * EINVAL - A requested resource is unavailable, invalid port or queue ID, or
+ *	    the domain is not configured.
+ * EFAULT - Internal error (resp->status not set).
+ */
+int dlb_hw_map_qid(struct dlb_hw *hw,
+		   u32 domain_id,
+		   struct dlb_map_qid_args *args,
+		   struct dlb_cmd_response *resp,
+		   bool vf_request,
+		   unsigned int vf_id);
+
+/**
+ * dlb_hw_unmap_qid() - Unmap a load-balanced queue from a load-balanced port
+ * @hw: dlb_hw handle for a particular device.
+ * @domain_id: domain ID.
+ * @args: unmap QID arguments.
+ * @resp: response structure.
+ * @vf_request: indicates whether this request came from a VF.
+ * @vf_id: If vf_request is true, this contains the VF's ID.
+ *
+ * This function configures the DLB to stop scheduling QEs from the specified
+ * queue to the specified port.
+ *
+ * A successful return does not necessarily mean the mapping was removed. If
+ * this function is unable to immediately unmap the queue from the port, it
+ * will add the requested operation to a per-port list of pending map/unmap
+ * operations, and (if it's not already running) launch a kernel thread that
+ * periodically attempts to process all pending operations. See
+ * dlb_hw_map_qid() for more details.
+ *
+ * Return:
+ * Returns 0 upon success, < 0 otherwise. If an error occurs, resp->status is
+ * assigned a detailed error code from enum dlb_error.
+ *
+ * Errors:
+ * EINVAL - A requested resource is unavailable, invalid port or queue ID, or
+ *	    the domain is not configured.
+ * EFAULT - Internal error (resp->status not set).
+ */
+int dlb_hw_unmap_qid(struct dlb_hw *hw,
+		     u32 domain_id,
+		     struct dlb_unmap_qid_args *args,
+		     struct dlb_cmd_response *resp,
+		     bool vf_request,
+		     unsigned int vf_id);
+
+/**
  * dlb_reset_domain() - reset a scheduling domain
  * @hw: dlb_hw handle for a particular device.
  * @domain_id: domain ID.
@@ -431,6 +510,30 @@ int dlb_hw_get_ldb_queue_depth(struct dlb_hw *hw,
 int dlb_hw_get_dir_queue_depth(struct dlb_hw *hw,
 			       u32 domain_id,
 			       struct dlb_get_dir_queue_depth_args *args,
+			       struct dlb_cmd_response *resp,
+			       bool vf_request,
+			       unsigned int vf_id);
+
+/**
+ * dlb_hw_pending_port_unmaps() - returns the number of unmap operations in
+ *	progress for a load-balanced port.
+ * @hw: dlb_hw handle for a particular device.
+ * @domain_id: domain ID.
+ * @args: number of unmaps in progress args
+ * @vf_request: indicates whether this request came from a VF.
+ * @vf_id: If vf_request is true, this contains the VF's ID.
+ *
+ * Return:
+ * Returns 0 upon success, < 0 otherwise. If an error occurs, resp->status is
+ * assigned a detailed error code from enum dlb_error. If successful, resp->id
+ * contains the number of unmaps in progress.
+ *
+ * Errors:
+ * EINVAL - Invalid port ID.
+ */
+int dlb_hw_pending_port_unmaps(struct dlb_hw *hw,
+			       u32 domain_id,
+			       struct dlb_pending_port_unmaps_args *args,
 			       struct dlb_cmd_response *resp,
 			       bool vf_request,
 			       unsigned int vf_id);

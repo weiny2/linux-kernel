@@ -253,6 +253,10 @@ static int dlb_pf_mmap(struct file *f,
 
 static int dlb_pf_init_driver_state(struct dlb_dev *dlb_dev)
 {
+	dlb_dev->wq = create_singlethread_workqueue("DLB queue remapper");
+	if (!dlb_dev->wq)
+		return -EINVAL;
+
 	mutex_init(&dlb_dev->resource_mutex);
 
 	return 0;
@@ -260,6 +264,7 @@ static int dlb_pf_init_driver_state(struct dlb_dev *dlb_dev)
 
 static void dlb_pf_free_driver_state(struct dlb_dev *dlb_dev)
 {
+	destroy_workqueue(dlb_dev->wq);
 }
 
 static int dlb_pf_cdev_add(struct dlb_dev *dlb_dev,
@@ -425,6 +430,30 @@ static int dlb_pf_start_domain(struct dlb_hw *hw,
 	return dlb_hw_start_domain(hw, id, args, resp, false, 0);
 }
 
+static int dlb_pf_map_qid(struct dlb_hw *hw,
+			  u32 id,
+			  struct dlb_map_qid_args *args,
+			  struct dlb_cmd_response *resp)
+{
+	return dlb_hw_map_qid(hw, id, args, resp, false, 0);
+}
+
+static int dlb_pf_unmap_qid(struct dlb_hw *hw,
+			    u32 id,
+			    struct dlb_unmap_qid_args *args,
+			    struct dlb_cmd_response *resp)
+{
+	return dlb_hw_unmap_qid(hw, id, args, resp, false, 0);
+}
+
+static int dlb_pf_pending_port_unmaps(struct dlb_hw *hw,
+				      u32 id,
+				      struct dlb_pending_port_unmaps_args *args,
+				      struct dlb_cmd_response *resp)
+{
+	return dlb_hw_pending_port_unmaps(hw, id, args, resp, false, 0);
+}
+
 static int dlb_pf_get_num_resources(struct dlb_hw *hw,
 				    struct dlb_get_num_resources_args *args)
 {
@@ -468,6 +497,7 @@ static int dlb_pf_query_cq_poll_mode(struct dlb_dev *dlb_dev,
 		user_resp->id = DLB_CQ_POLL_MODE_STD;
 
 	return 0;
+
 }
 
 /**************************************/
@@ -513,6 +543,9 @@ struct dlb_device_ops dlb_pf_ops = {
 	.create_ldb_port = dlb_pf_create_ldb_port,
 	.create_dir_port = dlb_pf_create_dir_port,
 	.start_domain = dlb_pf_start_domain,
+	.map_qid = dlb_pf_map_qid,
+	.unmap_qid = dlb_pf_unmap_qid,
+	.pending_port_unmaps = dlb_pf_pending_port_unmaps,
 	.get_num_resources = dlb_pf_get_num_resources,
 	.reset_domain = dlb_pf_reset_domain,
 	.ldb_port_owned_by_domain = dlb_pf_ldb_port_owned_by_domain,
