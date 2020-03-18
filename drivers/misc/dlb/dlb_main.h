@@ -68,9 +68,25 @@ struct dlb_device_ops {
 			       u32 domain_id,
 			       struct dlb_create_dir_pool_args *args,
 			       struct dlb_cmd_response *resp);
+	int (*create_ldb_queue)(struct dlb_hw *hw,
+				u32 domain_id,
+				struct dlb_create_ldb_queue_args *args,
+				struct dlb_cmd_response *resp);
+	int (*create_dir_queue)(struct dlb_hw *hw,
+				u32 domain_id,
+				struct dlb_create_dir_queue_args *args,
+				struct dlb_cmd_response *resp);
 	int (*get_num_resources)(struct dlb_hw *hw,
 				 struct dlb_get_num_resources_args *args);
 	int (*reset_domain)(struct dlb_dev *dev, u32 domain_id);
+	int (*get_ldb_queue_depth)(struct dlb_hw *hw,
+				   u32 domain_id,
+				   struct dlb_get_ldb_queue_depth_args *args,
+				   struct dlb_cmd_response *resp);
+	int (*get_dir_queue_depth)(struct dlb_hw *hw,
+				   u32 domain_id,
+				   struct dlb_get_dir_queue_depth_args *args,
+				   struct dlb_cmd_response *resp);
 };
 
 extern struct dlb_device_ops dlb_pf_ops;

@@ -221,6 +221,22 @@ static int dlb_pf_create_dir_pool(struct dlb_hw *hw,
 	return dlb_hw_create_dir_pool(hw, id, args, resp, false, 0);
 }
 
+static int dlb_pf_create_ldb_queue(struct dlb_hw *hw,
+				   u32 id,
+				   struct dlb_create_ldb_queue_args *args,
+				   struct dlb_cmd_response *resp)
+{
+	return dlb_hw_create_ldb_queue(hw, id, args, resp, false, 0);
+}
+
+static int dlb_pf_create_dir_queue(struct dlb_hw *hw,
+				   u32 id,
+				   struct dlb_create_dir_queue_args *args,
+				   struct dlb_cmd_response *resp)
+{
+	return dlb_hw_create_dir_queue(hw, id, args, resp, false, 0);
+}
+
 static int dlb_pf_get_num_resources(struct dlb_hw *hw,
 				    struct dlb_get_num_resources_args *args)
 {
@@ -230,6 +246,22 @@ static int dlb_pf_get_num_resources(struct dlb_hw *hw,
 static int dlb_pf_reset_domain(struct dlb_dev *dev, u32 id)
 {
 	return dlb_reset_domain(&dev->hw, id, false, 0);
+}
+
+static int dlb_pf_get_ldb_queue_depth(struct dlb_hw *hw,
+				      u32 id,
+				      struct dlb_get_ldb_queue_depth_args *args,
+				      struct dlb_cmd_response *resp)
+{
+	return dlb_hw_get_ldb_queue_depth(hw, id, args, resp, false, 0);
+}
+
+static int dlb_pf_get_dir_queue_depth(struct dlb_hw *hw,
+				      u32 id,
+				      struct dlb_get_dir_queue_depth_args *args,
+				      struct dlb_cmd_response *resp)
+{
+	return dlb_hw_get_dir_queue_depth(hw, id, args, resp, false, 0);
 }
 
 /*******************************/
@@ -251,6 +283,10 @@ struct dlb_device_ops dlb_pf_ops = {
 	.create_sched_domain = dlb_pf_create_sched_domain,
 	.create_ldb_pool = dlb_pf_create_ldb_pool,
 	.create_dir_pool = dlb_pf_create_dir_pool,
+	.create_ldb_queue = dlb_pf_create_ldb_queue,
+	.create_dir_queue = dlb_pf_create_dir_queue,
 	.get_num_resources = dlb_pf_get_num_resources,
 	.reset_domain = dlb_pf_reset_domain,
+	.get_ldb_queue_depth = dlb_pf_get_ldb_queue_depth,
+	.get_dir_queue_depth = dlb_pf_get_dir_queue_depth,
 };
