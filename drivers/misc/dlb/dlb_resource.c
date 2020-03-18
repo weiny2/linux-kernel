@@ -358,6 +358,29 @@ dlb_get_domain_dir_pool(u32 id,
 	return NULL;
 }
 
+static struct dlb_ldb_port *
+dlb_get_domain_used_ldb_port(u32 id,
+			     bool vf_request,
+			     struct dlb_domain *domain)
+{
+	struct dlb_ldb_port *port;
+
+	if (id >= DLB_MAX_NUM_LDB_PORTS)
+		return NULL;
+
+	DLB_DOM_LIST_FOR(domain->used_ldb_ports, port)
+		if ((!vf_request && port->id.phys_id == id) ||
+		    (vf_request && port->id.virt_id == id))
+			return port;
+
+	DLB_DOM_LIST_FOR(domain->avail_ldb_ports, port)
+		if ((!vf_request && port->id.phys_id == id) ||
+		    (vf_request && port->id.virt_id == id))
+			return port;
+
+	return NULL;
+}
+
 static struct dlb_ldb_port *dlb_get_domain_ldb_port(u32 id,
 						    bool vf_request,
 						    struct dlb_domain *domain)
@@ -1883,6 +1906,64 @@ static int dlb_verify_start_domain_args(struct dlb_hw *hw,
 	return 0;
 }
 
+static int dlb_verify_map_qid_args(struct dlb_hw *hw,
+				   u32 domain_id,
+				   struct dlb_map_qid_args *args,
+				   struct dlb_cmd_response *resp,
+				   bool vf_request,
+				   unsigned int vf_id)
+{
+	struct dlb_domain *domain;
+	struct dlb_ldb_port *port;
+	struct dlb_ldb_queue *queue;
+	int id;
+
+	domain = dlb_get_domain_from_id(hw, domain_id, vf_request, vf_id);
+
+	if (!domain) {
+		resp->status = DLB_ST_INVALID_DOMAIN_ID;
+		return -EINVAL;
+	}
+
+	if (!domain->configured) {
+		resp->status = DLB_ST_DOMAIN_NOT_CONFIGURED;
+		return -EINVAL;
+	}
+
+	id = args->port_id;
+
+	port = dlb_get_domain_used_ldb_port(id, vf_request, domain);
+
+	if (!port || !port->configured) {
+		resp->status = DLB_ST_INVALID_PORT_ID;
+		return -EINVAL;
+	}
+
+	if (args->priority >= DLB_QID_PRIORITIES) {
+		resp->status = DLB_ST_INVALID_PRIORITY;
+		return -EINVAL;
+	}
+
+	queue = dlb_get_domain_ldb_queue(args->qid, vf_request, domain);
+
+	if (!queue || !queue->configured) {
+		resp->status = DLB_ST_INVALID_QID;
+		return -EINVAL;
+	}
+
+	if (queue->domain_id.phys_id != domain->id.phys_id) {
+		resp->status = DLB_ST_INVALID_QID;
+		return -EINVAL;
+	}
+
+	if (port->domain_id.phys_id != domain->id.phys_id) {
+		resp->status = DLB_ST_INVALID_PORT_ID;
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 static bool dlb_port_find_slot(struct dlb_ldb_port *port,
 			       enum dlb_qid_map_state state,
 			       int *slot)
@@ -1909,6 +1990,26 @@ static bool dlb_port_find_slot_queue(struct dlb_ldb_port *port,
 	for (i = 0; i < DLB_MAX_NUM_QIDS_PER_LDB_CQ; i++) {
 		if (port->qid_map[i].state == state &&
 		    port->qid_map[i].qid == queue->id.phys_id)
+			break;
+	}
+
+	*slot = i;
+
+	return (i < DLB_MAX_NUM_QIDS_PER_LDB_CQ);
+}
+
+static bool
+dlb_port_find_slot_with_pending_map_queue(struct dlb_ldb_port *port,
+					  struct dlb_ldb_queue *queue,
+					  int *slot)
+{
+	int i;
+
+	for (i = 0; i < DLB_MAX_NUM_QIDS_PER_LDB_CQ; i++) {
+		struct dlb_ldb_port_qid_map *map = &port->qid_map[i];
+
+		if (map->state == DLB_QUEUE_UNMAP_IN_PROGRESS_PENDING_MAP &&
+		    map->pending_qid == queue->id.phys_id)
 			break;
 	}
 
@@ -2038,6 +2139,114 @@ error:
 		   __func__, queue->id.phys_id, port->id.phys_id, curr_state,
 		   new_state);
 	return -EFAULT;
+}
+
+static int dlb_verify_map_qid_slot_available(struct dlb_ldb_port *port,
+					     struct dlb_ldb_queue *queue,
+					     struct dlb_cmd_response *resp)
+{
+	enum dlb_qid_map_state state;
+	int i;
+
+	/* Unused slot available? */
+	if (port->num_mappings < DLB_MAX_NUM_QIDS_PER_LDB_CQ)
+		return 0;
+
+	/* If the queue is already mapped (from the application's perspective),
+	 * this is simply a priority update.
+	 */
+	state = DLB_QUEUE_MAPPED;
+	if (dlb_port_find_slot_queue(port, state, queue, &i))
+		return 0;
+
+	state = DLB_QUEUE_MAP_IN_PROGRESS;
+	if (dlb_port_find_slot_queue(port, state, queue, &i))
+		return 0;
+
+	if (dlb_port_find_slot_with_pending_map_queue(port, queue, &i))
+		return 0;
+
+	/* If the slot contains an unmap in progress, it's considered
+	 * available.
+	 */
+	state = DLB_QUEUE_UNMAP_IN_PROGRESS;
+	if (dlb_port_find_slot(port, state, &i))
+		return 0;
+
+	state = DLB_QUEUE_UNMAPPED;
+	if (dlb_port_find_slot(port, state, &i))
+		return 0;
+
+	resp->status = DLB_ST_NO_QID_SLOTS_AVAILABLE;
+	return -EINVAL;
+}
+
+static int dlb_verify_unmap_qid_args(struct dlb_hw *hw,
+				     u32 domain_id,
+				     struct dlb_unmap_qid_args *args,
+				     struct dlb_cmd_response *resp,
+				     bool vf_request,
+				     unsigned int vf_id)
+{
+	enum dlb_qid_map_state state;
+	struct dlb_domain *domain;
+	struct dlb_ldb_port *port;
+	struct dlb_ldb_queue *queue;
+	int slot;
+	int id;
+
+	domain = dlb_get_domain_from_id(hw, domain_id, vf_request, vf_id);
+
+	if (!domain) {
+		resp->status = DLB_ST_INVALID_DOMAIN_ID;
+		return -EINVAL;
+	}
+
+	if (!domain->configured) {
+		resp->status = DLB_ST_DOMAIN_NOT_CONFIGURED;
+		return -EINVAL;
+	}
+
+	id = args->port_id;
+
+	port = dlb_get_domain_used_ldb_port(id, vf_request, domain);
+
+	if (!port || !port->configured) {
+		resp->status = DLB_ST_INVALID_PORT_ID;
+		return -EINVAL;
+	}
+
+	if (port->domain_id.phys_id != domain->id.phys_id) {
+		resp->status = DLB_ST_INVALID_PORT_ID;
+		return -EINVAL;
+	}
+
+	queue = dlb_get_domain_ldb_queue(args->qid, vf_request, domain);
+
+	if (!queue || !queue->configured) {
+		DLB_HW_ERR(hw, "[%s()] Can't unmap unconfigured queue %d\n",
+			   __func__, args->qid);
+		resp->status = DLB_ST_INVALID_QID;
+		return -EINVAL;
+	}
+
+	/* Verify that the port has the queue mapped. From the application's
+	 * perspective a queue is mapped if it is actually mapped, the map is
+	 * in progress, or the map is blocked pending an unmap.
+	 */
+	state = DLB_QUEUE_MAPPED;
+	if (dlb_port_find_slot_queue(port, state, queue, &slot))
+		return 0;
+
+	state = DLB_QUEUE_MAP_IN_PROGRESS;
+	if (dlb_port_find_slot_queue(port, state, queue, &slot))
+		return 0;
+
+	if (dlb_port_find_slot_with_pending_map_queue(port, queue, &slot))
+		return 0;
+
+	resp->status = DLB_ST_INVALID_QID;
+	return -EINVAL;
 }
 
 static int
@@ -3169,6 +3378,26 @@ static int dlb_ldb_port_map_qid_static(struct dlb_hw *hw,
 	return dlb_port_slot_state_transition(hw, p, q, i, state);
 }
 
+static void dlb_ldb_port_change_qid_priority(struct dlb_hw *hw,
+					     struct dlb_ldb_port *port,
+					     int slot,
+					     struct dlb_map_qid_args *args)
+{
+	union dlb_lsp_cq2priov r0;
+
+	/* Read-modify-write the priority and valid bit register */
+	r0.val = DLB_CSR_RD(hw, DLB_LSP_CQ2PRIOV(port->id.phys_id));
+
+	r0.field.v |= 1 << slot;
+	r0.field.prio |= (args->priority & 0x7) << slot * 3;
+
+	DLB_CSR_WR(hw, DLB_LSP_CQ2PRIOV(port->id.phys_id), r0.val);
+
+	dlb_flush_csr(hw);
+
+	port->qid_map[slot].priority = args->priority;
+}
+
 static int dlb_ldb_port_set_has_work_bits(struct dlb_hw *hw,
 					  struct dlb_ldb_port *port,
 					  struct dlb_ldb_queue *queue,
@@ -3393,6 +3622,60 @@ static int dlb_ldb_port_finish_map_qid_dynamic(struct dlb_hw *hw,
 	return 0;
 }
 
+static unsigned int dlb_finish_unmap_qid_procedures(struct dlb_hw *hw);
+static unsigned int dlb_finish_map_qid_procedures(struct dlb_hw *hw);
+
+/* The workqueue callback runs until it completes all outstanding QID->CQ
+ * map and unmap requests. To prevent deadlock, this function gives other
+ * threads a chance to grab the resource mutex and configure hardware.
+ */
+static void dlb_complete_queue_map_unmap(struct work_struct *work)
+{
+	struct dlb_dev *dlb_dev;
+	int ret;
+
+	dlb_dev = container_of(work, struct dlb_dev, work);
+
+	mutex_lock(&dlb_dev->resource_mutex);
+
+	ret = dlb_finish_unmap_qid_procedures(&dlb_dev->hw);
+	ret += dlb_finish_map_qid_procedures(&dlb_dev->hw);
+
+	if (ret != 0)
+		/* Relinquish the CPU so the application can process its CQs,
+		 * so this function doesn't deadlock.
+		 */
+		queue_work(dlb_dev->wq, &dlb_dev->work);
+	else
+		dlb_dev->worker_launched = false;
+
+	mutex_unlock(&dlb_dev->resource_mutex);
+}
+
+/**
+ * dlb_schedule_work() - launch a thread to process pending map and unmap work
+ * @hw: dlb_hw handle for a particular device.
+ *
+ * This function launches a kernel thread that will run until all pending
+ * map and unmap procedures are complete.
+ */
+static void dlb_schedule_work(struct dlb_hw *hw)
+{
+	struct dlb_dev *dlb_dev;
+
+	dlb_dev = container_of(hw, struct dlb_dev, hw);
+
+	/* Nothing to do if the worker is already running */
+	if (dlb_dev->worker_launched)
+		return;
+
+	INIT_WORK(&dlb_dev->work, dlb_complete_queue_map_unmap);
+
+	queue_work(dlb_dev->wq, &dlb_dev->work);
+
+	dlb_dev->worker_launched = true;
+}
+
 /**
  * dlb_ldb_port_map_qid_dynamic() - perform a "dynamic" QID->CQ mapping
  * @hw: dlb_hw handle for a particular device.
@@ -3447,6 +3730,18 @@ static int dlb_ldb_port_map_qid_dynamic(struct dlb_hw *hw,
 	if (ret)
 		return ret;
 
+	r0.val = DLB_CSR_RD(hw, DLB_LSP_QID_LDB_INFL_CNT(queue->id.phys_id));
+
+	if (r0.field.count) {
+		/* The queue is owed completions so it's not safe to map it
+		 * yet. Schedule a kernel thread to complete the mapping later,
+		 * once software has completed all the queue's inflight events.
+		 */
+		dlb_schedule_work(hw);
+
+		return 1;
+	}
+
 	/* Disable the affected CQ, and the CQs already mapped to the QID,
 	 * before reading the QID's inflight count a second time. There is an
 	 * unlikely race in which the QID may schedule one more QE after we
@@ -3466,6 +3761,12 @@ static int dlb_ldb_port_map_qid_dynamic(struct dlb_hw *hw,
 			dlb_ldb_port_cq_enable(hw, port);
 
 		dlb_ldb_queue_enable_mapped_cqs(hw, domain, queue);
+
+		/* The queue is owed completions so it's not safe to map it
+		 * yet. Schedule a kernel thread to complete the mapping later,
+		 * once software has completed all the queue's inflight events.
+		 */
+		dlb_schedule_work(hw);
 
 		return 1;
 	}
@@ -4498,7 +4799,7 @@ dlb_domain_finish_unmap_qid_procedures(struct dlb_hw *hw,
 	return domain->num_pending_removals;
 }
 
-unsigned int dlb_finish_unmap_qid_procedures(struct dlb_hw *hw)
+static unsigned int dlb_finish_unmap_qid_procedures(struct dlb_hw *hw)
 {
 	int i, num = 0;
 
@@ -4584,7 +4885,7 @@ dlb_domain_finish_map_qid_procedures(struct dlb_hw *hw,
 	return domain->num_pending_additions;
 }
 
-unsigned int dlb_finish_map_qid_procedures(struct dlb_hw *hw)
+static unsigned int dlb_finish_map_qid_procedures(struct dlb_hw *hw)
 {
 	int i, num = 0;
 
@@ -4598,6 +4899,398 @@ unsigned int dlb_finish_map_qid_procedures(struct dlb_hw *hw)
 	return num;
 }
 
+static void dlb_log_map_qid(struct dlb_hw *hw,
+			    u32 domain_id,
+			    struct dlb_map_qid_args *args,
+			    bool vf_request,
+			    unsigned int vf_id)
+{
+	DLB_HW_DBG(hw, "DLB map QID arguments:\n");
+	if (vf_request)
+		DLB_HW_DBG(hw, "(Request from VF %d)\n", vf_id);
+	DLB_HW_DBG(hw, "\tDomain ID: %d\n",
+		   domain_id);
+	DLB_HW_DBG(hw, "\tPort ID:   %d\n",
+		   args->port_id);
+	DLB_HW_DBG(hw, "\tQueue ID:  %d\n",
+		   args->qid);
+	DLB_HW_DBG(hw, "\tPriority:  %d\n",
+		   args->priority);
+}
+
+int dlb_hw_map_qid(struct dlb_hw *hw,
+		   u32 domain_id,
+		   struct dlb_map_qid_args *args,
+		   struct dlb_cmd_response *resp,
+		   bool vf_request,
+		   unsigned int vf_id)
+{
+	enum dlb_qid_map_state state;
+	struct dlb_ldb_queue *queue;
+	struct dlb_ldb_port *port;
+	struct dlb_domain *domain;
+	int ret, i, id;
+	u8 prio;
+
+	dlb_log_map_qid(hw, domain_id, args, vf_request, vf_id);
+
+	/* Verify that hardware resources are available before attempting to
+	 * satisfy the request. This simplifies the error unwinding code.
+	 */
+	ret = dlb_verify_map_qid_args(hw,
+				      domain_id,
+				      args,
+				      resp,
+				      vf_request,
+				      vf_id);
+	if (ret)
+		return ret;
+
+	prio = args->priority;
+
+	domain = dlb_get_domain_from_id(hw, domain_id, vf_request, vf_id);
+	if (!domain) {
+		DLB_HW_ERR(hw,
+			   "[%s():%d] Internal error: domain not found\n",
+			   __func__, __LINE__);
+		return -EFAULT;
+	}
+
+	id = args->port_id;
+
+	port = dlb_get_domain_used_ldb_port(id, vf_request, domain);
+	if (!port) {
+		DLB_HW_ERR(hw,
+			   "[%s():%d] Internal error: port not found\n",
+			   __func__, __LINE__);
+		return -EFAULT;
+	}
+
+	queue = dlb_get_domain_ldb_queue(args->qid, vf_request, domain);
+	if (!queue) {
+		DLB_HW_ERR(hw,
+			   "[%s():%d] Internal error: queue not found\n",
+			   __func__, __LINE__);
+		return -EFAULT;
+	}
+
+	/* If there are any outstanding detach operations for this port,
+	 * attempt to complete them. This may be necessary to free up a QID
+	 * slot for this requested mapping.
+	 */
+	if (port->num_pending_removals)
+		dlb_domain_finish_unmap_port(hw, domain, port);
+
+	ret = dlb_verify_map_qid_slot_available(port, queue, resp);
+	if (ret)
+		return ret;
+
+	/* Hardware requires disabling the CQ before mapping QIDs. */
+	if (port->enabled)
+		dlb_ldb_port_cq_disable(hw, port);
+
+	/* If this is only a priority change, don't perform the full QID->CQ
+	 * mapping procedure
+	 */
+	state = DLB_QUEUE_MAPPED;
+	if (dlb_port_find_slot_queue(port, state, queue, &i)) {
+		if (i >= DLB_MAX_NUM_QIDS_PER_LDB_CQ) {
+			DLB_HW_ERR(hw,
+				   "[%s():%d] Internal error: port slot tracking failed\n",
+				   __func__, __LINE__);
+			return -EFAULT;
+		}
+
+		if (prio != port->qid_map[i].priority) {
+			dlb_ldb_port_change_qid_priority(hw, port, i, args);
+			DLB_HW_DBG(hw, "DLB map: priority change only\n");
+		}
+
+		state = DLB_QUEUE_MAPPED;
+		ret = dlb_port_slot_state_transition(hw, port, queue, i, state);
+		if (ret)
+			return ret;
+
+		goto map_qid_done;
+	}
+
+	state = DLB_QUEUE_UNMAP_IN_PROGRESS;
+	if (dlb_port_find_slot_queue(port, state, queue, &i)) {
+		if (i >= DLB_MAX_NUM_QIDS_PER_LDB_CQ) {
+			DLB_HW_ERR(hw,
+				   "[%s():%d] Internal error: port slot tracking failed\n",
+				   __func__, __LINE__);
+			return -EFAULT;
+		}
+
+		if (prio != port->qid_map[i].priority) {
+			dlb_ldb_port_change_qid_priority(hw, port, i, args);
+			DLB_HW_DBG(hw, "DLB map: priority change only\n");
+		}
+
+		state = DLB_QUEUE_MAPPED;
+		ret = dlb_port_slot_state_transition(hw, port, queue, i, state);
+		if (ret)
+			return ret;
+
+		goto map_qid_done;
+	}
+
+	/* If this is a priority change on an in-progress mapping, don't
+	 * perform the full QID->CQ mapping procedure.
+	 */
+	state = DLB_QUEUE_MAP_IN_PROGRESS;
+	if (dlb_port_find_slot_queue(port, state, queue, &i)) {
+		if (i >= DLB_MAX_NUM_QIDS_PER_LDB_CQ) {
+			DLB_HW_ERR(hw,
+				   "[%s():%d] Internal error: port slot tracking failed\n",
+				   __func__, __LINE__);
+			return -EFAULT;
+		}
+
+		port->qid_map[i].priority = prio;
+
+		DLB_HW_DBG(hw, "DLB map: priority change only\n");
+
+		goto map_qid_done;
+	}
+
+	/* If this is a priority change on a pending mapping, update the
+	 * pending priority
+	 */
+	if (dlb_port_find_slot_with_pending_map_queue(port, queue, &i)) {
+		if (i >= DLB_MAX_NUM_QIDS_PER_LDB_CQ) {
+			DLB_HW_ERR(hw,
+				   "[%s():%d] Internal error: port slot tracking failed\n",
+				   __func__, __LINE__);
+			return -EFAULT;
+		}
+
+		port->qid_map[i].pending_priority = prio;
+
+		DLB_HW_DBG(hw, "DLB map: priority change only\n");
+
+		goto map_qid_done;
+	}
+
+	/* If all the CQ's slots are in use, then there's an unmap in progress
+	 * (guaranteed by dlb_verify_map_qid_slot_available()), so add this
+	 * mapping to pending_map and return. When the removal is completed for
+	 * the slot's current occupant, this mapping will be performed.
+	 */
+	if (!dlb_port_find_slot(port, DLB_QUEUE_UNMAPPED, &i)) {
+		if (dlb_port_find_slot(port, DLB_QUEUE_UNMAP_IN_PROGRESS, &i)) {
+			enum dlb_qid_map_state state;
+
+			if (i >= DLB_MAX_NUM_QIDS_PER_LDB_CQ) {
+				DLB_HW_ERR(hw,
+					   "[%s():%d] Internal error: port slot tracking failed\n",
+					   __func__, __LINE__);
+				return -EFAULT;
+			}
+
+			port->qid_map[i].pending_qid = queue->id.phys_id;
+			port->qid_map[i].pending_priority = prio;
+
+			state = DLB_QUEUE_UNMAP_IN_PROGRESS_PENDING_MAP;
+
+			ret = dlb_port_slot_state_transition(hw, port, queue,
+							     i, state);
+			if (ret)
+				return ret;
+
+			DLB_HW_DBG(hw, "DLB map: map pending removal\n");
+
+			goto map_qid_done;
+		}
+	}
+
+	/* If the domain has started, a special "dynamic" CQ->queue mapping
+	 * procedure is required in order to safely update the CQ<->QID tables.
+	 * The "static" procedure cannot be used when traffic is flowing,
+	 * because the CQ<->QID tables cannot be updated atomically and the
+	 * scheduler won't see the new mapping unless the queue's if_status
+	 * changes, which isn't guaranteed.
+	 */
+	ret = dlb_ldb_port_map_qid(hw, domain, port, queue, prio);
+
+	/* If ret is less than zero, it's due to an internal error */
+	if (ret < 0)
+		return ret;
+
+map_qid_done:
+	if (port->enabled)
+		dlb_ldb_port_cq_enable(hw, port);
+
+	resp->status = 0;
+
+	return 0;
+}
+
+static void dlb_log_unmap_qid(struct dlb_hw *hw,
+			      u32 domain_id,
+			      struct dlb_unmap_qid_args *args,
+			      bool vf_request,
+			      unsigned int vf_id)
+{
+	DLB_HW_DBG(hw, "DLB unmap QID arguments:\n");
+	if (vf_request)
+		DLB_HW_DBG(hw, "(Request from VF %d)\n", vf_id);
+	DLB_HW_DBG(hw, "\tDomain ID: %d\n",
+		   domain_id);
+	DLB_HW_DBG(hw, "\tPort ID:   %d\n",
+		   args->port_id);
+	DLB_HW_DBG(hw, "\tQueue ID:  %d\n",
+		   args->qid);
+	if (args->qid < DLB_MAX_NUM_LDB_QUEUES)
+		DLB_HW_DBG(hw, "\tQueue's num mappings:  %d\n",
+			   hw->rsrcs.ldb_queues[args->qid].num_mappings);
+}
+
+int dlb_hw_unmap_qid(struct dlb_hw *hw,
+		     u32 domain_id,
+		     struct dlb_unmap_qid_args *args,
+		     struct dlb_cmd_response *resp,
+		     bool vf_request,
+		     unsigned int vf_id)
+{
+	enum dlb_qid_map_state state;
+	struct dlb_ldb_queue *queue;
+	struct dlb_ldb_port *port;
+	struct dlb_domain *domain;
+	bool unmap_complete;
+	int i, ret, id;
+
+	dlb_log_unmap_qid(hw, domain_id, args, vf_request, vf_id);
+
+	/* Verify that hardware resources are available before attempting to
+	 * satisfy the request. This simplifies the error unwinding code.
+	 */
+	ret = dlb_verify_unmap_qid_args(hw,
+					domain_id,
+					args,
+					resp,
+					vf_request,
+					vf_id);
+	if (ret)
+		return ret;
+
+	domain = dlb_get_domain_from_id(hw, domain_id, vf_request, vf_id);
+	if (!domain) {
+		DLB_HW_ERR(hw,
+			   "[%s():%d] Internal error: domain not found\n",
+			   __func__, __LINE__);
+		return -EFAULT;
+	}
+
+	id = args->port_id;
+
+	port = dlb_get_domain_used_ldb_port(id, vf_request, domain);
+	if (!port) {
+		DLB_HW_ERR(hw,
+			   "[%s():%d] Internal error: port not found\n",
+			   __func__, __LINE__);
+		return -EFAULT;
+	}
+
+	queue = dlb_get_domain_ldb_queue(args->qid, vf_request, domain);
+	if (!queue) {
+		DLB_HW_ERR(hw,
+			   "[%s():%d] Internal error: queue not found\n",
+			   __func__, __LINE__);
+		return -EFAULT;
+	}
+
+	/* If the queue hasn't been mapped yet, we need to update the slot's
+	 * state and re-enable the queue's inflights.
+	 */
+	state = DLB_QUEUE_MAP_IN_PROGRESS;
+	if (dlb_port_find_slot_queue(port, state, queue, &i)) {
+		if (i >= DLB_MAX_NUM_QIDS_PER_LDB_CQ) {
+			DLB_HW_ERR(hw,
+				   "[%s():%d] Internal error: port slot tracking failed\n",
+				   __func__, __LINE__);
+			return -EFAULT;
+		}
+
+		/* Since the in-progress map was aborted, re-enable the QID's
+		 * inflights.
+		 */
+		if (queue->num_pending_additions == 0)
+			dlb_ldb_queue_set_inflight_limit(hw, queue);
+
+		state = DLB_QUEUE_UNMAPPED;
+		ret = dlb_port_slot_state_transition(hw, port, queue, i, state);
+		if (ret)
+			return ret;
+
+		goto unmap_qid_done;
+	}
+
+	/* If the queue mapping is on hold pending an unmap, we simply need to
+	 * update the slot's state.
+	 */
+	if (dlb_port_find_slot_with_pending_map_queue(port, queue, &i)) {
+		if (i >= DLB_MAX_NUM_QIDS_PER_LDB_CQ) {
+			DLB_HW_ERR(hw,
+				   "[%s():%d] Internal error: port slot tracking failed\n",
+				   __func__, __LINE__);
+			return -EFAULT;
+		}
+
+		state = DLB_QUEUE_UNMAP_IN_PROGRESS;
+		ret = dlb_port_slot_state_transition(hw, port, queue, i, state);
+		if (ret)
+			return ret;
+
+		goto unmap_qid_done;
+	}
+
+	state = DLB_QUEUE_MAPPED;
+	if (!dlb_port_find_slot_queue(port, state, queue, &i)) {
+		DLB_HW_ERR(hw,
+			   "[%s()] Internal error: no available CQ slots\n",
+			   __func__);
+		return -EFAULT;
+	}
+
+	if (i >= DLB_MAX_NUM_QIDS_PER_LDB_CQ) {
+		DLB_HW_ERR(hw,
+			   "[%s():%d] Internal error: port slot tracking failed\n",
+			   __func__, __LINE__);
+		return -EFAULT;
+	}
+
+	/* QID->CQ mapping removal is an asychronous procedure. It requires
+	 * stopping the DLB from scheduling this CQ, draining all inflights
+	 * from the CQ, then unmapping the queue from the CQ. This function
+	 * simply marks the port as needing the queue unmapped, and (if
+	 * necessary) starts the unmapping worker thread.
+	 */
+	dlb_ldb_port_cq_disable(hw, port);
+
+	state = DLB_QUEUE_UNMAP_IN_PROGRESS;
+	ret = dlb_port_slot_state_transition(hw, port, queue, i, state);
+	if (ret)
+		return ret;
+
+	/* Attempt to finish the unmapping now, in case the port has no
+	 * outstanding inflights. If that's not the case, this will fail and
+	 * the unmapping will be completed at a later time.
+	 */
+	unmap_complete = dlb_domain_finish_unmap_port(hw, domain, port);
+
+	/* If the unmapping couldn't complete immediately, launch the worker
+	 * thread (if it isn't already launched) to finish it later.
+	 */
+	if (!unmap_complete)
+		dlb_schedule_work(hw);
+
+unmap_qid_done:
+	resp->status = 0;
+
+	return 0;
+}
 
 void dlb_disable_dp_vasr_feature(struct dlb_hw *hw)
 {
@@ -5116,6 +5809,48 @@ int dlb_hw_get_dir_queue_depth(struct dlb_hw *hw,
 	}
 
 	resp->id = dlb_dir_queue_depth(hw, queue);
+
+	return 0;
+}
+
+static void
+dlb_log_pending_port_unmaps_args(struct dlb_hw *hw,
+				 struct dlb_pending_port_unmaps_args *args,
+				 bool vf_request,
+				 unsigned int vf_id)
+{
+	DLB_HW_DBG(hw, "DLB pending port unmaps arguments:\n");
+	if (vf_request)
+		DLB_HW_DBG(hw, "(Request from VF %d)\n", vf_id);
+	DLB_HW_DBG(hw, "\tPort ID: %d\n", args->port_id);
+}
+
+int dlb_hw_pending_port_unmaps(struct dlb_hw *hw,
+			       u32 domain_id,
+			       struct dlb_pending_port_unmaps_args *args,
+			       struct dlb_cmd_response *resp,
+			       bool vf_request,
+			       unsigned int vf_id)
+{
+	struct dlb_domain *domain;
+	struct dlb_ldb_port *port;
+
+	dlb_log_pending_port_unmaps_args(hw, args, vf_request, vf_id);
+
+	domain = dlb_get_domain_from_id(hw, domain_id, vf_request, vf_id);
+
+	if (!domain) {
+		resp->status = DLB_ST_INVALID_DOMAIN_ID;
+		return -EINVAL;
+	}
+
+	port = dlb_get_domain_used_ldb_port(args->port_id, vf_request, domain);
+	if (!port || !port->configured) {
+		resp->status = DLB_ST_INVALID_PORT_ID;
+		return -EINVAL;
+	}
+
+	resp->id = port->num_pending_removals;
 
 	return 0;
 }
