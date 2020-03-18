@@ -65,6 +65,7 @@ DLB_DOMAIN_IOCTL_CALLBACK_TEMPLATE(create_ldb_pool)
 DLB_DOMAIN_IOCTL_CALLBACK_TEMPLATE(create_dir_pool)
 DLB_DOMAIN_IOCTL_CALLBACK_TEMPLATE(create_ldb_queue)
 DLB_DOMAIN_IOCTL_CALLBACK_TEMPLATE(create_dir_queue)
+DLB_DOMAIN_IOCTL_CALLBACK_TEMPLATE(start_domain)
 DLB_DOMAIN_IOCTL_CALLBACK_TEMPLATE(get_ldb_queue_depth)
 DLB_DOMAIN_IOCTL_CALLBACK_TEMPLATE(get_dir_queue_depth)
 
@@ -290,6 +291,7 @@ dlb_domain_ioctl_callback_fns[NUM_DLB_DOMAIN_CMD] = {
 	dlb_domain_ioctl_create_dir_queue,
 	dlb_domain_ioctl_create_ldb_port,
 	dlb_domain_ioctl_create_dir_port,
+	dlb_domain_ioctl_start_domain,
 	dlb_domain_ioctl_get_ldb_queue_depth,
 	dlb_domain_ioctl_get_dir_queue_depth,
 };
