@@ -68,12 +68,228 @@ DLB_DOMAIN_IOCTL_CALLBACK_TEMPLATE(create_dir_queue)
 DLB_DOMAIN_IOCTL_CALLBACK_TEMPLATE(get_ldb_queue_depth)
 DLB_DOMAIN_IOCTL_CALLBACK_TEMPLATE(get_dir_queue_depth)
 
+static int dlb_domain_ioctl_create_ldb_port(struct dlb_dev *dev,
+					    struct dlb_status *status,
+					    unsigned long user_arg,
+					    u32 domain_id)
+{
+	struct dlb_create_ldb_port_args arg;
+	struct dlb_cmd_response response;
+	struct dlb_domain_dev *domain;
+	dma_addr_t pc_dma_base = 0;
+	dma_addr_t cq_dma_base = 0;
+	void *pc_base = NULL;
+	void *cq_base = NULL;
+	int ret;
+
+	dev_dbg(dev->dlb_device, "Entering %s()\n", __func__);
+
+	response.status = 0;
+
+	if (copy_from_user(&arg, (void __user *)user_arg, sizeof(arg))) {
+		dev_err(dev->dlb_device,
+			"[%s()] Invalid ioctl argument pointer\n", __func__);
+		return -EFAULT;
+	}
+
+	mutex_lock(&dev->resource_mutex);
+
+	if (domain_id >= DLB_MAX_NUM_DOMAINS) {
+		response.status = DLB_ST_INVALID_DOMAIN_ID;
+		ret = -EPERM;
+		goto unlock;
+	}
+
+	domain = &dev->sched_domains[domain_id];
+
+	cq_base = dma_alloc_coherent(&dev->pdev->dev,
+				     DLB_LDB_CQ_MAX_SIZE,
+				     &cq_dma_base,
+				     GFP_KERNEL);
+	if (!cq_base) {
+		response.status = DLB_ST_NO_MEMORY;
+		ret = -ENOMEM;
+		goto unlock;
+	}
+
+	pc_base = dma_alloc_coherent(&dev->pdev->dev,
+				     PAGE_SIZE,
+				     &pc_dma_base,
+				     GFP_KERNEL);
+	if (!pc_base) {
+		response.status = DLB_ST_NO_MEMORY;
+		ret = -ENOMEM;
+		goto unlock;
+	}
+
+	ret = dev->ops->create_ldb_port(&dev->hw,
+					domain_id,
+					&arg,
+					(uintptr_t)pc_dma_base,
+					(uintptr_t)cq_dma_base,
+					&response);
+	if (ret)
+		goto unlock;
+
+	/* Fill out the per-port memory tracking structure */
+	dev->ldb_port_mem[response.id].domain_id = domain_id;
+	dev->ldb_port_mem[response.id].cq_base = cq_base;
+	dev->ldb_port_mem[response.id].pc_base = pc_base;
+	dev->ldb_port_mem[response.id].cq_dma_base = cq_dma_base;
+	dev->ldb_port_mem[response.id].pc_dma_base = pc_dma_base;
+	dev->ldb_port_mem[response.id].valid = true;
+
+unlock:
+	if (ret) {
+		dev_err(dev->dlb_device, "[%s()]: Error %s\n",
+			__func__, dlb_error_strings[response.status]);
+
+		if (cq_dma_base)
+			dma_free_coherent(&dev->pdev->dev,
+					  DLB_LDB_CQ_MAX_SIZE,
+					  cq_base,
+					  cq_dma_base);
+		if (pc_dma_base)
+			dma_free_coherent(&dev->pdev->dev,
+					  PAGE_SIZE,
+					  pc_base,
+					  pc_dma_base);
+	} else {
+		dev_dbg(dev->dlb_device, "CQ PA: 0x%llx\n",
+			virt_to_phys(cq_base));
+		dev_dbg(dev->dlb_device, "CQ IOVA: 0x%llx\n", cq_dma_base);
+	}
+
+	mutex_unlock(&dev->resource_mutex);
+
+	if (copy_to_user((void __user *)arg.response,
+			 &response,
+			 sizeof(response))) {
+		dev_err(dev->dlb_device,
+			"[%s()] Invalid ioctl response pointer\n", __func__);
+		return -EFAULT;
+	}
+
+	dev_dbg(dev->dlb_device, "Exiting %s()\n", __func__);
+
+	return ret;
+}
+
+static int dlb_domain_ioctl_create_dir_port(struct dlb_dev *dev,
+					    struct dlb_status *status,
+					    unsigned long user_arg,
+					    u32 domain_id)
+{
+	struct dlb_create_dir_port_args arg;
+	struct dlb_cmd_response response;
+	struct dlb_domain_dev *domain;
+	dma_addr_t pc_dma_base = 0;
+	dma_addr_t cq_dma_base = 0;
+	void *pc_base = NULL;
+	void *cq_base = NULL;
+	int ret;
+
+	dev_dbg(dev->dlb_device, "Entering %s()\n", __func__);
+
+	response.status = 0;
+
+	if (copy_from_user(&arg, (void __user *)user_arg, sizeof(arg))) {
+		dev_err(dev->dlb_device,
+			"[%s()] Invalid ioctl argument pointer\n", __func__);
+		return -EFAULT;
+	}
+
+	mutex_lock(&dev->resource_mutex);
+
+	if (domain_id >= DLB_MAX_NUM_DOMAINS) {
+		response.status = DLB_ST_INVALID_DOMAIN_ID;
+		ret = -EPERM;
+		goto unlock;
+	}
+
+	domain = &dev->sched_domains[domain_id];
+
+	cq_base = dma_alloc_coherent(&dev->pdev->dev,
+				     DLB_DIR_CQ_MAX_SIZE,
+				     &cq_dma_base,
+				     GFP_KERNEL);
+	if (!cq_base) {
+		response.status = DLB_ST_NO_MEMORY;
+		ret = -ENOMEM;
+		goto unlock;
+	}
+
+	pc_base = dma_alloc_coherent(&dev->pdev->dev,
+				     PAGE_SIZE,
+				     &pc_dma_base,
+				     GFP_KERNEL);
+	if (!pc_base) {
+		response.status = DLB_ST_NO_MEMORY;
+		ret = -ENOMEM;
+		goto unlock;
+	}
+
+	ret = dev->ops->create_dir_port(&dev->hw,
+					domain_id,
+					&arg,
+					(uintptr_t)pc_dma_base,
+					(uintptr_t)cq_dma_base,
+					&response);
+	if (ret)
+		goto unlock;
+
+	/* Fill out the per-port memory tracking structure */
+	dev->dir_port_mem[response.id].domain_id = domain_id;
+	dev->dir_port_mem[response.id].cq_base = cq_base;
+	dev->dir_port_mem[response.id].pc_base = pc_base;
+	dev->dir_port_mem[response.id].cq_dma_base = cq_dma_base;
+	dev->dir_port_mem[response.id].pc_dma_base = pc_dma_base;
+	dev->dir_port_mem[response.id].valid = true;
+
+unlock:
+	if (ret) {
+		dev_err(dev->dlb_device, "[%s()]: Error %s\n",
+			__func__, dlb_error_strings[response.status]);
+
+		if (cq_dma_base)
+			dma_free_coherent(&dev->pdev->dev,
+					  DLB_DIR_CQ_MAX_SIZE,
+					  cq_base,
+					  cq_dma_base);
+		if (pc_dma_base)
+			dma_free_coherent(&dev->pdev->dev,
+					  PAGE_SIZE,
+					  pc_base,
+					  pc_dma_base);
+	} else {
+		dev_dbg(dev->dlb_device, "CQ PA: 0x%llx\n",
+			virt_to_phys(cq_base));
+		dev_dbg(dev->dlb_device, "CQ IOVA: 0x%llx\n", cq_dma_base);
+	}
+
+	mutex_unlock(&dev->resource_mutex);
+
+	if (copy_to_user((void __user *)arg.response,
+			 &response,
+			 sizeof(response))) {
+		dev_err(dev->dlb_device,
+			"[%s()] Invalid ioctl response pointer\n", __func__);
+		return -EFAULT;
+	}
+
+	dev_dbg(dev->dlb_device, "Exiting %s()\n", __func__);
+
+	return ret;
+}
+
 static dlb_domain_ioctl_callback_fn_t
 dlb_domain_ioctl_callback_fns[NUM_DLB_DOMAIN_CMD] = {
 	dlb_domain_ioctl_create_ldb_pool,
 	dlb_domain_ioctl_create_dir_pool,
 	dlb_domain_ioctl_create_ldb_queue,
 	dlb_domain_ioctl_create_dir_queue,
+	dlb_domain_ioctl_create_ldb_port,
+	dlb_domain_ioctl_create_dir_port,
 	dlb_domain_ioctl_get_ldb_queue_depth,
 	dlb_domain_ioctl_get_dir_queue_depth,
 };
@@ -232,6 +448,36 @@ static int dlb_ioctl_get_driver_version(struct dlb_dev *dev,
 	return 0;
 }
 
+static int dlb_ioctl_query_cq_poll_mode(struct dlb_dev *dev,
+					unsigned long user_arg)
+{
+	struct dlb_query_cq_poll_mode_args arg;
+	struct dlb_cmd_response response;
+	int ret;
+
+	if (copy_from_user(&arg, (void __user *)user_arg, sizeof(arg))) {
+		dev_err(dev->dlb_device,
+			"[%s()] Invalid ioctl argument pointer\n",
+			__func__);
+		return -EFAULT;
+	}
+
+	mutex_lock(&dev->resource_mutex);
+
+	ret = dev->ops->query_cq_poll_mode(dev, &response);
+
+	mutex_unlock(&dev->resource_mutex);
+
+	if (copy_to_user((void __user *)arg.response,
+			 &response,
+			 sizeof(response))) {
+		pr_err("Invalid ioctl response pointer\n");
+		return -EFAULT;
+	}
+
+	return ret;
+}
+
 typedef int (*dlb_ioctl_callback_fn_t)(struct dlb_dev *dev, unsigned long arg);
 
 static dlb_ioctl_callback_fn_t dlb_ioctl_callback_fns[NUM_DLB_CMD] = {
@@ -239,6 +485,7 @@ static dlb_ioctl_callback_fn_t dlb_ioctl_callback_fns[NUM_DLB_CMD] = {
 	dlb_ioctl_create_sched_domain,
 	dlb_ioctl_get_num_resources,
 	dlb_ioctl_get_driver_version,
+	dlb_ioctl_query_cq_poll_mode,
 };
 
 int dlb_ioctl_dispatcher(struct dlb_dev *dev,

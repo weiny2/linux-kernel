@@ -312,11 +312,34 @@ struct dlb_get_num_resources_args {
 	__u32 padding0;
 };
 
+/*
+ * DLB_CMD_QUERY_CQ_POLL_MODE: Query the CQ poll mode the kernel driver is using
+ *
+ * Output parameters:
+ * - response: pointer to a struct dlb_cmd_response.
+ *	response.status: Detailed error code. In certain cases, such as if the
+ *		response pointer is invalid, the driver won't set status.
+ *	response.id: CQ poll mode (see enum dlb_cq_poll_modes).
+ */
+struct dlb_query_cq_poll_mode_args {
+	/* Output parameters */
+	__u64 response;
+};
+
+enum dlb_cq_poll_modes {
+	DLB_CQ_POLL_MODE_STD,
+	DLB_CQ_POLL_MODE_SPARSE,
+
+	/* NUM_DLB_CQ_POLL_MODE must be last */
+	NUM_DLB_CQ_POLL_MODE,
+};
+
 enum dlb_user_interface_commands {
 	DLB_CMD_GET_DEVICE_VERSION,
 	DLB_CMD_CREATE_SCHED_DOMAIN,
 	DLB_CMD_GET_NUM_RESOURCES,
 	DLB_CMD_GET_DRIVER_VERSION,
+	DLB_CMD_QUERY_CQ_POLL_MODE,
 
 	/* NUM_DLB_CMD must be last */
 	NUM_DLB_CMD,
@@ -420,6 +443,150 @@ struct dlb_create_dir_queue_args {
 	__u32 padding0;
 };
 
+/*
+ * DLB_DOMAIN_CMD_CREATE_LDB_PORT: Configure a load-balanced port.
+ * Input parameters:
+ * - ldb_credit_pool_id: Load-balanced credit pool this port will belong to.
+ * - dir_credit_pool_id: Directed credit pool this port will belong to.
+ * - ldb_credit_high_watermark: Number of load-balanced credits from the pool
+ *	that this port will own.
+ *
+ *	If this port's scheduling domain doesn't have any load-balanced queues,
+ *	this argument is ignored and the port is given no load-balanced
+ *	credits.
+ * - dir_credit_high_watermark: Number of directed credits from the pool that
+ *	this port will own.
+ *
+ *	If this port's scheduling domain doesn't have any directed queues,
+ *	this argument is ignored and the port is given no directed credits.
+ * - ldb_credit_low_watermark: Load-balanced credit low watermark. When the
+ *	port's credits reach this watermark, they become eligible to be
+ *	refilled by the DLB as credits until the high watermark
+ *	(num_ldb_credits) is reached.
+ *
+ *	If this port's scheduling domain doesn't have any load-balanced queues,
+ *	this argument is ignored and the port is given no load-balanced
+ *	credits.
+ * - dir_credit_low_watermark: Directed credit low watermark. When the port's
+ *	credits reach this watermark, they become eligible to be refilled by
+ *	the DLB as credits until the high watermark (num_dir_credits) is
+ *	reached.
+ *
+ *	If this port's scheduling domain doesn't have any directed queues,
+ *	this argument is ignored and the port is given no directed credits.
+ * - ldb_credit_quantum: Number of load-balanced credits for the DLB to refill
+ *	per refill operation.
+ *
+ *	If this port's scheduling domain doesn't have any load-balanced queues,
+ *	this argument is ignored and the port is given no load-balanced
+ *	credits.
+ * - dir_credit_quantum: Number of directed credits for the DLB to refill per
+ *	refill operation.
+ *
+ *	If this port's scheduling domain doesn't have any directed queues,
+ *	this argument is ignored and the port is given no directed credits.
+ * - padding0: Reserved for future use.
+ * - cq_depth: Depth of the port's CQ. Must be a power-of-two between 8 and
+ *	1024, inclusive.
+ * - cq_depth_threshold: CQ depth interrupt threshold. A value of N means that
+ *	the CQ interrupt won't fire until there are N or more outstanding CQ
+ *	tokens.
+ * - cq_history_list_size: Number of history list entries. This must be greater
+ *	than or equal to cq_depth.
+ * - padding1: Reserved for future use.
+ * - padding2: Reserved for future use.
+ *
+ * Output parameters:
+ * - response: pointer to a struct dlb_cmd_response.
+ *	response.status: Detailed error code. In certain cases, such as if the
+ *		response pointer is invalid, the driver won't set status.
+ *	response.id: port ID.
+ */
+struct dlb_create_ldb_port_args {
+	/* Output parameters */
+	__u64 response;
+	/* Input parameters */
+	__u32 ldb_credit_pool_id;
+	__u32 dir_credit_pool_id;
+	__u16 ldb_credit_high_watermark;
+	__u16 ldb_credit_low_watermark;
+	__u16 ldb_credit_quantum;
+	__u16 dir_credit_high_watermark;
+	__u16 dir_credit_low_watermark;
+	__u16 dir_credit_quantum;
+	__u16 padding0;
+	__u16 cq_depth;
+	__u16 cq_depth_threshold;
+	__u16 cq_history_list_size;
+	__u32 padding1;
+};
+
+/*
+ * DLB_DOMAIN_CMD_CREATE_DIR_PORT: Configure a directed port.
+ * Input parameters:
+ * - ldb_credit_pool_id: Load-balanced credit pool this port will belong to.
+ * - dir_credit_pool_id: Directed credit pool this port will belong to.
+ * - ldb_credit_high_watermark: Number of load-balanced credits from the pool
+ *	that this port will own.
+ *
+ *	If this port's scheduling domain doesn't have any load-balanced queues,
+ *	this argument is ignored and the port is given no load-balanced
+ *	credits.
+ * - dir_credit_high_watermark: Number of directed credits from the pool that
+ *	this port will own.
+ * - ldb_credit_low_watermark: Load-balanced credit low watermark. When the
+ *	port's credits reach this watermark, they become eligible to be
+ *	refilled by the DLB as credits until the high watermark
+ *	(num_ldb_credits) is reached.
+ *
+ *	If this port's scheduling domain doesn't have any load-balanced queues,
+ *	this argument is ignored and the port is given no load-balanced
+ *	credits.
+ * - dir_credit_low_watermark: Directed credit low watermark. When the port's
+ *	credits reach this watermark, they become eligible to be refilled by
+ *	the DLB as credits until the high watermark (num_dir_credits) is
+ *	reached.
+ * - ldb_credit_quantum: Number of load-balanced credits for the DLB to refill
+ *	per refill operation.
+ *
+ *	If this port's scheduling domain doesn't have any load-balanced queues,
+ *	this argument is ignored and the port is given no load-balanced
+ *	credits.
+ * - dir_credit_quantum: Number of directed credits for the DLB to refill per
+ *	refill operation.
+ * - cq_depth: Depth of the port's CQ. Must be a power-of-two between 8 and
+ *	1024, inclusive.
+ * - cq_depth_threshold: CQ depth interrupt threshold. A value of N means that
+ *	the CQ interrupt won't fire until there are N or more outstanding CQ
+ *	tokens.
+ * - qid: Queue ID. If the corresponding directed queue is already created,
+ *	specify its ID here. Else this argument must be 0xFFFFFFFF to indicate
+ *	that the port is being created before the queue.
+ * - padding1: Reserved for future use.
+ *
+ * Output parameters:
+ * - response: pointer to a struct dlb_cmd_response.
+ *	response.status: Detailed error code. In certain cases, such as if the
+ *		response pointer is invalid, the driver won't set status.
+ *	response.id: Port ID.
+ */
+struct dlb_create_dir_port_args {
+	/* Output parameters */
+	__u64 response;
+	/* Input parameters */
+	__u32 ldb_credit_pool_id;
+	__u32 dir_credit_pool_id;
+	__u16 ldb_credit_high_watermark;
+	__u16 ldb_credit_low_watermark;
+	__u16 ldb_credit_quantum;
+	__u16 dir_credit_high_watermark;
+	__u16 dir_credit_low_watermark;
+	__u16 dir_credit_quantum;
+	__u16 cq_depth;
+	__u16 cq_depth_threshold;
+	__s32 queue_id;
+	__u32 padding1;
+};
 
 /*
  * DLB_DOMAIN_CMD_GET_LDB_QUEUE_DEPTH: Get a load-balanced queue's depth.
@@ -466,12 +633,17 @@ enum dlb_domain_user_interface_commands {
 	DLB_DOMAIN_CMD_CREATE_DIR_POOL,
 	DLB_DOMAIN_CMD_CREATE_LDB_QUEUE,
 	DLB_DOMAIN_CMD_CREATE_DIR_QUEUE,
+	DLB_DOMAIN_CMD_CREATE_LDB_PORT,
+	DLB_DOMAIN_CMD_CREATE_DIR_PORT,
 	DLB_DOMAIN_CMD_GET_LDB_QUEUE_DEPTH,
 	DLB_DOMAIN_CMD_GET_DIR_QUEUE_DEPTH,
 
 	/* NUM_DLB_DOMAIN_CMD must be last */
 	NUM_DLB_DOMAIN_CMD,
 };
+
+#define DLB_LDB_CQ_MAX_SIZE 65536
+#define DLB_DIR_CQ_MAX_SIZE 65536
 
 /*******************/
 /* dlb ioctl codes */
@@ -495,6 +667,10 @@ enum dlb_domain_user_interface_commands {
 		_IOWR(DLB_IOC_MAGIC,				\
 		      DLB_CMD_GET_DRIVER_VERSION,		\
 		      struct dlb_get_driver_version_args)
+#define DLB_IOC_QUERY_CQ_POLL_MODE				\
+		_IOWR(DLB_IOC_MAGIC,				\
+		      DLB_CMD_QUERY_CQ_POLL_MODE,		\
+		      struct dlb_query_cq_poll_mode_args)
 #define DLB_IOC_CREATE_LDB_POOL					\
 		_IOWR(DLB_IOC_MAGIC,				\
 		      DLB_DOMAIN_CMD_CREATE_LDB_POOL,		\
@@ -511,6 +687,14 @@ enum dlb_domain_user_interface_commands {
 		_IOWR(DLB_IOC_MAGIC,				\
 		      DLB_DOMAIN_CMD_CREATE_DIR_QUEUE,		\
 		      struct dlb_create_dir_queue_args)
+#define DLB_IOC_CREATE_LDB_PORT					\
+		_IOWR(DLB_IOC_MAGIC,				\
+		      DLB_DOMAIN_CMD_CREATE_LDB_PORT,		\
+		      struct dlb_create_ldb_port_args)
+#define DLB_IOC_CREATE_DIR_PORT					\
+		_IOWR(DLB_IOC_MAGIC,				\
+		      DLB_DOMAIN_CMD_CREATE_DIR_PORT,		\
+		      struct dlb_create_dir_port_args)
 #define DLB_IOC_GET_LDB_QUEUE_DEPTH				\
 		_IOWR(DLB_IOC_MAGIC,				\
 		      DLB_DOMAIN_CMD_GET_LDB_QUEUE_DEPTH,	\
