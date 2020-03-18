@@ -289,6 +289,50 @@ int dlb_reset_domain(struct dlb_hw *hw,
 		     unsigned int vf_id);
 
 /**
+ * dlb_ldb_port_owned_by_domain() - query whether a port is owned by a domain
+ * @hw: dlb_hw handle for a particular device.
+ * @domain_id: domain ID.
+ * @port_id: indicates whether this request came from a VF.
+ * @vf_request: indicates whether this request came from a VF.
+ * @vf_id: If vf_request is true, this contains the VF's ID.
+ *
+ * This function returns whether a load-balanced port is owned by a specified
+ * domain.
+ *
+ * Return:
+ * Returns 0 if false, 1 if true, <0 otherwise.
+ *
+ * EINVAL - Invalid domain or port ID, or the domain is not configured.
+ */
+int dlb_ldb_port_owned_by_domain(struct dlb_hw *hw,
+				 u32 domain_id,
+				 u32 port_id,
+				 bool vf_request,
+				 unsigned int vf_id);
+
+/**
+ * dlb_dir_port_owned_by_domain() - query whether a port is owned by a domain
+ * @hw: dlb_hw handle for a particular device.
+ * @domain_id: domain ID.
+ * @port_id: indicates whether this request came from a VF.
+ * @vf_request: indicates whether this request came from a VF.
+ * @vf_id: If vf_request is true, this contains the VF's ID.
+ *
+ * This function returns whether a directed port is owned by a specified
+ * domain.
+ *
+ * Return:
+ * Returns 0 if false, 1 if true, <0 otherwise.
+ *
+ * EINVAL - Invalid domain or port ID, or the domain is not configured.
+ */
+int dlb_dir_port_owned_by_domain(struct dlb_hw *hw,
+				 u32 domain_id,
+				 u32 port_id,
+				 bool vf_request,
+				 unsigned int vf_id);
+
+/**
  * dlb_hw_get_num_resources() - query the PCI function's available resources
  * @arg: pointer to resource counts.
  * @vf_request: indicates whether this request came from a VF.
