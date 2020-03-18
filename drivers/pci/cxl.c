@@ -157,20 +157,23 @@ void pci_cxl_init(struct pci_dev *dev)
 	/* Only for Device 0 Function 0 Root Complex Endpoints */
 	if ((dev->devfn == 0) && (pci_pcie_type(dev) == PCI_EXP_TYPE_RC_END)) {
 		cxl_dvsec_id = PCI_CXL_DVSEC_ID;
-	/* Or for upstream/downstream Ports */
-	else if ((pci_pcie_type(dev) == PCI_EXP_TYPE_ROOT_PORT ||
+		dev_info(&dev->dev, "CXL: pci_cxl_init() : dev 0, func 0 found\n");
+	} else if ((pci_pcie_type(dev) == PCI_EXP_TYPE_ROOT_PORT ||
 		   pci_pcie_type(dev) == PCI_EXP_TYPE_UPSTREAM ||
-		   pci_pcie_type(dev) == PCI_EXP_TYPE_DOWNSTREAM))
+		   pci_pcie_type(dev) == PCI_EXP_TYPE_DOWNSTREAM)) {
+		dev_info(&dev->dev, "CXL: pci_cxl_init() : upstream/downstream port found\n");
 		cxl_dvsec_id = PCI_CXL_DVSEC_PORT_ID;
-	else
+	} else
 		return;
 
 	pos = pci_find_cxl_capability(dev, cxl_dvsec_id);
-	if (!pos)
+	if (!pos) {
+		dev_info(&dev->dev, "CXL: pci_cxl_init() : No CXL capability found\n");
 		return;
-
+	}
 	dev->cxl_cap = pos;
 
+	dev_info(&dev->dev, "CXL: pci_cxl_init() : CXL capability found\n");
 	pci_read_config_word(dev, pos + PCI_CXL_CAP, &cap);
 
 	if (pci_pcie_type(dev) == PCI_EXP_TYPE_RC_END) {

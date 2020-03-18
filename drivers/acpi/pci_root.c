@@ -195,10 +195,12 @@ static acpi_status acpi_pci_run_osc(acpi_handle handle,
 		context.uuid_str = uuid_str_ids[i];
 		status = acpi_run_osc(handle, &context);
 		if (ACPI_SUCCESS(status)) {
+			pr_info("ACPI_OSC: Success run OSC: %s\n", uuid_str_ids[i]);
 			*retval = *((u32 *)(context.ret.pointer + 8));
 			kfree(context.ret.pointer);
 			break;
-		}
+		} else
+			pr_info("ACPI_OSC: Failed run OSC: %s\n", uuid_str_ids[i]);
 	}
 	return status;
 }
