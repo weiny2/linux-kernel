@@ -589,6 +589,25 @@ struct dlb_create_dir_port_args {
 };
 
 /*
+ * DLB_DOMAIN_CMD_START_DOMAIN: Mark the end of the domain configuration. This
+ *	must be called before passing QEs into the device, and no configuration
+ *	ioctls can be issued once the domain has started. Sending QEs into the
+ *	device before calling this ioctl will result in undefined behavior.
+ * Input parameters:
+ * - (None)
+ *
+ * Output parameters:
+ * - response: pointer to a struct dlb_cmd_response.
+ *	response.status: Detailed error code. In certain cases, such as if the
+ *		response pointer is invalid, the driver won't set status.
+ */
+struct dlb_start_domain_args {
+	/* Output parameters */
+	__u64 response;
+	/* Input parameters */
+};
+
+/*
  * DLB_DOMAIN_CMD_GET_LDB_QUEUE_DEPTH: Get a load-balanced queue's depth.
  * Input parameters:
  * - queue_id: The load-balanced queue ID.
@@ -635,6 +654,7 @@ enum dlb_domain_user_interface_commands {
 	DLB_DOMAIN_CMD_CREATE_DIR_QUEUE,
 	DLB_DOMAIN_CMD_CREATE_LDB_PORT,
 	DLB_DOMAIN_CMD_CREATE_DIR_PORT,
+	DLB_DOMAIN_CMD_START_DOMAIN,
 	DLB_DOMAIN_CMD_GET_LDB_QUEUE_DEPTH,
 	DLB_DOMAIN_CMD_GET_DIR_QUEUE_DEPTH,
 
@@ -722,6 +742,10 @@ enum dlb_domain_user_interface_commands {
 		_IOWR(DLB_IOC_MAGIC,				\
 		      DLB_DOMAIN_CMD_CREATE_DIR_PORT,		\
 		      struct dlb_create_dir_port_args)
+#define DLB_IOC_START_DOMAIN					\
+		_IOWR(DLB_IOC_MAGIC,				\
+		      DLB_DOMAIN_CMD_START_DOMAIN,		\
+		      struct dlb_start_domain_args)
 #define DLB_IOC_GET_LDB_QUEUE_DEPTH				\
 		_IOWR(DLB_IOC_MAGIC,				\
 		      DLB_DOMAIN_CMD_GET_LDB_QUEUE_DEPTH,	\
