@@ -89,6 +89,10 @@ struct dlb_device_ops {
 			       uintptr_t pop_count_dma_base,
 			       uintptr_t cq_dma_base,
 			       struct dlb_cmd_response *resp);
+	int (*start_domain)(struct dlb_hw *hw,
+			    u32 domain_id,
+			    struct dlb_start_domain_args *args,
+			    struct dlb_cmd_response *resp);
 	int (*get_num_resources)(struct dlb_hw *hw,
 				 struct dlb_get_num_resources_args *args);
 	int (*reset_domain)(struct dlb_dev *dev, u32 domain_id);

@@ -262,6 +262,33 @@ int dlb_hw_create_ldb_port(struct dlb_hw *hw,
 			   unsigned int vf_id);
 
 /**
+ * dlb_hw_start_domain() - start a scheduling domain
+ * @hw: dlb_hw handle for a particular device.
+ * @domain_id: domain ID.
+ * @args: start domain arguments.
+ * @resp: response structure.
+ * @vf_request: indicates whether this request came from a VF.
+ * @vf_id: If vf_request is true, this contains the VF's ID.
+ *
+ * This function starts a scheduling domain, which allows applications to send
+ * traffic through it. Once a domain is started, its resources can no longer be
+ * configured (besides QID remapping and port enable/disable).
+ *
+ * Return:
+ * Returns 0 upon success, < 0 otherwise. If an error occurs, resp->status is
+ * assigned a detailed error code from enum dlb_error.
+ *
+ * Errors:
+ * EINVAL - the domain is not configured, or the domain is already started.
+ */
+int dlb_hw_start_domain(struct dlb_hw *hw,
+			u32 domain_id,
+			struct dlb_start_domain_args *args,
+			struct dlb_cmd_response *resp,
+			bool vf_request,
+			unsigned int vf_id);
+
+/**
  * dlb_reset_domain() - reset a scheduling domain
  * @hw: dlb_hw handle for a particular device.
  * @domain_id: domain ID.

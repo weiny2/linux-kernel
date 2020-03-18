@@ -417,6 +417,14 @@ static int dlb_pf_create_dir_port(struct dlb_hw *hw,
 				      resp, false, 0);
 }
 
+static int dlb_pf_start_domain(struct dlb_hw *hw,
+			       u32 id,
+			       struct dlb_start_domain_args *args,
+			       struct dlb_cmd_response *resp)
+{
+	return dlb_hw_start_domain(hw, id, args, resp, false, 0);
+}
+
 static int dlb_pf_get_num_resources(struct dlb_hw *hw,
 				    struct dlb_get_num_resources_args *args)
 {
@@ -504,6 +512,7 @@ struct dlb_device_ops dlb_pf_ops = {
 	.create_dir_queue = dlb_pf_create_dir_queue,
 	.create_ldb_port = dlb_pf_create_ldb_port,
 	.create_dir_port = dlb_pf_create_dir_port,
+	.start_domain = dlb_pf_start_domain,
 	.get_num_resources = dlb_pf_get_num_resources,
 	.reset_domain = dlb_pf_reset_domain,
 	.ldb_port_owned_by_domain = dlb_pf_ldb_port_owned_by_domain,
