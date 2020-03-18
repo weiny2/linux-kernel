@@ -205,6 +205,22 @@ static int dlb_pf_create_sched_domain(struct dlb_hw *hw,
 	return dlb_hw_create_sched_domain(hw, args, resp, false, 0);
 }
 
+static int dlb_pf_create_ldb_pool(struct dlb_hw *hw,
+				  u32 id,
+				  struct dlb_create_ldb_pool_args *args,
+				  struct dlb_cmd_response *resp)
+{
+	return dlb_hw_create_ldb_pool(hw, id, args, resp, false, 0);
+}
+
+static int dlb_pf_create_dir_pool(struct dlb_hw *hw,
+				  u32 id,
+				  struct dlb_create_dir_pool_args *args,
+				  struct dlb_cmd_response *resp)
+{
+	return dlb_hw_create_dir_pool(hw, id, args, resp, false, 0);
+}
+
 static int dlb_pf_get_num_resources(struct dlb_hw *hw,
 				    struct dlb_get_num_resources_args *args)
 {
@@ -233,6 +249,8 @@ struct dlb_device_ops dlb_pf_ops = {
 	.cdev_del = dlb_pf_cdev_del,
 	.init_hardware = dlb_pf_init_hardware,
 	.create_sched_domain = dlb_pf_create_sched_domain,
+	.create_ldb_pool = dlb_pf_create_ldb_pool,
+	.create_dir_pool = dlb_pf_create_dir_pool,
 	.get_num_resources = dlb_pf_get_num_resources,
 	.reset_domain = dlb_pf_reset_domain,
 };

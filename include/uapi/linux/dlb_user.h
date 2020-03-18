@@ -322,6 +322,59 @@ enum dlb_user_interface_commands {
 	NUM_DLB_CMD,
 };
 
+/*********************************/
+/* 'domain' device file commands */
+/*********************************/
+
+/*
+ * DLB_DOMAIN_CMD_CREATE_LDB_POOL: Configure a load-balanced credit pool.
+ * Input parameters:
+ * - num_ldb_credits: Number of load-balanced credits (QED space) for this
+ *	pool.
+ * - padding0: Reserved for future use.
+ *
+ * Output parameters:
+ * - response: pointer to a struct dlb_cmd_response.
+ *	response.status: Detailed error code. In certain cases, such as if the
+ *		response pointer is invalid, the driver won't set status.
+ *	response.id: pool ID.
+ */
+struct dlb_create_ldb_pool_args {
+	/* Output parameters */
+	__u64 response;
+	/* Input parameters */
+	__u32 num_ldb_credits;
+	__u32 padding0;
+};
+
+/*
+ * DLB_DOMAIN_CMD_CREATE_DIR_POOL: Configure a directed credit pool.
+ * Input parameters:
+ * - num_dir_credits: Number of directed credits (DQED space) for this pool.
+ * - padding0: Reserved for future use.
+ *
+ * Output parameters:
+ * - response: pointer to a struct dlb_cmd_response.
+ *	response.status: Detailed error code. In certain cases, such as if the
+ *		response pointer is invalid, the driver won't set status.
+ *	response.id: Pool ID.
+ */
+struct dlb_create_dir_pool_args {
+	/* Output parameters */
+	__u64 response;
+	/* Input parameters */
+	__u32 num_dir_credits;
+	__u32 padding0;
+};
+
+enum dlb_domain_user_interface_commands {
+	DLB_DOMAIN_CMD_CREATE_LDB_POOL,
+	DLB_DOMAIN_CMD_CREATE_DIR_POOL,
+
+	/* NUM_DLB_DOMAIN_CMD must be last */
+	NUM_DLB_DOMAIN_CMD,
+};
+
 /*******************/
 /* dlb ioctl codes */
 /*******************/
@@ -344,5 +397,13 @@ enum dlb_user_interface_commands {
 		_IOWR(DLB_IOC_MAGIC,				\
 		      DLB_CMD_GET_DRIVER_VERSION,		\
 		      struct dlb_get_driver_version_args)
+#define DLB_IOC_CREATE_LDB_POOL					\
+		_IOWR(DLB_IOC_MAGIC,				\
+		      DLB_DOMAIN_CMD_CREATE_LDB_POOL,		\
+		      struct dlb_create_ldb_pool_args)
+#define DLB_IOC_CREATE_DIR_POOL					\
+		_IOWR(DLB_IOC_MAGIC,				\
+		      DLB_DOMAIN_CMD_CREATE_DIR_POOL,		\
+		      struct dlb_create_dir_pool_args)
 
 #endif /* __DLB_USER_H */

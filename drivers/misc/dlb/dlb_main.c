@@ -263,8 +263,20 @@ static ssize_t dlb_write(struct file *f,
 static long dlb_ioctl(struct file *f, unsigned int cmd, unsigned long arg)
 {
 	struct dlb_dev *dev;
+	u32 domain_id;
+	int ret;
 
 	dev = container_of(f->f_inode->i_cdev, struct dlb_dev, cdev);
+
+	domain_id = DLB_FILE_ID_FROM_DEV_T(dlb_dev_number_base,
+					   f->f_inode->i_rdev);
+
+	if (!IS_DLB_DEV_FILE(dlb_dev_number_base, f->f_inode->i_rdev) &&
+	    domain_id >= DLB_MAX_NUM_DOMAINS) {
+		dev_err(dev->dlb_device,
+			"[%s()] Internal error\n", __func__);
+		return -EINVAL;
+	}
 
 	if (_IOC_TYPE(cmd) != DLB_IOC_MAGIC) {
 		dev_err(dev->dlb_device,
@@ -272,7 +284,13 @@ static long dlb_ioctl(struct file *f, unsigned int cmd, unsigned long arg)
 		return -EINVAL;
 	}
 
-	return dlb_ioctl_dispatcher(dev, cmd, arg);
+	if (IS_DLB_DEV_FILE(dlb_dev_number_base, f->f_inode->i_rdev))
+		ret = dlb_ioctl_dispatcher(dev, cmd, arg);
+	else
+		ret = dlb_domain_ioctl_dispatcher(dev, f->private_data,
+						  cmd, arg, domain_id);
+
+	return ret;
 }
 
 static const struct file_operations dlb_fops = {

@@ -6,6 +6,86 @@
 #include "dlb_ioctl.h"
 #include "dlb_main.h"
 
+typedef int (*dlb_domain_ioctl_callback_fn_t)(struct dlb_dev *dev,
+					      struct dlb_status *status,
+					      unsigned long arg,
+					      u32 domain_id);
+
+/* The DLB domain ioctl callback template minimizes replication of boilerplate
+ * code to copy arguments, acquire and release the resource lock, and execute
+ * the command.  The arguments and response structure name should have the
+ * format dlb_<lower_name>_args.
+ */
+#define DLB_DOMAIN_IOCTL_CALLBACK_TEMPLATE(lower_name)		     \
+static int dlb_domain_ioctl_##lower_name(struct dlb_dev *dev,	     \
+					 struct dlb_status *status,  \
+					 unsigned long user_arg,     \
+					 u32 domain_id)		     \
+{								     \
+	struct dlb_##lower_name##_args arg;			     \
+	struct dlb_cmd_response response = {0};			     \
+	int ret;						     \
+	response.status = 0;					     \
+								     \
+	dev_dbg(dev->dlb_device, "Entering %s()\n", __func__);	     \
+								     \
+	if (copy_from_user(&arg,				     \
+			   (void  __user *)user_arg,		     \
+			   sizeof(arg))) {			     \
+		dev_err(dev->dlb_device,			     \
+			"[%s()] Invalid ioctl argument pointer\n",   \
+			__func__);				     \
+		return -EFAULT;					     \
+	}							     \
+								     \
+	mutex_lock(&dev->resource_mutex);			     \
+								     \
+	ret = dev->ops->lower_name(&dev->hw,			     \
+				  domain_id,			     \
+				  &arg,				     \
+				  &response);			     \
+								     \
+	mutex_unlock(&dev->resource_mutex);			     \
+								     \
+	if (copy_to_user((void __user *)arg.response,		     \
+			 &response,				     \
+			 sizeof(response))) {			     \
+		dev_err(dev->dlb_device,			     \
+			"[%s()] Invalid ioctl response pointer\n",   \
+			__func__);				     \
+		return -EFAULT;					     \
+	}							     \
+								     \
+	dev_dbg(dev->dlb_device, "Exiting %s()\n", __func__);	     \
+								     \
+	return ret;						     \
+}
+
+DLB_DOMAIN_IOCTL_CALLBACK_TEMPLATE(create_ldb_pool)
+DLB_DOMAIN_IOCTL_CALLBACK_TEMPLATE(create_dir_pool)
+
+static dlb_domain_ioctl_callback_fn_t
+dlb_domain_ioctl_callback_fns[NUM_DLB_DOMAIN_CMD] = {
+	dlb_domain_ioctl_create_ldb_pool,
+	dlb_domain_ioctl_create_dir_pool,
+};
+
+int dlb_domain_ioctl_dispatcher(struct dlb_dev *dev,
+				struct dlb_status *st,
+				unsigned int cmd,
+				unsigned long arg,
+				u32 id)
+{
+	if (_IOC_NR(cmd) >= NUM_DLB_DOMAIN_CMD) {
+		dev_err(dev->dlb_device,
+			"[%s()] Unexpected DLB DOMAIN command %d\n",
+		       __func__, _IOC_NR(cmd));
+		return -1;
+	}
+
+	return dlb_domain_ioctl_callback_fns[_IOC_NR(cmd)](dev, st, arg, id);
+}
+
 /* [7:0]: device revision, [15:8]: device version */
 #define DLB_SET_DEVICE_VERSION(ver, rev) (((ver) << 8) | (rev))
 

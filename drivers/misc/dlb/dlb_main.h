@@ -60,6 +60,14 @@ struct dlb_device_ops {
 	int (*create_sched_domain)(struct dlb_hw *hw,
 				   struct dlb_create_sched_domain_args *args,
 				   struct dlb_cmd_response *resp);
+	int (*create_ldb_pool)(struct dlb_hw *hw,
+			       u32 domain_id,
+			       struct dlb_create_ldb_pool_args *args,
+			       struct dlb_cmd_response *resp);
+	int (*create_dir_pool)(struct dlb_hw *hw,
+			       u32 domain_id,
+			       struct dlb_create_dir_pool_args *args,
+			       struct dlb_cmd_response *resp);
 	int (*get_num_resources)(struct dlb_hw *hw,
 				 struct dlb_get_num_resources_args *args);
 	int (*reset_domain)(struct dlb_dev *dev, u32 domain_id);

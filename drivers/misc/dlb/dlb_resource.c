@@ -959,6 +959,197 @@ dlb_verify_create_sched_domain_args(struct dlb_hw *hw,
 	return 0;
 }
 
+static int
+dlb_verify_create_ldb_pool_args(struct dlb_hw *hw,
+				u32 domain_id,
+				struct dlb_create_ldb_pool_args *args,
+				struct dlb_cmd_response *resp,
+				bool vf_request,
+				unsigned int vf_id)
+{
+	struct dlb_freelist *qed_freelist;
+	struct dlb_domain *domain;
+
+	domain = dlb_get_domain_from_id(hw, domain_id, vf_request, vf_id);
+
+	if (!domain) {
+		resp->status = DLB_ST_INVALID_DOMAIN_ID;
+		return -EINVAL;
+	}
+
+	if (!domain->configured) {
+		resp->status = DLB_ST_DOMAIN_NOT_CONFIGURED;
+		return -EINVAL;
+	}
+
+	qed_freelist = &domain->qed_freelist;
+
+	if (dlb_freelist_count(qed_freelist) < args->num_ldb_credits) {
+		resp->status = DLB_ST_LDB_CREDITS_UNAVAILABLE;
+		return -EINVAL;
+	}
+
+	if (list_empty(&domain->avail_ldb_credit_pools)) {
+		resp->status = DLB_ST_LDB_CREDIT_POOLS_UNAVAILABLE;
+		return -EINVAL;
+	}
+
+	if (domain->started) {
+		resp->status = DLB_ST_DOMAIN_STARTED;
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static void
+dlb_configure_ldb_credit_pool(struct dlb_hw *hw,
+			      struct dlb_domain *domain,
+			      struct dlb_create_ldb_pool_args *args,
+			      struct dlb_credit_pool *pool)
+{
+	union dlb_sys_ldb_pool_enbld r0 = { {0} };
+	union dlb_chp_ldb_pool_crd_lim r1 = { {0} };
+	union dlb_chp_ldb_pool_crd_cnt r2 = { {0} };
+	union dlb_chp_qed_fl_base  r3 = { {0} };
+	union dlb_chp_qed_fl_lim r4 = { {0} };
+	union dlb_chp_qed_fl_push_ptr r5 = { {0} };
+	union dlb_chp_qed_fl_pop_ptr  r6 = { {0} };
+
+	r1.field.limit = args->num_ldb_credits;
+
+	DLB_CSR_WR(hw, DLB_CHP_LDB_POOL_CRD_LIM(pool->id.phys_id), r1.val);
+
+	r2.field.count = args->num_ldb_credits;
+
+	DLB_CSR_WR(hw, DLB_CHP_LDB_POOL_CRD_CNT(pool->id.phys_id), r2.val);
+
+	r3.field.base = domain->qed_freelist.base + domain->qed_freelist.offset;
+
+	DLB_CSR_WR(hw, DLB_CHP_QED_FL_BASE(pool->id.phys_id), r3.val);
+
+	r4.field.freelist_disable = 0;
+	r4.field.limit = r3.field.base + args->num_ldb_credits - 1;
+
+	DLB_CSR_WR(hw, DLB_CHP_QED_FL_LIM(pool->id.phys_id), r4.val);
+
+	r5.field.push_ptr = r3.field.base;
+	r5.field.generation = 1;
+
+	DLB_CSR_WR(hw, DLB_CHP_QED_FL_PUSH_PTR(pool->id.phys_id), r5.val);
+
+	r6.field.pop_ptr = r3.field.base;
+	r6.field.generation = 0;
+
+	DLB_CSR_WR(hw, DLB_CHP_QED_FL_POP_PTR(pool->id.phys_id), r6.val);
+
+	r0.field.pool_enabled = 1;
+
+	DLB_CSR_WR(hw, DLB_SYS_LDB_POOL_ENBLD(pool->id.phys_id), r0.val);
+
+	pool->avail_credits = args->num_ldb_credits;
+	pool->total_credits = args->num_ldb_credits;
+	domain->qed_freelist.offset += args->num_ldb_credits;
+
+	pool->configured = true;
+}
+
+static int
+dlb_verify_create_dir_pool_args(struct dlb_hw *hw,
+				u32 domain_id,
+				struct dlb_create_dir_pool_args *args,
+				struct dlb_cmd_response *resp,
+				bool vf_request,
+				unsigned int vf_id)
+{
+	struct dlb_freelist *dqed_freelist;
+	struct dlb_domain *domain;
+
+	domain = dlb_get_domain_from_id(hw, domain_id, vf_request, vf_id);
+
+	if (!domain) {
+		resp->status = DLB_ST_INVALID_DOMAIN_ID;
+		return -EINVAL;
+	}
+
+	if (!domain->configured) {
+		resp->status = DLB_ST_DOMAIN_NOT_CONFIGURED;
+		return -EINVAL;
+	}
+
+	dqed_freelist = &domain->dqed_freelist;
+
+	if (dlb_freelist_count(dqed_freelist) < args->num_dir_credits) {
+		resp->status = DLB_ST_DIR_CREDITS_UNAVAILABLE;
+		return -EINVAL;
+	}
+
+	if (list_empty(&domain->avail_dir_credit_pools)) {
+		resp->status = DLB_ST_DIR_CREDIT_POOLS_UNAVAILABLE;
+		return -EINVAL;
+	}
+
+	if (domain->started) {
+		resp->status = DLB_ST_DOMAIN_STARTED;
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static void
+dlb_configure_dir_credit_pool(struct dlb_hw *hw,
+			      struct dlb_domain *domain,
+			      struct dlb_create_dir_pool_args *args,
+			      struct dlb_credit_pool *pool)
+{
+	union dlb_sys_dir_pool_enbld r0 = { {0} };
+	union dlb_chp_dir_pool_crd_lim r1 = { {0} };
+	union dlb_chp_dir_pool_crd_cnt r2 = { {0} };
+	union dlb_chp_dqed_fl_base  r3 = { {0} };
+	union dlb_chp_dqed_fl_lim r4 = { {0} };
+	union dlb_chp_dqed_fl_push_ptr r5 = { {0} };
+	union dlb_chp_dqed_fl_pop_ptr  r6 = { {0} };
+
+	r1.field.limit = args->num_dir_credits;
+
+	DLB_CSR_WR(hw, DLB_CHP_DIR_POOL_CRD_LIM(pool->id.phys_id), r1.val);
+
+	r2.field.count = args->num_dir_credits;
+
+	DLB_CSR_WR(hw, DLB_CHP_DIR_POOL_CRD_CNT(pool->id.phys_id), r2.val);
+
+	r3.field.base = domain->dqed_freelist.base +
+			domain->dqed_freelist.offset;
+
+	DLB_CSR_WR(hw, DLB_CHP_DQED_FL_BASE(pool->id.phys_id), r3.val);
+
+	r4.field.freelist_disable = 0;
+	r4.field.limit = r3.field.base + args->num_dir_credits - 1;
+
+	DLB_CSR_WR(hw, DLB_CHP_DQED_FL_LIM(pool->id.phys_id), r4.val);
+
+	r5.field.push_ptr = r3.field.base;
+	r5.field.generation = 1;
+
+	DLB_CSR_WR(hw, DLB_CHP_DQED_FL_PUSH_PTR(pool->id.phys_id), r5.val);
+
+	r6.field.pop_ptr = r3.field.base;
+	r6.field.generation = 0;
+
+	DLB_CSR_WR(hw, DLB_CHP_DQED_FL_POP_PTR(pool->id.phys_id), r6.val);
+
+	r0.field.pool_enabled = 1;
+
+	DLB_CSR_WR(hw, DLB_SYS_DIR_POOL_ENBLD(pool->id.phys_id), r0.val);
+
+	pool->avail_credits = args->num_dir_credits;
+	pool->total_credits = args->num_dir_credits;
+	domain->dqed_freelist.offset += args->num_dir_credits;
+
+	pool->configured = true;
+}
+
 static bool dlb_port_find_slot(struct dlb_ldb_port *port,
 			       enum dlb_qid_map_state state,
 			       int *slot)
@@ -1886,6 +2077,170 @@ int dlb_hw_create_sched_domain(struct dlb_hw *hw,
 
 	resp->id = (vf_request) ? domain->id.virt_id : domain->id.phys_id;
 	resp->status = 0;
+
+	return 0;
+}
+
+static void
+dlb_log_create_ldb_pool_args(struct dlb_hw *hw,
+			     u32 domain_id,
+			     struct dlb_create_ldb_pool_args *args,
+			     bool vf_request,
+			     unsigned int vf_id)
+{
+	DLB_HW_DBG(hw, "DLB create load-balanced credit pool arguments:\n");
+	if (vf_request)
+		DLB_HW_DBG(hw, "(Request from VF %d)\n", vf_id);
+	DLB_HW_DBG(hw, "\tDomain ID:             %d\n", domain_id);
+	DLB_HW_DBG(hw, "\tNumber of LDB credits: %d\n",
+		   args->num_ldb_credits);
+}
+
+/**
+ * dlb_hw_create_ldb_pool() - Allocate and initialize a DLB credit pool.
+ * @hw:	  Contains the current state of the DLB hardware.
+ * @args: User-provided arguments.
+ * @resp: Response to user.
+ *
+ * Return: returns < 0 on error, 0 otherwise. If the driver is unable to
+ * satisfy a request, resp->status will be set accordingly.
+ */
+int dlb_hw_create_ldb_pool(struct dlb_hw *hw,
+			   u32 domain_id,
+			   struct dlb_create_ldb_pool_args *args,
+			   struct dlb_cmd_response *resp,
+			   bool vf_request,
+			   unsigned int vf_id)
+{
+	struct dlb_credit_pool *pool;
+	struct dlb_domain *domain;
+	int ret;
+
+	dlb_log_create_ldb_pool_args(hw, domain_id, args, vf_request, vf_id);
+
+	/* Verify that hardware resources are available before attempting to
+	 * satisfy the request. This simplifies the error unwinding code.
+	 */
+	ret = dlb_verify_create_ldb_pool_args(hw,
+					      domain_id,
+					      args,
+					      resp,
+					      vf_request,
+					      vf_id);
+	if (ret)
+		return ret;
+
+	domain = dlb_get_domain_from_id(hw, domain_id, vf_request, vf_id);
+	if (!domain) {
+		DLB_HW_ERR(hw,
+			   "[%s():%d] Internal error: domain not found\n",
+			   __func__, __LINE__);
+		return -EFAULT;
+	}
+
+	pool = DLB_DOM_LIST_HEAD(domain->avail_ldb_credit_pools, typeof(*pool));
+
+	/* Verification should catch this. */
+	if (!pool) {
+		DLB_HW_ERR(hw,
+			   "[%s():%d] Internal error: no available ldb credit pools\n",
+			   __func__, __LINE__);
+		return -EFAULT;
+	}
+
+	dlb_configure_ldb_credit_pool(hw, domain, args, pool);
+
+	/* Configuration succeeded, so move the resource from the 'avail' to
+	 * the 'used' list.
+	 */
+	list_del(&pool->domain_list);
+
+	list_add(&pool->domain_list, &domain->used_ldb_credit_pools);
+
+	resp->status = 0;
+	resp->id = (vf_request) ? pool->id.virt_id : pool->id.phys_id;
+
+	return 0;
+}
+
+static void
+dlb_log_create_dir_pool_args(struct dlb_hw *hw,
+			     u32 domain_id,
+			     struct dlb_create_dir_pool_args *args,
+			     bool vf_request,
+			     unsigned int vf_id)
+{
+	DLB_HW_DBG(hw, "DLB create directed credit pool arguments:\n");
+	if (vf_request)
+		DLB_HW_DBG(hw, "(Request from VF %d)\n", vf_id);
+	DLB_HW_DBG(hw, "\tDomain ID:             %d\n", domain_id);
+	DLB_HW_DBG(hw, "\tNumber of DIR credits: %d\n",
+		   args->num_dir_credits);
+}
+
+/**
+ * dlb_hw_create_dir_pool() - Allocate and initialize a DLB credit pool.
+ * @hw:	  Contains the current state of the DLB hardware.
+ * @args: User-provided arguments.
+ * @resp: Response to user.
+ *
+ * Return: returns < 0 on error, 0 otherwise. If the driver is unable to
+ * satisfy a request, resp->status will be set accordingly.
+ */
+int dlb_hw_create_dir_pool(struct dlb_hw *hw,
+			   u32 domain_id,
+			   struct dlb_create_dir_pool_args *args,
+			   struct dlb_cmd_response *resp,
+			   bool vf_request,
+			   unsigned int vf_id)
+{
+	struct dlb_credit_pool *pool;
+	struct dlb_domain *domain;
+	int ret;
+
+	dlb_log_create_dir_pool_args(hw, domain_id, args, vf_request, vf_id);
+
+	/* Verify that hardware resources are available before attempting to
+	 * satisfy the request. This simplifies the error unwinding code.
+	 */
+	ret = dlb_verify_create_dir_pool_args(hw,
+					      domain_id,
+					      args,
+					      resp,
+					      vf_request,
+					      vf_id);
+	if (ret)
+		return ret;
+
+	domain = dlb_get_domain_from_id(hw, domain_id, vf_request, vf_id);
+	if (!domain) {
+		DLB_HW_ERR(hw,
+			   "[%s():%d] Internal error: domain not found\n",
+			   __func__, __LINE__);
+		return -EFAULT;
+	}
+
+	pool = DLB_DOM_LIST_HEAD(domain->avail_dir_credit_pools, typeof(*pool));
+
+	/* Verification should catch this. */
+	if (!pool) {
+		DLB_HW_ERR(hw,
+			   "[%s():%d] Internal error: no available dir credit pools\n",
+			   __func__, __LINE__);
+		return -EFAULT;
+	}
+
+	dlb_configure_dir_credit_pool(hw, domain, args, pool);
+
+	/* Configuration succeeded, so move the resource from the 'avail' to
+	 * the 'used' list.
+	 */
+	list_del(&pool->domain_list);
+
+	list_add(&pool->domain_list, &domain->used_dir_credit_pools);
+
+	resp->status = 0;
+	resp->id = (vf_request) ? pool->id.virt_id : pool->id.phys_id;
 
 	return 0;
 }
