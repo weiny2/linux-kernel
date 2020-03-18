@@ -20,8 +20,6 @@
 #define JSL_GPI_IS	0x100
 #define JSL_GPI_IE	0x120
 
-#define JSL_NO_GPIO	-1
-
 #define JSL_GPP(r, s, e, g)				\
 	{						\
 		.reg_num = (r),				\
@@ -285,27 +283,27 @@ static const struct pinctrl_pin_desc jsl_pins[] = {
 };
 
 static const struct intel_padgroup jsl_community0_gpps[] = {
-	JSL_GPP(0, 0, 19, 320),			/* GPP_F */
-	JSL_GPP(1, 20, 45, 32),			/* GPP_B */
-	JSL_GPP(2, 46, 66, 64),			/* GPP_A */
-	JSL_GPP(3, 67, 74, 96),			/* GPP_S */
-	JSL_GPP(4, 75, 82, 128),		/* GPP_R */
+	JSL_GPP(0, 0, 19, 320),				/* GPP_F */
+	JSL_GPP(1, 20, 45, 32),				/* GPP_B */
+	JSL_GPP(2, 46, 66, 64),				/* GPP_A */
+	JSL_GPP(3, 67, 74, 96),				/* GPP_S */
+	JSL_GPP(4, 75, 82, 128),			/* GPP_R */
 };
 
 static const struct intel_padgroup jsl_community1_gpps[] = {
-	JSL_GPP(0, 83, 106, 160),		/* GPP_H */
-	JSL_GPP(1, 107, 132, 192),		/* GPP_D */
-	JSL_GPP(2, 133, 161, 224),		/* vGPIO */
-	JSL_GPP(3, 162, 185, 256),		/* GPP_C */
+	JSL_GPP(0, 83, 106, 160),			/* GPP_H */
+	JSL_GPP(1, 107, 132, 192),			/* GPP_D */
+	JSL_GPP(2, 133, 161, 224),			/* vGPIO */
+	JSL_GPP(3, 162, 185, 256),			/* GPP_C */
 };
 
 static const struct intel_padgroup jsl_community4_gpps[] = {
-	JSL_GPP(0, 186, 191, JSL_NO_GPIO),	/* HVCMOS */
-	JSL_GPP(1, 192, 215, 288),		/* GPP_E */
+	JSL_GPP(0, 186, 191, INTEL_GPIO_BASE_NOMAP),	/* HVCMOS */
+	JSL_GPP(1, 192, 215, 288),			/* GPP_E */
 };
 
 static const struct intel_padgroup jsl_community5_gpps[] = {
-	JSL_GPP(0, 216, 223, 0),		/* GPP_G */
+	JSL_GPP(0, 216, 223, INTEL_GPIO_BASE_ZERO),	/* GPP_G */
 };
 
 static const struct intel_community jsl_communities[] = {
