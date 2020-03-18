@@ -4151,7 +4151,7 @@
             "stuck_at_ref": ""
         },
         {
-            "branch": "tags/cxl-5.6.0-rc6",
+            "branch": "cxl-next",
             "branch_type": "expiring",
             "config_options": [],
             "contributor": [
