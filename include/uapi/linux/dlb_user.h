@@ -367,9 +367,107 @@ struct dlb_create_dir_pool_args {
 	__u32 padding0;
 };
 
+/*
+ * DLB_DOMAIN_CMD_CREATE_LDB_QUEUE: Configure a load-balanced queue.
+ * Input parameters:
+ * - num_atomic_inflights: This specifies the amount of temporary atomic QE
+ *	storage for this queue. If zero, the queue will not support atomic
+ *	scheduling.
+ * - num_sequence_numbers: This specifies the number of sequence numbers used
+ *	by this queue. If zero, the queue will not support ordered scheduling.
+ *	If non-zero, the queue will not support unordered scheduling.
+ * - num_qid_inflights: The maximum number of QEs that can be inflight
+ *	(scheduled to a CQ but not completed) at any time. If
+ *	num_sequence_numbers is non-zero, num_qid_inflights must be set equal
+ *	to num_sequence_numbers.
+ * - padding0: Reserved for future use.
+ *
+ * Output parameters:
+ * - response: pointer to a struct dlb_cmd_response.
+ *	response.status: Detailed error code. In certain cases, such as if the
+ *		response pointer is invalid, the driver won't set status.
+ *	response.id: Queue ID.
+ */
+struct dlb_create_ldb_queue_args {
+	/* Output parameters */
+	__u64 response;
+	/* Input parameters */
+	__u32 num_sequence_numbers;
+	__u32 num_qid_inflights;
+	__u32 num_atomic_inflights;
+	__u32 padding0;
+};
+
+/*
+ * DLB_DOMAIN_CMD_CREATE_DIR_QUEUE: Configure a directed queue.
+ * Input parameters:
+ * - port_id: Port ID. If the corresponding directed port is already created,
+ *	specify its ID here. Else this argument must be 0xFFFFFFFF to indicate
+ *	that the queue is being created before the port.
+ * - padding0: Reserved for future use.
+ *
+ * Output parameters:
+ * - response: pointer to a struct dlb_cmd_response.
+ *	response.status: Detailed error code. In certain cases, such as if the
+ *		response pointer is invalid, the driver won't set status.
+ *	response.id: Queue ID.
+ */
+struct dlb_create_dir_queue_args {
+	/* Output parameters */
+	__u64 response;
+	/* Input parameters */
+	__s32 port_id;
+	__u32 padding0;
+};
+
+
+/*
+ * DLB_DOMAIN_CMD_GET_LDB_QUEUE_DEPTH: Get a load-balanced queue's depth.
+ * Input parameters:
+ * - queue_id: The load-balanced queue ID.
+ * - padding0: Reserved for future use.
+ *
+ * Output parameters:
+ * - response: pointer to a struct dlb_cmd_response.
+ *	response.status: Detailed error code. In certain cases, such as if the
+ *		response pointer is invalid, the driver won't set status.
+ *	response.id: queue depth.
+ */
+struct dlb_get_ldb_queue_depth_args {
+	/* Output parameters */
+	__u64 response;
+	/* Input parameters */
+	__u32 queue_id;
+	__u32 padding0;
+};
+
+/*
+ * DLB_DOMAIN_CMD_GET_DIR_QUEUE_DEPTH: Get a directed queue's depth.
+ * Input parameters:
+ * - queue_id: The directed queue ID.
+ * - padding0: Reserved for future use.
+ *
+ * Output parameters:
+ * - response: pointer to a struct dlb_cmd_response.
+ *	response.status: Detailed error code. In certain cases, such as if the
+ *		response pointer is invalid, the driver won't set status.
+ *	response.id: queue depth.
+ */
+struct dlb_get_dir_queue_depth_args {
+	/* Output parameters */
+	__u64 response;
+	/* Input parameters */
+	__u32 queue_id;
+	__u32 padding0;
+};
+
 enum dlb_domain_user_interface_commands {
 	DLB_DOMAIN_CMD_CREATE_LDB_POOL,
 	DLB_DOMAIN_CMD_CREATE_DIR_POOL,
+	DLB_DOMAIN_CMD_CREATE_LDB_QUEUE,
+	DLB_DOMAIN_CMD_CREATE_DIR_QUEUE,
+	DLB_DOMAIN_CMD_GET_LDB_QUEUE_DEPTH,
+	DLB_DOMAIN_CMD_GET_DIR_QUEUE_DEPTH,
 
 	/* NUM_DLB_DOMAIN_CMD must be last */
 	NUM_DLB_DOMAIN_CMD,
@@ -405,5 +503,21 @@ enum dlb_domain_user_interface_commands {
 		_IOWR(DLB_IOC_MAGIC,				\
 		      DLB_DOMAIN_CMD_CREATE_DIR_POOL,		\
 		      struct dlb_create_dir_pool_args)
+#define DLB_IOC_CREATE_LDB_QUEUE				\
+		_IOWR(DLB_IOC_MAGIC,				\
+		      DLB_DOMAIN_CMD_CREATE_LDB_QUEUE,		\
+		      struct dlb_create_ldb_queue_args)
+#define DLB_IOC_CREATE_DIR_QUEUE				\
+		_IOWR(DLB_IOC_MAGIC,				\
+		      DLB_DOMAIN_CMD_CREATE_DIR_QUEUE,		\
+		      struct dlb_create_dir_queue_args)
+#define DLB_IOC_GET_LDB_QUEUE_DEPTH				\
+		_IOWR(DLB_IOC_MAGIC,				\
+		      DLB_DOMAIN_CMD_GET_LDB_QUEUE_DEPTH,	\
+		      struct dlb_get_ldb_queue_depth_args)
+#define DLB_IOC_GET_DIR_QUEUE_DEPTH				\
+		_IOWR(DLB_IOC_MAGIC,				\
+		      DLB_DOMAIN_CMD_GET_DIR_QUEUE_DEPTH,	\
+		      struct dlb_get_dir_queue_depth_args)
 
 #endif /* __DLB_USER_H */
