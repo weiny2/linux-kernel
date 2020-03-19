@@ -3,6 +3,7 @@
 
 #include <uapi/linux/dlb_user.h>
 
+#include "dlb_intr.h"
 #include "dlb_ioctl.h"
 #include "dlb_main.h"
 
@@ -135,6 +136,21 @@ static int dlb_domain_ioctl_create_ldb_port(struct dlb_dev *dev,
 	if (ret)
 		goto unlock;
 
+	/* DLB A-stepping workaround for hardware write buffer lock up issue:
+	 * limit the maximum configured ports to < 128 and disable CQ occupancy
+	 * interrupts.
+	 */
+	if (dev->revision >= DLB_REV_B0) {
+		u16 threshold = arg.cq_depth_threshold;
+
+		ret = dev->ops->enable_ldb_cq_interrupts(dev,
+							 response.id,
+							 threshold);
+		if (ret)
+			/* Internal error, don't unwind port creation */
+			goto unlock;
+	}
+
 	/* Fill out the per-port memory tracking structure */
 	dev->ldb_port_mem[response.id].domain_id = domain_id;
 	dev->ldb_port_mem[response.id].cq_base = cq_base;
@@ -242,6 +258,21 @@ static int dlb_domain_ioctl_create_dir_port(struct dlb_dev *dev,
 	if (ret)
 		goto unlock;
 
+	/* DLB A-stepping workaround for hardware write buffer lock up issue:
+	 * limit the maximum configured ports to < 128 and disable CQ occupancy
+	 * interrupts.
+	 */
+	if (dev->revision >= DLB_REV_B0) {
+		u16 threshold = arg.cq_depth_threshold;
+
+		ret = dev->ops->enable_dir_cq_interrupts(dev,
+							 response.id,
+							 threshold);
+		if (ret)
+			/* Internal error, don't unwind port creation */
+			goto unlock;
+	}
+
 	/* Fill out the per-port memory tracking structure */
 	dev->dir_port_mem[response.id].domain_id = domain_id;
 	dev->dir_port_mem[response.id].cq_base = cq_base;
@@ -310,6 +341,10 @@ static int dlb_domain_ioctl_enable_ldb_port(struct dlb_dev *dev,
 
 	ret = dev->ops->enable_ldb_port(&dev->hw, domain_id, &arg, &response);
 
+	/* Allow threads to block on this port's CQ interrupt */
+	if (!ret)
+		WRITE_ONCE(dev->intr.ldb_cq_intr[arg.port_id].disabled, false);
+
 	mutex_unlock(&dev->resource_mutex);
 
 	if (copy_to_user((void __user *)arg.response,
@@ -349,6 +384,10 @@ static int dlb_domain_ioctl_enable_dir_port(struct dlb_dev *dev,
 	mutex_lock(&dev->resource_mutex);
 
 	ret = dev->ops->enable_dir_port(&dev->hw, domain_id, &arg, &response);
+
+	/* Allow threads to block on this port's CQ interrupt */
+	if (!ret)
+		WRITE_ONCE(dev->intr.dir_cq_intr[arg.port_id].disabled, false);
 
 	mutex_unlock(&dev->resource_mutex);
 
@@ -390,6 +429,14 @@ static int dlb_domain_ioctl_disable_ldb_port(struct dlb_dev *dev,
 
 	ret = dev->ops->disable_ldb_port(&dev->hw, domain_id, &arg, &response);
 
+	/* Wake threads blocked on this port's CQ interrupt, and prevent
+	 * subsequent attempts to block on it.
+	 */
+	if (!ret)
+		dlb_wake_thread(dev,
+				&dev->intr.ldb_cq_intr[arg.port_id],
+				WAKE_PORT_DISABLED);
+
 	mutex_unlock(&dev->resource_mutex);
 
 	if (copy_to_user((void __user *)arg.response,
@@ -430,6 +477,14 @@ static int dlb_domain_ioctl_disable_dir_port(struct dlb_dev *dev,
 
 	ret = dev->ops->disable_dir_port(&dev->hw, domain_id, &arg, &response);
 
+	/* Wake threads blocked on this port's CQ interrupt, and prevent
+	 * subsequent attempts to block on it.
+	 */
+	if (!ret)
+		dlb_wake_thread(dev,
+				&dev->intr.dir_cq_intr[arg.port_id],
+				WAKE_PORT_DISABLED);
+
 	mutex_unlock(&dev->resource_mutex);
 
 	if (copy_to_user((void __user *)arg.response,
@@ -438,6 +493,47 @@ static int dlb_domain_ioctl_disable_dir_port(struct dlb_dev *dev,
 		dev_err(dev->dlb_device,
 			"[%s()] Invalid ioctl response pointer\n",
 			__func__);
+		return -EFAULT;
+	}
+
+	dev_dbg(dev->dlb_device, "Exiting %s()\n", __func__);
+
+	return ret;
+}
+
+static int dlb_domain_ioctl_block_on_cq_interrupt(struct dlb_dev *dev,
+						  struct dlb_status *status,
+						  unsigned long user_arg,
+						  u32 domain_id)
+{
+	struct dlb_block_on_cq_interrupt_args arg;
+	struct dlb_cmd_response response;
+	int ret = 0;
+
+	response.status = 0;
+
+	dev_dbg(dev->dlb_device, "Entering %s()\n", __func__);
+
+	if (copy_from_user(&arg, (void __user *)user_arg, sizeof(arg))) {
+		dev_err(dev->dlb_device,
+			"[%s()] Invalid ioctl argument pointer\n", __func__);
+		return -EFAULT;
+	}
+
+	ret = dlb_block_on_cq_interrupt(dev,
+					status,
+					domain_id,
+					arg.port_id,
+					arg.is_ldb,
+					arg.cq_va,
+					arg.cq_gen,
+					arg.arm);
+
+	if (copy_to_user((void __user *)arg.response,
+			 &response,
+			 sizeof(response))) {
+		dev_err(dev->dlb_device,
+			"[%s()] Invalid ioctl response pointer\n", __func__);
 		return -EFAULT;
 	}
 
@@ -461,6 +557,7 @@ dlb_domain_ioctl_callback_fns[NUM_DLB_DOMAIN_CMD] = {
 	dlb_domain_ioctl_enable_dir_port,
 	dlb_domain_ioctl_disable_ldb_port,
 	dlb_domain_ioctl_disable_dir_port,
+	dlb_domain_ioctl_block_on_cq_interrupt,
 	dlb_domain_ioctl_get_ldb_queue_depth,
 	dlb_domain_ioctl_get_dir_queue_depth,
 	dlb_domain_ioctl_pending_port_unmaps,
