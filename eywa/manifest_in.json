@@ -4096,31 +4096,31 @@
             "branch_type": "expiring",
             "config_options": [
                 {
-                    "name": "    CONFIG_INTEL_HQMV2",
+                    "name": "CONFIG_INTEL_HQMV2",
                     "value": "m"
                 },
                 {
-                    "name": "    CONFIG_INTEL_HQMV2_DATAPATH",
+                    "name": "CONFIG_INTEL_HQMV2_DATAPATH",
                     "value": "y"
                 },
                 {
-                    "name": "    CONFIG_INTEL_HQMV2_SIOV",
+                    "name": "CONFIG_INTEL_HQMV2_SIOV",
                     "value": "n"
                 },
                 {
-                    "name": "    CONFIG_INTEL_IOMMU",
+                    "name": "CONFIG_INTEL_IOMMU",
                     "value": "y"
                 },
                 {
-                    "name": "    CONFIG_VFIO",
+                    "name": "CONFIG_VFIO",
                     "value": "y"
                 },
                 {
-                    "name": "    CONFIG_VFIO_MDEV",
+                    "name": "CONFIG_VFIO_MDEV",
                     "value": "y"
                 },
                 {
-                    "name": "    CONFIG_VFIO_MDEV_DEVICE",
+                    "name": "CONFIG_VFIO_MDEV_DEVICE",
                     "value": "y"
                 }
             ],
