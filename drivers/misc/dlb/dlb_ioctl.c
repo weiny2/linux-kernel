@@ -542,6 +542,55 @@ static int dlb_domain_ioctl_block_on_cq_interrupt(struct dlb_dev *dev,
 	return ret;
 }
 
+static int dlb_domain_ioctl_enqueue_domain_alert(struct dlb_dev *dev,
+						 struct dlb_status *status,
+						 unsigned long user_arg,
+						 u32 domain_id)
+{
+	struct dlb_enqueue_domain_alert_args arg;
+	struct dlb_domain_dev *domain;
+	struct dlb_domain_alert alert;
+	int idx;
+
+	dev_dbg(dev->dlb_device, "Entering %s()\n", __func__);
+
+	if (copy_from_user(&arg, (void __user *)user_arg, sizeof(arg))) {
+		dev_err(dev->dlb_device,
+			"[%s()] Invalid ioctl argument pointer\n", __func__);
+		return -EFAULT;
+	}
+
+	domain = &dev->sched_domains[domain_id];
+
+	/* Grab the alert mutex to access the read and write indexes */
+	if (mutex_lock_interruptible(&domain->alert_mutex))
+		return -ERESTARTSYS;
+
+	/* If there's no space for this notification, return */
+	if ((domain->alert_wr_idx - domain->alert_rd_idx) ==
+	    (DLB_DOMAIN_ALERT_RING_SIZE - 1)) {
+		mutex_unlock(&domain->alert_mutex);
+		return 0;
+	}
+
+	alert.alert_id = DLB_DOMAIN_ALERT_USER;
+	alert.aux_alert_data = arg.aux_alert_data;
+
+	idx = domain->alert_wr_idx % DLB_DOMAIN_ALERT_RING_SIZE;
+
+	domain->alerts[idx] = alert;
+
+	domain->alert_wr_idx++;
+
+	mutex_unlock(&domain->alert_mutex);
+
+	wake_up_interruptible(&domain->wq_head);
+
+	dev_dbg(dev->dlb_device, "Exiting %s()\n", __func__);
+
+	return 0;
+}
+
 static dlb_domain_ioctl_callback_fn_t
 dlb_domain_ioctl_callback_fns[NUM_DLB_DOMAIN_CMD] = {
 	dlb_domain_ioctl_create_ldb_pool,
@@ -558,6 +607,7 @@ dlb_domain_ioctl_callback_fns[NUM_DLB_DOMAIN_CMD] = {
 	dlb_domain_ioctl_disable_ldb_port,
 	dlb_domain_ioctl_disable_dir_port,
 	dlb_domain_ioctl_block_on_cq_interrupt,
+	dlb_domain_ioctl_enqueue_domain_alert,
 	dlb_domain_ioctl_get_ldb_queue_depth,
 	dlb_domain_ioctl_get_dir_queue_depth,
 	dlb_domain_ioctl_pending_port_unmaps,

@@ -179,6 +179,9 @@ static int dlb_close_domain_device_file(struct dlb_dev *dev,
 
 	devm_kfree(dev->dlb_device, status);
 
+	dev->sched_domains[domain_id].alert_rd_idx = 0;
+	dev->sched_domains[domain_id].alert_wr_idx = 0;
+
 	/* Check if the domain was reset, its device file destroyed, and its
 	 * memory released during FLR handling.
 	 */
@@ -251,12 +254,130 @@ end:
 	return ret;
 }
 
+static bool dlb_domain_valid(struct dlb_dev *dev, struct dlb_status *status)
+{
+	bool ret;
+
+	mutex_lock(&dev->resource_mutex);
+
+	ret = status->valid;
+
+	mutex_unlock(&dev->resource_mutex);
+
+	return ret;
+}
+
+static bool dlb_domain_alerts_avail(struct dlb_domain_dev *domain)
+{
+	bool ret;
+
+	mutex_lock(&domain->alert_mutex);
+
+	ret = domain->alert_rd_idx != domain->alert_wr_idx;
+
+	mutex_unlock(&domain->alert_mutex);
+
+	return ret;
+}
+
+static int dlb_read_domain_alert(struct dlb_dev *dev,
+				 struct dlb_status *status,
+				 int domain_id,
+				 struct dlb_domain_alert *alert,
+				 bool nonblock)
+{
+	struct dlb_domain_dev *domain = &dev->sched_domains[domain_id];
+	int idx;
+
+	/* Grab the alert semaphore to access the read and write indexes */
+	if (mutex_lock_interruptible(&domain->alert_mutex))
+		return -ERESTARTSYS;
+
+	while (domain->alert_rd_idx == domain->alert_wr_idx) {
+		/* Release the alert semaphore before putting the thread on the
+		 * wait queue.
+		 */
+		mutex_unlock(&domain->alert_mutex);
+
+		if (nonblock)
+			return -EWOULDBLOCK;
+
+		dev_dbg(dev->dlb_device,
+			"Thread %d is blocking waiting for an alert in domain %d\n",
+			current->pid, domain_id);
+
+		if (wait_event_interruptible(domain->wq_head,
+					     dlb_domain_alerts_avail(domain) ||
+					     !dlb_domain_valid(dev, status)))
+			return -ERESTARTSYS;
+
+		if (!dlb_domain_valid(dev, status)) {
+			alert->alert_id = DLB_DOMAIN_ALERT_DEVICE_RESET;
+			return 0;
+		}
+
+		if (mutex_lock_interruptible(&domain->alert_mutex))
+			return -ERESTARTSYS;
+	}
+
+	/* The alert indexes are not equal, so there is an alert available. */
+	idx = domain->alert_rd_idx % DLB_DOMAIN_ALERT_RING_SIZE;
+
+	memcpy(alert, &domain->alerts[idx], sizeof(*alert));
+
+	domain->alert_rd_idx++;
+
+	mutex_unlock(&domain->alert_mutex);
+
+	return 0;
+}
+
 static ssize_t dlb_read(struct file *f,
 			char __user *buf,
 			size_t len,
 			loff_t *offset)
 {
-	return 0;
+	struct dlb_status *status = f->private_data;
+	struct dlb_domain_alert alert;
+	struct dlb_dev *dev;
+	u32 domain_id;
+	int ret;
+
+	if (IS_DLB_DEV_FILE(dlb_dev_number_base, f->f_inode->i_rdev))
+		return 0;
+
+	if (len != sizeof(alert))
+		return -EINVAL;
+
+	dev = container_of(f->f_inode->i_cdev, struct dlb_dev, cdev);
+
+	domain_id = DLB_FILE_ID_FROM_DEV_T(dlb_dev_number_base,
+					   f->f_inode->i_rdev);
+
+	if (domain_id >= DLB_MAX_NUM_DOMAINS) {
+		dev_err(dev->dlb_device,
+			"[%s()] Internal error\n", __func__);
+		return -EINVAL;
+	}
+
+	/* See dlb_user.h for details on domain alert notifications */
+
+	ret = dlb_read_domain_alert(dev,
+				    status,
+				    domain_id,
+				    &alert,
+				    f->f_flags & O_NONBLOCK);
+	if (ret)
+		return ret;
+
+	if (copy_to_user(buf, &alert, sizeof(alert)))
+		return -EFAULT;
+
+	dev_dbg(dev->dlb_device,
+		"Thread %d received alert 0x%llx, with aux data 0x%llx\n",
+		current->pid, ((u64 *)&alert)[0], ((u64 *)&alert)[1]);
+
+	return sizeof(alert);
 }
 
 static ssize_t dlb_write(struct file *f,
