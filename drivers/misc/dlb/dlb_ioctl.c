@@ -286,6 +286,166 @@ unlock:
 	return ret;
 }
 
+static int dlb_domain_ioctl_enable_ldb_port(struct dlb_dev *dev,
+					    struct dlb_status *status,
+					    unsigned long user_arg,
+					    u32 domain_id)
+{
+	struct dlb_enable_ldb_port_args arg;
+	struct dlb_cmd_response response = {0};
+	int ret;
+
+	response.status = 0;
+
+	dev_dbg(dev->dlb_device, "Entering %s()\n", __func__);
+
+	if (copy_from_user(&arg, (void __user *)user_arg, sizeof(arg))) {
+		dev_err(dev->dlb_device,
+			"[%s()] Invalid ioctl argument pointer\n",
+			__func__);
+		return -EFAULT;
+	}
+
+	mutex_lock(&dev->resource_mutex);
+
+	ret = dev->ops->enable_ldb_port(&dev->hw, domain_id, &arg, &response);
+
+	mutex_unlock(&dev->resource_mutex);
+
+	if (copy_to_user((void __user *)arg.response,
+			 &response,
+			 sizeof(response))) {
+		dev_err(dev->dlb_device,
+			"[%s()] Invalid ioctl response pointer\n",
+			__func__);
+		return -EFAULT;
+	}
+
+	dev_dbg(dev->dlb_device, "Exiting %s()\n", __func__);
+
+	return ret;
+}
+
+static int dlb_domain_ioctl_enable_dir_port(struct dlb_dev *dev,
+					    struct dlb_status *status,
+					    unsigned long user_arg,
+					    u32 domain_id)
+{
+	struct dlb_enable_dir_port_args arg;
+	struct dlb_cmd_response response = {0};
+	int ret;
+
+	response.status = 0;
+
+	dev_dbg(dev->dlb_device, "Entering %s()\n", __func__);
+
+	if (copy_from_user(&arg, (void __user *)user_arg, sizeof(arg))) {
+		dev_err(dev->dlb_device,
+			"[%s()] Invalid ioctl argument pointer\n",
+			__func__);
+		return -EFAULT;
+	}
+
+	mutex_lock(&dev->resource_mutex);
+
+	ret = dev->ops->enable_dir_port(&dev->hw, domain_id, &arg, &response);
+
+	mutex_unlock(&dev->resource_mutex);
+
+	if (copy_to_user((void __user *)arg.response,
+			 &response,
+			 sizeof(response))) {
+		dev_err(dev->dlb_device,
+			"[%s()] Invalid ioctl response pointer\n",
+			__func__);
+		return -EFAULT;
+	}
+
+	dev_dbg(dev->dlb_device, "Exiting %s()\n", __func__);
+
+	return ret;
+}
+
+static int dlb_domain_ioctl_disable_ldb_port(struct dlb_dev *dev,
+					     struct dlb_status *status,
+					     unsigned long user_arg,
+					     u32 domain_id)
+{
+	struct dlb_disable_ldb_port_args arg;
+	struct dlb_cmd_response response = {0};
+	int ret;
+
+	response.status = 0;
+
+	dev_dbg(dev->dlb_device, "Entering %s()\n", __func__);
+
+	if (copy_from_user(&arg, (void __user *)user_arg, sizeof(arg))) {
+		dev_err(dev->dlb_device,
+			"[%s()] Invalid ioctl argument pointer\n",
+			__func__);
+		return -EFAULT;
+	}
+
+	mutex_lock(&dev->resource_mutex);
+
+	ret = dev->ops->disable_ldb_port(&dev->hw, domain_id, &arg, &response);
+
+	mutex_unlock(&dev->resource_mutex);
+
+	if (copy_to_user((void __user *)arg.response,
+			 &response,
+			 sizeof(response))) {
+		dev_err(dev->dlb_device,
+			"[%s()] Invalid ioctl response pointer\n",
+			__func__);
+		return -EFAULT;
+	}
+
+	dev_dbg(dev->dlb_device, "Exiting %s()\n", __func__);
+
+	return ret;
+}
+
+static int dlb_domain_ioctl_disable_dir_port(struct dlb_dev *dev,
+					     struct dlb_status *status,
+					     unsigned long user_arg,
+					     u32 domain_id)
+{
+	struct dlb_disable_dir_port_args arg;
+	struct dlb_cmd_response response = {0};
+	int ret;
+
+	response.status = 0;
+
+	dev_dbg(dev->dlb_device, "Entering %s()\n", __func__);
+
+	if (copy_from_user(&arg, (void __user *)user_arg, sizeof(arg))) {
+		dev_err(dev->dlb_device,
+			"[%s()] Invalid ioctl argument pointer\n",
+			__func__);
+		return -EFAULT;
+	}
+
+	mutex_lock(&dev->resource_mutex);
+
+	ret = dev->ops->disable_dir_port(&dev->hw, domain_id, &arg, &response);
+
+	mutex_unlock(&dev->resource_mutex);
+
+	if (copy_to_user((void __user *)arg.response,
+			 &response,
+			 sizeof(response))) {
+		dev_err(dev->dlb_device,
+			"[%s()] Invalid ioctl response pointer\n",
+			__func__);
+		return -EFAULT;
+	}
+
+	dev_dbg(dev->dlb_device, "Exiting %s()\n", __func__);
+
+	return ret;
+}
+
 static dlb_domain_ioctl_callback_fn_t
 dlb_domain_ioctl_callback_fns[NUM_DLB_DOMAIN_CMD] = {
 	dlb_domain_ioctl_create_ldb_pool,
@@ -297,6 +457,10 @@ dlb_domain_ioctl_callback_fns[NUM_DLB_DOMAIN_CMD] = {
 	dlb_domain_ioctl_start_domain,
 	dlb_domain_ioctl_map_qid,
 	dlb_domain_ioctl_unmap_qid,
+	dlb_domain_ioctl_enable_ldb_port,
+	dlb_domain_ioctl_enable_dir_port,
+	dlb_domain_ioctl_disable_ldb_port,
+	dlb_domain_ioctl_disable_dir_port,
 	dlb_domain_ioctl_get_ldb_queue_depth,
 	dlb_domain_ioctl_get_dir_queue_depth,
 	dlb_domain_ioctl_pending_port_unmaps,
