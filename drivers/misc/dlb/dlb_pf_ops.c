@@ -458,9 +458,19 @@ static int dlb_pf_arm_cq_interrupt(struct dlb_dev *dev,
 
 static int dlb_pf_init_driver_state(struct dlb_dev *dlb_dev)
 {
+	int i;
+
 	dlb_dev->wq = create_singlethread_workqueue("DLB queue remapper");
 	if (!dlb_dev->wq)
 		return -EINVAL;
+
+	/* Initialize software state */
+	for (i = 0; i < DLB_MAX_NUM_DOMAINS; i++) {
+		struct dlb_domain_dev *domain = &dlb_dev->sched_domains[i];
+
+		mutex_init(&domain->alert_mutex);
+		init_waitqueue_head(&domain->wq_head);
+	}
 
 	mutex_init(&dlb_dev->resource_mutex);
 

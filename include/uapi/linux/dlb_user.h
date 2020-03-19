@@ -345,6 +345,112 @@ enum dlb_user_interface_commands {
 	NUM_DLB_CMD,
 };
 
+/*******************************/
+/* 'domain' device file alerts */
+/*******************************/
+
+/* Scheduling domain device files can be read to receive domain-specific
+ * notifications, for alerts such as hardware errors.
+ *
+ * Each alert is encoded in a 16B message. The first 8B contains the alert ID,
+ * and the second 8B is optional and contains additional information.
+ * Applications should cast read data to a struct dlb_domain_alert, and
+ * interpret the struct's alert_id according to dlb_domain_alert_id. The read
+ * length must be 16B, or the function will return -EINVAL.
+ *
+ * Reads are destructive, and in the case of multiple file descriptors for the
+ * same domain device file, an alert will be read by only one of the file
+ * descriptors.
+ *
+ * The driver stores alerts in a fixed-size alert ring until they are read. If
+ * the alert ring fills completely, subsequent alerts will be dropped. It is
+ * recommended that DLB applications dedicate a thread to perform blocking
+ * reads on the device file.
+ */
+enum dlb_domain_alert_id {
+	/* A destination domain queue that this domain connected to has
+	 * unregistered, and can no longer be sent to. The aux alert data
+	 * contains the queue ID.
+	 */
+	DLB_DOMAIN_ALERT_REMOTE_QUEUE_UNREGISTER,
+	/* A producer port in this domain attempted to send a QE without a
+	 * credit. aux_alert_data[7:0] contains the port ID, and
+	 * aux_alert_data[15:8] contains a flag indicating whether the port is
+	 * load-balanced (1) or directed (0).
+	 */
+	DLB_DOMAIN_ALERT_PP_OUT_OF_CREDITS,
+	/* Software issued an illegal enqueue for a port in this domain. An
+	 * illegal enqueue could be:
+	 * - Illegal (excess) completion
+	 * - Illegal fragment
+	 * - Illegal enqueue command
+	 * aux_alert_data[7:0] contains the port ID, and aux_alert_data[15:8]
+	 * contains a flag indicating whether the port is load-balanced (1) or
+	 * directed (0).
+	 */
+	DLB_DOMAIN_ALERT_PP_ILLEGAL_ENQ,
+	/* Software issued excess CQ token pops for a port in this domain.
+	 * aux_alert_data[7:0] contains the port ID, and aux_alert_data[15:8]
+	 * contains a flag indicating whether the port is load-balanced (1) or
+	 * directed (0).
+	 */
+	DLB_DOMAIN_ALERT_PP_EXCESS_TOKEN_POPS,
+	/* A enqueue contained either an invalid command encoding or a REL,
+	 * REL_T, RLS, FWD, FWD_T, FRAG, or FRAG_T from a directed port.
+	 *
+	 * aux_alert_data[7:0] contains the port ID, and aux_alert_data[15:8]
+	 * contains a flag indicating whether the port is load-balanced (1) or
+	 * directed (0).
+	 */
+	DLB_DOMAIN_ALERT_ILLEGAL_HCW,
+	/* The QID must be valid and less than 128.
+	 *
+	 * aux_alert_data[7:0] contains the port ID, and aux_alert_data[15:8]
+	 * contains a flag indicating whether the port is load-balanced (1) or
+	 * directed (0).
+	 */
+	DLB_DOMAIN_ALERT_ILLEGAL_QID,
+	/* An enqueue went to a disabled QID.
+	 *
+	 * aux_alert_data[7:0] contains the port ID, and aux_alert_data[15:8]
+	 * contains a flag indicating whether the port is load-balanced (1) or
+	 * directed (0).
+	 */
+	DLB_DOMAIN_ALERT_DISABLED_QID,
+	/* The device containing this domain was reset. All applications using
+	 * the device need to exit for the driver to complete the reset
+	 * procedure.
+	 *
+	 * aux_alert_data doesn't contain any information for this alert.
+	 */
+	DLB_DOMAIN_ALERT_DEVICE_RESET,
+	/* User-space has enqueued an alert.
+	 *
+	 * aux_alert_data contains user-provided data.
+	 */
+	DLB_DOMAIN_ALERT_USER,
+
+	/* Number of DLB domain alerts */
+	NUM_DLB_DOMAIN_ALERTS
+};
+
+static const char dlb_domain_alert_strings[][128] = {
+	"DLB_DOMAIN_ALERT_REMOTE_QUEUE_UNREGISTER",
+	"DLB_DOMAIN_ALERT_PP_OUT_OF_CREDITS",
+	"DLB_DOMAIN_ALERT_PP_ILLEGAL_ENQ",
+	"DLB_DOMAIN_ALERT_PP_EXCESS_TOKEN_POPS",
+	"DLB_DOMAIN_ALERT_ILLEGAL_HCW",
+	"DLB_DOMAIN_ALERT_ILLEGAL_QID",
+	"DLB_DOMAIN_ALERT_DISABLED_QID",
+	"DLB_DOMAIN_ALERT_DEVICE_RESET",
+	"DLB_DOMAIN_ALERT_USER",
+};
+
+struct dlb_domain_alert {
+	__u64 alert_id;
+	__u64 aux_alert_data;
+};
+
 /*********************************/
 /* 'domain' device file commands */
 /*********************************/
@@ -760,6 +866,25 @@ struct dlb_block_on_cq_interrupt_args {
 };
 
 /*
+ * DLB_DOMAIN_CMD_ENQUEUE_DOMAIN_ALERT: Enqueue a domain alert that will be
+ *	read by one reader thread.
+ *
+ * Input parameters:
+ * - aux_alert_data: user-defined auxiliary data.
+ *
+ * Output parameters:
+ * - response: pointer to a struct dlb_cmd_response.
+ *	response.status: Detailed error code. In certain cases, such as if the
+ *		response pointer is invalid, the driver won't set status.
+ */
+struct dlb_enqueue_domain_alert_args {
+	/* Output parameters */
+	__u64 response;
+	/* Input parameters */
+	__u64 aux_alert_data;
+};
+
+/*
  * DLB_DOMAIN_CMD_GET_LDB_QUEUE_DEPTH: Get a load-balanced queue's depth.
  * Input parameters:
  * - queue_id: The load-balanced queue ID.
@@ -839,6 +964,7 @@ enum dlb_domain_user_interface_commands {
 	DLB_DOMAIN_CMD_DISABLE_LDB_PORT,
 	DLB_DOMAIN_CMD_DISABLE_DIR_PORT,
 	DLB_DOMAIN_CMD_BLOCK_ON_CQ_INTERRUPT,
+	DLB_DOMAIN_CMD_ENQUEUE_DOMAIN_ALERT,
 	DLB_DOMAIN_CMD_GET_LDB_QUEUE_DEPTH,
 	DLB_DOMAIN_CMD_GET_DIR_QUEUE_DEPTH,
 	DLB_DOMAIN_CMD_PENDING_PORT_UNMAPS,
@@ -959,6 +1085,10 @@ enum dlb_domain_user_interface_commands {
 		_IOWR(DLB_IOC_MAGIC,				\
 		      DLB_DOMAIN_CMD_BLOCK_ON_CQ_INTERRUPT,	\
 		      struct dlb_block_on_cq_interrupt_args)
+#define DLB_IOC_ENQUEUE_DOMAIN_ALERT				\
+		_IOWR(DLB_IOC_MAGIC,				\
+		      DLB_DOMAIN_CMD_ENQUEUE_DOMAIN_ALERT,	\
+		      struct dlb_enqueue_domain_alert_args)
 #define DLB_IOC_GET_LDB_QUEUE_DEPTH				\
 		_IOWR(DLB_IOC_MAGIC,				\
 		      DLB_DOMAIN_CMD_GET_LDB_QUEUE_DEPTH,	\
