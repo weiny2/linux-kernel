@@ -476,6 +476,130 @@ int dlb_hw_disable_dir_port(struct dlb_hw *hw,
 			    unsigned int vf_id);
 
 /**
+ * dlb_configure_ldb_cq_interrupt() - configure load-balanced CQ for interrupts
+ * @hw: dlb_hw handle for a particular device.
+ * @port_id: load-balancd port ID.
+ * @vector: interrupt vector ID. Should be 0 for MSI or compressed MSI-X mode,
+ *	    else a value up to 64.
+ * @mode: interrupt type (DLB_CQ_ISR_MODE_MSI or DLB_CQ_ISR_MODE_MSIX)
+ * @vf: If the port is VF-owned, the VF's ID. This is used for translating the
+ *	virtual port ID to a physical port ID. Ignored if mode is not MSI.
+ * @owner_vf: the VF to route the interrupt to. Ignore if mode is not MSI.
+ * @threshold: the minimum CQ depth at which the interrupt can fire. Must be
+ *	greater than 0.
+ *
+ * This function configures the DLB registers for load-balanced CQ's interrupts.
+ * This doesn't enable the CQ's interrupt; that can be done with
+ * dlb_arm_cq_interrupt() or through an interrupt arm QE.
+ *
+ * Return:
+ * Returns 0 upon success, < 0 otherwise.
+ *
+ * Errors:
+ * EINVAL - The port ID is invalid.
+ */
+int dlb_configure_ldb_cq_interrupt(struct dlb_hw *hw,
+				   int port_id,
+				   int vector,
+				   int mode,
+				   unsigned int vf,
+				   unsigned int owner_vf,
+				   u16 threshold);
+
+/**
+ * dlb_configure_dir_cq_interrupt() - configure directed CQ for interrupts
+ * @hw: dlb_hw handle for a particular device.
+ * @port_id: load-balancd port ID.
+ * @vector: interrupt vector ID. Should be 0 for MSI or compressed MSI-X mode,
+ *	    else a value up to 64.
+ * @mode: interrupt type (DLB_CQ_ISR_MODE_MSI or DLB_CQ_ISR_MODE_MSIX)
+ * @vf: If the port is VF-owned, the VF's ID. This is used for translating the
+ *	virtual port ID to a physical port ID. Ignored if mode is not MSI.
+ * @owner_vf: the VF to route the interrupt to. Ignore if mode is not MSI.
+ * @threshold: the minimum CQ depth at which the interrupt can fire. Must be
+ *	greater than 0.
+ *
+ * This function configures the DLB registers for directed CQ's interrupts.
+ * This doesn't enable the CQ's interrupt; that can be done with
+ * dlb_arm_cq_interrupt() or through an interrupt arm QE.
+ *
+ * Return:
+ * Returns 0 upon success, < 0 otherwise.
+ *
+ * Errors:
+ * EINVAL - The port ID is invalid.
+ */
+int dlb_configure_dir_cq_interrupt(struct dlb_hw *hw,
+				   int port_id,
+				   int vector,
+				   int mode,
+				   unsigned int vf,
+				   unsigned int owner_vf,
+				   u16 threshold);
+
+/**
+ * dlb_set_msix_mode() - enable certain hardware alarm interrupts
+ * @hw: dlb_hw handle for a particular device.
+ * @mode: MSI-X mode (DLB_MSIX_MODE_PACKED or DLB_MSIX_MODE_COMPRESSED)
+ *
+ * This function configures the hardware to use either packed or compressed
+ * mode. This function should not be called if using MSI interrupts.
+ */
+void dlb_set_msix_mode(struct dlb_hw *hw, int mode);
+
+/**
+ * dlb_arm_cq_interrupt() - arm a CQ's interrupt
+ * @hw: dlb_hw handle for a particular device.
+ * @port_id: port ID
+ * @is_ldb: true for load-balanced port, false for a directed port
+ * @vf_request: indicates whether this request came from a VF.
+ * @vf_id: If vf_request is true, this contains the VF's ID.
+ *
+ * This function arms the CQ's interrupt. The CQ must be configured prior to
+ * calling this function.
+ *
+ * The function does no parameter validation; that is the caller's
+ * responsibility.
+ *
+ * Return: returns 0 upon success, <0 otherwise.
+ *
+ * EINVAL - Invalid port ID.
+ */
+int dlb_arm_cq_interrupt(struct dlb_hw *hw,
+			 int port_id,
+			 bool is_ldb,
+			 bool vf_request,
+			 unsigned int vf_id);
+
+/**
+ * dlb_read_compressed_cq_intr_status() - read compressed CQ interrupt status
+ * @hw: dlb_hw handle for a particular device.
+ * @ldb_interrupts: 2-entry array of u32 bitmaps
+ * @dir_interrupts: 4-entry array of u32 bitmaps
+ *
+ * This function can be called from a compressed CQ interrupt handler to
+ * determine which CQ interrupts have fired. The caller should take appropriate
+ * (such as waking threads blocked on a CQ's interrupt) then ack the interrupts
+ * with dlb_ack_compressed_cq_intr().
+ */
+void dlb_read_compressed_cq_intr_status(struct dlb_hw *hw,
+					u32 *ldb_interrupts,
+					u32 *dir_interrupts);
+
+/**
+ * dlb_ack_compressed_cq_intr_status() - ack compressed CQ interrupts
+ * @hw: dlb_hw handle for a particular device.
+ * @ldb_interrupts: 2-entry array of u32 bitmaps
+ * @dir_interrupts: 4-entry array of u32 bitmaps
+ *
+ * This function ACKs compressed CQ interrupts. Its arguments should be the
+ * same ones passed to dlb_read_compressed_cq_intr_status().
+ */
+void dlb_ack_compressed_cq_intr(struct dlb_hw *hw,
+				u32 *ldb_interrupts,
+				u32 *dir_interrupts);
+
+/**
  * dlb_reset_domain() - reset a scheduling domain
  * @hw: dlb_hw handle for a particular device.
  * @domain_id: domain ID.

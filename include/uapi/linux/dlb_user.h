@@ -727,6 +727,39 @@ struct dlb_disable_dir_port_args {
 };
 
 /*
+ * DLB_DOMAIN_CMD_BLOCK_ON_CQ_INTERRUPT: Block on a CQ interrupt until a QE
+ *	arrives for the specified port. If a QE is already present, the ioctl
+ *	will immediately return.
+ *
+ *	Note: Only one thread can block on a CQ's interrupt at a time. Doing
+ *	otherwise can result in hung threads.
+ *
+ * Input parameters:
+ * - port_id: Port ID.
+ * - is_ldb: True if the port is load-balanced, false otherwise.
+ * - arm: Tell the driver to arm the interrupt.
+ * - cq_gen: Current CQ generation bit.
+ * - padding0: Reserved for future use.
+ * - cq_va: VA of the CQ entry where the next QE will be placed.
+ *
+ * Output parameters:
+ * - response: pointer to a struct dlb_cmd_response.
+ *	response.status: Detailed error code. In certain cases, such as if the
+ *		response pointer is invalid, the driver won't set status.
+ */
+struct dlb_block_on_cq_interrupt_args {
+	/* Output parameters */
+	__u64 response;
+	/* Input parameters */
+	__u32 port_id;
+	__u8 is_ldb;
+	__u8 arm;
+	__u8 cq_gen;
+	__u8 padding0;
+	__u64 cq_va;
+};
+
+/*
  * DLB_DOMAIN_CMD_GET_LDB_QUEUE_DEPTH: Get a load-balanced queue's depth.
  * Input parameters:
  * - queue_id: The load-balanced queue ID.
@@ -805,6 +838,7 @@ enum dlb_domain_user_interface_commands {
 	DLB_DOMAIN_CMD_ENABLE_DIR_PORT,
 	DLB_DOMAIN_CMD_DISABLE_LDB_PORT,
 	DLB_DOMAIN_CMD_DISABLE_DIR_PORT,
+	DLB_DOMAIN_CMD_BLOCK_ON_CQ_INTERRUPT,
 	DLB_DOMAIN_CMD_GET_LDB_QUEUE_DEPTH,
 	DLB_DOMAIN_CMD_GET_DIR_QUEUE_DEPTH,
 	DLB_DOMAIN_CMD_PENDING_PORT_UNMAPS,
@@ -921,6 +955,10 @@ enum dlb_domain_user_interface_commands {
 		_IOWR(DLB_IOC_MAGIC,				\
 		      DLB_DOMAIN_CMD_DISABLE_DIR_PORT,		\
 		      struct dlb_disable_dir_port_args)
+#define DLB_IOC_BLOCK_ON_CQ_INTERRUPT				\
+		_IOWR(DLB_IOC_MAGIC,				\
+		      DLB_DOMAIN_CMD_BLOCK_ON_CQ_INTERRUPT,	\
+		      struct dlb_block_on_cq_interrupt_args)
 #define DLB_IOC_GET_LDB_QUEUE_DEPTH				\
 		_IOWR(DLB_IOC_MAGIC,				\
 		      DLB_DOMAIN_CMD_GET_LDB_QUEUE_DEPTH,	\

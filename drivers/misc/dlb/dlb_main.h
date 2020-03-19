@@ -57,6 +57,19 @@ struct dlb_device_ops {
 			dev_t base,
 			const struct file_operations *fops);
 	void (*cdev_del)(struct dlb_dev *dlb_dev);
+	int (*init_interrupts)(struct dlb_dev *dev, struct pci_dev *pdev);
+	int (*enable_ldb_cq_interrupts)(struct dlb_dev *dev,
+					int port_id,
+					u16 thresh);
+	int (*enable_dir_cq_interrupts)(struct dlb_dev *dev,
+					int port_id,
+					u16 thresh);
+	int (*arm_cq_interrupt)(struct dlb_dev *dev,
+				int domain_id,
+				int port_id,
+				bool is_ldb);
+	void (*reinit_interrupts)(struct dlb_dev *dev);
+	void (*free_interrupts)(struct dlb_dev *dev, struct pci_dev *pdev);
 	void (*init_hardware)(struct dlb_dev *dev);
 	int (*create_sched_domain)(struct dlb_hw *hw,
 				   struct dlb_create_sched_domain_args *args,
@@ -158,6 +171,38 @@ struct dlb_status {
 	u32 refcnt;
 };
 
+struct dlb_cq_intr {
+	u8 wake;
+	u8 configured;
+	/* vector is in the range [0,63] */
+	u8 vector;
+	/* disabled is true if the port is disabled. In that
+	 * case, the driver doesn't allow applications to block on the
+	 * port's interrupt.
+	 */
+	u8 disabled;
+	wait_queue_head_t wq_head;
+	/* The CQ interrupt mutex guarantees one thread is blocking on a CQ's
+	 * interrupt at a time.
+	 */
+	struct mutex mutex;
+} __aligned(64);
+
+struct dlb_intr {
+	int num_vectors;
+	int base_vector;
+	int mode;
+	u64 packed_vector_bitmap;
+	/* The PF has more interrupt vectors than the VF, so we
+	 * simply over-allocate in the case of the VF driver
+	 */
+	u8 isr_registered[DLB_PF_TOTAL_NUM_INTERRUPT_VECTORS];
+	struct dlb_cq_intr ldb_cq_intr[DLB_MAX_NUM_LDB_PORTS];
+	struct dlb_cq_intr dir_cq_intr[DLB_MAX_NUM_DIR_PORTS];
+	int num_ldb_ports;
+	int num_dir_ports;
+};
+
 struct dlb_domain_dev {
 	struct dlb_status *status;
 };
@@ -182,6 +227,7 @@ struct dlb_dev {
 	struct dlb_port_memory ldb_port_mem[DLB_MAX_NUM_LDB_PORTS];
 	struct dlb_port_memory dir_port_mem[DLB_MAX_NUM_DIR_PORTS];
 	struct list_head vma_list;
+	struct dlb_intr intr;
 	u8 domain_reset_failed;
 	/* The resource mutex serializes access to driver data structures and
 	 * hardware registers.

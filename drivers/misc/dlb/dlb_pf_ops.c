@@ -3,6 +3,7 @@
 
 #include <linux/pm_runtime.h>
 
+#include "dlb_intr.h"
 #include "dlb_main.h"
 #include "dlb_regs.h"
 #include "dlb_resource.h"
@@ -245,6 +246,210 @@ static int dlb_pf_mmap(struct file *f,
 				  bar_pgoff + vma->vm_pgoff,
 				  vma->vm_end - vma->vm_start,
 				  pgprot);
+}
+
+/**********************************/
+/****** Interrupt management ******/
+/**********************************/
+
+static irqreturn_t dlb_compressed_cq_intr_handler(int irq, void *hdlr_ptr)
+{
+	struct dlb_dev *dev = (struct dlb_dev *)hdlr_ptr;
+	u32 ldb_cq_interrupts[DLB_MAX_NUM_LDB_PORTS / 32];
+	u32 dir_cq_interrupts[DLB_MAX_NUM_DIR_PORTS / 32];
+	int i;
+
+	dev_dbg(dev->dlb_device, "Entered ISR\n");
+
+	dlb_read_compressed_cq_intr_status(&dev->hw,
+					   ldb_cq_interrupts,
+					   dir_cq_interrupts);
+
+	dlb_ack_compressed_cq_intr(&dev->hw,
+				   ldb_cq_interrupts,
+				   dir_cq_interrupts);
+
+	for (i = 0; i < DLB_MAX_NUM_LDB_PORTS; i++) {
+		if (!(ldb_cq_interrupts[i / 32] & (1 << (i % 32))))
+			continue;
+
+		dev_dbg(dev->dlb_device, "[%s()] Waking LDB port %d\n",
+			__func__, i);
+
+		dlb_wake_thread(dev, &dev->intr.ldb_cq_intr[i], WAKE_CQ_INTR);
+	}
+
+	for (i = 0; i < DLB_MAX_NUM_DIR_PORTS; i++) {
+		if (!(dir_cq_interrupts[i / 32] & (1 << (i % 32))))
+			continue;
+
+		dev_dbg(dev->dlb_device, "[%s()] Waking DIR port %d\n",
+			__func__, i);
+
+		dlb_wake_thread(dev, &dev->intr.dir_cq_intr[i], WAKE_CQ_INTR);
+	}
+
+	return IRQ_HANDLED;
+}
+
+static int dlb_init_compressed_mode_interrupts(struct dlb_dev *dev,
+					       struct pci_dev *pdev)
+{
+	int ret, irq;
+
+	irq = pci_irq_vector(pdev, DLB_PF_COMPRESSED_MODE_CQ_VECTOR_ID);
+
+	ret = devm_request_irq(&pdev->dev,
+			       irq,
+			       dlb_compressed_cq_intr_handler,
+			       0,
+			       "dlb_compressed_cq",
+			       dev);
+	if (ret)
+		return ret;
+
+	dev->intr.isr_registered[DLB_PF_COMPRESSED_MODE_CQ_VECTOR_ID] = true;
+
+	dev->intr.mode = DLB_MSIX_MODE_COMPRESSED;
+
+	dlb_set_msix_mode(&dev->hw, DLB_MSIX_MODE_COMPRESSED);
+
+	return 0;
+}
+
+static void dlb_pf_free_interrupts(struct dlb_dev *dev, struct pci_dev *pdev)
+{
+	int i;
+
+	for (i = 0; i < dev->intr.num_vectors; i++) {
+		if (dev->intr.isr_registered[i])
+			devm_free_irq(&pdev->dev, pci_irq_vector(pdev, i), dev);
+	}
+
+	pci_free_irq_vectors(pdev);
+}
+
+static int dlb_pf_init_interrupts(struct dlb_dev *dev, struct pci_dev *pdev)
+{
+	int ret, i, nvecs;
+
+	/* DLB supports two modes for CQ interrupts:
+	 * - "compressed mode": all CQ interrupts are packed into a single
+	 *	vector. The ISR reads six interrupt status registers to
+	 *	determine the source(s).
+	 * - "packed mode" (unused): the hardware supports up to 64 vectors. If
+	 *	software requests more than 64 CQs to use interrupts, the
+	 *	driver will pack CQs onto the same vector. The application
+	 *	thread is responsible for checking the CQ depth when it is
+	 *	woken and returns to user-space, in case its CQ shares the
+	 *	vector and didn't cause the interrupt.
+	 */
+
+	nvecs = DLB_PF_NUM_COMPRESSED_MODE_VECTORS;
+
+	ret = pci_alloc_irq_vectors(pdev, nvecs, nvecs, PCI_IRQ_MSIX);
+	if (ret < 0)
+		return ret;
+
+	dev->intr.num_vectors = ret;
+	dev->intr.base_vector = pci_irq_vector(pdev, 0);
+
+	ret = dlb_init_compressed_mode_interrupts(dev, pdev);
+	if (ret) {
+		dlb_pf_free_interrupts(dev, pdev);
+		return ret;
+	}
+
+	/* Initialize per-CQ interrupt structures, such as wait queues
+	 * that threads will wait on until the CQ's interrupt fires.
+	 */
+	for (i = 0; i < DLB_MAX_NUM_LDB_PORTS; i++) {
+		init_waitqueue_head(&dev->intr.ldb_cq_intr[i].wq_head);
+		mutex_init(&dev->intr.ldb_cq_intr[i].mutex);
+	}
+
+	for (i = 0; i < DLB_MAX_NUM_DIR_PORTS; i++) {
+		init_waitqueue_head(&dev->intr.dir_cq_intr[i].wq_head);
+		mutex_init(&dev->intr.dir_cq_intr[i].mutex);
+	}
+
+	return 0;
+}
+
+/* If the device is reset during use, its interrupt registers need to be
+ * reinitialized.
+ */
+static void dlb_pf_reinit_interrupts(struct dlb_dev *dev)
+{
+	dlb_set_msix_mode(&dev->hw, dev->intr.mode);
+}
+
+static int dlb_pf_enable_ldb_cq_interrupts(struct dlb_dev *dev,
+					   int id,
+					   u16 thresh)
+{
+	int mode, vec;
+
+	if (dev->intr.mode == DLB_MSIX_MODE_COMPRESSED) {
+		mode = DLB_CQ_ISR_MODE_MSIX;
+		vec = 0;
+	} else {
+		mode = DLB_CQ_ISR_MODE_MSIX;
+		vec = fls64(~dev->intr.packed_vector_bitmap) - 1;
+		dev->intr.packed_vector_bitmap |= (u64)1 << vec;
+	}
+
+	dev->intr.ldb_cq_intr[id].disabled = false;
+	dev->intr.ldb_cq_intr[id].configured = true;
+	dev->intr.ldb_cq_intr[id].vector = vec;
+
+	return dlb_configure_ldb_cq_interrupt(&dev->hw, id, vec,
+					      mode, 0, 0, thresh);
+}
+
+static int dlb_pf_enable_dir_cq_interrupts(struct dlb_dev *dev,
+					   int id,
+					   u16 thresh)
+{
+	int mode, vec;
+
+	if (dev->intr.mode == DLB_MSIX_MODE_COMPRESSED) {
+		mode = DLB_CQ_ISR_MODE_MSIX;
+		vec = 0;
+	} else {
+		mode = DLB_CQ_ISR_MODE_MSIX;
+		vec = fls64(~dev->intr.packed_vector_bitmap) - 1;
+		dev->intr.packed_vector_bitmap |= (u64)1 << vec;
+	}
+
+	dev->intr.dir_cq_intr[id].disabled = false;
+	dev->intr.dir_cq_intr[id].configured = true;
+	dev->intr.dir_cq_intr[id].vector = vec;
+
+	return dlb_configure_dir_cq_interrupt(&dev->hw, id, vec,
+					      mode, 0, 0, thresh);
+}
+
+static int dlb_pf_arm_cq_interrupt(struct dlb_dev *dev,
+				   int domain_id,
+				   int port_id,
+				   bool is_ldb)
+{
+	int ret;
+
+	if (is_ldb)
+		ret = dev->ops->ldb_port_owned_by_domain(&dev->hw,
+							 domain_id,
+							 port_id);
+	else
+		ret = dev->ops->dir_port_owned_by_domain(&dev->hw,
+							 domain_id,
+							 port_id);
+
+	if (ret != 1)
+		return -EINVAL;
+
+	return dlb_arm_cq_interrupt(&dev->hw, port_id, is_ldb, false, 0);
 }
 
 /*******************************/
@@ -492,8 +697,43 @@ static int dlb_pf_get_num_resources(struct dlb_hw *hw,
 	return dlb_hw_get_num_resources(hw, args, false, 0);
 }
 
+static void dlb_reset_packed_interrupts(struct dlb_dev *dev, int id)
+{
+	struct dlb_hw *hw = &dev->hw;
+	u32 vec;
+	int i;
+
+	for (i = 0; i < DLB_MAX_NUM_LDB_PORTS; i++) {
+		if (!dlb_ldb_port_owned_by_domain(hw, id, i, false, 0))
+			continue;
+
+		if (!dev->intr.ldb_cq_intr[i].configured)
+			continue;
+
+		vec = dev->intr.ldb_cq_intr[i].vector;
+
+		dev->intr.packed_vector_bitmap &= ~((u64)1 << vec);
+	}
+
+	for (i = 0; i < DLB_MAX_NUM_DIR_PORTS; i++) {
+		if (!dlb_dir_port_owned_by_domain(hw, id, i, false, 0))
+			continue;
+
+		if (!dev->intr.dir_cq_intr[i].configured)
+			continue;
+
+		vec = dev->intr.dir_cq_intr[i].vector;
+
+		dev->intr.packed_vector_bitmap &= ~((u64)1 << vec);
+	}
+}
+
 static int dlb_pf_reset_domain(struct dlb_dev *dev, u32 id)
 {
+	/* Unset the domain's packed vector bitmap entries */
+	if (dev->intr.mode == DLB_MSIX_MODE_PACKED)
+		dlb_reset_packed_interrupts(dev, id);
+
 	return dlb_reset_domain(&dev->hw, id, false, 0);
 }
 
@@ -566,6 +806,12 @@ struct dlb_device_ops dlb_pf_ops = {
 	.device_destroy = dlb_pf_device_destroy,
 	.cdev_add = dlb_pf_cdev_add,
 	.cdev_del = dlb_pf_cdev_del,
+	.init_interrupts = dlb_pf_init_interrupts,
+	.enable_ldb_cq_interrupts = dlb_pf_enable_ldb_cq_interrupts,
+	.enable_dir_cq_interrupts = dlb_pf_enable_dir_cq_interrupts,
+	.arm_cq_interrupt = dlb_pf_arm_cq_interrupt,
+	.reinit_interrupts = dlb_pf_reinit_interrupts,
+	.free_interrupts = dlb_pf_free_interrupts,
 	.init_hardware = dlb_pf_init_hardware,
 	.create_sched_domain = dlb_pf_create_sched_domain,
 	.create_ldb_pool = dlb_pf_create_ldb_pool,
