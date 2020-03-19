@@ -203,8 +203,18 @@ struct dlb_intr {
 	int num_dir_ports;
 };
 
+#define DLB_DOMAIN_ALERT_RING_SIZE 256
+
 struct dlb_domain_dev {
 	struct dlb_status *status;
+	struct dlb_domain_alert alerts[DLB_DOMAIN_ALERT_RING_SIZE];
+	u8 alert_rd_idx;
+	u8 alert_wr_idx;
+	/* The alert mutex protects access to the alert ring and its read and
+	 * write indexes.
+	 */
+	struct mutex alert_mutex;
+	wait_queue_head_t wq_head;
 };
 
 struct dlb_vma_node {
