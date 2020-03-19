@@ -358,6 +358,36 @@ dlb_get_domain_dir_pool(u32 id,
 	return NULL;
 }
 
+static struct dlb_ldb_port *dlb_get_ldb_port_from_id(struct dlb_hw *hw,
+						     u32 id,
+						     bool vf_request,
+						     unsigned int vf_id)
+{
+	struct dlb_function_resources *rsrcs;
+	struct dlb_ldb_port *port;
+	struct dlb_domain *domain;
+
+	if (id >= DLB_MAX_NUM_LDB_PORTS)
+		return NULL;
+
+	rsrcs = (vf_request) ? &hw->vf[vf_id] : &hw->pf;
+
+	if (!vf_request)
+		return &hw->rsrcs.ldb_ports[id];
+
+	DLB_FUNC_LIST_FOR(rsrcs->used_domains, domain) {
+		DLB_DOM_LIST_FOR(domain->used_ldb_ports, port)
+			if (port->id.virt_id == id)
+				return port;
+	}
+
+	DLB_FUNC_LIST_FOR(rsrcs->avail_ldb_ports, port)
+		if (port->id.virt_id == id)
+			return port;
+
+	return NULL;
+}
+
 static struct dlb_ldb_port *
 dlb_get_domain_used_ldb_port(u32 id,
 			     bool vf_request,
@@ -398,6 +428,36 @@ static struct dlb_ldb_port *dlb_get_domain_ldb_port(u32 id,
 	DLB_DOM_LIST_FOR(domain->avail_ldb_ports, port)
 		if ((!vf_request && port->id.phys_id == id) ||
 		    (vf_request && port->id.virt_id == id))
+			return port;
+
+	return NULL;
+}
+
+static struct dlb_dir_pq_pair *dlb_get_dir_pq_from_id(struct dlb_hw *hw,
+						      u32 id,
+						      bool vf_request,
+						      unsigned int vf_id)
+{
+	struct dlb_function_resources *rsrcs;
+	struct dlb_dir_pq_pair *port;
+	struct dlb_domain *domain;
+
+	if (id >= DLB_MAX_NUM_DIR_PORTS)
+		return NULL;
+
+	rsrcs = (vf_request) ? &hw->vf[vf_id] : &hw->pf;
+
+	if (!vf_request)
+		return &hw->rsrcs.dir_pq_pairs[id];
+
+	DLB_FUNC_LIST_FOR(rsrcs->used_domains, domain) {
+		DLB_DOM_LIST_FOR(domain->used_dir_pq_pairs, port)
+			if (port->id.virt_id == id)
+				return port;
+	}
+
+	DLB_FUNC_LIST_FOR(rsrcs->avail_dir_pq_pairs, port)
+		if (port->id.virt_id == id)
 			return port;
 
 	return NULL;
@@ -5686,6 +5746,272 @@ int dlb_hw_disable_dir_port(struct dlb_hw *hw,
 	resp->status = 0;
 
 	return 0;
+}
+
+void dlb_set_msix_mode(struct dlb_hw *hw, int mode)
+{
+	union dlb_sys_msix_mode r0 = { {0} };
+
+	r0.field.mode = mode;
+
+	DLB_CSR_WR(hw, DLB_SYS_MSIX_MODE, r0.val);
+}
+
+int dlb_configure_ldb_cq_interrupt(struct dlb_hw *hw,
+				   int port_id,
+				   int vector,
+				   int mode,
+				   unsigned int vf,
+				   unsigned int owner_vf,
+				   u16 threshold)
+{
+	union dlb_chp_ldb_cq_int_depth_thrsh r0 = { {0} };
+	union dlb_chp_ldb_cq_int_enb r1 = { {0} };
+	union dlb_sys_ldb_cq_isr r2 = { {0} };
+	struct dlb_ldb_port *port;
+	bool vf_request;
+
+	vf_request = (mode == DLB_CQ_ISR_MODE_MSI);
+
+	port = dlb_get_ldb_port_from_id(hw, port_id, vf_request, vf);
+	if (!port) {
+		DLB_HW_ERR(hw,
+			   "[%s()]: Internal error: failed to enable LDB CQ int\n\tport_id: %u, vf_req: %u, vf: %u\n",
+			   __func__, port_id, vf_request, vf);
+		return -EINVAL;
+	}
+
+	/* Trigger the interrupt when threshold or more QEs arrive in the CQ */
+	r0.field.depth_threshold = threshold - 1;
+
+	DLB_CSR_WR(hw,
+		   DLB_CHP_LDB_CQ_INT_DEPTH_THRSH(port->id.phys_id),
+		   r0.val);
+
+	r1.field.en_depth = 1;
+
+	DLB_CSR_WR(hw, DLB_CHP_LDB_CQ_INT_ENB(port->id.phys_id), r1.val);
+
+	r2.field.vector = vector;
+	r2.field.vf = owner_vf;
+	r2.field.en_code = mode;
+
+	DLB_CSR_WR(hw, DLB_SYS_LDB_CQ_ISR(port->id.phys_id), r2.val);
+
+	return 0;
+}
+
+int dlb_configure_dir_cq_interrupt(struct dlb_hw *hw,
+				   int port_id,
+				   int vector,
+				   int mode,
+				   unsigned int vf,
+				   unsigned int owner_vf,
+				   u16 threshold)
+{
+	union dlb_chp_dir_cq_int_depth_thrsh r0 = { {0} };
+	union dlb_chp_dir_cq_int_enb r1 = { {0} };
+	union dlb_sys_dir_cq_isr r2 = { {0} };
+	struct dlb_dir_pq_pair *port;
+	bool vf_request;
+
+	vf_request = (mode == DLB_CQ_ISR_MODE_MSI);
+
+	port = dlb_get_dir_pq_from_id(hw, port_id, vf_request, vf);
+	if (!port) {
+		DLB_HW_ERR(hw,
+			   "[%s()]: Internal error: failed to enable DIR CQ int\n\tport_id: %u, vf_req: %u, vf: %u\n",
+			   __func__, port_id, vf_request, vf);
+		return -EINVAL;
+	}
+
+	/* Trigger the interrupt when threshold or more QEs arrive in the CQ */
+	r0.field.depth_threshold = threshold - 1;
+
+	DLB_CSR_WR(hw,
+		   DLB_CHP_DIR_CQ_INT_DEPTH_THRSH(port->id.phys_id),
+		   r0.val);
+
+	r1.field.en_depth = 1;
+
+	DLB_CSR_WR(hw, DLB_CHP_DIR_CQ_INT_ENB(port->id.phys_id), r1.val);
+
+	r2.field.vector = vector;
+	r2.field.vf = owner_vf;
+	r2.field.en_code = mode;
+
+	DLB_CSR_WR(hw, DLB_SYS_DIR_CQ_ISR(port->id.phys_id), r2.val);
+
+	return 0;
+}
+
+int dlb_arm_cq_interrupt(struct dlb_hw *hw,
+			 int port_id,
+			 bool is_ldb,
+			 bool vf_request,
+			 unsigned int vf_id)
+{
+	u32 val;
+	u32 reg;
+
+	if (vf_request && is_ldb) {
+		struct dlb_ldb_port *ldb_port;
+
+		ldb_port = dlb_get_ldb_port_from_id(hw, port_id, true, vf_id);
+
+		if (!ldb_port || !ldb_port->configured)
+			return -EINVAL;
+
+		port_id = ldb_port->id.phys_id;
+	} else if (vf_request && !is_ldb) {
+		struct dlb_dir_pq_pair *dir_port;
+
+		dir_port = dlb_get_dir_pq_from_id(hw, port_id, true, vf_id);
+
+		if (!dir_port || !dir_port->port_configured)
+			return -EINVAL;
+
+		port_id = dir_port->id.phys_id;
+	}
+
+	val = 1 << (port_id % 32);
+
+	if (is_ldb && port_id < 32)
+		reg = DLB_CHP_LDB_CQ_INTR_ARMED0;
+	else if (is_ldb && port_id < 64)
+		reg = DLB_CHP_LDB_CQ_INTR_ARMED1;
+	else if (!is_ldb && port_id < 32)
+		reg = DLB_CHP_DIR_CQ_INTR_ARMED0;
+	else if (!is_ldb && port_id < 64)
+		reg = DLB_CHP_DIR_CQ_INTR_ARMED1;
+	else if (!is_ldb && port_id < 96)
+		reg = DLB_CHP_DIR_CQ_INTR_ARMED2;
+	else
+		reg = DLB_CHP_DIR_CQ_INTR_ARMED3;
+
+	DLB_CSR_WR(hw, reg, val);
+
+	dlb_flush_csr(hw);
+
+	return 0;
+}
+
+void dlb_read_compressed_cq_intr_status(struct dlb_hw *hw,
+					u32 *ldb_interrupts,
+					u32 *dir_interrupts)
+{
+	/* Read every CQ's interrupt status */
+
+	ldb_interrupts[0] = DLB_CSR_RD(hw, DLB_SYS_LDB_CQ_31_0_OCC_INT_STS);
+	ldb_interrupts[1] = DLB_CSR_RD(hw, DLB_SYS_LDB_CQ_63_32_OCC_INT_STS);
+
+	dir_interrupts[0] = DLB_CSR_RD(hw, DLB_SYS_DIR_CQ_31_0_OCC_INT_STS);
+	dir_interrupts[1] = DLB_CSR_RD(hw, DLB_SYS_DIR_CQ_63_32_OCC_INT_STS);
+	dir_interrupts[2] = DLB_CSR_RD(hw, DLB_SYS_DIR_CQ_95_64_OCC_INT_STS);
+	dir_interrupts[3] = DLB_CSR_RD(hw, DLB_SYS_DIR_CQ_127_96_OCC_INT_STS);
+}
+
+static void dlb_ack_msix_interrupt(struct dlb_hw *hw, int vector)
+{
+	union dlb_sys_msix_ack r0 = { {0} };
+
+	switch (vector) {
+	case 0:
+		r0.field.msix_0_ack = 1;
+		break;
+	case 1:
+		r0.field.msix_1_ack = 1;
+		break;
+	case 2:
+		r0.field.msix_2_ack = 1;
+		break;
+	case 3:
+		r0.field.msix_3_ack = 1;
+		break;
+	case 4:
+		r0.field.msix_4_ack = 1;
+		break;
+	case 5:
+		r0.field.msix_5_ack = 1;
+		break;
+	case 6:
+		r0.field.msix_6_ack = 1;
+		break;
+	case 7:
+		r0.field.msix_7_ack = 1;
+		break;
+	case 8:
+		r0.field.msix_8_ack = 1;
+		/*
+		 * The recommended workaround for acknowledging
+		 * vector 8 interrupts is :
+		 *   1: set   MSI-X mask
+		 *   2: set   MSIX_PASSTHROUGH
+		 *   3: clear MSIX_ACK
+		 *   4: clear MSIX_PASSTHROUGH
+		 *   5: clear MSI-X mask
+		 *
+		 * The MSIX-ACK (step 3) is cleared for all vectors
+		 * below. We handle steps 1 & 2 for vector 8 here.
+		 *
+		 * The bitfields for MSIX_ACK and MSIX_PASSTHRU are
+		 * defined the same, so we just use the MSIX_ACK
+		 * value when writing to PASSTHRU.
+		 */
+
+		/* set MSI-X mask and passthrough for vector 8 */
+		DLB_FUNC_WR(hw, DLB_MSIX_MEM_VECTOR_CTRL(8), 1);
+		DLB_CSR_WR(hw, DLB_SYS_MSIX_PASSTHRU, r0.val);
+		break;
+	}
+
+	/* clear MSIX_ACK (write one to clear) */
+	DLB_CSR_WR(hw, DLB_SYS_MSIX_ACK, r0.val);
+
+	if (vector == 8) {
+		/*
+		 * finish up steps 4 & 5 of the workaround -
+		 * clear pasthrough and mask
+		 */
+		DLB_CSR_WR(hw, DLB_SYS_MSIX_PASSTHRU, 0);
+		DLB_FUNC_WR(hw, DLB_MSIX_MEM_VECTOR_CTRL(8), 0);
+	}
+
+	dlb_flush_csr(hw);
+}
+
+void dlb_ack_compressed_cq_intr(struct dlb_hw *hw,
+				u32 *ldb_interrupts,
+				u32 *dir_interrupts)
+{
+	/* Write back the status regs to ack the interrupts */
+	if (ldb_interrupts[0])
+		DLB_CSR_WR(hw,
+			   DLB_SYS_LDB_CQ_31_0_OCC_INT_STS,
+			   ldb_interrupts[0]);
+	if (ldb_interrupts[1])
+		DLB_CSR_WR(hw,
+			   DLB_SYS_LDB_CQ_63_32_OCC_INT_STS,
+			   ldb_interrupts[1]);
+
+	if (dir_interrupts[0])
+		DLB_CSR_WR(hw,
+			   DLB_SYS_DIR_CQ_31_0_OCC_INT_STS,
+			   dir_interrupts[0]);
+	if (dir_interrupts[1])
+		DLB_CSR_WR(hw,
+			   DLB_SYS_DIR_CQ_63_32_OCC_INT_STS,
+			   dir_interrupts[1]);
+	if (dir_interrupts[2])
+		DLB_CSR_WR(hw,
+			   DLB_SYS_DIR_CQ_95_64_OCC_INT_STS,
+			   dir_interrupts[2]);
+	if (dir_interrupts[3])
+		DLB_CSR_WR(hw,
+			   DLB_SYS_DIR_CQ_127_96_OCC_INT_STS,
+			   dir_interrupts[3]);
+
+	dlb_ack_msix_interrupt(hw, DLB_PF_COMPRESSED_MODE_CQ_VECTOR_ID);
 }
 
 void dlb_disable_dp_vasr_feature(struct dlb_hw *hw)

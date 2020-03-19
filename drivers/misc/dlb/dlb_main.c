@@ -163,6 +163,9 @@ static void dlb_reset_hardware_state(struct dlb_dev *dev)
 {
 	dlb_reset_device(dev->pdev);
 
+	/* Reinitialize interrupt configuration */
+	dev->ops->reinit_interrupts(dev);
+
 	/* Reinitialize any other hardware state */
 	dev->ops->init_hardware(dev);
 }
@@ -564,6 +567,10 @@ static int dlb_probe(struct pci_dev *pdev,
 	if (ret)
 		goto dlb_reset_fail;
 
+	ret = dlb_dev->ops->init_interrupts(dlb_dev, pdev);
+	if (ret)
+		goto init_interrupts_fail;
+
 	ret = dlb_dev->ops->init_driver_state(dlb_dev);
 	if (ret)
 		goto init_driver_state_fail;
@@ -589,6 +596,8 @@ static int dlb_probe(struct pci_dev *pdev,
 resource_init_fail:
 	dlb_dev->ops->free_driver_state(dlb_dev);
 init_driver_state_fail:
+	dlb_dev->ops->free_interrupts(dlb_dev, pdev);
+init_interrupts_fail:
 dlb_reset_fail:
 dma_set_mask_fail:
 	dlb_dev->ops->device_destroy(dlb_dev, dlb_class);
@@ -628,6 +637,8 @@ static void dlb_remove(struct pci_dev *pdev)
 	dlb_dev->ops->inc_pm_refcnt(pdev, false);
 
 	dlb_dev->ops->free_driver_state(dlb_dev);
+
+	dlb_dev->ops->free_interrupts(dlb_dev, pdev);
 
 	dlb_resource_free(&dlb_dev->hw);
 
