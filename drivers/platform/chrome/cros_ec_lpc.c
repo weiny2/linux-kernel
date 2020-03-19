@@ -327,6 +327,16 @@ static void cros_ec_lpc_acpi_notify(acpi_handle device, u32 value, void *data)
 						&ec_dev->event_notifier, 0,
 						ec_dev);
 		} while (ec_has_more_events);
+#if 0
+	if (ec_dev->mkbp_event_supported &&
+	    cros_ec_get_next_event(ec_dev, NULL) > 0)
+#endif
+	/*
+	 * Unconditionally call the notifier chain, so the USB MUX
+	 * events are posted to listeners
+	 */
+		blocking_notifier_call_chain(&ec_dev->event_notifier, 0,
+					     ec_dev);
 
 	if (value == ACPI_NOTIFY_DEVICE_WAKE)
 		pm_system_wakeup();
