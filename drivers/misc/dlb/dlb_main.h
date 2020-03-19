@@ -105,6 +105,22 @@ struct dlb_device_ops {
 				   u32 domain_id,
 				   struct dlb_pending_port_unmaps_args *args,
 				   struct dlb_cmd_response *resp);
+	int (*enable_ldb_port)(struct dlb_hw *hw,
+			       u32 domain_id,
+			       struct dlb_enable_ldb_port_args *args,
+			       struct dlb_cmd_response *resp);
+	int (*disable_ldb_port)(struct dlb_hw *hw,
+				u32 domain_id,
+				struct dlb_disable_ldb_port_args *args,
+				struct dlb_cmd_response *resp);
+	int (*enable_dir_port)(struct dlb_hw *hw,
+			       u32 domain_id,
+			       struct dlb_enable_dir_port_args *args,
+			       struct dlb_cmd_response *resp);
+	int (*disable_dir_port)(struct dlb_hw *hw,
+				u32 domain_id,
+				struct dlb_disable_dir_port_args *args,
+				struct dlb_cmd_response *resp);
 	int (*get_num_resources)(struct dlb_hw *hw,
 				 struct dlb_get_num_resources_args *args);
 	int (*reset_domain)(struct dlb_dev *dev, u32 domain_id);

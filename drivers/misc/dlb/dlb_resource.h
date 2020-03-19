@@ -368,6 +368,114 @@ int dlb_hw_unmap_qid(struct dlb_hw *hw,
 		     unsigned int vf_id);
 
 /**
+ * dlb_hw_enable_ldb_port() - enable a load-balanced port for scheduling
+ * @hw: dlb_hw handle for a particular device.
+ * @domain_id: domain ID.
+ * @args: port enable arguments.
+ * @resp: response structure.
+ * @vf_request: indicates whether this request came from a VF.
+ * @vf_id: If vf_request is true, this contains the VF's ID.
+ *
+ * This function configures the DLB to schedule QEs to a load-balanced port.
+ * Ports are enabled by default.
+ *
+ * Return:
+ * Returns 0 upon success, < 0 otherwise. If an error occurs, resp->status is
+ * assigned a detailed error code from enum dlb_error.
+ *
+ * Errors:
+ * EINVAL - The port ID is invalid or the domain is not configured.
+ * EFAULT - Internal error (resp->status not set).
+ */
+int dlb_hw_enable_ldb_port(struct dlb_hw *hw,
+			   u32 domain_id,
+			   struct dlb_enable_ldb_port_args *args,
+			   struct dlb_cmd_response *resp,
+			   bool vf_request,
+			   unsigned int vf_id);
+
+/**
+ * dlb_hw_disable_ldb_port() - disable a load-balanced port for scheduling
+ * @hw: dlb_hw handle for a particular device.
+ * @domain_id: domain ID.
+ * @args: port disable arguments.
+ * @resp: response structure.
+ * @vf_request: indicates whether this request came from a VF.
+ * @vf_id: If vf_request is true, this contains the VF's ID.
+ *
+ * This function configures the DLB to stop scheduling QEs to a load-balanced
+ * port. Ports are enabled by default.
+ *
+ * Return:
+ * Returns 0 upon success, < 0 otherwise. If an error occurs, resp->status is
+ * assigned a detailed error code from enum dlb_error.
+ *
+ * Errors:
+ * EINVAL - The port ID is invalid or the domain is not configured.
+ * EFAULT - Internal error (resp->status not set).
+ */
+int dlb_hw_disable_ldb_port(struct dlb_hw *hw,
+			    u32 domain_id,
+			    struct dlb_disable_ldb_port_args *args,
+			    struct dlb_cmd_response *resp,
+			    bool vf_request,
+			    unsigned int vf_id);
+
+/**
+ * dlb_hw_enable_dir_port() - enable a directed port for scheduling
+ * @hw: dlb_hw handle for a particular device.
+ * @domain_id: domain ID.
+ * @args: port enable arguments.
+ * @resp: response structure.
+ * @vf_request: indicates whether this request came from a VF.
+ * @vf_id: If vf_request is true, this contains the VF's ID.
+ *
+ * This function configures the DLB to schedule QEs to a directed port.
+ * Ports are enabled by default.
+ *
+ * Return:
+ * Returns 0 upon success, < 0 otherwise. If an error occurs, resp->status is
+ * assigned a detailed error code from enum dlb_error.
+ *
+ * Errors:
+ * EINVAL - The port ID is invalid or the domain is not configured.
+ * EFAULT - Internal error (resp->status not set).
+ */
+int dlb_hw_enable_dir_port(struct dlb_hw *hw,
+			   u32 domain_id,
+			   struct dlb_enable_dir_port_args *args,
+			   struct dlb_cmd_response *resp,
+			   bool vf_request,
+			   unsigned int vf_id);
+
+/**
+ * dlb_hw_disable_dir_port() - disable a directed port for scheduling
+ * @hw: dlb_hw handle for a particular device.
+ * @domain_id: domain ID.
+ * @args: port disable arguments.
+ * @resp: response structure.
+ * @vf_request: indicates whether this request came from a VF.
+ * @vf_id: If vf_request is true, this contains the VF's ID.
+ *
+ * This function configures the DLB to stop scheduling QEs to a directed port.
+ * Ports are enabled by default.
+ *
+ * Return:
+ * Returns 0 upon success, < 0 otherwise. If an error occurs, resp->status is
+ * assigned a detailed error code from enum dlb_error.
+ *
+ * Errors:
+ * EINVAL - The port ID is invalid or the domain is not configured.
+ * EFAULT - Internal error (resp->status not set).
+ */
+int dlb_hw_disable_dir_port(struct dlb_hw *hw,
+			    u32 domain_id,
+			    struct dlb_disable_dir_port_args *args,
+			    struct dlb_cmd_response *resp,
+			    bool vf_request,
+			    unsigned int vf_id);
+
+/**
  * dlb_reset_domain() - reset a scheduling domain
  * @hw: dlb_hw handle for a particular device.
  * @domain_id: domain ID.

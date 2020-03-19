@@ -651,6 +651,82 @@ struct dlb_unmap_qid_args {
 };
 
 /*
+ * DLB_DOMAIN_CMD_ENABLE_LDB_PORT: Enable scheduling to a load-balanced port.
+ * Input parameters:
+ * - port_id: Load-balanced port ID.
+ * - padding0: Reserved for future use.
+ *
+ * Output parameters:
+ * - response: pointer to a struct dlb_cmd_response.
+ *	response.status: Detailed error code. In certain cases, such as if the
+ *		response pointer is invalid, the driver won't set status.
+ */
+struct dlb_enable_ldb_port_args {
+	/* Output parameters */
+	__u64 response;
+	/* Input parameters */
+	__u32 port_id;
+	__u32 padding0;
+};
+
+/*
+ * DLB_DOMAIN_CMD_ENABLE_DIR_PORT: Enable scheduling to a directed port.
+ * Input parameters:
+ * - port_id: Directed port ID.
+ * - padding0: Reserved for future use.
+ *
+ * Output parameters:
+ * - response: pointer to a struct dlb_cmd_response.
+ *	response.status: Detailed error code. In certain cases, such as if the
+ *		response pointer is invalid, the driver won't set status.
+ */
+struct dlb_enable_dir_port_args {
+	/* Output parameters */
+	__u64 response;
+	/* Input parameters */
+	__u32 port_id;
+};
+
+/*
+ * DLB_DOMAIN_CMD_DISABLE_LDB_PORT: Disable scheduling to a load-balanced port.
+ * Input parameters:
+ * - port_id: Load-balanced port ID.
+ * - padding0: Reserved for future use.
+ *
+ * Output parameters:
+ * - response: pointer to a struct dlb_cmd_response.
+ *	response.status: Detailed error code. In certain cases, such as if the
+ *		response pointer is invalid, the driver won't set status.
+ */
+struct dlb_disable_ldb_port_args {
+	/* Output parameters */
+	__u64 response;
+	/* Input parameters */
+	__u32 port_id;
+	__u32 padding0;
+};
+
+/*
+ * DLB_DOMAIN_CMD_DISABLE_DIR_PORT: Disable scheduling to a directed port.
+ * Input parameters:
+ * - port_id: Directed port ID.
+ * - padding0: Reserved for future use.
+ *
+ * Output parameters:
+ * - response: pointer to a struct dlb_cmd_response.
+ *	response.status: Detailed error code. In certain cases, such as if the
+ *		response pointer is invalid, the driver won't set status.
+ *
+ */
+struct dlb_disable_dir_port_args {
+	/* Output parameters */
+	__u64 response;
+	/* Input parameters */
+	__u32 port_id;
+	__u32 padding0;
+};
+
+/*
  * DLB_DOMAIN_CMD_GET_LDB_QUEUE_DEPTH: Get a load-balanced queue's depth.
  * Input parameters:
  * - queue_id: The load-balanced queue ID.
@@ -725,6 +801,10 @@ enum dlb_domain_user_interface_commands {
 	DLB_DOMAIN_CMD_START_DOMAIN,
 	DLB_DOMAIN_CMD_MAP_QID,
 	DLB_DOMAIN_CMD_UNMAP_QID,
+	DLB_DOMAIN_CMD_ENABLE_LDB_PORT,
+	DLB_DOMAIN_CMD_ENABLE_DIR_PORT,
+	DLB_DOMAIN_CMD_DISABLE_LDB_PORT,
+	DLB_DOMAIN_CMD_DISABLE_DIR_PORT,
 	DLB_DOMAIN_CMD_GET_LDB_QUEUE_DEPTH,
 	DLB_DOMAIN_CMD_GET_DIR_QUEUE_DEPTH,
 	DLB_DOMAIN_CMD_PENDING_PORT_UNMAPS,
@@ -825,6 +905,22 @@ enum dlb_domain_user_interface_commands {
 		_IOWR(DLB_IOC_MAGIC,				\
 		      DLB_DOMAIN_CMD_UNMAP_QID,			\
 		      struct dlb_unmap_qid_args)
+#define DLB_IOC_ENABLE_LDB_PORT					\
+		_IOWR(DLB_IOC_MAGIC,				\
+		      DLB_DOMAIN_CMD_ENABLE_LDB_PORT,		\
+		      struct dlb_enable_ldb_port_args)
+#define DLB_IOC_ENABLE_DIR_PORT					\
+		_IOWR(DLB_IOC_MAGIC,				\
+		      DLB_DOMAIN_CMD_ENABLE_DIR_PORT,		\
+		      struct dlb_enable_dir_port_args)
+#define DLB_IOC_DISABLE_LDB_PORT				\
+		_IOWR(DLB_IOC_MAGIC,				\
+		      DLB_DOMAIN_CMD_DISABLE_LDB_PORT,		\
+		      struct dlb_disable_ldb_port_args)
+#define DLB_IOC_DISABLE_DIR_PORT				\
+		_IOWR(DLB_IOC_MAGIC,				\
+		      DLB_DOMAIN_CMD_DISABLE_DIR_PORT,		\
+		      struct dlb_disable_dir_port_args)
 #define DLB_IOC_GET_LDB_QUEUE_DEPTH				\
 		_IOWR(DLB_IOC_MAGIC,				\
 		      DLB_DOMAIN_CMD_GET_LDB_QUEUE_DEPTH,	\
