@@ -13,7 +13,7 @@
 #include "nhi_regs.h"
 #include "tb.h"
 
-/* Ice Lake specific NHI operations */
+/* Ice Lake and Tiger Lake specific NHI operations */
 
 #define ICL_LC_MAILBOX_TIMEOUT	500 /* ms */
 
@@ -126,15 +126,19 @@ static int icl_nhi_suspend(struct tb_nhi *nhi)
 	if (icl_nhi_is_device_connected(nhi))
 		return 0;
 
-	/*
-	 * If there is no device connected we need to perform both: a
-	 * handshake through LC mailbox and force power down before
-	 * entering D3.
-	 */
-	icl_nhi_lc_mailbox_cmd(nhi, ICL_LC_PREPARE_FOR_RESET);
-	ret = icl_nhi_lc_mailbox_cmd_complete(nhi, ICL_LC_MAILBOX_TIMEOUT);
-	if (ret)
-		return ret;
+	/* Prepare for reset is only needed in ICL */
+	if (nhi->pdev->device == PCI_DEVICE_ID_INTEL_ICL_NHI0 ||
+	    nhi->pdev->device == PCI_DEVICE_ID_INTEL_ICL_NHI1) {
+		/*
+		 * If there is no device connected we need to perform
+		 * both: a handshake through LC mailbox and force power
+		 * down before entering D3.
+		 */
+		icl_nhi_lc_mailbox_cmd(nhi, ICL_LC_PREPARE_FOR_RESET);
+		ret = icl_nhi_lc_mailbox_cmd_complete(nhi, ICL_LC_MAILBOX_TIMEOUT);
+		if (ret)
+			return ret;
+	}
 
 	return icl_nhi_force_power(nhi, false);
 }
