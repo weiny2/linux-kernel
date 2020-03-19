@@ -603,7 +603,8 @@ static void ucsi_handle_connector_change(struct work_struct *work)
 
 	role = !!(con->status.flags & UCSI_CONSTAT_PWR_DIR);
 
-	if (con->status.change & UCSI_CONSTAT_POWER_OPMODE_CHANGE)
+	if (con->status.change & UCSI_CONSTAT_POWER_OPMODE_CHANGE ||
+	    con->status.change & UCSI_CONSTAT_POWER_LEVEL_CHANGE)
 		ucsi_pwr_opmode_change(con);
 
 	if (con->status.change & UCSI_CONSTAT_POWER_DIR_CHANGE) {
@@ -892,6 +893,11 @@ static int ucsi_register_port(struct ucsi *ucsi, int index)
 		*accessory++ = TYPEC_ACCESSORY_AUDIO;
 	if (con->cap.op_mode & UCSI_CONCAP_OPMODE_DEBUG_ACCESSORY)
 		*accessory = TYPEC_ACCESSORY_DEBUG;
+
+	if (con->cap.op_mode & UCSI_CONCAP_OPMODE_USB2)
+		cap->usb |= USB_CAPABILITY_USB2;
+	if (con->cap.op_mode & UCSI_CONCAP_OPMODE_USB3)
+		cap->usb |= USB_CAPABILITY_USB3;
 
 	cap->fwnode = ucsi_find_fwnode(con);
 	cap->driver_data = con;
