@@ -454,6 +454,38 @@ static int dlb_pf_pending_port_unmaps(struct dlb_hw *hw,
 	return dlb_hw_pending_port_unmaps(hw, id, args, resp, false, 0);
 }
 
+static int dlb_pf_enable_ldb_port(struct dlb_hw *hw,
+				  u32 id,
+				  struct dlb_enable_ldb_port_args *args,
+				  struct dlb_cmd_response *resp)
+{
+	return dlb_hw_enable_ldb_port(hw, id, args, resp, false, 0);
+}
+
+static int dlb_pf_disable_ldb_port(struct dlb_hw *hw,
+				   u32 id,
+				   struct dlb_disable_ldb_port_args *args,
+				   struct dlb_cmd_response *resp)
+{
+	return dlb_hw_disable_ldb_port(hw, id, args, resp, false, 0);
+}
+
+static int dlb_pf_enable_dir_port(struct dlb_hw *hw,
+				  u32 id,
+				  struct dlb_enable_dir_port_args *args,
+				  struct dlb_cmd_response *resp)
+{
+	return dlb_hw_enable_dir_port(hw, id, args, resp, false, 0);
+}
+
+static int dlb_pf_disable_dir_port(struct dlb_hw *hw,
+				   u32 id,
+				   struct dlb_disable_dir_port_args *args,
+				   struct dlb_cmd_response *resp)
+{
+	return dlb_hw_disable_dir_port(hw, id, args, resp, false, 0);
+}
+
 static int dlb_pf_get_num_resources(struct dlb_hw *hw,
 				    struct dlb_get_num_resources_args *args)
 {
@@ -546,6 +578,10 @@ struct dlb_device_ops dlb_pf_ops = {
 	.map_qid = dlb_pf_map_qid,
 	.unmap_qid = dlb_pf_unmap_qid,
 	.pending_port_unmaps = dlb_pf_pending_port_unmaps,
+	.enable_ldb_port = dlb_pf_enable_ldb_port,
+	.enable_dir_port = dlb_pf_enable_dir_port,
+	.disable_ldb_port = dlb_pf_disable_ldb_port,
+	.disable_dir_port = dlb_pf_disable_dir_port,
 	.get_num_resources = dlb_pf_get_num_resources,
 	.reset_domain = dlb_pf_reset_domain,
 	.ldb_port_owned_by_domain = dlb_pf_ldb_port_owned_by_domain,

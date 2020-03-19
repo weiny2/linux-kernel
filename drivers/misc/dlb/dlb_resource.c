@@ -2250,6 +2250,150 @@ static int dlb_verify_unmap_qid_args(struct dlb_hw *hw,
 }
 
 static int
+dlb_verify_enable_ldb_port_args(struct dlb_hw *hw,
+				u32 domain_id,
+				struct dlb_enable_ldb_port_args *args,
+				struct dlb_cmd_response *resp,
+				bool vf_request,
+				unsigned int vf_id)
+{
+	struct dlb_domain *domain;
+	struct dlb_ldb_port *port;
+	int id;
+
+	domain = dlb_get_domain_from_id(hw, domain_id, vf_request, vf_id);
+
+	if (!domain) {
+		resp->status = DLB_ST_INVALID_DOMAIN_ID;
+		return -EINVAL;
+	}
+
+	if (!domain->configured) {
+		resp->status = DLB_ST_DOMAIN_NOT_CONFIGURED;
+		return -EINVAL;
+	}
+
+	id = args->port_id;
+
+	port = dlb_get_domain_used_ldb_port(id, vf_request, domain);
+
+	if (!port || !port->configured) {
+		resp->status = DLB_ST_INVALID_PORT_ID;
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int
+dlb_verify_enable_dir_port_args(struct dlb_hw *hw,
+				u32 domain_id,
+				struct dlb_enable_dir_port_args *args,
+				struct dlb_cmd_response *resp,
+				bool vf_request,
+				unsigned int vf_id)
+{
+	struct dlb_domain *domain;
+	struct dlb_dir_pq_pair *port;
+	int id;
+
+	domain = dlb_get_domain_from_id(hw, domain_id, vf_request, vf_id);
+
+	if (!domain) {
+		resp->status = DLB_ST_INVALID_DOMAIN_ID;
+		return -EINVAL;
+	}
+
+	if (!domain->configured) {
+		resp->status = DLB_ST_DOMAIN_NOT_CONFIGURED;
+		return -EINVAL;
+	}
+
+	id = args->port_id;
+
+	port = dlb_get_domain_used_dir_pq(id, vf_request, domain);
+
+	if (!port || !port->port_configured) {
+		resp->status = DLB_ST_INVALID_PORT_ID;
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int
+dlb_verify_disable_ldb_port_args(struct dlb_hw *hw,
+				 u32 domain_id,
+				 struct dlb_disable_ldb_port_args *args,
+				 struct dlb_cmd_response *resp,
+				 bool vf_request,
+				 unsigned int vf_id)
+{
+	struct dlb_domain *domain;
+	struct dlb_ldb_port *port;
+	int id;
+
+	domain = dlb_get_domain_from_id(hw, domain_id, vf_request, vf_id);
+
+	if (!domain) {
+		resp->status = DLB_ST_INVALID_DOMAIN_ID;
+		return -EINVAL;
+	}
+
+	if (!domain->configured) {
+		resp->status = DLB_ST_DOMAIN_NOT_CONFIGURED;
+		return -EINVAL;
+	}
+
+	id = args->port_id;
+
+	port = dlb_get_domain_used_ldb_port(id, vf_request, domain);
+
+	if (!port || !port->configured) {
+		resp->status = DLB_ST_INVALID_PORT_ID;
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int
+dlb_verify_disable_dir_port_args(struct dlb_hw *hw,
+				 u32 domain_id,
+				 struct dlb_disable_dir_port_args *args,
+				 struct dlb_cmd_response *resp,
+				 bool vf_request,
+				 unsigned int vf_id)
+{
+	struct dlb_domain *domain;
+	struct dlb_dir_pq_pair *port;
+	int id;
+
+	domain = dlb_get_domain_from_id(hw, domain_id, vf_request, vf_id);
+
+	if (!domain) {
+		resp->status = DLB_ST_INVALID_DOMAIN_ID;
+		return -EINVAL;
+	}
+
+	if (!domain->configured) {
+		resp->status = DLB_ST_DOMAIN_NOT_CONFIGURED;
+		return -EINVAL;
+	}
+
+	id = args->port_id;
+
+	port = dlb_get_domain_used_dir_pq(id, vf_request, domain);
+
+	if (!port || !port->port_configured) {
+		resp->status = DLB_ST_INVALID_PORT_ID;
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int
 dlb_domain_attach_resources(struct dlb_hw *hw,
 			    struct dlb_function_resources *rsrcs,
 			    struct dlb_domain *domain,
@@ -5287,6 +5431,258 @@ int dlb_hw_unmap_qid(struct dlb_hw *hw,
 		dlb_schedule_work(hw);
 
 unmap_qid_done:
+	resp->status = 0;
+
+	return 0;
+}
+
+static void dlb_log_enable_port(struct dlb_hw *hw,
+				u32 domain_id,
+				u32 port_id,
+				bool vf_request,
+				unsigned int vf_id)
+{
+	DLB_HW_DBG(hw, "DLB enable port arguments:\n");
+	if (vf_request)
+		DLB_HW_DBG(hw, "(Request from VF %d)\n", vf_id);
+	DLB_HW_DBG(hw, "\tDomain ID: %d\n",
+		   domain_id);
+	DLB_HW_DBG(hw, "\tPort ID:   %d\n",
+		   port_id);
+}
+
+int dlb_hw_enable_ldb_port(struct dlb_hw *hw,
+			   u32 domain_id,
+			   struct dlb_enable_ldb_port_args *args,
+			   struct dlb_cmd_response *resp,
+			   bool vf_request,
+			   unsigned int vf_id)
+{
+	struct dlb_ldb_port *port;
+	struct dlb_domain *domain;
+	int ret, id;
+
+	dlb_log_enable_port(hw, domain_id, args->port_id, vf_request, vf_id);
+
+	/* Verify that hardware resources are available before attempting to
+	 * satisfy the request. This simplifies the error unwinding code.
+	 */
+	ret = dlb_verify_enable_ldb_port_args(hw,
+					      domain_id,
+					      args,
+					      resp,
+					      vf_request,
+					      vf_id);
+	if (ret)
+		return ret;
+
+	domain = dlb_get_domain_from_id(hw, domain_id, vf_request, vf_id);
+	if (!domain) {
+		DLB_HW_ERR(hw,
+			   "[%s():%d] Internal error: domain not found\n",
+			   __func__, __LINE__);
+		return -EFAULT;
+	}
+
+	id = args->port_id;
+
+	port = dlb_get_domain_used_ldb_port(id, vf_request, domain);
+	if (!port) {
+		DLB_HW_ERR(hw,
+			   "[%s():%d] Internal error: port not found\n",
+			   __func__, __LINE__);
+		return -EFAULT;
+	}
+
+	/* Hardware requires disabling the CQ before unmapping QIDs. */
+	if (!port->enabled) {
+		dlb_ldb_port_cq_enable(hw, port);
+		port->enabled = true;
+
+		hw->pf.num_enabled_ldb_ports++;
+		dlb_update_ldb_arb_threshold(hw);
+	}
+
+	resp->status = 0;
+
+	return 0;
+}
+
+static void dlb_log_disable_port(struct dlb_hw *hw,
+				 u32 domain_id,
+				 u32 port_id,
+				 bool vf_request,
+				 unsigned int vf_id)
+{
+	DLB_HW_DBG(hw, "DLB disable port arguments:\n");
+	if (vf_request)
+		DLB_HW_DBG(hw, "(Request from VF %d)\n", vf_id);
+	DLB_HW_DBG(hw, "\tDomain ID: %d\n",
+		   domain_id);
+	DLB_HW_DBG(hw, "\tPort ID:   %d\n",
+		   port_id);
+}
+
+int dlb_hw_disable_ldb_port(struct dlb_hw *hw,
+			    u32 domain_id,
+			    struct dlb_disable_ldb_port_args *args,
+			    struct dlb_cmd_response *resp,
+			    bool vf_request,
+			    unsigned int vf_id)
+{
+	struct dlb_ldb_port *port;
+	struct dlb_domain *domain;
+	int ret, id;
+
+	dlb_log_disable_port(hw, domain_id, args->port_id, vf_request, vf_id);
+
+	/* Verify that hardware resources are available before attempting to
+	 * satisfy the request. This simplifies the error unwinding code.
+	 */
+	ret = dlb_verify_disable_ldb_port_args(hw,
+					       domain_id,
+					       args,
+					       resp,
+					       vf_request,
+					       vf_id);
+	if (ret)
+		return ret;
+
+	domain = dlb_get_domain_from_id(hw, domain_id, vf_request, vf_id);
+	if (!domain) {
+		DLB_HW_ERR(hw,
+			   "[%s():%d] Internal error: domain not found\n",
+			   __func__, __LINE__);
+		return -EFAULT;
+	}
+
+	id = args->port_id;
+
+	port = dlb_get_domain_used_ldb_port(id, vf_request, domain);
+	if (!port) {
+		DLB_HW_ERR(hw,
+			   "[%s():%d] Internal error: port not found\n",
+			   __func__, __LINE__);
+		return -EFAULT;
+	}
+
+	/* Hardware requires disabling the CQ before unmapping QIDs. */
+	if (port->enabled) {
+		dlb_ldb_port_cq_disable(hw, port);
+		port->enabled = false;
+
+		hw->pf.num_enabled_ldb_ports--;
+		dlb_update_ldb_arb_threshold(hw);
+	}
+
+	resp->status = 0;
+
+	return 0;
+}
+
+int dlb_hw_enable_dir_port(struct dlb_hw *hw,
+			   u32 domain_id,
+			   struct dlb_enable_dir_port_args *args,
+			   struct dlb_cmd_response *resp,
+			   bool vf_request,
+			   unsigned int vf_id)
+{
+	struct dlb_dir_pq_pair *port;
+	struct dlb_domain *domain;
+	int ret, id;
+
+	dlb_log_enable_port(hw, domain_id, args->port_id, vf_request, vf_id);
+
+	/* Verify that hardware resources are available before attempting to
+	 * satisfy the request. This simplifies the error unwinding code.
+	 */
+	ret = dlb_verify_enable_dir_port_args(hw,
+					      domain_id,
+					      args,
+					      resp,
+					      vf_request,
+					      vf_id);
+	if (ret)
+		return ret;
+
+	domain = dlb_get_domain_from_id(hw, domain_id, vf_request, vf_id);
+	if (!domain) {
+		DLB_HW_ERR(hw,
+			   "[%s():%d] Internal error: domain not found\n",
+			   __func__, __LINE__);
+		return -EFAULT;
+	}
+
+	id = args->port_id;
+
+	port = dlb_get_domain_used_dir_pq(id, vf_request, domain);
+	if (!port) {
+		DLB_HW_ERR(hw,
+			   "[%s():%d] Internal error: port not found\n",
+			   __func__, __LINE__);
+		return -EFAULT;
+	}
+
+	/* Hardware requires disabling the CQ before unmapping QIDs. */
+	if (!port->enabled) {
+		dlb_dir_port_cq_enable(hw, port);
+		port->enabled = true;
+	}
+
+	resp->status = 0;
+
+	return 0;
+}
+
+int dlb_hw_disable_dir_port(struct dlb_hw *hw,
+			    u32 domain_id,
+			    struct dlb_disable_dir_port_args *args,
+			    struct dlb_cmd_response *resp,
+			    bool vf_request,
+			    unsigned int vf_id)
+{
+	struct dlb_dir_pq_pair *port;
+	struct dlb_domain *domain;
+	int ret, id;
+
+	dlb_log_disable_port(hw, domain_id, args->port_id, vf_request, vf_id);
+
+	/* Verify that hardware resources are available before attempting to
+	 * satisfy the request. This simplifies the error unwinding code.
+	 */
+	ret = dlb_verify_disable_dir_port_args(hw,
+					       domain_id,
+					       args,
+					       resp,
+					       vf_request,
+					       vf_id);
+	if (ret)
+		return ret;
+
+	domain = dlb_get_domain_from_id(hw, domain_id, vf_request, vf_id);
+	if (!domain) {
+		DLB_HW_ERR(hw,
+			   "[%s():%d] Internal error: domain not found\n",
+			   __func__, __LINE__);
+		return -EFAULT;
+	}
+
+	id = args->port_id;
+
+	port = dlb_get_domain_used_dir_pq(id, vf_request, domain);
+	if (!port) {
+		DLB_HW_ERR(hw,
+			   "[%s():%d] Internal error: port not found\n",
+			   __func__, __LINE__);
+		return -EFAULT;
+	}
+
+	/* Hardware requires disabling the CQ before unmapping QIDs. */
+	if (port->enabled) {
+		dlb_dir_port_cq_disable(hw, port);
+		port->enabled = false;
+	}
+
 	resp->status = 0;
 
 	return 0;
