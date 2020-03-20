@@ -51,10 +51,23 @@ static inline void copy_init_pkru_to_fpregs(void)
 #endif /* ! CONFIG_ARCH_HAS_PKEYS */
 
 
+enum pks_alloc_flags
+{
+	PKS_FLAG_EXCLUSIVE = 0,
+};
+
 #ifdef CONFIG_ARCH_ENABLE_SUPERVISOR_PKEYS
 
 void pkrs_save_set_irq(struct pt_regs *regs, u32 val);
 void pkrs_restore_irq(struct pt_regs *regs);
+
+__must_check int pks_key_alloc(const char *const pkey_user,
+			       enum pks_alloc_flags flags);
+void pks_key_free(int pkey);
+
+void pks_mk_noaccess(int pkey);
+void pks_mk_readonly(int pkey);
+void pks_mk_readwrite(int pkey);
 
 #else /* !CONFIG_ARCH_ENABLE_SUPERVISOR_PKEYS */
 
@@ -64,6 +77,17 @@ void pkrs_restore_irq(struct pt_regs *regs);
 
 static inline void pkrs_save_set_irq(struct pt_regs *regs, u32 val) { }
 static inline void pkrs_restore_irq(struct pt_regs *regs) { }
+
+static inline __must_check int pks_key_alloc(const char * const pkey_user,
+					     enum pks_alloc_flags flags)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline void pks_key_free(int pkey) {}
+static inline void pks_mk_noaccess(int pkey) {}
+static inline void pks_mk_readonly(int pkey) {}
+static inline void pks_mk_readwrite(int pkey) {}
 
 #endif /* CONFIG_ARCH_ENABLE_SUPERVISOR_PKEYS */
 
