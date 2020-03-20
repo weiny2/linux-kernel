@@ -57,4 +57,17 @@ static inline int update_local_sup_key(int pkey, unsigned long protection)
 }
 #endif
 
+#ifndef pks_key_alloc
+static inline int pks_key_alloc(const char * const pkey_user)
+{
+	return -EINVAL;
+}
+#endif
+
+#ifndef pks_key_free
+static inline void pks_key_free(int pkey)
+{
+}
+#endif
+
 #endif /* _LINUX_PKEYS_H */
