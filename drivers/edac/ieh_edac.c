@@ -144,6 +144,7 @@ struct ieh_dev {
 
 static struct ieh_config {
 	u16 did;
+	int typever_off;
 	enum op_on_fa_err op_on_fa;
 } *ieh_cfg;
 
@@ -161,6 +162,7 @@ static LIST_HEAD(ss_ieh_list);
 
 static struct ieh_config tgl_lp_cfg = {
 	.did		= IEH_DID_TGL_LP,
+	.typever_off	= IEH_TYPEVER_OFF,
 	.op_on_fa	= RESTART,
 };
 
@@ -169,7 +171,18 @@ static struct ieh_config tgl_lp_cfg = {
 
 static struct ieh_config tgl_h_cfg = {
 	.did		= IEH_DID_TGL_H,
+	.typever_off	= IEH_TYPEVER_OFF,
 	.op_on_fa	= RESTART,
+};
+
+/* Sapphire Rapids server */
+#define IEH_DID_SPR_H		0x0998
+#define IEH_TYPEVER_SPR_OFF	0xd0
+
+static struct ieh_config spr_h_cfg = {
+	.did		= IEH_DID_SPR_H,
+	.typever_off	= IEH_TYPEVER_SPR_OFF,
+	.op_on_fa	= POWER_OFF,
 };
 
 static const char * const severities[] = {
@@ -412,6 +425,7 @@ static struct notifier_block ieh_mce_dec = {
 static const struct x86_cpu_id ieh_cpuids[] = {
 	INTEL_CPU_FAM6(TIGERLAKE_L, tgl_lp_cfg),
 	INTEL_CPU_FAM6(TIGERLAKE_L, tgl_h_cfg),
+	INTEL_CPU_FAM6(SAPPHIRERAPIDS, spr_h_cfg),
 	{}
 };
 MODULE_DEVICE_TABLE(x86cpu, ieh_cpuids);
@@ -473,7 +487,7 @@ static int __get_all_iehs(u16 did)
 			goto fail2;
 		}
 
-		PCI_RD_U32(pdev, IEH_TYPEVER_OFF, &reg);
+		PCI_RD_U32(pdev, ieh_cfg->typever_off, &reg);
 		d->pdev = pdev;
 		d->ver  = IEH_TYPEVER_VER(reg);
 		d->type = IEH_TYPEVER_TYP(reg);
