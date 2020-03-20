@@ -3,6 +3,9 @@
  * Intel Memory Protection Keys management
  * Copyright (c) 2015, Intel Corporation.
  */
+#undef pr_fmt
+#define pr_fmt(fmt) "x86/PKeys: " fmt
+
 #include <linux/debugfs.h>		/* debugfs_create_u32()		*/
 #include <linux/mm_types.h>             /* mm_struct, vma, etc...       */
 #include <linux/pkeys.h>                /* PKEY_*                       */
@@ -296,3 +299,75 @@ int pks_update_protection(int pkey, unsigned long protection)
 	return 0;
 }
 EXPORT_SYMBOL_GPL(pks_update_protection);
+
+static const char pks_key_user0[] = "kernel";
+/*
+ * The array stores names of allocated keys. After a key is allocated, the
+ * pointer indexed by the key points to a key name string. Key 0 is reserved
+ * for the kernel. All other keys can be allocated dynamically.
+ */
+static const char *pks_key_users[PKS_NUM_KEYS] = {
+	pks_key_user0
+};
+
+/*
+ * One bit per protection key says whether the kernel can use it or not.
+ * Protected by atomic bit operations. Bit 0 is set for key 0 initially.
+ * Totally 16 bits for 16 keys. Defined as unsigned long to avoid split
+ * lock in atomic bit ops.
+ */
+static unsigned long pks_key_allocation_map = 1 << PKS_KERN_DEFAULT_KEY;
+
+/*
+ * Allocate a PKS key for a given name. Caller must maintain the name string
+ * in memory during the key's life cycle.
+ */
+int pks_key_alloc(const char * const pkey_user)
+{
+	int nr, old_bit, pkey;
+
+	if (!cpu_feature_enabled(X86_FEATURE_PKS))
+		return -EINVAL;
+
+	if (!pkey_user)
+		return -EINVAL;
+
+	/* Find a free bit (0) in the bit map. */
+	old_bit = 1;
+	while (old_bit) {
+		nr = ffz(pks_key_allocation_map);
+		if (nr > PKS_NUM_KEYS - 1) {
+			int i;
+
+			pr_info("Cannot allocate supervisor key for %s. Key users are:\n",
+				pkey_user);
+			for (i = PKS_KERN_DEFAULT_KEY; i < PKS_NUM_KEYS; i++)
+				pr_info("%s\n", pks_key_users[i]);
+
+			return -ENOSPC;
+		}
+
+		old_bit = test_and_set_bit(nr, &pks_key_allocation_map);
+	}
+
+	pkey = nr;
+	/* store name for debugging key exhaustion */
+	pks_key_users[pkey] = pkey_user;
+
+	return pkey;
+}
+EXPORT_SYMBOL_GPL(pks_key_alloc);
+
+/* Free a PKS key. */
+void pks_key_free(int pkey)
+{
+	if (!pks_key_validate(pkey))
+		return;
+
+	clear_bit(pkey, &pks_key_allocation_map);
+	pks_key_users[pkey] = NULL;
+
+	/* Restore to default AD=1 and WD=0. */
+	pks_update_protection(pkey, PKEY_DISABLE_ACCESS | ~PKEY_DISABLE_WRITE);
+}
+EXPORT_SYMBOL_GPL(pks_key_free);

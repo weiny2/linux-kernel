@@ -55,6 +55,15 @@ static inline int pks_update_protection(int pkey, unsigned long protection)
 {
 	return -EINVAL;
 }
+
+static inline int pks_key_alloc(const char * const pkey_user)
+{
+	return -EINVAL;
+}
+
+static inline void pks_key_free(int pkey)
+{
+}
 #endif
 
 #endif /* _LINUX_PKEYS_H */
