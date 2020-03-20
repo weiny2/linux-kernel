@@ -138,4 +138,34 @@ static inline int vma_pkey(struct vm_area_struct *vma)
 
 u32 get_new_pkr(u32 old_pkr, int pkey, unsigned long init_val);
 
+#ifdef CONFIG_ARCH_HAS_SUPERVISOR_PKEYS
+int pks_key_alloc(const char *const pkey_user);
+void pks_key_free(int pkey);
+u32 get_new_pkr(u32 old_pkr, int pkey, unsigned long init_val);
+
+/*
+ * pks_update_protection - Update the protection of the specified key
+ *
+ * @pkey: Key for the domain to change
+ * @protection: protection bits to be used
+ *
+ * Protection utilizes the same protection bits specified for User pkeys
+ *     PKEY_DISABLE_ACCESS
+ *     PKEY_DISABLE_WRITE
+ *
+ * This is not a global update.  It only affects the current running thread.
+ *
+ * It is undefined and a bug for users to call this without having allocated a
+ * pkey and using it as pkey here.
+ */
+static inline void pks_update_protection(int pkey, unsigned long protection)
+{
+	current->thread.saved_pkrs = get_new_pkr(current->thread.saved_pkrs,
+						 pkey, protection);
+	preempt_disable();
+	write_pkrs(current->thread.saved_pkrs);
+	preempt_enable();
+}
+#endif /* CONFIG_ARCH_HAS_SUPERVISOR_PKEYS */
+
 #endif /*_ASM_X86_PKEYS_H */
