@@ -194,6 +194,14 @@ static struct ieh_config tgl_lp_cfg = {
 	.action	= RESTART,
 };
 
+/* Tiger Lake-H SoC */
+#define IEH_DID_TGL_H		0x43af
+
+static struct ieh_config tgl_h_cfg = {
+	.did	= IEH_DID_TGL_H,
+	.action	= RESTART,
+};
+
 static const char * const severities[] = {
 	[IEH_CORR_ERR]		= "correctable",
 	[IEH_NONFATAL_ERR]	= "non-fatal uncorrectable",
@@ -525,6 +533,7 @@ static struct notifier_block ieh_mce_dec = {
 
 static const struct x86_cpu_id ieh_cpuids[] = {
 	X86_MATCH_INTEL_FAM6_MODEL(TIGERLAKE_L,	&tgl_lp_cfg),
+	X86_MATCH_INTEL_FAM6_MODEL(TIGERLAKE_L,	&tgl_h_cfg),
 	{}
 };
 MODULE_DEVICE_TABLE(x86cpu, ieh_cpuids);
