@@ -51,11 +51,22 @@ static inline void copy_init_pkru_to_fpregs(void)
 #endif /* ! CONFIG_ARCH_HAS_PKEYS */
 
 #ifdef CONFIG_ARCH_HAS_SUPERVISOR_PKEYS
+int pks_key_alloc(const char *const pkey_user);
 int pks_update_protection(int pkey, unsigned long protection);
+void pks_key_free(int pkey);
 #else
+static inline int pks_key_alloc(const char * const pkey_user)
+{
+	return -EINVAL;
+}
+
 static inline int pks_update_protection(int pkey, unsigned long protection)
 {
 	return -EINVAL;
+}
+
+static inline void pks_key_free(int pkey)
+{
 }
 #endif /* CONFIG_ARCH_HAS_SUPERVISOR_PKEYS */
 
