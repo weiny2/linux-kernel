@@ -50,4 +50,28 @@ static inline void copy_init_pkru_to_fpregs(void)
 
 #endif /* ! CONFIG_ARCH_HAS_PKEYS */
 
+#define PKS_FLAG_EXCLUSIVE 0x00
+
+#ifndef CONFIG_ARCH_HAS_SUPERVISOR_PKEYS
+static inline __must_check int pks_key_alloc(const char * const pkey_user, int flags)
+{
+	return -EOPNOTSUPP;
+}
+static inline void pks_key_free(int pkey)
+{
+}
+static inline void pks_mk_noaccess(int pkey)
+{
+	pr_err("pks_mk_noaccess is not valid without PKS support\n");
+}
+static inline void pks_mk_readonly(int pkey)
+{
+	pr_err("pks_mk_readonly is not valid without PKS support\n");
+}
+static inline void pks_mk_readwrite(int pkey)
+{
+	pr_err("pks_mk_readwrite is not valid without PKS support\n");
+}
+#endif /* ! CONFIG_ARCH_HAS_SUPERVISOR_PKEYS */
+
 #endif /* _LINUX_PKEYS_H */
