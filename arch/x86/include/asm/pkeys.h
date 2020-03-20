@@ -147,6 +147,7 @@ u32 get_new_pkr(u32 old_pkr, int pkey, unsigned long init_val);
 int update_local_sup_key(int pkey, unsigned long protection);
 int pks_key_alloc(const char *const pkey_user);
 void pks_key_free(int pkey);
+u64 get_ia32_pkrs_cached(void);
 
 #if defined(CONFIG_PKS_TESTING)
 bool pks_test_armed(void);

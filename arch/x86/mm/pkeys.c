@@ -212,6 +212,12 @@ __setup("init_pkru=", setup_init_pkru);
 /* The IA32_PKRS MSR is cached per CPU. */
 static DEFINE_PER_CPU(u32, pkrs);
 
+u64 get_ia32_pkrs_cached(void)
+{
+	return this_cpu_read(pkrs);
+}
+EXPORT_SYMBOL_GPL(get_ia32_pkrs_cached);
+
 void pks_init_task(struct task_struct *tsk)
 {
 	tsk->thread.pkrs = init_pkrs_value;

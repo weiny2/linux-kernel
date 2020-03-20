@@ -285,6 +285,8 @@ struct vcpu_vmx {
 
 	u32 host_pkru;
 
+	u64 host_cached_pkrs;
+
 	unsigned long host_debugctlmsr;
 
 	/*

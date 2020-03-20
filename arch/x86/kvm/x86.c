@@ -9576,6 +9576,8 @@ void kvm_vcpu_reset(struct kvm_vcpu *vcpu, bool init_event)
 
 	vcpu->arch.ia32_xss = 0;
 
+	vcpu->arch.pkrs = 0;
+
 	kvm_x86_ops.vcpu_reset(vcpu, init_event);
 }
 
