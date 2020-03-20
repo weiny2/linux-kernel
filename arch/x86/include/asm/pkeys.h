@@ -146,5 +146,9 @@ void pks_init(void);
 u32 get_new_pkr(u32 old_pkr, int pkey, unsigned long init_val);
 int update_local_sup_key(int pkey, unsigned long protection);
 #define update_local_sup_key update_local_sup_key
+int pks_key_alloc(const char *const pkey_user);
+#define pks_key_alloc pks_key_alloc
+void pks_key_free(int pkey);
+#define pks_key_free pks_key_free
 
 #endif /*_ASM_X86_PKEYS_H */
