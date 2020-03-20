@@ -175,6 +175,7 @@ struct ieh_dev {
 static struct ieh_config {
 	u16 did;
 	enum action_on_fatal_err action;
+	int typever_offset;
 } *ieh_cfg;
 
 struct decoded_res {
@@ -190,16 +191,34 @@ static LIST_HEAD(south_ieh_list);
 #define IEH_DID_TGL_LP		0xa0af
 
 static struct ieh_config tgl_lp_cfg = {
-	.did	= IEH_DID_TGL_LP,
-	.action	= RESTART,
+	.did		= IEH_DID_TGL_LP,
+	.action		= RESTART,
+	.typever_offset = IEHTYPEVER_OFFSET,
 };
 
 /* Tiger Lake-H SoC */
 #define IEH_DID_TGL_H		0x43af
 
 static struct ieh_config tgl_h_cfg = {
-	.did	= IEH_DID_TGL_H,
-	.action	= RESTART,
+	.did		= IEH_DID_TGL_H,
+	.action		= RESTART,
+	.typever_offset = IEHTYPEVER_OFFSET,
+};
+
+/* Sapphire Rapids server defines */
+#define SPR_IEH_DID		0x0998
+#define SPR_IEHTYPEVER_OFFSET	0xd0
+/* Local uncorrectable error mask */
+#define SPR_LERRUNCMSK_OFFSET	0x28c
+#define SPR_LERRUNCMSK		0xffffffff
+/* Local correctable error mask */
+#define SPR_LERRCORMSK_OFFSET	0x2a0
+#define SPR_LERRCORMSK		0xffffffff
+
+static struct ieh_config spr_cfg = {
+	.did		= SPR_IEH_DID,
+	.action		= RESTART,
+	.typever_offset = SPR_IEHTYPEVER_OFFSET,
 };
 
 static const char * const severities[] = {
@@ -326,8 +345,13 @@ static int unmask_all_err_events(void)
 		UNMASK_ERR_EVENT(ieh, GFAERR);
 		UNMASK_ERR_EVENT(ieh, GNFERR);
 		UNMASK_ERR_EVENT(ieh, GCOERR);
-		UNMASK_ERR_EVENT(ieh, LERRUNC);
-		UNMASK_ERR_EVENT(ieh, LERRCOR);
+		if (ieh_cfg->did == SPR_IEH_DID) {
+			UNMASK_ERR_EVENT(ieh, SPR_LERRUNC);
+			UNMASK_ERR_EVENT(ieh, SPR_LERRCOR);
+		} else {
+			UNMASK_ERR_EVENT(ieh, LERRUNC);
+			UNMASK_ERR_EVENT(ieh, LERRCOR);
+		}
 		UNMASK_ERR_EVENT(ieh, GSYSEVT);
 	}
 
@@ -351,8 +375,13 @@ static int mask_all_err_events(void)
 		MASK_ERR_EVENT(ieh, GFAERR);
 		MASK_ERR_EVENT(ieh, GNFERR);
 		MASK_ERR_EVENT(ieh, GCOERR);
-		MASK_ERR_EVENT(ieh, LERRUNC);
-		MASK_ERR_EVENT(ieh, LERRCOR);
+		if (ieh_cfg->did == SPR_IEH_DID) {
+			MASK_ERR_EVENT(ieh, SPR_LERRUNC);
+			MASK_ERR_EVENT(ieh, SPR_LERRCOR);
+		} else {
+			MASK_ERR_EVENT(ieh, LERRUNC);
+			MASK_ERR_EVENT(ieh, LERRCOR);
+		}
 		MASK_ERR_EVENT(ieh, GSYSEVT);
 	}
 
@@ -534,6 +563,7 @@ static struct notifier_block ieh_mce_dec = {
 static const struct x86_cpu_id ieh_cpuids[] = {
 	X86_MATCH_INTEL_FAM6_MODEL(TIGERLAKE_L,	&tgl_lp_cfg),
 	X86_MATCH_INTEL_FAM6_MODEL(TIGERLAKE_L,	&tgl_h_cfg),
+	X86_MATCH_INTEL_FAM6_MODEL(SAPPHIRERAPIDS, &spr_cfg),
 	{}
 };
 MODULE_DEVICE_TABLE(x86cpu, ieh_cpuids);
@@ -595,7 +625,7 @@ static int __get_all_iehs(u16 did)
 			goto fail2;
 		}
 
-		PCI_RD_U32(pdev, IEHTYPEVER_OFFSET, &reg);
+		PCI_RD_U32(pdev, ieh_cfg->typever_offset, &reg);
 		ieh->pdev = pdev;
 		ieh->ver  = IEHTYPEVER_VER(reg);
 		ieh->type = IEHTYPEVER_TYPE(reg);
