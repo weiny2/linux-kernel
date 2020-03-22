@@ -5393,7 +5393,7 @@ int get_and_dump_counters(void)
 }
 
 void print_version() {
-	fprintf(outf, "turbostat version 20.03.20"
+	fprintf(outf, "turbostat version 20.03.22-INTNERAL"
 		" - Len Brown <lenb@kernel.org>\n");
 }
 
