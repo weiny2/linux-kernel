@@ -4840,6 +4840,44 @@ void pci_bridge_wait_for_secondary_bus(struct pci_dev *dev)
 	}
 }
 
+/**
+ * pciehp_is_native - Check whether a hotplug port is handled by the OS
+ * @bridge: Hotplug port to check
+ *
+ * Returns true if the given @bridge is handled by the native PCIe hotplug
+ * driver.
+ */
+bool pciehp_is_native(struct pci_dev *bridge)
+{
+	const struct pci_host_bridge *host;
+	u32 slot_cap;
+
+	if (!IS_ENABLED(CONFIG_HOTPLUG_PCI_PCIE))
+		return false;
+
+	pcie_capability_read_dword(bridge, PCI_EXP_SLTCAP, &slot_cap);
+	if (!(slot_cap & PCI_EXP_SLTCAP_HPC))
+		return false;
+
+	if (pcie_ports_native)
+		return true;
+
+	host = pci_find_host_bridge(bridge->bus);
+	return host->native_pcie_hotplug;
+}
+
+/**
+ * shpchp_is_native - Check whether a hotplug port is handled by the OS
+ * @bridge: Hotplug port to check
+ *
+ * Returns true if the given @bridge is handled by the native SHPC hotplug
+ * driver.
+ */
+bool shpchp_is_native(struct pci_dev *bridge)
+{
+	return bridge->shpc_managed;
+}
+
 void pci_reset_secondary_bus(struct pci_dev *dev)
 {
 	u16 ctrl;
