@@ -294,6 +294,43 @@ static struct extra_reg intel_icl_extra_regs[] __read_mostly = {
 	EVENT_EXTRA_END
 };
 
+static struct event_constraint intel_adl_event_constraints[] = {
+	FIXED_EVENT_CONSTRAINT(0x00c0, 0),	/* INST_RETIRED.ANY */
+	FIXED_EVENT_CONSTRAINT(0x01c0, 0),	/* INST_RETIRED.PREC_DIST */
+	FIXED_EVENT_CONSTRAINT(0x003c, 1),	/* CPU_CLK_UNHALTED.CORE */
+	FIXED_EVENT_CONSTRAINT(0x0300, 2),	/* CPU_CLK_UNHALTED.REF */
+	FIXED_EVENT_CONSTRAINT(0x0400, 3),	/* SLOTS */
+	METRIC_EVENT_CONSTRAINT(0x1000, 0),	/* Retiring metric */
+	METRIC_EVENT_CONSTRAINT(0x1100, 1),	/* Bad speculation metric */
+	METRIC_EVENT_CONSTRAINT(0x1200, 2),	/* FE bound metric */
+	METRIC_EVENT_CONSTRAINT(0x1300, 3),	/* BE bound metric */
+
+	INTEL_EVENT_CONSTRAINT(0x2e, 0xff),
+	INTEL_EVENT_CONSTRAINT(0x3c, 0xff),
+	/*
+	 * Generally event codes < 0x90 are restricted to counters 0-3.
+	 * For ADL, 0x2E and 0x3C are exception, which has no restriction.
+	 */
+	INTEL_EVENT_CONSTRAINT_RANGE(0x01, 0x8f, 0xf),
+
+	INTEL_UEVENT_CONSTRAINT(0x01a3, 0xf),
+	INTEL_UEVENT_CONSTRAINT(0x02a3, 0xf),
+	INTEL_UEVENT_CONSTRAINT(0x08a3, 0xf),
+	INTEL_UEVENT_CONSTRAINT(0x04a4, 0x1),
+	INTEL_UEVENT_CONSTRAINT(0x08a4, 0x1),
+	INTEL_UEVENT_CONSTRAINT(0x02cd, 0x1),
+	INTEL_EVENT_CONSTRAINT(0xce, 0x1),
+	INTEL_EVENT_CONSTRAINT_RANGE(0xd0, 0xdf, 0xf),
+	/*
+	 * Generally event codes >= 0x90 are 'likely' to have no restrictions.
+	 * The exception are defined as above.
+	 */
+	INTEL_EVENT_CONSTRAINT_RANGE(0x90, 0xfe, 0xff),
+
+	EVENT_CONSTRAINT_END
+};
+
+
 EVENT_ATTR_STR(mem-loads,	mem_ld_nhm,	"event=0x0b,umask=0x10,ldlat=3");
 EVENT_ATTR_STR(mem-loads,	mem_ld_snb,	"event=0xcd,umask=0x1,ldlat=3");
 EVENT_ATTR_STR(mem-stores,	mem_st_snb,	"event=0xcd,umask=0x2");
@@ -5657,7 +5694,7 @@ __init int intel_pmu_init(void)
 		memcpy(hw_cache_extra_regs, skl_hw_cache_extra_regs, sizeof(hw_cache_extra_regs));
 		hw_cache_event_ids[C(ITLB)][C(OP_READ)][C(RESULT_ACCESS)] = -1;
 
-		x86_pmu.event_constraints = intel_icl_event_constraints;
+		x86_pmu.event_constraints = intel_adl_event_constraints;
 		x86_pmu.pebs_constraints = intel_icl_pebs_event_constraints;
 		x86_pmu.extra_regs = intel_icl_extra_regs;
 		x86_pmu.pebs_aliases = NULL;
