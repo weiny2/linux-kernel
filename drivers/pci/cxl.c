@@ -36,8 +36,8 @@ static void pci_cxl_unlock(struct pci_dev *dev)
 	int pos = dev->cxl_cap;
 	u16 lock;
 
-	/* Only for Endpoints */
-	if (pci_pcie_type(dev) != PCI_EXP_TYPE_ENDPOINT)
+	/* Only for Root Complex Endpoints */
+	if (pci_pcie_type(dev) != PCI_EXP_TYPE_RC_END)
 		return;
 
 	pci_read_config_word(dev, pos + PCI_CXL_LOCK, &lock);
@@ -50,8 +50,8 @@ static void pci_cxl_lock(struct pci_dev *dev)
 	int pos = dev->cxl_cap;
 	u16 lock;
 
-	/* Only for Endpoints */
-	if (pci_pcie_type(dev) != PCI_EXP_TYPE_ENDPOINT)
+	/* Only for Root Complex Endpoints */
+	if (pci_pcie_type(dev) != PCI_EXP_TYPE_RC_END)
 		return;
 
 	pci_read_config_word(dev, pos + PCI_CXL_LOCK, &lock);
@@ -154,8 +154,8 @@ void pci_cxl_init(struct pci_dev *dev)
 	if (!pci_is_pcie(dev))
 		return;
 
-	/* Only for Device 0 Function 0 Endpoints */
-	if ((dev->devfn == 0) && (pci_pcie_type(dev) == PCI_EXP_TYPE_ENDPOINT))
+	/* Only for Device 0 Function 0 Root Complex Endpoints */
+	if ((dev->devfn == 0) && (pci_pcie_type(dev) == PCI_EXP_TYPE_RC_END)) {
 		cxl_dvsec_id = PCI_CXL_DVSEC_ID;
 	/* Or for upstream/downstream Ports */
 	else if ((pci_pcie_type(dev) == PCI_EXP_TYPE_ROOT_PORT ||
@@ -173,7 +173,7 @@ void pci_cxl_init(struct pci_dev *dev)
 
 	pci_read_config_word(dev, pos + PCI_CXL_CAP, &cap);
 
-	if (pci_pcie_type(dev) == PCI_EXP_TYPE_ENDPOINT) {
+	if (pci_pcie_type(dev) == PCI_EXP_TYPE_RC_END) {
 		dev_info(&dev->dev, "CXL: Cache%c IO%c Mem%c Viral%c HDMCount %d\n",
 			 (cap & PCI_CXL_CACHE) ? '+' : '-',
 			 (cap & PCI_CXL_IO) ? '+' : '-',
