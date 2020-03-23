@@ -4864,6 +4864,13 @@ static struct attribute *icl_tsx_events_attrs[] = {
 	NULL,
 };
 
+EVENT_ATTR_STR(mem-stores,	mem_st_adl,	"event=0xcd,umask=0x2")
+static struct attribute *adl_events_attrs[] = {
+	EVENT_PTR(mem_ld_hsw),
+	EVENT_PTR(mem_st_adl),
+	NULL,
+};
+
 static ssize_t freeze_on_smi_show(struct device *cdev,
 				  struct device_attribute *attr,
 				  char *buf)
@@ -5695,7 +5702,7 @@ __init int intel_pmu_init(void)
 		hw_cache_event_ids[C(ITLB)][C(OP_READ)][C(RESULT_ACCESS)] = -1;
 
 		x86_pmu.event_constraints = intel_adl_event_constraints;
-		x86_pmu.pebs_constraints = intel_icl_pebs_event_constraints;
+		x86_pmu.pebs_constraints = intel_adl_pebs_event_constraints;
 		x86_pmu.extra_regs = intel_icl_extra_regs;
 		x86_pmu.pebs_aliases = NULL;
 		x86_pmu.pebs_prec_dist = true;
@@ -5708,7 +5715,7 @@ __init int intel_pmu_init(void)
 		extra_attr = boot_cpu_has(X86_FEATURE_RTM) ?
 			hsw_format_attr : nhm_format_attr;
 		extra_skl_attr = skl_format_attr;
-		mem_attr = icl_events_attrs;
+		mem_attr = adl_events_attrs;
 		x86_pmu.rtm_abort_event = X86_CONFIG(.event=0xca, .umask=0x02);
 		x86_pmu.lbr_pt_coexist = true;
 		intel_pmu_pebs_data_source_skl(pmem);
