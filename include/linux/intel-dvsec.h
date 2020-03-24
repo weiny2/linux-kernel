@@ -34,6 +34,9 @@ enum pmt_quirks {
 
 	/* Crashlog capability not supported */
 	PMT_QUIRK_NO_CRASHLOG	= (1 << 1),
+
+	/* DVSEC PCI capabilty not preset (must be emulated */
+	PMT_QUIRK_NO_DVSEC	= (1 << 2),
 };
 
 struct pmt_platform_info {
