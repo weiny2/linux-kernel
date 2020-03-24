@@ -191,12 +191,15 @@ static irqreturn_t thunderbay_wdt_th_isr(int irq, void *dev_id)
 	struct thunderbay_wdt *wdt = (struct thunderbay_wdt *)dev_id;
 	struct arm_smccc_res res;
 
-	u32 th_val = 0;
+	//u32 th_val = 0;
 
 	// write a new TIM_WATCHDOG value greater than TIM_WATCHDOG_INT_THRES
-	if (wdt->wdd.pretimeout != 0)
-		th_val = wdt->wdd.timeout - wdt->wdd.pretimeout;
-	thunderbay_wdt_writel(wdt, TIM_WATCHDOG, th_val * wdt->rate + 10);
+	//if (wdt->wdd.pretimeout != 0)
+	//	th_val = wdt->wdd.timeout - wdt->wdd.pretimeout;
+	//thunderbay_wdt_writel(wdt, TIM_WATCHDOG, th_val * wdt->rate + 1);
+
+	//Set Pre-Timeout to Zero to avoid interrupt getting trigerred for every tick until timeout
+	thunderbay_wdt_set_pretimeout(&wdt->wdd, 0);
 
 	// clear bit 8 (WDOG_TH_INT_CLR)
 	if (IS_ENABLED(CONFIG_HAVE_ARM_SMCCC))
@@ -326,7 +329,7 @@ static int __maybe_unused thunderbay_wdt_resume(struct device *dev)
 {
 	struct thunderbay_wdt *wdt = dev_get_drvdata(dev);
 
-	if (watchdog_active(&wdt->wdd))
+	if (!watchdog_active(&wdt->wdd))
 		return thunderbay_wdt_start(&wdt->wdd);
 
 	return 0;
