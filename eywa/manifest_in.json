@@ -818,7 +818,7 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": "ec38db43ca2e522dab6e748d4001dcec5e4ff565"
+            "stuck_at_ref": ""
         },
         {
             "branch": "powertop",
