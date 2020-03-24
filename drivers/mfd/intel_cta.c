@@ -22,16 +22,13 @@
 #define CRASHLOG_DEV_NAME	"cta_crashlog"
 
 static int
-cta_add_dev(struct pci_dev *pdev, int pos, u16 id)
+cta_add_dev(struct pci_dev *pdev, struct intel_dvsec_header *header)
 {
-	struct intel_dvsec_header *header;
 	struct mfd_cell *cell, *tmp;
-	u8 num_entries, entry_size;
 	const char *name;
-	u32 table;
 	int i;
 
-	switch (id) {
+	switch (header->id) {
 	case DVSEC_INTEL_ID_TELEM:
 		name = TELEM_DEV_NAME;
 		break;
@@ -44,30 +41,6 @@ cta_add_dev(struct pci_dev *pdev, int pos, u16 id)
 	default:
 		return -EINVAL;
 	}
-
-	pci_read_config_byte(pdev, pos + INTEL_DVSEC_ENTRIES,
-			     &num_entries);
-
-	pci_read_config_byte(pdev, pos + INTEL_DVSEC_SIZE,
-			     &entry_size);
-
-	if (!num_entries || !entry_size)
-		return -EINVAL;
-
-	/* Read the CTA capability fields from the DVSEC header. */
-	header = devm_kzalloc(&pdev->dev, sizeof(*header), GFP_KERNEL);
-	if (!header)
-		return -ENOMEM;
-
-	header->id = id;
-
-	header->num_entries = num_entries;
-	header->entry_size = entry_size;
-
-	pci_read_config_dword(pdev, pos + INTEL_DVSEC_TABLE, &table);
-
-	header->tbir = INTEL_DVSEC_TABLE_BAR(table);
-	header->offset = INTEL_DVSEC_TABLE_OFFSET(table);
 
 	cell = devm_kcalloc(&pdev->dev, header->num_entries,
 			    sizeof(*cell), GFP_KERNEL);
@@ -105,8 +78,9 @@ static int
 cta_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 {
 	u16 vid;
-	u16 dvsec_id;
+	u32 table;
 	int ret, pos = 0, last_pos = 0;
+	struct intel_dvsec_header header;
 
 	ret = pcim_enable_device(pdev);
 	if (ret)
@@ -117,22 +91,29 @@ cta_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		if (vid != PCI_VENDOR_ID_INTEL)
 			continue;
 
-		pci_read_config_word(pdev, pos + PCI_DVSEC_HEADER2, &dvsec_id);
-		switch (dvsec_id) {
-		case DVSEC_INTEL_ID_TELEM:
-		case DVSEC_INTEL_ID_WATCHER:
-		case DVSEC_INTEL_ID_CRASHLOG:
-			ret = cta_add_dev(pdev, pos, dvsec_id);
-			if (ret)
-				dev_warn(&pdev->dev,
-					 "Failed to add devices for DVSEC id %d\n",
-					 dvsec_id);
-			last_pos = pos;
+		pci_read_config_word(pdev, pos + PCI_DVSEC_HEADER2,
+				     &header.id);
 
-			break;
-		default:
-			break;
-		}
+		pci_read_config_byte(pdev, pos + INTEL_DVSEC_ENTRIES,
+				     &header.num_entries);
+
+		pci_read_config_byte(pdev, pos + INTEL_DVSEC_SIZE,
+				     &header.entry_size);
+
+		if (!header.num_entries || !header.entry_size)
+			return -EINVAL;
+
+		pci_read_config_dword(pdev, pos + INTEL_DVSEC_TABLE,
+				      &table);
+
+		header.tbir = INTEL_DVSEC_TABLE_BAR(table);
+		header.offset = INTEL_DVSEC_TABLE_OFFSET(table);
+		ret = cta_add_dev(pdev, &header);
+		if (ret)
+			dev_warn(&pdev->dev,
+				 "Failed to add devices for DVSEC id %d\n",
+				 header.id);
+		last_pos = pos;
 	}
 
 	if (!last_pos) {
