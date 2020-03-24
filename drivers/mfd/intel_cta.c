@@ -21,6 +21,10 @@
 #define WATCHER_DEV_NAME	"cta_watcher"
 #define CRASHLOG_DEV_NAME	"cta_crashlog"
 
+static const struct cta_platform_info tgl_info = {
+	.quirks = CTA_QUIRK_NO_WATCHER | CTA_QUIRK_NO_CRASHLOG,
+};
+
 static const struct cta_platform_info cta_info = {
 };
 
@@ -37,9 +41,17 @@ cta_add_dev(struct pci_dev *pdev, struct intel_dvsec_header *header,
 		name = TELEM_DEV_NAME;
 		break;
 	case DVSEC_INTEL_ID_WATCHER:
+		if (info->quirks && CTA_QUIRK_NO_WATCHER) {
+			dev_info(&pdev->dev, "CTA Watcher not supported\n");
+			return 0;
+		}
 		name = WATCHER_DEV_NAME;
 		break;
 	case DVSEC_INTEL_ID_CRASHLOG:
+		if (info->quirks && CTA_QUIRK_NO_WATCHER) {
+			dev_info(&pdev->dev, "CTA Crashlog not supported\n");
+			return 0;
+		}
 		name = CRASHLOG_DEV_NAME;
 		break;
 	default:
@@ -146,7 +158,7 @@ static void cta_pci_remove(struct pci_dev *pdev)
 
 static const struct pci_device_id cta_pci_ids[] = {
 	/* TGL */
-	{ PCI_VDEVICE(INTEL, 0x9a0d), (kernel_ulong_t)&cta_info },
+	{ PCI_VDEVICE(INTEL, 0x9a0d), (kernel_ulong_t)&tgl_info },
 	/* OOBMSM */
 	{ PCI_VDEVICE(INTEL, 0x09a7), (kernel_ulong_t)&cta_info },
 	{ }
