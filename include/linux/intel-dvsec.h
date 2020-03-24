@@ -28,7 +28,15 @@ struct intel_dvsec_header {
 	u32	offset;
 };
 
-struct cta_platform_info {
+enum pmt_quirks {
+	/* Watcher capabilty not supported */
+	PMT_QUIRK_NO_WATCHER	= (1 << 0),
+
+	/* Crashlog capability not supported */
+	PMT_QUIRK_NO_CRASHLOG	= (1 << 1),
+};
+
+struct pmt_platform_info {
 	unsigned long quirks;
 	struct intel_dvsec_header **capabilities;
 };

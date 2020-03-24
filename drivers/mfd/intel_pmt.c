@@ -21,12 +21,16 @@
 #define WATCHER_DEV_NAME	"pmt_watcher"
 #define CRASHLOG_DEV_NAME	"pmt_crashlog"
 
-static const struct cta_platform_info cta_info = {
+static const struct pmt_platform_info tgl_info = {
+	.quirks = PMT_QUIRK_NO_WATCHER | PMT_QUIRK_NO_CRASHLOG,
+};
+
+static const struct pmt_platform_info pmt_info = {
 };
 
 static int
 pmt_add_dev(struct pci_dev *pdev, struct intel_dvsec_header *header,
-	    struct cta_platform_info *info)
+	    struct pmt_platform_info *info)
 {
 	struct mfd_cell *cell, *tmp;
 	const char *name;
@@ -37,9 +41,17 @@ pmt_add_dev(struct pci_dev *pdev, struct intel_dvsec_header *header,
 		name = TELEM_DEV_NAME;
 		break;
 	case DVSEC_INTEL_ID_WATCHER:
+		if (info->quirks && PMT_QUIRK_NO_WATCHER) {
+			dev_info(&pdev->dev, "Watcher not supported\n");
+			return 0;
+		}
 		name = WATCHER_DEV_NAME;
 		break;
 	case DVSEC_INTEL_ID_CRASHLOG:
+		if (info->quirks && PMT_QUIRK_NO_WATCHER) {
+			dev_info(&pdev->dev, "Crashlog not supported\n");
+			return 0;
+		}
 		name = CRASHLOG_DEV_NAME;
 		break;
 	default:
@@ -84,7 +96,7 @@ pmt_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	u16 vid;
 	u32 table;
 	int ret, pos = 0, last_pos = 0;
-	struct cta_platform_info *info;
+	struct pmt_platform_info *info;
 	struct intel_dvsec_header header;
 
 	ret = pcim_enable_device(pdev);
@@ -145,6 +157,8 @@ static void pmt_pci_remove(struct pci_dev *pdev)
 }
 
 static const struct pci_device_id pmt_pci_ids[] = {
+	/* TGL */
+	{ PCI_VDEVICE(INTEL, 0x9a0d), (kernel_ulong_t)&tgl_info },
 	{ }
 };
 MODULE_DEVICE_TABLE(pci, pmt_pci_ids);
