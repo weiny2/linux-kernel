@@ -34,6 +34,9 @@ enum cta_quirks {
 
 	/* Crashlog capability not supported */
 	CTA_QUIRK_NO_CRASHLOG	= (1 << 1),
+
+	/* DVSEC PCI capabilty not preset (must be emulated */
+	CTA_QUIRK_NO_DVSEC	= (1 << 2),
 };
 
 struct cta_platform_info {
