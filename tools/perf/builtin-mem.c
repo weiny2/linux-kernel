@@ -306,7 +306,7 @@ static int report_events(int argc, const char **argv, struct perf_mem *mem)
 					"dso_daddr,tlb,locked";
 	} else if (mem->phys_addr)
 		rep_argv[i++] = "--sort=local_weight,mem,sym,dso,symbol_daddr,"
-				"dso_daddr,snoop,tlb,locked,phys_daddr";
+				"dso_daddr,snoop,tlb,locked,blocked,phys_daddr";
 
 	for (j = 1; j < argc; j++, i++)
 		rep_argv[i] = argv[j];
