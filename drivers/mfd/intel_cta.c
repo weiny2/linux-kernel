@@ -21,8 +21,12 @@
 #define WATCHER_DEV_NAME	"cta_watcher"
 #define CRASHLOG_DEV_NAME	"cta_crashlog"
 
+static const struct cta_platform_info cta_info = {
+};
+
 static int
-cta_add_dev(struct pci_dev *pdev, struct intel_dvsec_header *header)
+cta_add_dev(struct pci_dev *pdev, struct intel_dvsec_header *header,
+	    struct cta_platform_info *info)
 {
 	struct mfd_cell *cell, *tmp;
 	const char *name;
@@ -80,11 +84,18 @@ cta_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	u16 vid;
 	u32 table;
 	int ret, pos = 0, last_pos = 0;
+	struct cta_platform_info *info;
 	struct intel_dvsec_header header;
 
 	ret = pcim_enable_device(pdev);
 	if (ret)
 		return ret;
+
+	info = devm_kmemdup(&pdev->dev, (void *)id->driver_data, sizeof(*info),
+			    GFP_KERNEL);
+
+	if (!info)
+		return -ENOMEM;
 
 	while ((pos = pci_find_next_ext_capability(pdev, pos, PCI_EXT_CAP_ID_DVSEC))) {
 		pci_read_config_word(pdev, pos + PCI_DVSEC_HEADER1, &vid);
@@ -108,7 +119,7 @@ cta_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 
 		header.tbir = INTEL_DVSEC_TABLE_BAR(table);
 		header.offset = INTEL_DVSEC_TABLE_OFFSET(table);
-		ret = cta_add_dev(pdev, &header);
+		ret = cta_add_dev(pdev, &header, info);
 		if (ret)
 			dev_warn(&pdev->dev,
 				 "Failed to add devices for DVSEC id %d\n",
@@ -135,9 +146,9 @@ static void cta_pci_remove(struct pci_dev *pdev)
 
 static const struct pci_device_id cta_pci_ids[] = {
 	/* TGL */
-	{ PCI_VDEVICE(INTEL, 0x9a0d), },
+	{ PCI_VDEVICE(INTEL, 0x9a0d), (kernel_ulong_t)&cta_info },
 	/* OOBMSM */
-	{ PCI_VDEVICE(INTEL, 0x09a7), },
+	{ PCI_VDEVICE(INTEL, 0x09a7), (kernel_ulong_t)&cta_info },
 	{ }
 };
 MODULE_DEVICE_TABLE(pci, cta_pci_ids);

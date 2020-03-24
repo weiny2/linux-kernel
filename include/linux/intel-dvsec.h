@@ -28,4 +28,9 @@ struct intel_dvsec_header {
 	u32	offset;
 };
 
+struct cta_platform_info {
+	unsigned long quirks;
+	struct intel_dvsec_header **capabilities;
+};
+
 #endif
