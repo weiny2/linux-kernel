@@ -125,7 +125,8 @@
 struct boot_parameters {
 	/* Header: 0x0 - 0x1F */
 	uint32_t magic_number;
-	uint32_t reserved_0[7];
+	uint32_t vpu_id;
+	uint32_t reserved_0[6];
 	/* Clock frequencies: 0x20 - 0xFF */
 	uint32_t cpu_frequency_hz;
 	uint32_t pll0_out[NUM_PLL_OUTPUTS];
@@ -723,6 +724,9 @@ static int setup_boot_parameters(struct vpu_ipc_dev *vpu_dev)
 	 * populated correctly
 	 */
 	vpu_dev->boot_params->magic_number = BOOT_PARAMS_MAGIC_NUMBER;
+
+	/* Set VPU ID. */
+	vpu_dev->boot_params->vpu_id = vpu_dev->vpu_id;
 
 	/* Inform VPU of clock frequencies */
 	vpu_dev->boot_params->cpu_frequency_hz =
