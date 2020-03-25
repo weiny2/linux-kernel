@@ -2440,7 +2440,8 @@ static __init int setup_vmcs_config(struct vmcs_config *vmcs_conf,
 	      VM_EXIT_LOAD_IA32_EFER |
 	      VM_EXIT_CLEAR_BNDCFGS |
 	      VM_EXIT_PT_CONCEAL_PIP |
-	      VM_EXIT_CLEAR_IA32_RTIT_CTL;
+	      VM_EXIT_CLEAR_IA32_RTIT_CTL |
+	      VM_EXIT_LOAD_CET_STATE;
 	if (adjust_vmx_controls(min, opt, MSR_IA32_VMX_EXIT_CTLS,
 				&_vmexit_control) < 0)
 		return -EIO;
@@ -2464,7 +2465,8 @@ static __init int setup_vmcs_config(struct vmcs_config *vmcs_conf,
 	      VM_ENTRY_LOAD_IA32_EFER |
 	      VM_ENTRY_LOAD_BNDCFGS |
 	      VM_ENTRY_PT_CONCEAL_PIP |
-	      VM_ENTRY_LOAD_IA32_RTIT_CTL;
+	      VM_ENTRY_LOAD_IA32_RTIT_CTL |
+	      VM_ENTRY_LOAD_CET_STATE;
 	if (adjust_vmx_controls(min, opt, MSR_IA32_VMX_ENTRY_CTLS,
 				&_vmentry_control) < 0)
 		return -EIO;
@@ -3027,6 +3029,12 @@ static bool is_cet_state_supported(struct kvm_vcpu *vcpu, u32 xss_states)
 		guest_cpuid_has(vcpu, X86_FEATURE_IBT)));
 }
 
+static bool is_cet_supported(struct kvm_vcpu *vcpu)
+{
+	return is_cet_state_supported(vcpu, XFEATURE_MASK_CET_USER |
+				      XFEATURE_MASK_CET_KERNEL);
+}
+
 int vmx_set_cr4(struct kvm_vcpu *vcpu, unsigned long cr4)
 {
 	struct vcpu_vmx *vmx = to_vmx(vcpu);
@@ -3067,6 +3075,10 @@ int vmx_set_cr4(struct kvm_vcpu *vcpu, unsigned long cr4)
 			return 1;
 	}
 
+	if ((cr4 & X86_CR4_CET) && (!is_cet_supported(vcpu) ||
+	    !(kvm_read_cr0(vcpu) & X86_CR0_WP)))
+		return 1;
+
 	if (vmx->nested.vmxon && !nested_cr4_valid(vcpu, cr4))
 		return 1;
 
@@ -3095,6 +3107,20 @@ int vmx_set_cr4(struct kvm_vcpu *vcpu, unsigned long cr4)
 		 */
 		if (!is_paging(vcpu))
 			hw_cr4 &= ~(X86_CR4_SMEP | X86_CR4_SMAP | X86_CR4_PKE);
+	}
+
+	if (cpu_has_load_cet_ctrl()) {
+		if ((hw_cr4 & X86_CR4_CET) && is_cet_supported(vcpu)) {
+			vm_entry_controls_setbit(to_vmx(vcpu),
+						 VM_ENTRY_LOAD_CET_STATE);
+			vm_exit_controls_setbit(to_vmx(vcpu),
+						VM_EXIT_LOAD_CET_STATE);
+		} else {
+			vm_entry_controls_clearbit(to_vmx(vcpu),
+						   VM_ENTRY_LOAD_CET_STATE);
+			vm_exit_controls_clearbit(to_vmx(vcpu),
+						  VM_EXIT_LOAD_CET_STATE);
+		}
 	}
 
 	vmcs_writel(CR4_READ_SHADOW, cr4);
