@@ -195,6 +195,8 @@ static void pmt_pci_remove(struct pci_dev *pdev)
 static const struct pci_device_id pmt_pci_ids[] = {
 	/* TGL */
 	{ PCI_VDEVICE(INTEL, 0x9a0d), (kernel_ulong_t)&tgl_info },
+	/* ADL */
+	{ PCI_VDEVICE(INTEL, 0x467d), (kernel_ulong_t)&tgl_info },
 	/* OOBMSM */
 	{ PCI_VDEVICE(INTEL, 0x09a7), (kernel_ulong_t)&pmt_info },
 	/* DG1 */
