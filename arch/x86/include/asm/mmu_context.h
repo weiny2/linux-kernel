@@ -12,7 +12,9 @@
 #include <asm/pgalloc.h>
 #include <asm/tlbflush.h>
 #include <asm/paravirt.h>
+#include <asm/cet.h>
 #include <asm/debugreg.h>
+#include <asm/iommu.h>
 
 extern atomic64_t last_mm_ctx_id;
 
@@ -127,8 +129,15 @@ static inline int init_new_context(struct task_struct *tsk,
 	}
 #endif
 	init_new_context_ldt(mm);
+
+#ifdef CONFIG_INTEL_IOMMU_SVM
+	if (cpu_feature_enabled(X86_FEATURE_ENQCMD))
+		refcount_set(&mm->context.pasid_refcount, 1);
+#endif
+
 	return 0;
 }
+
 static inline void destroy_context(struct mm_struct *mm)
 {
 	destroy_context_ldt(mm);
@@ -147,16 +156,33 @@ do {						\
 	switch_mm((prev), (next), NULL);	\
 } while (0);
 
+static inline void destroy_pasid(struct task_struct *tsk, struct mm_struct *mm)
+{
+	if (!IS_ENABLED(CONFIG_INTEL_IOMMU_SVM))
+		return;
+
+	if (!cpu_feature_enabled(X86_FEATURE_ENQCMD))
+		return;
+
+	__destroy_pasid(tsk, mm);
+}
+
 #ifdef CONFIG_X86_32
 #define deactivate_mm(tsk, mm)			\
 do {						\
 	lazy_load_gs(0);			\
+	if (mm)					\
+		destroy_pasid(tsk, mm);		\
 } while (0)
 #else
 #define deactivate_mm(tsk, mm)			\
 do {						\
+	if (!tsk->vfork_done)			\
+		cet_disable_free_shstk(tsk);	\
 	load_gs_index(0);			\
 	loadsegment(fs, 0);			\
+	if (mm)					\
+		destroy_pasid(tsk, mm);		\
 } while (0)
 #endif
 

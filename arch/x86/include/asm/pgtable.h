@@ -121,9 +121,9 @@ extern pmdval_t early_pmd_flags;
  * The following only work if pte_present() is true.
  * Undefined behaviour if not..
  */
-static inline int pte_dirty(pte_t pte)
+static inline bool pte_dirty(pte_t pte)
 {
-	return pte_flags(pte) & _PAGE_DIRTY;
+	return pte_flags(pte) & _PAGE_DIRTY_BITS;
 }
 
 
@@ -141,7 +141,7 @@ static inline void write_pkru(u32 pkru)
 	if (!boot_cpu_has(X86_FEATURE_OSPKE))
 		return;
 
-	pk = get_xsave_addr(&current->thread.fpu.state.xsave, XFEATURE_PKRU);
+	pk = get_xsave_addr(&current->thread.fpu, XFEATURE_PKRU);
 
 	/*
 	 * The PKRU value in xstate needs to be in sync with the value that is
@@ -160,9 +160,9 @@ static inline int pte_young(pte_t pte)
 	return pte_flags(pte) & _PAGE_ACCESSED;
 }
 
-static inline int pmd_dirty(pmd_t pmd)
+static inline bool pmd_dirty(pmd_t pmd)
 {
-	return pmd_flags(pmd) & _PAGE_DIRTY;
+	return pmd_flags(pmd) & _PAGE_DIRTY_BITS;
 }
 
 static inline int pmd_young(pmd_t pmd)
@@ -170,9 +170,9 @@ static inline int pmd_young(pmd_t pmd)
 	return pmd_flags(pmd) & _PAGE_ACCESSED;
 }
 
-static inline int pud_dirty(pud_t pud)
+static inline bool pud_dirty(pud_t pud)
 {
-	return pud_flags(pud) & _PAGE_DIRTY;
+	return pud_flags(pud) & _PAGE_DIRTY_BITS;
 }
 
 static inline int pud_young(pud_t pud)
@@ -315,7 +315,7 @@ static inline pte_t pte_clear_flags(pte_t pte, pteval_t clear)
 
 static inline pte_t pte_mkclean(pte_t pte)
 {
-	return pte_clear_flags(pte, _PAGE_DIRTY);
+	return pte_clear_flags(pte, _PAGE_DIRTY_BITS);
 }
 
 static inline pte_t pte_mkold(pte_t pte)
@@ -325,6 +325,17 @@ static inline pte_t pte_mkold(pte_t pte)
 
 static inline pte_t pte_wrprotect(pte_t pte)
 {
+	/*
+	 * Use _PAGE_DIRTY_SW on a R/O PTE to set it apart from
+	 * a Shadow Stack PTE, which is R/O + _PAGE_DIRTY_HW.
+	 */
+	if (static_cpu_has(X86_FEATURE_SHSTK)) {
+		if (pte_flags(pte) & _PAGE_DIRTY_HW) {
+			pte = pte_clear_flags(pte, _PAGE_DIRTY_HW);
+			pte = pte_set_flags(pte, _PAGE_DIRTY_SW);
+		}
+	}
+
 	return pte_clear_flags(pte, _PAGE_RW);
 }
 
@@ -335,7 +346,23 @@ static inline pte_t pte_mkexec(pte_t pte)
 
 static inline pte_t pte_mkdirty(pte_t pte)
 {
-	return pte_set_flags(pte, _PAGE_DIRTY | _PAGE_SOFT_DIRTY);
+	pteval_t dirty = _PAGE_DIRTY_HW;
+
+	if (static_cpu_has(X86_FEATURE_SHSTK) && !pte_write(pte))
+		dirty = _PAGE_DIRTY_SW;
+
+	return pte_set_flags(pte, dirty | _PAGE_SOFT_DIRTY);
+}
+
+static inline pte_t pte_mkdirty_shstk(pte_t pte)
+{
+	pte = pte_clear_flags(pte, _PAGE_DIRTY_SW);
+	return pte_set_flags(pte, _PAGE_DIRTY_HW | _PAGE_SOFT_DIRTY);
+}
+
+static inline bool pte_dirty_hw(pte_t pte)
+{
+	return pte_flags(pte) & _PAGE_DIRTY_HW;
 }
 
 static inline pte_t pte_mkyoung(pte_t pte)
@@ -345,6 +372,13 @@ static inline pte_t pte_mkyoung(pte_t pte)
 
 static inline pte_t pte_mkwrite(pte_t pte)
 {
+	if (static_cpu_has(X86_FEATURE_SHSTK)) {
+		if (pte_flags(pte) & _PAGE_DIRTY_SW) {
+			pte = pte_clear_flags(pte, _PAGE_DIRTY_SW);
+			pte = pte_set_flags(pte, _PAGE_DIRTY_HW);
+		}
+	}
+
 	return pte_set_flags(pte, _PAGE_RW);
 }
 
@@ -399,17 +433,44 @@ static inline pmd_t pmd_mkold(pmd_t pmd)
 
 static inline pmd_t pmd_mkclean(pmd_t pmd)
 {
-	return pmd_clear_flags(pmd, _PAGE_DIRTY);
+	return pmd_clear_flags(pmd, _PAGE_DIRTY_BITS);
 }
 
 static inline pmd_t pmd_wrprotect(pmd_t pmd)
 {
+	/*
+	 * Use _PAGE_DIRTY_SW on a R/O PMD to set it apart from
+	 * a Shadow Stack PTE, which is R/O + _PAGE_DIRTY_HW.
+	 */
+	if (static_cpu_has(X86_FEATURE_SHSTK)) {
+		if (pmd_flags(pmd) & _PAGE_DIRTY_HW) {
+			pmd = pmd_clear_flags(pmd, _PAGE_DIRTY_HW);
+			pmd = pmd_set_flags(pmd, _PAGE_DIRTY_SW);
+		}
+	}
+
 	return pmd_clear_flags(pmd, _PAGE_RW);
 }
 
 static inline pmd_t pmd_mkdirty(pmd_t pmd)
 {
-	return pmd_set_flags(pmd, _PAGE_DIRTY | _PAGE_SOFT_DIRTY);
+	pmdval_t dirty = _PAGE_DIRTY_HW;
+
+	if (static_cpu_has(X86_FEATURE_SHSTK) && !(pmd_flags(pmd) & _PAGE_RW))
+		dirty = _PAGE_DIRTY_SW;
+
+	return pmd_set_flags(pmd, dirty | _PAGE_SOFT_DIRTY);
+}
+
+static inline pmd_t pmd_mkdirty_shstk(pmd_t pmd)
+{
+	pmd = pmd_clear_flags(pmd, _PAGE_DIRTY_SW);
+	return pmd_set_flags(pmd, _PAGE_DIRTY_HW | _PAGE_SOFT_DIRTY);
+}
+
+static inline bool pmd_dirty_hw(pmd_t pmd)
+{
+	return  pmd_flags(pmd) & _PAGE_DIRTY_HW;
 }
 
 static inline pmd_t pmd_mkdevmap(pmd_t pmd)
@@ -429,6 +490,13 @@ static inline pmd_t pmd_mkyoung(pmd_t pmd)
 
 static inline pmd_t pmd_mkwrite(pmd_t pmd)
 {
+	if (static_cpu_has(X86_FEATURE_SHSTK)) {
+		if (pmd_flags(pmd) & _PAGE_DIRTY_SW) {
+			pmd = pmd_clear_flags(pmd, _PAGE_DIRTY_SW);
+			pmd = pmd_set_flags(pmd, _PAGE_DIRTY_HW);
+		}
+	}
+
 	return pmd_set_flags(pmd, _PAGE_RW);
 }
 
@@ -453,17 +521,33 @@ static inline pud_t pud_mkold(pud_t pud)
 
 static inline pud_t pud_mkclean(pud_t pud)
 {
-	return pud_clear_flags(pud, _PAGE_DIRTY);
+	return pud_clear_flags(pud, _PAGE_DIRTY_BITS);
 }
 
 static inline pud_t pud_wrprotect(pud_t pud)
 {
+	/*
+	 * Use _PAGE_DIRTY_SW on a R/O PUD to set it apart from
+	 * a Shadow Stack PTE, which is R/O + _PAGE_DIRTY_HW.
+	 */
+	if (static_cpu_has(X86_FEATURE_SHSTK)) {
+		if (pud_flags(pud) & _PAGE_DIRTY_HW) {
+			pud = pud_clear_flags(pud, _PAGE_DIRTY_HW);
+			pud = pud_set_flags(pud, _PAGE_DIRTY_SW);
+		}
+	}
+
 	return pud_clear_flags(pud, _PAGE_RW);
 }
 
 static inline pud_t pud_mkdirty(pud_t pud)
 {
-	return pud_set_flags(pud, _PAGE_DIRTY | _PAGE_SOFT_DIRTY);
+	pudval_t dirty = _PAGE_DIRTY_HW;
+
+	if (static_cpu_has(X86_FEATURE_SHSTK) && !(pud_flags(pud) & _PAGE_RW))
+		dirty = _PAGE_DIRTY_SW;
+
+	return pud_set_flags(pud, dirty | _PAGE_SOFT_DIRTY);
 }
 
 static inline pud_t pud_mkdevmap(pud_t pud)
@@ -483,6 +567,13 @@ static inline pud_t pud_mkyoung(pud_t pud)
 
 static inline pud_t pud_mkwrite(pud_t pud)
 {
+	if (static_cpu_has(X86_FEATURE_SHSTK)) {
+		if (pud_flags(pud) & _PAGE_DIRTY_SW) {
+			pud = pud_clear_flags(pud, _PAGE_DIRTY_SW);
+			pud = pud_set_flags(pud, _PAGE_DIRTY_HW);
+		}
+	}
+
 	return pud_set_flags(pud, _PAGE_RW);
 }
 
@@ -614,6 +705,14 @@ static inline pte_t pte_modify(pte_t pte, pgprot_t newprot)
 	val &= _PAGE_CHG_MASK;
 	val |= check_pgprot(newprot) & ~_PAGE_CHG_MASK;
 	val = flip_protnone_guard(oldval, val, PTE_PFN_MASK);
+
+	if (pte_dirty(pte)) {
+		if (static_cpu_has(X86_FEATURE_SHSTK) && !(val & _PAGE_RW))
+			val |= _PAGE_DIRTY_SW;
+		else
+			val |= _PAGE_DIRTY_HW;
+	}
+
 	return __pte(val);
 }
 
@@ -624,6 +723,14 @@ static inline pmd_t pmd_modify(pmd_t pmd, pgprot_t newprot)
 	val &= _HPAGE_CHG_MASK;
 	val |= check_pgprot(newprot) & ~_HPAGE_CHG_MASK;
 	val = flip_protnone_guard(oldval, val, PHYSICAL_PMD_PAGE_MASK);
+
+	if (pmd_dirty(pmd)) {
+		if (static_cpu_has(X86_FEATURE_SHSTK) && !(val & _PAGE_RW))
+			val |= _PAGE_DIRTY_SW;
+		else
+			val |= _PAGE_DIRTY_HW;
+	}
+
 	return __pmd(val);
 }
 
@@ -1151,6 +1258,39 @@ static inline pte_t ptep_get_and_clear_full(struct mm_struct *mm,
 static inline void ptep_set_wrprotect(struct mm_struct *mm,
 				      unsigned long addr, pte_t *ptep)
 {
+	/*
+	 * Some processors can start a write, but end up seeing a read-only
+	 * PTE by the time they get to the Dirty bit.  In this case, they
+	 * will set the Dirty bit, leaving a read-only, Dirty PTE which
+	 * looks like a Shadow Stack PTE.
+	 *
+	 * However, this behavior has been improved and will not occur on
+	 * processors supporting Shadow Stack.  Without this guarantee, a
+	 * transition to a non-present PTE and flush the TLB would be
+	 * needed.
+	 *
+	 * When changing a writable PTE to read-only and if the PTE has
+	 * _PAGE_DIRTY_HW set, we move that bit to _PAGE_DIRTY_SW so that
+	 * the PTE is not a valid Shadow Stack PTE.
+	 */
+#ifdef CONFIG_X86_64
+	if (static_cpu_has(X86_FEATURE_SHSTK)) {
+		pte_t new_pte, pte = READ_ONCE(*ptep);
+
+		do {
+			/*
+			 * This is the same as moving _PAGE_DIRTY_HW
+			 * to _PAGE_DIRTY_SW.
+			 */
+			new_pte = pte_wrprotect(pte);
+			new_pte.pte |= (new_pte.pte & _PAGE_DIRTY_HW) >>
+					_PAGE_BIT_DIRTY_HW << _PAGE_BIT_DIRTY_SW;
+			new_pte.pte &= ~_PAGE_DIRTY_HW;
+		} while (!try_cmpxchg(&ptep->pte, &pte.pte, new_pte.pte));
+
+		return;
+	}
+#endif
 	clear_bit(_PAGE_BIT_RW, (unsigned long *)&ptep->pte);
 }
 
@@ -1201,6 +1341,39 @@ static inline pud_t pudp_huge_get_and_clear(struct mm_struct *mm,
 static inline void pmdp_set_wrprotect(struct mm_struct *mm,
 				      unsigned long addr, pmd_t *pmdp)
 {
+	/*
+	 * Some processors can start a write, but end up seeing a read-only
+	 * PMD by the time they get to the Dirty bit.  In this case, they
+	 * will set the Dirty bit, leaving a read-only, Dirty PMD which
+	 * looks like a Shadow Stack PMD.
+	 *
+	 * However, this behavior has been improved and will not occur on
+	 * processors supporting Shadow Stack.  Without this guarantee, a
+	 * transition to a non-present PMD and flush the TLB would be
+	 * needed.
+	 *
+	 * When changing a writable PMD to read-only and if the PMD has
+	 * _PAGE_DIRTY_HW set, we move that bit to _PAGE_DIRTY_SW so that
+	 * the PMD is not a valid Shadow Stack PMD.
+	 */
+#ifdef CONFIG_X86_64
+	if (static_cpu_has(X86_FEATURE_SHSTK)) {
+		pmd_t new_pmd, pmd = READ_ONCE(*pmdp);
+
+		do {
+			/*
+			 * This is the same as moving _PAGE_DIRTY_HW
+			 * to _PAGE_DIRTY_SW.
+			 */
+			new_pmd = pmd_wrprotect(pmd);
+			new_pmd.pmd |= (new_pmd.pmd & _PAGE_DIRTY_HW) >>
+					_PAGE_BIT_DIRTY_HW << _PAGE_BIT_DIRTY_SW;
+			new_pmd.pmd &= ~_PAGE_DIRTY_HW;
+		} while (!try_cmpxchg(&pmdp->pmd, &pmd.pmd, new_pmd.pmd));
+
+		return;
+	}
+#endif
 	clear_bit(_PAGE_BIT_RW, (unsigned long *)pmdp);
 }
 

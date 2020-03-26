@@ -125,16 +125,21 @@ static void __init fpu__init_system_generic(void)
 	 * Set up the legacy init FPU context. (xstate init might overwrite this
 	 * with a more modern format, if the CPU supports it.)
 	 */
-	fpstate_init(&init_fpstate);
+	fpstate_init(NULL);
 
 	fpu__init_system_mxcsr();
 }
 
 /*
- * Size of the FPU context state. All tasks in the system use the
- * same context size, regardless of what portion they use.
- * This is inherent to the XSAVE architecture which puts all state
- * components into a single, continuous memory block:
+ * Size of expanded xstate buffer, which is expected to be huge,
+ * not fitting to the task_struct. Allocate as-needed basis
+ */
+unsigned int fpu_kernel_xstate_exp_size;
+EXPORT_SYMBOL_GPL(fpu_kernel_xstate_exp_size);
+
+/*
+ * Size of the default FPU context state. The state is appended
+ * to task_struct, as overall size is manageable.
  */
 unsigned int fpu_kernel_xstate_size;
 EXPORT_SYMBOL_GPL(fpu_kernel_xstate_size);
@@ -224,7 +229,8 @@ static void __init fpu__init_system_xstate_size_legacy(void)
  */
 u64 __init fpu__get_supported_xfeatures_mask(void)
 {
-	return XCNTXT_MASK;
+	return XFEATURE_MASK_USER_SUPPORTED |
+	       XFEATURE_MASK_SUPERVISOR_SUPPORTED;
 }
 
 /* Legacy code to initialize eager fpu mode. */

@@ -6,6 +6,7 @@
 #include <linux/rwsem.h>
 #include <linux/mutex.h>
 #include <linux/atomic.h>
+#include <linux/refcount.h>
 
 /*
  * x86 has arch-specific MMU state beyond what lives in mm_struct.
@@ -49,6 +50,11 @@ typedef struct {
 	 */
 	u16 pkey_allocation_map;
 	s16 execute_only_pkey;
+#endif
+
+#ifdef CONFIG_INTEL_IOMMU_SVM
+	int pasid;
+	refcount_t pasid_refcount;
 #endif
 } mm_context_t;
 

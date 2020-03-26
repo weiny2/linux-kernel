@@ -26,6 +26,7 @@ struct vm86;
 #include <asm/fpu/types.h>
 #include <asm/unwind_hints.h>
 #include <asm/vmxfeatures.h>
+#include <asm/cet.h>
 
 #include <linux/personality.h>
 #include <linux/cache.h>
@@ -478,6 +479,7 @@ DECLARE_PER_CPU(struct irq_stack *, softirq_stack_ptr);
 #endif	/* X86_64 */
 
 extern unsigned int fpu_kernel_xstate_size;
+extern unsigned int fpu_kernel_xstate_exp_size;
 extern unsigned int fpu_user_xstate_size;
 
 struct perf_event;
@@ -542,6 +544,10 @@ struct thread_struct {
 
 	unsigned int		sig_on_uaccess_err:1;
 	unsigned int		uaccess_err:1;	/* uaccess failed */
+
+#ifdef CONFIG_X86_INTEL_CET
+	struct cet_status	cet;
+#endif
 
 	/* Floating point and extended processor state */
 	struct fpu		fpu;
