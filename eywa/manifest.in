@@ -1,0 +1,761 @@
+###############################################################################
+# INTEL NEXT INFRASTRUCTURE
+###############################################################################
+
+# Intel Next scripts
+ssh://git-amr-1.devtools.intel.com:29418/otc_intel_next-linux.git eywa
+
+# Intel Next kernel configs
+ssh://git-amr-1.devtools.intel.com:29418/otc_intel_next-linux.git configs
+
+# Intel Next packaging
+ssh://git-amr-1.devtools.intel.com:29418/otc_intel_next-linux.git packaging
+
+###############################################################################
+# PUBLIC CODE
+###############################################################################
+
+# EFI
+# Intel contact: Ricardo Neri <ricardo.neri@intel.com>
+#git://git.kernel.org/pub/scm/linux/kernel/git/efi/efi.git next
+
+#Len's patches
+git://linux-os.sc.intel.com/~lenb/linux intel-next
+
+# Upstream power management and ACPI support
+# Intel contact: Rafael J. Wysocki <rafael.j.wysocki@intel.com>
+git://git.kernel.org/pub/scm/linux/kernel/git/rafael/linux-pm.git testing
+
+# iwlwifi
+# Intel contact: Luca Coelho <luciano.coelho@intel.com>
+#git://git.kernel.org/pub/scm/linux/kernel/git/iwlwifi/iwlwifi-next.git master
+
+# Bluetooth
+# Intel contact: Marcel Holtmann <marcel.holtmann@intel.com>
+#git://git.kernel.org/pub/scm/linux/kernel/git/bluetooth/bluetooth-next.git master
+
+# NVDIMM
+# Intel contact: Dan Williams <dan.j.williams@intel.com>
+#git://git.kernel.org/pub/scm/linux/kernel/git/nvdimm/nvdimm.git libnvdimm-for-next
+
+# Software RAID (MD)
+# Intel contact: Artur Paszkiewicz <artur.paszkiewicz@intel.com>
+#git://git.kernel.org/pub/scm/linux/kernel/git/shli/md.git for-next
+
+# TPM
+# Intel contact: Jarkko Sakkinen <jarkko.sakkinen@intel.com>
+git://git.infradead.org/users/jjs/linux-tpmdd.git next
+
+# SGX
+# Intel contact: Jarkko Sakkinen <jarkko.sakkinen@intel.com>
+git://github.com/jsakkine-intel/linux-sgx.git next
+
+###############################################################################
+# INTERNAL CODE/NON EXPIRING
+###############################################################################
+
+# DRM Intel Internal
+# Intel DRM internal branch
+# Classification      : Intel Confidential
+# Contributor         : Rodrigo Vivi <rodrigo.vivi@intel.com>
+# IP/Information Owner: Rodrigo Vivi <rodrigo.vivi@intel.com>
+# SDL Contact         : Rodrigo Vivi <rodrigo.vivi@intel.com>
+# Configs             : https://eclists.intel.com/sympa/arc/intel-next/2018-04/msg00005.html
+ssh://git-amr-1.devtools.intel.com:29418/otc_gen_graphics-drm-intel.git for-intel-next
+
+# #AC Split lock
+# Enable #AC for split locked accesses
+# Classification      : Public
+# Contributor         : Fenghua Yu <fenghua.yu@intel.com>
+# IP/Information Owner: Ravi V. Shankar <ravi.v.shankar@intel.com>
+# SDL Contact         : Ashok Raj <ashok.raj@intel.com>
+# Configs	      :
+ssh://git-amr-4.devtools.intel.com:29418/enabling_cldemote_in_linux_kerne-linux_git.git split_lock
+
+# nvme-pci
+# Enables the NVMe driver for the Tiger Lake/ KSL-R platforms.
+# Classification      : Intel Confidential
+# Contributor         : N,Shyjumon <shyjumon.n@intel.com>
+# IP/Information Owner: Akers, Jason B <jason.b.akers@intel.com>
+#                     : N,Shyjumon <shyjumon.n@intel.com>
+# SDL Contact         : N,Shyjumon <shyjumon.n@intel.com>
+# Configs             :
+ssh://git-gar-1.devtools.intel.com:29418/otc_nvme_linux-kernel for-intel-next
+
+###############################################################################
+# INTERNAL CODE
+###############################################################################
+
+# TOPIC BRANCH TITLE
+# [Short description of contents]
+# Classification      : [Public|Confidential|Top Secret]
+# Contributor         : Name <name@intel.com>
+# IP/Information Owner: Name <name@intel.com>
+# SDL Contact         : Name <name@intel.com>
+# ssh://your.url.here branch-name
+
+# MMC
+# MMC Subsystem and SCS (eMMC/SD card/SDIO/UFS) driver enabling
+# GPIO enabling
+# Classification      : Intel Confidential
+# Contributor         : Adrian Hunter <adrian.hunter@intel.com>
+# IP/Information Owner: Rajesh Bhaskar <rajesh.bhaskar@intel.com
+#                     : Tomasz Pielaszkiewicz <tomasz.pielaszkiewicz@intel.com>
+#                     : GPIO - Tan, Eric Thian Aun <eric.thian.aun.tan@intel.com>
+# SDL Contact         : Kai Svahn <kai.svahn@intel.com>
+# Configs             : CONFIG_MMC
+#                       CONFIG_MMC_SDHCI
+#                       CONFIG_MMC_SDHCI_PCI
+#                       CONFIG_MMC_SDHCI_ACPI
+#                       CONFIG_SCSI_LOWLEVEL
+#                       CONFIG_SCSI_UFSHCD
+#                       CONFIG_SCSI_UFSHCD_PCI
+#                       CONFIG_PINCTRL_CEDARFORK
+#                       CONFIG_PINCTRL_DENVERTON
+#	                CONFIG_PINCTRL_ELKHARTLAKE
+#	                CONFIG_PINCTRL_EMMITSBURG
+#	                CONFIG_PINCTRL_ICELAKE
+#	                CONFIG_PINCTRL_TIGERLAKE
+#	                CONFIG_PINCTRL_WHITLEY
+ssh://git-amr-3.devtools.intel.com:29418/otc_mmc-linux for-eywa
+
+# NTB
+# ICX NTB intel_ntb_hw driver
+# Classification      : Intel Confidential
+# Contributor         : Dave Jiang <dave.jiang@intel.com>
+# IP/Information Owner: Rajesh Pamujula <rajesh.s.pamujula@intel.com>
+# SDL Contact         : Dave Jiang <dave.jiang@intel.com>
+# Configs             : https://eclists.intel.com/sympa/arc/intel-next/2019-01/msg00007.html
+ssh://git-amr-1.devtools.intel.com:29418/csig_storage_group-linux-kernel.git ntb-next-upstream
+
+# MEI
+# CSE/CSME MEI driver and MEI client drivers
+# Classification      : Intel Confidential
+# Contributor         : Tomas Winkler <tomas.winkler@intel.com>
+# IP/Information Owner: William A. Stevens <william.a.stevens@intel.com>
+# SDL Contact         : Daniel Ohayon <daniel.ohayon@intel.com>
+#                     : Alexander Usyskin <alexander.usyskin@intel.com>
+#                     : Tomas Winkler <tomas.winkler@intel.com>
+# Configs             : https://eclists.intel.com/sympa/arc/intel-next/2019-03/msg00049.html
+ssh://git-ger-8.devtools.intel.com:29418/sfip_linux-linux-mei.git cse-5.3
+
+# ISH
+# Intel Integrated Sensor Hub enabling
+# Classification      : Intel Confidential
+# Contributor         : Srinivas Pandruvada <srinivas.pandruvada@intel.com>
+# IP/Information Owner: Guangyu Ren <guangyu.ren@intel.com>
+# SDL Contact         : Guangyu Ren <guangyu.ren@intel.com>
+# Configs             : https://eclists.intel.com/sympa/arc/intel-next/2018-03/msg00028.html
+ssh://git-amr-4.devtools.intel.com:29418/otc_linux_spandruv-internal.git to_eywa_intel_ish
+
+# cpufreq/performance
+# Classification      : Public
+# Contributor         : Srinivas Pandruvada <srinivas.pandruvada@intel.com>
+# IP/Information Owner: Charles Prestopine <charles.d.prestopine@intel.com>
+# SDL Contact         : Charles Prestopine <charles.d.prestopine@intel.com>
+#ssh://git-amr-4.devtools.intel.com:29418/otc_linux_spandruv-internal.git to_eywa_cpufreq
+
+# intel_idle and turbostat enabling for Ice Lake and Cannon Lake
+# Classification      : Intel Confidential
+# Contributor         : Kyle Pelton <kyle.d.pelton@intel.com>
+# IP/Information Owner: Cecilia Yao <cecilia.yao@intel.com> - ICL
+#                     : Kelan Silvester <kelan.silvester@intel.com> - CNL
+# SDL Contact         : Charles Prestopine <charles.d.prestopine@intel.com>
+# Configs             : CONFIG_INTEL_IDLE
+ssh://git-amr-4.devtools.intel.com:29418/otc_power-kernel.git intel_idle_all
+
+# USB
+# USB host support and fixes
+# Classification      : Intel Confidential
+# Contributor         : Mathias Nyman <mathias.nyman@intel.com>
+# IP/Information Owner: Abdul Rahman Ismail <abdul.r.ismail@intel.com>
+# SDL Contact         : Kai Svahn <kai.svahn@intel.com>
+# Configs             : https://eclists.intel.com/sympa/arc/intel-next/2019-05/msg00087.html
+ssh://git-amr-4.devtools.intel.com:29418/otc_usb-xhci.git for-eywa
+
+# LPSS/SMBus/GPIO/SPI-NOR/PCI/Thunderbolt driver enabling
+# Classification      : Intel Confidential
+# Contributor         : Mika Westerberg <mika.westerberg@intel.com>
+# IP/Information Owner: Rajesh Bhaskar <rajesh.bhaskar@intel.com> - LPSS
+#                     : Ming Chew Lee <ming.chew.lee@intel.com> - SMBus
+#                     : Eric Thian Aun Tan <eric.thian.aun.tan@intel.com> - GPIO
+#                     : Kevin Zhenyu Zhu <kevin.zhenyu.zhu@intel.com> - SPI-NOR
+#                     : Reuven Rozic <reuven.rozic@intel.com> - Thunderbolt
+# SDL Contact         : Kai Svahn <kai.svahn@intel.com>
+# Configs             : https://eclists.intel.com/sympa/arc/intel-next/2019-03/msg00051.html
+ssh://git-amr-4.devtools.intel.com:29418/mwesterb-linux.git for-eywa
+
+# perf
+# Linux perf PMU support for Cannonlake, Icelake, Tigerlake and Tremont
+# Classification      : Intel Confidential
+# Contributor         : Kan Liang <kan.liang@intel.com>
+# IP/Information Owner: Ahmad Yasin <ahmad.yasin@intel.com> - Core
+#                     : Beeman Strong <beeman.strong@intel.com> - Atom
+#                     : Jeremiah D. Williamson <jeremiah.d.williamson@intel.com> - Uncore
+# SDL Contact         : Andi Kleen <andi.kleen@intel.com>
+ssh://git-amr-2.devtools.intel.com:29418/kan_lkp-perf-intel-next.git perf-intel-next
+
+# powerTOP OOT
+# Enable out of tree powertop
+# Classification      : Intel Confidential
+# Maintained by       : Nivedita Swaminathan <nivedita.swaminathan@intel.com>
+# IP/Information Owner: Nivedita Swaminathan <Nivedita.Swaminathan@intel.com>
+# SDL Contact         : Charles D Prestopine <charles.d.prestopine@intel.com>
+ssh://git-amr-4.devtools.intel.com:29418/otc_power-kernel.git powertop
+
+# Key Locker enabling for Tiger Lake
+# Support for AES key hiding from memory during encryption and decryption process
+# Classification      : Intel Confidential
+# Contributor         : Chang S. Bae <chang.seok.bae@intel.com>
+# IP/Information Owner: Shanbhogue, Vedvyas <vedvyas.shanbhogue@intel.com>
+# SDL Contact         : Chang S. Bae <chang.seok.bae@intel.com>
+# Configs             : CRYPTO_AES_KL_INTEL
+ssh://git-amr-4.devtools.intel.com:29418/linux_cbae1_share-kl.git kl
+
+# Intel PT perf tools
+# Updates to perf tools for Intel PT
+# Classification      : Intel Confidential
+# Contributor         : Adrian Hunter <adrian.hunter@intel.com>
+# IP/Information Owner: Strong, Beeman <beeman.strong@intel.com>
+# SDL Contact         : Svahn, Kai <kai.svahn@intel.com>
+#ssh://git-amr-3.devtools.intel.com:29418/otc_mmc-linux intel-pt-perf-tools-v5.2
+
+# otc_usb gadget - USB/ADC/TGPIO/PWM/QEP/MCAN
+# USB Peripheral patches for intel-next
+# Classification      : Intel Confidential
+# Contributor         : Felipe Balbi <felipe.balbi@linux.intel.com>
+# IP/Information Owner: Ismail, Abdul Rahman <abdul.r.ismail@intel.com>
+#   			Hall, Christopher S <christopher.s.hall@intel.com>
+#   			Tan, Raymond <raymond.tan@intel.com>
+# SDL Contact         : Svahn, Kai <kai.svahn@intel.com>
+# Configs             : CONFIG_CAN_M_CAN_PCI, CONFIG_CAN_CALC_BITTIMING
+#                       CONFIG_INTEL_ADC, CONFIG_INTEL_QEP, CONFIG_PTP_INTEL_PMCTGPIO,
+#                       CONFIG_PTP_INTEL_TGPIO, CONFIG_PWM_DWC, CONFIG_USB_DWC3,
+#                       CONFIG_USB_DWC3_PCI, CONFIG_USB_GADGET, CONFIG_USB_MASS_STORAGE
+#                       CONFIG_USB_SUPPORT, CONFIG_USB_ZERO
+ssh://git-amr-4.devtools.intel.com:29418/otc_usb-gadget.git for-eywa
+
+# RPMB (CSE) support and SPD (storage proxy driver)
+# Classification      : Public
+# Contributor         : Winkler, Tomas <tomas.winkler@intel.com>
+# IP/Information Owner: Stevens, William A <william.a.stevens@intel.com>
+# SDL Contact         : Ohayon, Daniel <daniel.ohayon@intel.com>
+#                       Usyskin, Alexander <alexnder.usyskin@intel.com>
+#                       Winkler, Tomas <tomas.winkler@intel.com>
+#Configs              : https://eclists.intel.com/sympa/arc/intel-next/2019-05/msg00084.html 
+ssh://git-ger-8.devtools.intel.com:29418/sfip_linux-linux-mei.git rpmb
+
+# Linux EDAC support for Icelake-SP/Icelake-D server.
+# RAS EDAC patches for intel-next
+# Classification      : Intel Confidential
+# Contributor         : Zhuo, Qiuxu <qiuxu.zhuo@intel.com>
+# IP Owner            : Luc, Thuy D <thuy.d.luc@intel.com>
+#                     : Wadhawan, Puneet <puneet.wadhawan@intel.com>
+# SDL Contact         : Luck, Tony <tony.luck@intel.com>
+# Configs             : https://eclists.intel.com/sympa/arc/intel-next/2018-04/msg00055.html
+ssh://git-ccr-1.devtools.intel.com:29418/otc_edac_driver-linux.git for-intel-next
+
+# TGL, EHL PMC core driver changes and new AVX512 cpuid support
+# Classification      : Intel Confidential
+# Contributor         : Kammela, Gayatri <gayatri.kammela@intel.com>
+# IP/Information Owner: Charney, Mark <mark.charney@intel.com>
+# SDL Contact         : Prestopine, Charles D <charles.d.prestopine@intel.com>
+ssh://git-ger-6.devtools.intel.com:29418/secure_git_internal_repo-my_internal_repo.git avx512_cpuids
+
+# Enable Ethernet TSN driver for SNPS QOS
+# Classification       : Intel Confidential
+# SDLC contact         : Voon, Weifeng <weifeng.voon@intel.com>
+# Contributor          : Voon, Weifeng <weifeng.voon@intel.com>
+# IP Owners            : Kasichainula, Kishore <kishore.kasichainula@intel.com>
+# Configs              : CONFIG_STMMAC_ETH=m
+#                        CONFIG_STMMAC_PCI=m
+ssh://git@gitlab.devtools.intel.com:29418/OWR/IoTG/ESE/Connectivity/Linux-Ethernet/ese_linux_net_next.git dev/master
+
+# Intel Trace Hub
+# Contains support for Ice Lake and Tiger Lake and MIPI SyS-T protocol support.
+# Classification       : Intel Confidential
+# SDL contact          : Kai Svahn <kai.svahn@intel.com> 
+# IP Owner             : Marcus Winston <marcus.winston@intel.com> 
+# Contributor          : Alexander Shishkin <alexander.shishkin@linux.intel.com>
+# Configs              : CONFIG_STM*=m CONFIG_INTEL_TH*=m 
+# Supplementary tool   : https://git-amr-1.devtools.intel.com/gerrit/gitweb?p=linux-npk-npktool.git;tflink=projects.linux-npk/scm.npktool
+ssh://git-amr-4.devtools.intel.com:29418/ash-pullme.git intel_th-for-intel-next
+
+# COE audio support
+# IP: CoE audio features and additions
+# Classification       : Intel Confidential
+# Contributor          : Lewandowski, Gustaw <gustaw.lewandowski@intel.com>
+# SDL Contact          : Uzieblo, Olgierd <olgierd.uzieblo@intel.com>
+# IP Owners            : Kaczmarski, Filip filip.kaczmarski@intel.com
+# Configs              : CONFIG_SND_SOC_INTEL_SST_TOPLEVEL
+#                        CONFIG_SND_SOC_INTEL_SST
+#                        CONFIG_SND_SOC_INTEL_SKYLAKE
+#                        CONFIG_SND_SOC_ACPI_INTEL_MATCH
+#                        CONFIG_SND_SOC_INTEL_MACH
+ssh://git-gar-1.devtools.intel.com:29418/eig_audio_integ-kernel.git for-intel-next
+
+# IOMMU scalable mode
+# IP: Intel IOMMU
+# Classification       : Public
+# Contributor          : Kevin Tian <kevin.tian@intel.com>
+#                      : Ashok Raj <ashok.raj@intel.com>
+#                      : Jacob Pan <jacob.jun.pan@linux.intel.com>
+#                      : Lu Baolu <baolu.lu@linux.intel.com>
+# SDL Contact          : Ashok Raj <ashok.raj@intel.com>
+# 		       : Lu Baolu <baolu.lu@linux.intel.com>
+# IP Owner             : Ashok Raj <ashok.raj@intel.com>
+# 		       : Lu Baolu <baolu.lu@linux.intel.com>
+# Configs              :
+ssh://git-ccr-1.devtools.intel.com:29418/iommu_next-siov.git for_intel_next_5.3-rc1
+
+# USB Type-C Support
+# IP: Type-C USB
+# Classification       : Public
+# Contributor          : Heikki Krogerus <heikki.krogerus@linux.intel.com>
+# SDL Contact          : Svahn Kai <kai.svahn@intel.com>
+# IP Owner             : Vijay Kadgi <vijaykumar.b.kadgi@intel.com>
+# Config               : https://eclists.intel.com/sympa/arc/intel-next/2019-04/msg00023.html
+ssh://git-amr-4.devtools.intel.com:29418/otc_usb-typec.git for-eywa
+
+# intel_rapl support for Icelake server, Cannonlake desktop,
+# Icelake desktop, ElkhartLake and Tigerlake mobile
+# Classification       : Intel Confidential
+# Contributor          : Zhang, Rui <rui.zhang@intel.com>
+# SDL Contact          : Prestopine, Charles D <charles.d.prestopine@intel.com>
+# IP Owners            : Fields, Evelyn <evelyn.fields@intel.com>
+ssh://git-ccr-1.devtools.intel.com:29418/otc_linux_rui-rapl for-intel-next
+
+# Cache Pseudo-Locking
+# Cache Pseudo-Locking in Intel Cache Allocation Technology (CAT)
+# Classification       : Intel Confidential
+# SDLC contact         : Cindy R Johnson <cindy.r.johnson@intel.com>
+# IP contact           : Kuo-Lang Tseng <kuo-lang.tseng@intel.com>
+# Contributor          : Reinette Chatre <reinette.chatre@intel.com>
+# Configs              : CONFIG_X86_CPU_RESCTRL=y
+ssh://git-amr-2.devtools.intel.com:29418/rt_linux-linux.git cache-pseudo-locking/for-intel-next
+
+# IPU driver 19WW29 release to intel-next
+# Classification       : Intel Confidential
+# SDLC contact         : Shengquan <shengquan.yuan@intel.com> 
+# IP owner             : Cao Bingbu <bingbu.cao@intel.com>
+# Contributor          : Meng Wei <wei.meng@intel.com>
+# Configs	       :
+ssh://git-ccr-1.devtools.intel.com:29418/icg_camera-kernel intel-next-release-embargoed
+
+# SoCWatch and SEP drivers for both native and ACRN hypervisor
+# Classification       : Intel Confidential
+# SDLC Contact         : Kalinin, Alexei <alexei.v.kalinin@intel.com>
+# Contributor          : Moeller, Jon <jon.moeller@.intel.com>
+# IP Owner             : Upadhyaya, Gautam <gautam.upadhyaya@intel.com>
+# Configs              : https://eclists.intel.com/sympa/arc/intel-next/2018-11/msg00027.html
+git://github.com/mchinth/linux.git sep_socwatch_linux_5_3
+
+# Multi-Key Total Memory Encryption enabling
+# Classification       : Intel Confidential
+# Contributor          : Kirill Shutemov <kirill.shutemov@linux.intel.com>
+# SDL Contact          : Robert Kasten <robert.a.kasten@intel.com>
+# IP Owner             : Baiju Patel <baiju.v.patel@intel.com>
+# Configs              : X86_INTEL_MKTME
+ssh://git-ger-3.devtools.intel.com:29418/linux_mktme-linux.git mktme/integration
+
+# TPM2 driver for TPM2 Trusted Application running in OPTEE Keembay
+# Classification       : Intel Confidential
+# SDLC Contact         : Vincent T Cao <vincent.t.cao@intel.com>
+# IP Owner             : Vincent T Cao <vincent.t.cao@intel.com>
+# Contributor          : Vincent T Cao <vincent.t.cao@intel.com>
+# Configs              : CONFIG_TCG_FTPM_OPTEE=y,CONFIG_TCG=y
+#https://github.intel.com/vtcao/Linux-Kernel.git optee-ftpm-kernel-5.2-rc1
+
+# IMR Driver for the Keem Bay Soc platform
+# Classification       : Intel Confidential
+# SDL Owner            : Walsh, Liz <liz.walsh@intel.com>
+# IP Owner             : Walsh, Liz <liz.walsh@intel.com>
+# Contributor          : Alessandrelli, Daniele <daniele.alessandrelli@intel.com>
+# Configs              : CONFIG_KEEMBAY_PLATFORM=y,CONFIG_KEEMBAY_IMR=y
+#ssh://git-ger-3.devtools.intel.com:29418/ntg_kmb-linux-kernel intel-next-keembay-imr
+
+# VPU IPC Driver for the Keem Bay Soc platform
+# Classification       : Intel Confidential
+# SDL Owner            : Walsh, Liz <liz.walsh@intel.com>
+# IP Owner             : Walsh, Liz <liz.walsh@intel.com>
+# Contributor          : Alessandrelli, Daniele <daniele.alessandrelli@intel.com>
+# Configs              : https://eclists.intel.com/sympa/arc/intel-next/2019-03/msg00053.html
+#ssh://git-ger-3.devtools.intel.com:29418/ntg_kmb-linux-kernel vpu-ipc-on-v5.2-rc1
+#ssh://git@gitlab.devtools.intel.com:29418/mvds-linux-dev/keem-bay-linux/linux.git  develop-v5.2-rc2
+
+# Driver support for timers, watchdog timer, RTC, GPIO, PWM, SPI and Movidius'
+# interrupt controller block in Keem Bay SoC.
+# Classification       : Intel Confidential
+# SDLC contact         : Wan Mohamad, Wan Ahmad Zainie <wan.ahmad.zainie.wan.mohamad@intel.com>
+# IP owner             : Hunter, Gary T <gary.t.hunter@intel.com>
+# Contributor          : Wan Mohamad, Wan Ahmad Zainie <wan.ahmad.zainie.wan.mohamad@intel.com>
+# Configs              : https://eclists.intel.com/sympa/arc/intel-next/2019-05/msg00089.html
+#ssh://git@gitlab.devtools.intel.com:29418/OWR/IoTG/ESE/Linux-Integration/KMB/iotg_dragonbay-linux-kernel.git  topic/for-intel-next/iotg-keem-bay-integration
+
+# Patches from Android GFX domain branch
+# Classification      : public
+# SDL contact         : Fan Yugang <yugang.fan@intel.com>
+# IP owner            : Sourab Gupta <sourab.gupta@intel.com>
+#                     : Gao Chun <chun.gao@intel.com>
+#                     : Kalyan Kondapally <kalyan.kondapally@intel.com>
+# Contributor         : Fan Yugang <yugang.fan@intel.com>
+# Configs             : CONFIG_DRM_I915_MEMTRACK
+#ssh://git-amr-1.devtools.intel.com:29418/aose_graphics_media-pkt_graphics gfx-dm-di4in
+
+# Media codec driver module for KMB ARM Media
+# Classification      : Intel Confidential
+# SDLC Contact        : Cheah, Vincent Beng Keat <vincent.beng.keat.cheah@intel.com>
+# IP Owner            : Cheah, Vincent Beng Keat <vincent.beng.keat.cheah@intel.com>
+# Contributors        : Murugasen Krishnan, Kuhanh <kuhanh.murugasen.krishnan@intel.com>
+#                       Cheah, Vincent Beng Keat <vincent.beng.keat.cheah@intel.com>
+# Configs             : CONFIG_DRM_HANTRO=m
+#                       CONFIG_DRM=y, CONFIG_DRM_KMS_HELPER=y and CONFIG_DRM_PANEL_ORIENTATION_QUIRKS=y
+#ssh://git-amr-1.devtools.intel.com:29418/iotg_keembay-hantrodriver 0606_v5.2-rc6
+
+# Audio solution on KeemBay Platform
+# Classification      : Intel Confidential
+# SDL contact         : Sia, Jee Heng <jee.heng.sia@intel.com>
+# IP ownder           : Sia, Jee Heng <jee.heng.sia@intel.com>
+# Contributor         : Sit, Michael Wei Hong <michael.wei.hong.sit@intel.com>
+# Configs             : https://eclists.intel.com/sympa/arc/intel-next/2019-01/msg00081.html
+ssh://git@gitlab.devtools.intel.com:29418/OWR/IoTG/ESE/Audio/keembay_linux_sound_driver-linux_sound_driver.git v5.3-rc1
+
+# boot/ota/dnt support for Android project
+# Classification      : Intel Confidential
+# SDL Contact         : Qihua, Zhuang <qihua.zhuang@intel.com>
+# IP Owner            : Baofeng, Tian <baofeng.tian@intel.com>
+# Contributor         : Baofeng, Tian <baofeng.tian@intel.com>
+ssh://git-amr-4.devtools.intel.com:29418/otc_android_dnt_domain-boot_dnt_kernel_domain.git for-sos-intel-next
+
+# Intel ICL-NNP SoC   : Intel ICL Neural Network Processor Support.
+# Classification      : Intel Confidential (EMBARGO) 
+# SDL Contact         : Prestopine, Charles D <charles.d.prestopine@intel.com>
+# IP Owners           : Makmel, Moshe <moshe.makmel@intel.com> 
+# Contributor         : Bhardwaj, Rajneesh <rajneesh.bhardwaj@intel.com>
+# Configs             :
+#ssh://git-gar-1.devtools.intel.com:29418/chrome_ba_pnp-pmc_driver.git linux5.1-rc3
+
+# Interrupt Message Store
+# Classification      : Public
+# SDL Contact         : Ashok Raj ashok.raj@intel.com
+# IP Owners           : Megha Dey <megha.dey@intel.com>
+# Contributor         : Megha Dey <megha.dey@intel.com>
+# Configs             : CONFIG_MSI_IMS
+ssh://git-amr-4.devtools.intel.com:29418/otc_core_linux-linux.git interrupt_message_store
+
+# Intel Gaussian & Neural Accelerator driver
+# Classification       : Intel Confidential
+# SDLC Contact         : Krolikowski, Rafal <rafal.krolikowski@intel.com>
+# Contributor          : Zalewski, Mariusz <mariusz.zalewski@intel.com>
+# IP Owner             : Krolikowski, Rafal <rafal.krolikowski@intel.com>
+# Configs              : https://eclists.intel.com/sympa/arc/intel-next/2019-03/msg00064.html
+ssh://git-gar-1.devtools.intel.com:29418/itsg_ml_integ-gna_driver_v_2_x.git for-intel-next-v5.3-rc1
+
+# CBC (Carrier Board Communication) line discipline kernel module enablement
+# Classification       : Public
+# SDLC Contact         : Edapalapati, Padmarao <padmarao.edapalapati@intel.com> 
+# IP Owner             : CBC: Tabrah, Ryan <ryan.tabrah@intel.com>
+# Configs              : CONFIG_CBC_LDISC
+ssh://git-gar-1.devtools.intel.com:29418/cbc_ldisc-cbc-ldisc.git for-eywa
+
+# Intel PCI driver related fixes
+# Classification       : Public
+# SDL Contact          : Ashok Raj <ashok.raj@intel.com>
+# IP Owners            : Ashok Raj <ashok.raj@intel.com>
+# Contributor          : Sathyanarayanan <sathyanarayanan.kuppuswamy@intel.com>
+# Configs              : CONFIG_PCIE_DPC=y, CONFIG_PCIE_EDR=y
+ssh://git@gitlab.devtools.intel.com:29418/skuppusw/linux.git pci-next
+
+
+# Intel Speed Select Technologies (SST)
+# Classification       :Intel Confidential
+# Contributor          :Srinivas Pandruvada <srinivas.pandruvada@intel.com>
+# SDLC Contact         :Charles Prestopine <charles.d.prestopine@intel.com>
+# IP Owner             :"Chen, Stanley" <stanley.chen@intel.com>
+# Configs              :CONFIG_INTEL_SPEED_SELECT_INTERFACE
+#ssh://git-amr-4.devtools.intel.com:29418/otc_linux_spandruv-internal.git intel-iss
+
+# GFX patch to load DMC firmware
+# Classification      : Intel Confidential
+# Contributor         : Swaminathan, Nivedita <nivedita.swaminathan@intel.com>
+# IP/Information Owner: Atwood, Matthew S <matthew.s.atwood@intel.com>
+# SDL Contact         : Charles Prestopine <charles.d.prestopine@intel.com>
+ssh://git-amr-4.devtools.intel.com:29418/otc_power-kernel.git chrome-dmc-patch
+
+# Custom intel-next logo on bootup
+# Classification	: Intel Confidential
+# Contributor		: Kyle Pelton <kyle.d.pelton@intel.com>
+# SDL Contact		: Charles Prestopine <charles.d.prestopine@intel.com>
+# Configs		: CONFIG_LOGO=y, CONFIG_LOGO_LINUX_NEXT_CLUT224=y
+ssh://git-amr-4.devtools.intel.com:29418/otc_power-kernel.git intel_next_branding
+
+# Introduce PASID XSAVES supervisor state
+# Classification       : Intel Confidential
+# Contributor          : Yu, Yu-cheng <yu-cheng.yu@intel.com> 
+# IP Owner             : Raj, Ashok 
+# SDL Contact          : Raj, Ashok
+#ssh://git-amr-10.devtools.intel.com:29418/linux_yyu-pasid.git pasid
+
+# Add Audio SOF drivers, included embargoed TGL and JSL support
+# Classification	: Intel Confidential
+# Contributors		: Liam Girdwood <liam.r.girdwood@linux.intel.com>
+# 			  Bard liao <yung-chuan.liao@linux.intel.com>
+#               	  Keyon Jie <yang.jie@linux.intel.com>
+#               	  Ranjani Sridharan <ranjani.sridharan@linux.intel.com>
+#               	  Xiuli Pan <xiuli.pan@linux.intel.com>
+# SDL Contact		: Grodzicki, Michal <michal.grodzicki@intel.com>
+# IP Owners		: Grodzicki, Michal <michal.grodzicki@intel.com>
+# Config		: https://eclists.intel.com/sympa/arc/intel-next/2019-05/msg00086.html
+ssh://git-amr-4.devtools.intel.com:29418/otc_audio-linux.git sof-for-next-5.3-rc1 
+
+# Handle PASID in svm binding/unbinding and #GP
+# Classification      : Intel Confidential
+# Contributor         : Fenghua Yu <fenghua.yu@intel.com>
+# IP/Information Owner: Ravi V. Shankar <ravi.v.shankar@intel.com>
+# SDL Contact         : Ashok Raj <ashok.raj@intel.com>
+# Configs	      :
+ssh://git-amr-4.devtools.intel.com:29418/enabling_cldemote_in_linux_kerne-linux_git.git pasid
+
+#IOMMU vSVA changes since v5.3
+# Classification      : Public
+# Contributor         : Jacob Pan <jacob.jun.pan@linux.intel.com>
+#			Liu Yi L <yi.l.liu@intel.com>
+#    			Lu Baolu <baolu.lu@linux.intel.com>
+#    			Ashok Raj <ashok.raj@intel.com>
+# IP/Information Owner: Vakharwala, Rupin H <rupin.h.vakharwala@intel.com>
+#			Ashok Raj <ashok.raj@intel.com>
+# SDL Contact         : Ashok Raj <ashok.raj@intel.com>
+#  			Pan, Jacob jun <jacob.jun.pan@intel.com>
+# Configs             :
+ssh://git-amr-4.devtools.intel.com:29418/linux_iommu-iommu.git sva-intel-next
+
+# Perf core updates, Intel PT/AUX related
+# Classification      : Public
+# Contributor         : Alexander Shishkin <alexander.shishkin@linux.intel.com>
+# IP/Information owner: Alexander Shishkin <alexander.shishkin@linux.intel.com>
+# SDL contact         : Kai Svahn <kai.svahn@intel.com>
+# Configs             :
+#git://git.kernel.org/pub/scm/linux/kernel/git/ash/linux.git perf-aux-dev
+
+# Add Custom clear linux patches required to boot clear linux
+# on NEXT kernel from https://github.com/clearlinux-pkgs/linux
+# Classification      : Public
+# Config              : N/A
+# Contributor         : Pelton, Kyle <kyle.d.pelton@intel.com>
+# SDL Contact         : Charles Prestopine <charles.d.prestopine@intel.com>
+# IP Owners           : Charles Prestopine <charles.d.prestopine@intel.com>
+#ssh://git-amr-4.devtools.intel.com:29418/otc_power-kernel.git clear_linux_patches_for_next
+
+# IOMMU svm fix
+# Classification      : Public
+# Config              : N/A
+# Contributor         : Jacob Pan <jacob.jun.pan@linux.intel.com>
+# SDL Contact         : Ashok Raj <ashok.raj@intel.com> 
+#                       Lu Baolu <baolu.lu@linux.intel.com>
+# IP Owners           : Vakharwala, Rupin H <rupin.h.vakharwala@intel.com>
+#ssh://git-amr-1.devtools.intel.com:29418/linux_kernel_jpan9-jacobpan.git iommu-fix
+
+# SVOS Kernel/Driver 
+# Classified          : Intel Confidential
+# Branch name         : svos-next-pull
+# Config              : CONFIG_SVOS=n CONFIG_SVFS_ACPI=n
+# SDLC Contact        : Stonecypher, Thomas EdwardX <thomas.edwardx.stonecypher@intel.com>
+# IP Owner            : Stonecypher, Thomas EdwardX <thomas.edwardx.stonecypher@intel.com>
+ssh://git-amr-1.devtools.intel.com:29418/svos_kernel-next.git svos-next-pull-5.3 
+
+
+# TLB Shootdown
+# Classification      : Intel Confidential
+# Config              : CONFIG_X86_INTEL_RAR
+# SDL Contact         : Yu-cheng Yu <yu-cheng.yu@intel.com> 
+# IP Owner            : Ido Ouziel <ouziel.ido@intel.com>
+#ssh://git-amr-1.devtools.intel.com:29418/linux_yyu-rar.git rar
+
+# Intel Thermal
+# Classification      : Intel Confidential
+# Contributor         : Srinivas Pandruvada <srinivas.pandruvada@intel.com>
+# Config              : CONFIG_INT340X_THERMAL
+# SDL Contact         : Prestopine, Charles D <charles.d.prestopine@intel.com>
+# IP Owners           : Hermerding, Jim G <jim.g.hermerding@intel.com>
+ssh://git-amr-4.devtools.intel.com:29418/otc_linux_spandruv-internal.git to_eywa_thermal
+
+# Speed Select Technologies (SST)
+# Classification      : Intel Confidential
+# SDL contact         : Charles Prestopine <charles.d.prestopine@intel.com> 
+# Contributor         : Srinivas Pandruvada <srinivas.pandruvada@intel.com>
+# IP owner            : Chen, Stanley <stanley.chen@intel.com>
+# Configs: CONFIG_INTEL_SPEED_SELECT_INTERFACE
+ssh://git-amr-4.devtools.intel.com:29418/otc_linux_spandruv-internal.git intel-sst
+
+# AiA branch
+# AiA umwait/umnoitor/tpause instructions
+# Classification      : Public
+# Contributor         : Fenghua Yu <fenghua.yu@intel.com>
+# IP/Information Owner: Ashok Raj <ashok.raj@intel.com>
+# SDL Contact         : Ashok Raj <ashok.raj@intel.com>
+# Configs             :
+#ssh://git-amr-4.devtools.intel.com:29418/enabling_cldemote_in_linux_kerne-linux_git.git aia
+
+# Trusty driver is responsible for IPC communication between normal world OS(Linux) and Trusty OS.
+# Classification      : Public
+# Contributor         : Zhang, Qi1 <qi1.zhang@intel.com>
+# IP/Information Owner: Wang, Kai Z <kai.z.wang@intel.com>
+# SDL Contact         : Wang, Kai Z <kai.z.wang@intel.com>
+# Configs             : CONFIG_TRUSTY=m, CONFIG_TRUSTY_LOG=m, CONFIG_TRUSTY_VIRTIO=m, CONFIG_TRUSTY_VIRTIO_IPC=m and CONFIG_TRUSTY_BACKUP_TIMER=m
+ssh://git-amr-7.devtools.intel.com:29418/trusty_for_intel_next-intel-next.git trusty-5.3
+
+# Enable BFLOAT16
+# Classification      : Public
+# Contributor         : Fenghua Yu <fenghua.yu@intel.com>
+# IP/Information Owner: Ashok Raj <ashok.raj@intel.com>
+# SDL Contact         : Ashok Raj <ashok.raj@intel.com>
+# Configs             :
+#ssh://git-amr-4.devtools.intel.com:29418/enabling_cldemote_in_linux_kerne-linux_git.git bfloat16
+
+# Intel Data Stream Accelerator enabling
+# Clasification       : Intel Confidential
+# Contributor         : Dave Jiang <dave.jiang@intel.com>
+# SDL Contact         : Dave Jiang <dave.jiang@intel.com> 
+# IP Owner            : Rajesh Pamujula <rajesh.s.pamujula@intel.com>
+# Config:             : CONFIG_INTEL_IOMMU=y, CONFIG_INTEL_IOMMU_SVM=y, CONFIG_DMA_ENGINE=y, CONFIG_INTEL_DSA=m, CONFIG_DMATEST=m
+ssh://git@gitlab.devtools.intel.com:29418/otc-clk-server/linux-dsa/kernel.git intel-next
+
+# Keystore driver enabling
+# Clasification       : Intel Confidential
+# Contributor         : Cai, Cliff <cliff.cai@intel.com>
+# SDL Contact         : Wang, Kai Z <kai.z.wang@intel.com>
+# IP Owner            : Wang, Kai Z <kai.z.wang@intel.com>
+# Config:             : CONFIG_KEYSTORE=m
+ssh://git-amr-7.devtools.intel.com:29418/trusty_for_intel_next-intel-next.git keystore-5.3
+
+# ACRN/GVT-g Hypervisor 
+# Classification      : Public
+# Config              : CONFIG_ACRN=y
+#                       CONFIG_X86_X2APIC=y
+#                       CONFIG_VIRTIO_PCI=y
+#                       CONFIG_VIRTIO_PCI_LEGACY=y
+#                       CONFIG_ACRN_VIRTIO_DEVICES=y
+#                       CONFIG_VBS=y
+#                       CONFIG_VBS_RNG=y
+#                       CONFIG_ACRN_SHARED_BUFFER=y
+#                       CONFIG_ACRN_TRACE=y
+#                       CONFIG_ACRN_HVLOG=y
+#                       CONFIG_ACRN_HV_NPK_LOG=y
+#                       CONFIG_ACRN_VHM=y
+# SDLC contact        : Yao Michael <Michael.yao@intel.com>
+# IP Owner            : Chen, Jason CJ <Jason.cj.chen@intel.com>
+#                       Chi, MingQiang <Mingqiang.chi@intel.com>
+#                       Li, Fei1 <fei1.li@intel.com >
+#                       Yin, FengWei <Fengwei.yin@intel.com>
+#                       Zhao, Yakui <yakui.zhao@intel.com>
+#                       Wang, Yu1 <yu1.wang@intel.com>
+#git://github.com/projectacrn/acrn-kernel.git acrn_staging_next
+
+# Fix for systemd-networkd breaking patch on v5.2-rc3
+# Classification      : Public
+# Contributor         : Kyle Pelton <kyle.d.pelton@intel.com>
+# SDL Contact         : Charles Prestopine <charles.d.prestopine@intel.com>
+# Configs             :
+#ssh://git-amr-4.devtools.intel.com:29418/otc_power-kernel.git upstream_fixes
+
+# CET
+# Control Flow Enforcement support for v5.1
+# Classification       : Public
+# SDLC contact         : Yu-cheng Yu <yu-cheng.yu@intel.com>
+# Contributor          : Yu-cheng Yu <yu-cheng.yu@intel.com>
+# IP Owner             : Vedvyas Shanbhogue <vedvyas.shanbhogue@intel.com>
+# Configs              :
+git://github.com/yyu168/linux_cet cet
+
+#VMDOS
+# Classification      : Intel Confidential
+# Contributor         : Fenghua Yu <fenghua.yu@intel.com>
+# IP/Information Owner: Ashok Raj <ashok.raj@intel.com>
+# SDL Contact         : Ashok Raj <ashok.raj@intel.com>
+# Configs	      :
+#ssh://git-amr-4.devtools.intel.com:29418/enabling_cldemote_in_linux_kerne-linux_git.git vmdos
+
+# PCIe VPU drivers for IOTG Keem Bay Xlink
+# Classification      : Intel Confidential
+# Contributor         : Lai, Jun Ann <jun.ann.lai@intel.com>
+# IP owner            : Tan, Seng Kai <seng.kai.tan@intel.com>
+# SDLC contact        : Tan, Seng Kai <seng.kai.tan@intel.com>
+# Configs             : CONFIG_XLINK_PCIE_LH_DRIVER=m
+#                       CONFIG_XLINK_PCIE_RH_DRIVER=m
+#Disabled build failure 08/08 ssh://git@gitlab.devtools.intel.com:29418/OWR/IoTG/ESE/Linux-Integration/KMB/xlink.git int/vpu-driver
+
+# MTRR: Trust BIOS programming
+# Mechanism to skip the MTRR initialization if already performed by BIOS
+# Classification      : Intel Confidential
+# Contributor         : Ricardo Neri <ricardo.neri@intel.com>
+# IP Owner            : Ricardo Neri <ricardo.neri@intel.com>
+# SDLC Contact        : Bob Kasten <robert.a.kasten@intel.com>
+# Configs             :
+#ssh://git-amr-4.devtools.intel.com:29418/otc_core_linux-linux.git rneri/mtrr-trust-bios
+
+# Fix for drm allmodconfig breaking patch on v5.2-rc5 
+# Classification : Intel Confidential
+# Contributor : Kyle Pelton <kyle.d.pelton@intel.com>
+# SDL Contact : Charles Prestopine <charles.d.prestopine@intel.com>
+# Configs :
+#ssh://git-amr-4.devtools.intel.com:29418/otc_power-kernel.git drm_fixup
+
+# Add new PCI id for Jasper lake processor thermal device.
+# Contributor		: Chen Yu <yu.c.chen@intel.com>
+# Classification	: Intel Confidential
+# IP/Information Owner	: Pandruvada, Srinivas <srinivas.pandruvada@intel.com>
+# SDLC Contact		: Prestopine, Charles D <charles.d.prestopine@intel.com>
+# Configs		:
+#ssh://git-amr-4.devtools.intel.com:29418/otc_power-kernel.git thermal_jsl_support
+
+# pinctrl: Add hack to load the ICP-N GPIO driver
+# Contributor		: Chen Yu <yu.c.chen@intel.com>
+# Classification		: Intel Confidential
+# IP/Information Owner	: Shevchenko, Andriy <andriy.shevchenko@intel.com>
+# SDLC Contact		: Svahn, Kai <kai.svahn@intel.com>
+# Configs               :
+#ssh://git-ccr-1.devtools.intel.com:29418/jasperlake_po_intel_next_kernel-beta.git master
+
+# VPUSMM: Add kernel module into intel-Next for Keembay SOC project
+# Classification        : Public
+# SDLC Contact          : Chen, Peter <peter.chen@intel.com>
+# IP/Information Owner  : Xu, Yu <yu.xu@intel.com>
+# Contributor           : Tingqian Li <tingqian.li@intel.com>
+ssh://git@gitlab.devtools.intel.com:29418/kmb_integration/vpusmm_driver.git for-intel-next
+
+# Advanced Matrix Extension
+# Classification	: Intel Confidential
+# Contributor		: Chang S. Bae <chang.seok.bae@intel.com> 
+# IP/Information Owner	: Bob Valentine <bob.valentine@intel.com> 
+# SDL Contact		: Israel Hirsh <israel.hirsh@intel.com>
+ssh://git-amr-4.devtools.intel.com:29418/linux_cbae1_share-kl.git amx
+
+# Fix up branch for DSA and CoE audio branch Makefiles
+# Classification        : Intel Confidential
+# Contributor           : Kyle Pelton <kyle.d.pelton@intel.com>
+# SDL Contact           : Charles Prestopine <charles.d.prestopine@intel.com>
+ssh://git-amr-4.devtools.intel.com:29418/otc_power-kernel.git fixups
+
+# Telemetry 
+# Classification        : Intel Confidential
+# Contributer           : David E. Box <david.e.box@intel.com>
+# IP/Information Owner  : Ramamurthy Krithivas <ramamurthy.krithivas@intel.com>
+# SDL Contact           : David E. Box <david.e.box@intel.com>
+# Config                : CONFIG_MFD_INTEL_CTA, CONFIG_INTEL_CTA_TELEM
+ssh://git-amr-3.devtools.intel.com:29418/otc_linux_debox1-dev.git cta_arch
+
+# Scalable Mode fault information
+# Classification        : Public
+# Contributer           : Park, Kyung Min <kyung.min.park@intel.com >
+# IP/Information Owner  : Ashok Raj <ashok.raj@intel.com>, Vakharwala, Rupin H <rupin.h.vakharwala@intel.com>
+# SDL Contact           : Ashok Raj <ashok.raj@intel.com>, Sohil Mehta <sohil.mehta@intel.com>
+# Config                : 
+ssh://git-amr-1.devtools.intel.com:29418/intel_next_icl_i-secure_git_intel_next.git master
+
+# Classification	: Intel Confidential
+# SDL Contact		: hari.chand.balasubramaniam@intel.com
+# IP Owner		: N/A (vsi_video_sales@verisilicon.com)
+# Contributer		: hari.chand.balasubramaniam@intel.com
+# Authorized contact	: vsi_video_sales@verisilicon.com
+# Config		: CONFIG_DRM_HANTRO_THB
+ssh://git-amr-1.devtools.intel.com:29418/iotg_keembay-hantrodriver thb_0629_v5.3-rc5	
