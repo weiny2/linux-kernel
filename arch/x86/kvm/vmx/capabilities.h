@@ -370,4 +370,10 @@ static inline bool cpu_has_vmx_intel_pt(void)
 		(vmcs_config.vmentry_ctrl & VM_ENTRY_LOAD_IA32_RTIT_CTL);
 }
 
+static inline bool cpu_has_vmx_no_commit_exiting(void)
+{
+	return vmcs_config.cpu_based_2nd_exec_ctrl &
+		SECONDARY_EXEC_NO_COMMIT_EXITING;
+}
+
 #endif /* __KVM_X86_VMX_CAPS_H */

@@ -22,6 +22,8 @@ extern u32 get_umwait_control_msr(void);
 
 #define X2APIC_MSR(r) (APIC_BASE_MSR + ((r) >> 4))
 
+#define basic(exit_reason) ((u16)(exit_reason))
+
 #ifdef CONFIG_X86_64
 #define NR_SHARED_MSRS	7
 #else
