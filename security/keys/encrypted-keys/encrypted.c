@@ -34,6 +34,7 @@
 
 #include "encrypted.h"
 #include "ecryptfs_format.h"
+#include "mktme_format.h"
 
 static const char KEY_TRUSTED_PREFIX[] = "trusted:";
 static const char KEY_USER_PREFIX[] = "user:";
@@ -43,6 +44,7 @@ static const char blkcipher_alg[] = "cbc(aes)";
 static const char key_format_default[] = "default";
 static const char key_format_ecryptfs[] = "ecryptfs";
 static const char key_format_enc32[] = "enc32";
+static const char key_format_mktme[] = "mktme";
 static unsigned int ivsize;
 static int blksize;
 
@@ -61,13 +63,14 @@ enum {
 };
 
 enum {
-	Opt_default, Opt_ecryptfs, Opt_enc32, Opt_error
+	Opt_default, Opt_ecryptfs, Opt_enc32, Opt_mktme, Opt_error
 };
 
 static const match_table_t key_format_tokens = {
 	{Opt_default, "default"},
 	{Opt_ecryptfs, "ecryptfs"},
 	{Opt_enc32, "enc32"},
+	{Opt_mktme, "mktme"},
 	{Opt_error, NULL}
 };
 
@@ -170,11 +173,10 @@ static int valid_master_desc(const char *new_desc, const char *orig_desc)
  */
 static int datablob_parse(char *datablob, const char **format,
 			  char **master_desc, char **decrypted_datalen,
-			  char **hex_encoded_iv)
+			  char **hex_encoded_iv, int *key_cmd)
 {
 	substring_t args[MAX_OPT_ARGS];
 	int ret = -EINVAL;
-	int key_cmd;
 	int key_format;
 	char *p, *keyword;
 
@@ -183,7 +185,7 @@ static int datablob_parse(char *datablob, const char **format,
 		pr_info("encrypted_key: insufficient parameters specified\n");
 		return ret;
 	}
-	key_cmd = match_token(keyword, key_tokens, args);
+	*key_cmd = match_token(keyword, key_tokens, args);
 
 	/* Get optional format: default | ecryptfs */
 	p = strsep(&datablob, " \t");
@@ -196,6 +198,7 @@ static int datablob_parse(char *datablob, const char **format,
 	switch (key_format) {
 	case Opt_ecryptfs:
 	case Opt_enc32:
+	case Opt_mktme:
 	case Opt_default:
 		*format = p;
 		*master_desc = strsep(&datablob, " \t");
@@ -224,7 +227,7 @@ static int datablob_parse(char *datablob, const char **format,
 		}
 	}
 
-	switch (key_cmd) {
+	switch (*key_cmd) {
 	case Opt_new:
 		if (!decrypted_datalen) {
 			pr_info("encrypted_key: keyword \'%s\' not allowed "
@@ -640,6 +643,12 @@ static struct encrypted_key_payload *encrypted_key_alloc(struct key *key,
 						decrypted_datalen);
 				return ERR_PTR(-EINVAL);
 			}
+		} else if (!strcmp(format, key_format_mktme)) {
+			if (dlen != KEY_MKTME_PAYLOAD_LEN) {
+				pr_err("encrypted_key: keylen for the mktme format must be equal to %ld bytes\n",
+				       KEY_MKTME_PAYLOAD_LEN);
+				return ERR_PTR(-EINVAL);
+			}
 		}
 	}
 
@@ -794,12 +803,14 @@ static int encrypted_instantiate(struct key *key,
 				 struct key_preparsed_payload *prep)
 {
 	struct encrypted_key_payload *epayload = NULL;
+	struct mktme_payload *mpayload = NULL;
 	char *datablob = NULL;
 	const char *format = NULL;
 	char *master_desc = NULL;
 	char *decrypted_datalen = NULL;
 	char *hex_encoded_iv = NULL;
 	size_t datalen = prep->datalen;
+	int key_cmd = Opt_error;
 	int ret;
 
 	if (datalen <= 0 || datalen > 32767 || !prep->data)
@@ -811,7 +822,7 @@ static int encrypted_instantiate(struct key *key,
 	datablob[datalen] = 0;
 	memcpy(datablob, prep->data, datalen);
 	ret = datablob_parse(datablob, &format, &master_desc,
-			     &decrypted_datalen, &hex_encoded_iv);
+			     &decrypted_datalen, &hex_encoded_iv, &key_cmd);
 	if (ret < 0)
 		goto out;
 
@@ -828,6 +839,19 @@ static int encrypted_instantiate(struct key *key,
 		goto out;
 	}
 
+	/*
+	 * Request the MKTME hardware key after epayload->decrypted_data
+	 * is in place for Opt_load keys. MKTME format requires key_cmd
+	 * to know what to expect in the payload - new or reloading key.
+	 */
+	if (format && !strcmp(format, key_format_mktme)) {
+		mpayload = (struct mktme_payload *)epayload->decrypted_data;
+		ret = mktme_request_key(key, mpayload, key_cmd);
+		if (ret < 0) {
+			kzfree(epayload);
+			goto out;
+		}
+	}
 	rcu_assign_keypointer(key, epayload);
 out:
 	kzfree(datablob);
@@ -859,6 +883,7 @@ static int encrypted_update(struct key *key, struct key_preparsed_payload *prep)
 	char *new_master_desc = NULL;
 	const char *format = NULL;
 	size_t datalen = prep->datalen;
+	int key_cmd = Opt_error;
 	int ret = 0;
 
 	if (key_is_negative(key))
@@ -872,7 +897,8 @@ static int encrypted_update(struct key *key, struct key_preparsed_payload *prep)
 
 	buf[datalen] = 0;
 	memcpy(buf, prep->data, datalen);
-	ret = datablob_parse(buf, &format, &new_master_desc, NULL, NULL);
+	ret = datablob_parse(buf, &format, &new_master_desc, NULL, NULL,
+			     &key_cmd);
 	if (ret < 0)
 		goto out;
 
@@ -974,6 +1000,10 @@ out:
  */
 static void encrypted_destroy(struct key *key)
 {
+	struct encrypted_key_payload *epayload = key->payload.data[0];
+
+	if (!strcmp(epayload->format, key_format_mktme))
+		mktme_remove_key(key);
 	kzfree(key->payload.data[0]);
 }
 

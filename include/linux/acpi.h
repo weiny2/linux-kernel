@@ -228,13 +228,12 @@ int acpi_numa_init (void);
 
 int acpi_table_init (void);
 int acpi_table_parse(char *id, acpi_tbl_table_handler handler);
-int __init acpi_table_parse_entries(char *id, unsigned long table_size,
-			      int entry_id,
-			      acpi_tbl_entry_handler handler,
-			      unsigned int max_entries);
-int __init acpi_table_parse_entries_array(char *id, unsigned long table_size,
-			      struct acpi_subtable_proc *proc, int proc_num,
-			      unsigned int max_entries);
+int acpi_table_parse_entries(char *id, unsigned long table_size,
+			     int entry_id, acpi_tbl_entry_handler handler,
+			     unsigned int max_entries);
+int acpi_table_parse_entries_array(char *id, unsigned long table_size,
+				   struct acpi_subtable_proc *proc,
+				   int proc_num, unsigned int max_entries);
 int acpi_table_parse_madt(enum acpi_madt_type id,
 			  acpi_tbl_entry_handler handler,
 			  unsigned int max_entries);
@@ -1333,5 +1332,10 @@ acpi_platform_notify(struct device *dev, enum kobject_action action)
 	return 0;
 }
 #endif
+
+#ifdef CONFIG_X86_INTEL_MKTME
+extern bool acpi_hmat_present(void);
+extern bool mktme_hmat_evaluate(void);
+#endif /* CONFIG_X86_INTEL_MKTME */
 
 #endif	/*_LINUX_ACPI_H*/
