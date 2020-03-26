@@ -1258,6 +1258,7 @@ static void pci_acpi_setup(struct device *dev)
 
 	acpi_pci_wakeup(pci_dev, false);
 	acpi_device_power_add_dependent(adev, dev);
+	pci_acpi_add_edr_notifier(pci_dev);
 }
 
 static void pci_acpi_cleanup(struct device *dev)
@@ -1276,6 +1277,8 @@ static void pci_acpi_cleanup(struct device *dev)
 
 		device_set_wakeup_capable(dev, false);
 	}
+
+	pci_acpi_remove_edr_notifier(pci_dev);
 }
 
 static bool pci_acpi_bus_match(struct device *dev)

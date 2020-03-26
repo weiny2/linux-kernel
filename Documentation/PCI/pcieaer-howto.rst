@@ -147,7 +147,7 @@ section 3.3.
 Provide callbacks
 -----------------
 
-callback reset_link to reset pci express link
+callback reset_cb to reset pci express link
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 This callback is used to reset the pci express physical link when a
@@ -156,11 +156,8 @@ default reset_link function, but different upstream ports might
 have different specifications to reset pci express link, so all
 upstream ports should provide their own reset_link functions.
 
-In struct pcie_port_service_driver, a new pointer, reset_link, is
-added.
-::
-
-	pci_ers_result_t (*reset_link) (struct pci_dev *dev);
+In pcie_do_recovery function, reset_cb function pointer can be used
+to pass the port specific reset_link callback.
 
 Section 3.2.2.2 provides more detailed info on when to call
 reset_link.
@@ -212,13 +209,13 @@ error_detected(dev, pci_channel_io_frozen) to all drivers within
 a hierarchy in question. Then, performing link reset at upstream is
 necessary. As different kinds of devices might use different approaches
 to reset link, AER port service driver is required to provide the
-function to reset link. Firstly, kernel looks for if the upstream
-component has an aer driver. If it has, kernel uses the reset_link
-callback of the aer driver. If the upstream component has no aer driver
-and the port is downstream port, we will perform a hot reset as the
-default by setting the Secondary Bus Reset bit of the Bridge Control
-register associated with the downstream port. As for upstream ports,
-they should provide their own aer service drivers with reset_link
+function to reset link via reset_cb parameter of pcie_do_recovery()
+function call. If reset_cb is not NULL, recovery function will use it
+to reset the link. If there is no reset_cb callback provided and
+the port is downstream port, we will perform a hot reset as the default
+by setting the Secondary Bus Reset bit of the Bridge Control register
+associated with the downstream port. As for upstream ports,
+they should provide their own reset_link function via reset_cb callback
 function. If error_detected returns PCI_ERS_RESULT_CAN_RECOVER and
 reset_link returns PCI_ERS_RESULT_RECOVERED, the error handling goes
 to mmio_enabled.
@@ -262,7 +259,7 @@ A:
 
 Q:
   What happens if an upstream port service driver does not provide
-  callback reset_link?
+  callback reset_cb?
 
 A:
   Fatal error recovery will fail if the errors are reported by the
