@@ -878,7 +878,7 @@ static void *__text_poke(void *addr, const void *opcode, size_t len)
 	 */
 	flush_tlb_mm_range(poking_mm, poking_addr, poking_addr +
 			   (cross_page_boundary ? 2 : 1) * PAGE_SIZE,
-			   PAGE_SHIFT, false);
+			   PAGE_SHIFT, false, false);
 
 	/*
 	 * If the text does not match what we just wrote then something is

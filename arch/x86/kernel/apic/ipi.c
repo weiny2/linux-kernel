@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 
 #include <linux/cpumask.h>
+#include <linux/gfp.h>
 #include <linux/smp.h>
 
 #include "local.h"
@@ -92,6 +93,32 @@ void native_send_call_func_ipi(const struct cpumask *mask)
 
 sendmask:
 	apic->send_IPI_mask(mask, CALL_FUNCTION_VECTOR);
+}
+
+void native_send_rar_single_ipi(int cpu)
+{
+	apic->send_IPI_mask(cpumask_of(cpu), RAR_VECTOR);
+}
+
+void native_send_rar_ipi(const struct cpumask *mask)
+{
+	cpumask_var_t allbutself;
+
+	if (!alloc_cpumask_var(&allbutself, GFP_ATOMIC)) {
+		apic->send_IPI_mask(mask, RAR_VECTOR);
+		return;
+	}
+
+	cpumask_copy(allbutself, cpu_online_mask);
+	cpumask_clear_cpu(smp_processor_id(), allbutself);
+
+	if (cpumask_equal(mask, allbutself) &&
+		cpumask_equal(cpu_online_mask, cpu_callout_mask))
+		apic->send_IPI_allbutself(RAR_VECTOR);
+	else
+		apic->send_IPI_mask(mask, RAR_VECTOR);
+
+	free_cpumask_var(allbutself);
 }
 
 #endif /* CONFIG_SMP */
