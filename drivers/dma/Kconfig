@@ -286,6 +286,14 @@ config INTEL_IDXD
 	depends on PCI && X86_64
 	select DMA_ENGINE
 	select SBITMAP
+	select INTEL_IOMMU_SVM
+	select PCI_PRI
+	select PCI_PASID
+	select PCI_IOV
+	select MSI_IMS
+	select VFIO_PCI
+	select VFIO_MDEV
+	select VFIO_MDEV_DEVICE
 	help
 	  Enable support for the Intel(R) data accelerators present
 	  in Intel Xeon CPU.
@@ -293,6 +301,16 @@ config INTEL_IDXD
 	  Say Y if you have such a platform.
 
 	  If unsure, say N.
+
+config INTEL_IDXD_KTEST
+	tristate "Intel IDXD kernel direct API test"
+	depends on INTEL_IDXD && DMATEST
+	help
+	  Enable support for IDXD kernel direct API testing.
+
+	  Say Y if you want to perform testing for idxd KAPI.
+
+	  If unsure, say N
 
 config INTEL_IOATDMA
 	tristate "Intel I/OAT DMA support"

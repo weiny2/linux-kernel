@@ -7384,6 +7384,11 @@ static void svm_pre_update_apicv_exec_ctrl(struct kvm *kvm, bool activate)
 	avic_update_access_page(kvm, activate);
 }
 
+static bool svm_pasid_trans_supported(void)
+{
+	return false;
+}
+
 static struct kvm_x86_ops svm_x86_ops __ro_after_init = {
 	.cpu_has_kvm_support = has_svm,
 	.disabled_by_bios = is_disabled,
@@ -7524,6 +7529,8 @@ static struct kvm_x86_ops svm_x86_ops __ro_after_init = {
 	.need_emulation_on_page_fault = svm_need_emulation_on_page_fault,
 
 	.apic_init_signal_blocked = svm_apic_init_signal_blocked,
+
+	.pasid_trans_supported = svm_pasid_trans_supported,
 };
 
 static int __init svm_init(void)

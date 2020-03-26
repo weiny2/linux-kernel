@@ -107,6 +107,16 @@ static inline bool vmx_mpx_supported(void)
 		(vmcs_config.vmentry_ctrl & VM_ENTRY_LOAD_BNDCFGS);
 }
 
+static inline bool cpu_has_load_guest_cet_states_ctrl(void)
+{
+	return ((vmcs_config.vmentry_ctrl) & VM_ENTRY_LOAD_GUEST_CET_STATE);
+}
+
+static inline bool cpu_has_load_host_cet_states_ctrl(void)
+{
+	return ((vmcs_config.vmexit_ctrl) & VM_EXIT_LOAD_HOST_CET_STATE);
+}
+
 static inline bool cpu_has_vmx_tpr_shadow(void)
 {
 	return vmcs_config.cpu_based_exec_ctrl & CPU_BASED_TPR_SHADOW;
@@ -251,6 +261,12 @@ static inline bool vmx_xsaves_supported(void)
 {
 	return vmcs_config.cpu_based_2nd_exec_ctrl &
 		SECONDARY_EXEC_XSAVES;
+}
+
+static inline bool cpu_has_vmx_pasid_trans(void)
+{
+	return vmcs_config.cpu_based_2nd_exec_ctrl &
+		SECONDARY_EXEC_PASID_TRANS;
 }
 
 static inline bool vmx_waitpkg_supported(void)

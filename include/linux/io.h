@@ -79,6 +79,10 @@ void devm_memunmap(struct device *dev, void *addr);
 
 void *__devm_memremap_pages(struct device *dev, struct resource *res);
 
+void __iomem *devm_cmdmem_remap(struct device *dev, resource_size_t offset,
+				 resource_size_t size);
+void devm_cmdmem_unmap(struct device *dev, void __iomem *addr);
+
 #ifdef CONFIG_PCI
 /*
  * The PCI specifications (Rev 3.0, 3.2.5 "Transaction Ordering and

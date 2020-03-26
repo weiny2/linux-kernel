@@ -114,7 +114,7 @@ static inline bool x86_exception_has_error_code(unsigned int vector)
 {
 	static u32 exception_has_error_code = BIT(DF_VECTOR) | BIT(TS_VECTOR) |
 			BIT(NP_VECTOR) | BIT(SS_VECTOR) | BIT(GP_VECTOR) |
-			BIT(PF_VECTOR) | BIT(AC_VECTOR);
+			BIT(PF_VECTOR) | BIT(AC_VECTOR) | BIT(CP_VECTOR);
 
 	return (1U << vector) & exception_has_error_code;
 }
@@ -284,6 +284,15 @@ enum exit_fastpath_completion handle_fastpath_set_msr_irqoff(struct kvm_vcpu *vc
 				| XFEATURE_MASK_YMM | XFEATURE_MASK_BNDREGS \
 				| XFEATURE_MASK_BNDCSR | XFEATURE_MASK_AVX512 \
 				| XFEATURE_MASK_PKRU)
+
+/*
+ * In future, applicable XSS state bits can be added here
+ * to make them available to KVM and guest.
+ */
+#define KVM_SUPPORTED_XSS	(XFEATURE_MASK_CET_USER \
+				| XFEATURE_MASK_CET_KERNEL \
+				| XFEATURE_MASK_PASID)
+
 extern u64 host_xcr0;
 
 extern u64 kvm_supported_xcr0(void);
@@ -293,6 +302,8 @@ extern unsigned int min_timer_period_us;
 extern bool enable_vmware_backdoor;
 
 extern int pi_inject_timer;
+
+extern bool enable_pasid_trans;
 
 extern struct static_key kvm_no_apic_vcpu;
 

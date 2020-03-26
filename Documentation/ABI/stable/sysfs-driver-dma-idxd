@@ -71,6 +71,19 @@ Contact:        dmaengine@vger.kernel.org
 Description:    The operation capability bit mask specify the operation types
 		supported by the this device.
 
+What:		sys/bus/dsa/devices/dsa<m>/pasid_enabled
+Date:		Jan 30, 2020
+KernelVersion:	5.7.0
+Contact:	dmaengine@vger.kernel.org
+Description:	To indicate if PASID (process address space identifier) is
+
+What:           sys/bus/dsa/devices/dsa<m>/ims_size
+Date:           Oct 25, 2019
+KernelVersion:  5.8.0
+Contact:        dmaengine@vger.kernel.org
+Description:	Number of entries in the interrupt message storage table.
+		enabled or not for this device.
+
 What:           sys/bus/dsa/devices/dsa<m>/state
 Date:           Oct 25, 2019
 KernelVersion:  5.6.0
@@ -110,6 +123,13 @@ Description:    The maximum number of bandwidth tokens that may be in use at
 		one time by operations that access low bandwidth memory in the
 		device.
 
+What:		sys/bus/dsa/devices/wq<m>.<n>/block_on_fault
+Date:		Jan 30, 2020
+KernelVersion:	5.7.0
+Contact:	dmaengine@vger.kernel.org
+Description:	To indicate block on fault is allowed or not for the work queue
+		to support on demand paging.
+
 What:           sys/bus/dsa/devices/wq<m>.<n>/group_id
 Date:           Oct 25, 2019
 KernelVersion:  5.6.0
@@ -127,8 +147,16 @@ Date:           Oct 25, 2019
 KernelVersion:  5.6.0
 Contact:        dmaengine@vger.kernel.org
 Description:    The type of this work queue, it can be "kernel" type for work
-		queue usages in the kernel space or "user" type for work queue
-		usages by applications in user space.
+		queue usages in the kernel space, "user" type for work queue
+		usages by applications in user space, or "mdev" type for
+		VFIO mediated devices.
+
+What:           sys/bus/dsa/devices/wq<m>.<n>/uuid
+Date:           Oct 25, 2019
+KernelVersion:  5.8.0
+Contact:        dmaengine@vger.kernel.org
+Description:    The uuid attached to this work queue when the mediated device is
+		created.
 
 What:           sys/bus/dsa/devices/wq<m>.<n>/cdev_minor
 Date:           Oct 25, 2019

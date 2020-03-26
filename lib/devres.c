@@ -218,6 +218,42 @@ void __iomem *devm_of_iomap(struct device *dev, struct device_node *node, int in
 }
 EXPORT_SYMBOL(devm_of_iomap);
 
+/**
+ * devm_cmdmem_remap - Managed wrapper for cmdmem ioremap()
+ * @dev: Generic device to remap IO address for
+ * @offset: Resource address to map
+ * @size: Size of map
+ *
+ * Managed cmdmem ioremap() wrapper.  Map is automatically unmapped on
+ * driver detach.
+ */
+void __iomem *devm_cmdmem_remap(struct device *dev, resource_size_t offset,
+				 resource_size_t size)
+{
+	if (!device_supports_cmdmem(dev))
+		return NULL;
+
+	return devm_ioremap(dev, offset, size);
+}
+EXPORT_SYMBOL(devm_cmdmem_remap);
+
+/**
+ * devm_cmdmem_unmap - Managed wrapper for cmdmem iounmap()
+ * @dev: Generic device to unmap for
+ * @addr: Address to unmap
+ *
+ * Managed cmdmem iounmap().  @addr must have been mapped using
+ * devm_cmdmem_remap*().
+ */
+void devm_cmdmem_unmap(struct device *dev, void __iomem *addr)
+{
+	if (!device_supports_cmdmem(dev))
+		return;
+
+	devm_iounmap(dev, addr);
+}
+EXPORT_SYMBOL(devm_cmdmem_unmap);
+
 #ifdef CONFIG_HAS_IOPORT_MAP
 /*
  * Generic iomap devres

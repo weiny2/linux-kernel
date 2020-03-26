@@ -44,6 +44,7 @@
 #include <asm/spec-ctrl.h>
 #include <asm/virtext.h>
 #include <asm/vmx.h>
+#include <asm/cet.h>
 
 #include "capabilities.h"
 #include "cpuid.h"
@@ -1819,6 +1820,96 @@ static int vmx_get_msr_feature(struct kvm_msr_entry *msr)
 	}
 }
 
+#define CET_MSR_RSVD_BITS_1    0x3
+#define CET_MSR_RSVD_BITS_2   (0xF << 6)
+
+static bool cet_ssp_write_allowed(struct kvm_vcpu *vcpu, struct msr_data *msr)
+{
+	u64 data = msr->data;
+	u32 high_word = data >> 32;
+
+	if (is_64_bit_mode(vcpu)) {
+		if (data & CET_MSR_RSVD_BITS_1)
+			return false;
+	} else if (high_word) {
+		return false;
+	}
+
+	return true;
+}
+
+static bool cet_ctl_write_allowed(struct kvm_vcpu *vcpu, struct msr_data *msr)
+{
+	u64 data = msr->data;
+	u32 high_word = data >> 32;
+
+	if (data & CET_MSR_RSVD_BITS_2)
+		return false;
+
+	if (!is_64_bit_mode(vcpu) && high_word)
+		return false;
+
+	return true;
+}
+
+static bool cet_ssp_access_allowed(struct kvm_vcpu *vcpu, struct msr_data *msr)
+{
+	u64 kvm_xss;
+	u32 index = msr->index;
+
+	if (is_guest_mode(vcpu))
+		return false;
+
+	if (!boot_cpu_has(X86_FEATURE_SHSTK))
+		return false;
+
+	if (!msr->host_initiated &&
+	    !guest_cpuid_has(vcpu, X86_FEATURE_SHSTK))
+		return false;
+
+	if (index == MSR_IA32_INT_SSP_TAB)
+		return true;
+
+	kvm_xss = kvm_supported_xss();
+
+	if (index == MSR_IA32_PL3_SSP) {
+		if (!(kvm_xss & XFEATURE_MASK_CET_USER))
+			return false;
+	} else if (!(kvm_xss & XFEATURE_MASK_CET_KERNEL)) {
+		return false;
+	}
+
+	return true;
+}
+
+static bool cet_ctl_access_allowed(struct kvm_vcpu *vcpu, struct msr_data *msr)
+{
+	u64 kvm_xss;
+	u32 index = msr->index;
+
+	if (is_guest_mode(vcpu))
+		return false;
+
+	kvm_xss = kvm_supported_xss();
+
+	if (!boot_cpu_has(X86_FEATURE_SHSTK) &&
+	    !boot_cpu_has(X86_FEATURE_IBT))
+		return false;
+
+	if (!msr->host_initiated &&
+	    !guest_cpuid_has(vcpu, X86_FEATURE_SHSTK) &&
+	    !guest_cpuid_has(vcpu, X86_FEATURE_IBT))
+		return false;
+
+	if (index == MSR_IA32_U_CET) {
+		if (!(kvm_xss & XFEATURE_MASK_CET_USER))
+			return false;
+	} else if (!(kvm_xss & XFEATURE_MASK_CET_KERNEL)) {
+		return false;
+	}
+
+	return true;
+}
 /*
  * Reads an msr value (of 'msr_index') into 'pdata'.
  * Returns 0 on success, non-0 otherwise.
@@ -1950,6 +2041,26 @@ static int vmx_get_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 			msr_info->data = vmx->pt_desc.guest.addr_b[index / 2];
 		else
 			msr_info->data = vmx->pt_desc.guest.addr_a[index / 2];
+		break;
+	case MSR_IA32_S_CET:
+		if (!cet_ctl_access_allowed(vcpu, msr_info))
+			return 1;
+		msr_info->data = vmcs_readl(GUEST_S_CET);
+		break;
+	case MSR_IA32_INT_SSP_TAB:
+		if (!cet_ssp_access_allowed(vcpu, msr_info))
+			return 1;
+		msr_info->data = vmcs_readl(GUEST_INTR_SSP_TABLE);
+		break;
+	case MSR_IA32_U_CET:
+		if (!cet_ctl_access_allowed(vcpu, msr_info))
+			return 1;
+		rdmsrl(MSR_IA32_U_CET, msr_info->data);
+		break;
+	case MSR_IA32_PL0_SSP ... MSR_IA32_PL3_SSP:
+		if (!cet_ssp_access_allowed(vcpu, msr_info))
+			return 1;
+		rdmsrl(msr_info->index, msr_info->data);
 		break;
 	case MSR_TSC_AUX:
 		if (!msr_info->host_initiated &&
@@ -2207,6 +2318,34 @@ static int vmx_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 		else
 			vmx->pt_desc.guest.addr_a[index / 2] = data;
 		break;
+	case MSR_IA32_S_CET:
+		if (!cet_ctl_access_allowed(vcpu, msr_info))
+			return 1;
+		if (!cet_ctl_write_allowed(vcpu, msr_info))
+			return 1;
+		vmcs_writel(GUEST_S_CET, data);
+		break;
+	case MSR_IA32_INT_SSP_TAB:
+		if (!cet_ctl_access_allowed(vcpu, msr_info))
+			return 1;
+		if (!is_64_bit_mode(vcpu))
+			return 1;
+		vmcs_writel(GUEST_INTR_SSP_TABLE, data);
+		break;
+	case MSR_IA32_U_CET:
+		if (!cet_ctl_access_allowed(vcpu, msr_info))
+			return 1;
+		if (!cet_ctl_write_allowed(vcpu, msr_info))
+			return 1;
+		wrmsrl(MSR_IA32_U_CET, data);
+		break;
+	case MSR_IA32_PL0_SSP ... MSR_IA32_PL3_SSP:
+		if (!cet_ssp_access_allowed(vcpu, msr_info))
+			return 1;
+		if (!cet_ssp_write_allowed(vcpu, msr_info))
+			return 1;
+		wrmsrl(msr_info->index, data);
+		break;
 	case MSR_TSC_AUX:
 		if (!msr_info->host_initiated &&
 		    !guest_cpuid_has(vcpu, X86_FEATURE_RDTSCP))
@@ -2429,7 +2568,8 @@ static __init int setup_vmcs_config(struct vmcs_config *vmcs_conf,
 			SECONDARY_EXEC_ENABLE_USR_WAIT_PAUSE |
 			SECONDARY_EXEC_PT_USE_GPA |
 			SECONDARY_EXEC_PT_CONCEAL_VMX |
-			SECONDARY_EXEC_ENABLE_VMFUNC;
+			SECONDARY_EXEC_ENABLE_VMFUNC |
+			SECONDARY_EXEC_PASID_TRANS;
 		if (cpu_has_sgx())
 			opt2 |= SECONDARY_EXEC_ENCLS_EXITING;
 		if (adjust_vmx_controls(min2, opt2,
@@ -2480,7 +2620,9 @@ static __init int setup_vmcs_config(struct vmcs_config *vmcs_conf,
 	      VM_EXIT_CLEAR_BNDCFGS |
 	      VM_EXIT_PT_CONCEAL_PIP |
 	      VM_EXIT_CLEAR_IA32_RTIT_CTL |
-	      VM_EXIT_CLEAR_IA32_LBR_CTL;
+	      VM_EXIT_CLEAR_IA32_LBR_CTL |
+	      VM_EXIT_LOAD_HOST_CET_STATE;
+
 	if (adjust_vmx_controls(min, opt, MSR_IA32_VMX_EXIT_CTLS,
 				&_vmexit_control) < 0)
 		return -EIO;
@@ -2505,7 +2647,9 @@ static __init int setup_vmcs_config(struct vmcs_config *vmcs_conf,
 	      VM_ENTRY_LOAD_BNDCFGS |
 	      VM_ENTRY_PT_CONCEAL_PIP |
 	      VM_ENTRY_LOAD_IA32_RTIT_CTL |
-	      VM_ENTRY_LOAD_IA32_LBR_CTL;
+	      VM_ENTRY_LOAD_IA32_LBR_CTL |
+	      VM_ENTRY_LOAD_GUEST_CET_STATE;
+
 	if (adjust_vmx_controls(min, opt, MSR_IA32_VMX_ENTRY_CTLS,
 				&_vmentry_control) < 0)
 		return -EIO;
@@ -3059,6 +3203,25 @@ void vmx_set_cr3(struct kvm_vcpu *vcpu, unsigned long cr3)
 		vmcs_writel(GUEST_CR3, guest_cr3);
 }
 
+bool is_cet_bit_allowed(struct kvm_vcpu *vcpu)
+{
+	u64 kvm_xss = kvm_supported_xss();
+	unsigned long cr0;
+	bool cet_allowed;
+
+	cr0 = kvm_read_cr0(vcpu);
+
+	/* Right now, only user-mode CET is supported.*/
+	cet_allowed = (kvm_xss & XFEATURE_MASK_CET_USER) &&
+		      (guest_cpuid_has(vcpu, X86_FEATURE_SHSTK) ||
+		      guest_cpuid_has(vcpu, X86_FEATURE_IBT));
+
+	if ((cr0 & X86_CR0_WP) && cet_allowed)
+		return true;
+
+	return false;
+}
+
 int vmx_set_cr4(struct kvm_vcpu *vcpu, unsigned long cr4)
 {
 	struct vcpu_vmx *vmx = to_vmx(vcpu);
@@ -3098,6 +3261,9 @@ int vmx_set_cr4(struct kvm_vcpu *vcpu, unsigned long cr4)
 		if (!nested_vmx_allowed(vcpu) || is_smm(vcpu))
 			return 1;
 	}
+
+	if ((cr4 & X86_CR4_CET) && !is_cet_bit_allowed(vcpu))
+		return 1;
 
 	if (vmx->nested.vmxon && !nested_cr4_valid(vcpu, cr4))
 		return 1;
@@ -3958,6 +4124,12 @@ void vmx_set_constant_host_state(struct vcpu_vmx *vmx)
 
 	if (cpu_has_load_ia32_efer())
 		vmcs_write64(HOST_IA32_EFER, host_efer);
+
+	if (cpu_has_load_host_cet_states_ctrl()) {
+		vmcs_writel(HOST_S_CET, 0);
+		vmcs_writel(HOST_INTR_SSP_TABLE, 0);
+		vmcs_writel(HOST_SSP, 0);
+	}
 }
 
 void set_cr4_guest_host_mask(struct vcpu_vmx *vmx)
@@ -4072,6 +4244,9 @@ static void vmx_compute_secondary_exec_control(struct vcpu_vmx *vmx)
 
 	if (!enable_pml)
 		exec_control &= ~SECONDARY_EXEC_ENABLE_PML;
+
+	if (!enable_pasid_trans)
+		exec_control &= ~SECONDARY_EXEC_PASID_TRANS;
 
 	if (vmx_xsaves_supported()) {
 		/* Exposing XSAVES only when XSAVE is exposed */
@@ -4286,6 +4461,13 @@ static void init_vmcs(struct vcpu_vmx *vmx)
 		/* Bit[6~0] are forced to 1, writes are ignored. */
 		vmx->pt_desc.guest.output_mask = 0x7F;
 		vmcs_write64(GUEST_IA32_RTIT_CTL, 0);
+	}
+
+	if (enable_pasid_trans && cpu_has_vmx_pasid_trans()) {
+		struct kvm_vmx *kvm_vmx = to_kvm_vmx(vmx->vcpu.kvm);
+
+		vmcs_write64(PASID_DIR0, page_to_phys(kvm_vmx->pasid_dir0));
+		vmcs_write64(PASID_DIR1, page_to_phys(kvm_vmx->pasid_dir1));
 	}
 }
 
@@ -5550,6 +5732,44 @@ static int handle_encls(struct kvm_vcpu *vcpu)
 	return 1;
 }
 
+static int handle_enqcmd_pasid(struct kvm_vcpu *vcpu)
+{
+	unsigned long flags;
+
+	kvm_debug_ratelimited("[%s] VM exit_qualification=0x%lx\n", __func__,
+			      vmcs_readl(EXIT_QUALIFICATION));
+
+	/*
+	 * it's required to setup PASID translation table using ioctl
+	 * KVM_SET_USER_PASID before using ENQCMD with that PASID in Guest.
+	 * So translation failure is not expected with any valid guest PASID.
+	 *
+	 * One possible case of translation failure is that people are using
+	 * some invalid guest PASIDs. For safety, we have to skip this ENQCMD
+	 * instruction and set ZF flag to 1.
+	 */
+	flags = vmx_get_rflags(vcpu);
+	flags |= X86_EFLAGS_ZF;
+	vmx_set_rflags(vcpu, flags);
+
+	return kvm_skip_emulated_instruction(vcpu);
+}
+
+static int handle_enqcmds_pasid(struct kvm_vcpu *vcpu)
+{
+	unsigned long flags;
+
+	kvm_debug_ratelimited("[%s] VM exit_qualification=0x%lx\n", __func__,
+			      vmcs_readl(EXIT_QUALIFICATION));
+
+	/* Same case as ENQCMD for ENQCMDS */
+	flags = vmx_get_rflags(vcpu);
+	flags |= X86_EFLAGS_ZF;
+	vmx_set_rflags(vcpu, flags);
+
+	return kvm_skip_emulated_instruction(vcpu);
+}
+
 /*
  * The exit handlers return 1 if the exit was handled fully and guest execution
  * may resume.  Otherwise they set the kvm_run parameter to indicate what needs
@@ -5606,6 +5826,8 @@ static int (*kvm_vmx_exit_handlers[])(struct kvm_vcpu *vcpu) = {
 	[EXIT_REASON_VMFUNC]		      = handle_vmx_instruction,
 	[EXIT_REASON_PREEMPTION_TIMER]	      = handle_preemption_timer,
 	[EXIT_REASON_ENCLS]		      = handle_encls,
+	[EXIT_REASON_ENQCMD_PASID]            = handle_enqcmd_pasid,
+	[EXIT_REASON_ENQCMDS_PASID]           = handle_enqcmds_pasid,
 };
 
 static const int kvm_vmx_max_exit_handlers =
@@ -6336,6 +6558,11 @@ static bool vmx_pt_supported(void)
 	return pt_mode == PT_MODE_HOST_GUEST;
 }
 
+static bool vmx_pasid_trans_supported(void)
+{
+	return cpu_has_vmx_pasid_trans();
+}
+
 static void vmx_recover_nmi_blocking(struct vcpu_vmx *vmx)
 {
 	u32 exit_intr_info;
@@ -6524,7 +6751,9 @@ bool __vmx_vcpu_run(struct vcpu_vmx *vmx, unsigned long *regs, bool launched);
 static void vmx_vcpu_run(struct kvm_vcpu *vcpu)
 {
 	struct vcpu_vmx *vmx = to_vmx(vcpu);
+	u64 kvm_xss = kvm_supported_xss();
 	unsigned long cr3, cr4;
+	bool cet_allowed;
 
 	/* Record the guest's net vcpu time for enforced NMI injections. */
 	if (unlikely(!enable_vnmi &&
@@ -6557,6 +6786,25 @@ static void vmx_vcpu_run(struct kvm_vcpu *vcpu)
 		vmcs_writel(HOST_CR3, cr3);
 		vmx->loaded_vmcs->host_state.cr3 = cr3;
 	}
+
+	/* Right now, only user-mode CET is supported.*/
+	cet_allowed = (kvm_xss & XFEATURE_MASK_CET_USER) &&
+		      (guest_cpuid_has(vcpu, X86_FEATURE_SHSTK) ||
+		      guest_cpuid_has(vcpu, X86_FEATURE_IBT));
+
+	if (cpu_has_load_guest_cet_states_ctrl() && cet_allowed)
+		vmcs_set_bits(VM_ENTRY_CONTROLS,
+			      VM_ENTRY_LOAD_GUEST_CET_STATE);
+	else
+		vmcs_clear_bits(VM_ENTRY_CONTROLS,
+				VM_ENTRY_LOAD_GUEST_CET_STATE);
+
+	if (cpu_has_load_host_cet_states_ctrl() && cet_allowed)
+		vmcs_set_bits(VM_EXIT_CONTROLS,
+			      VM_EXIT_LOAD_HOST_CET_STATE);
+	else
+		vmcs_clear_bits(VM_EXIT_CONTROLS,
+				VM_EXIT_LOAD_HOST_CET_STATE);
 
 	cr4 = cr4_read_shadow();
 	if (unlikely(cr4 != vmx->loaded_vmcs->host_state.cr4)) {
@@ -6591,6 +6839,12 @@ static void vmx_vcpu_run(struct kvm_vcpu *vcpu)
 		vcpu->arch.apic->lapic_timer.timer_advance_ns)
 		kvm_wait_lapic_expire(vcpu);
 
+	if (enable_pasid_trans && cpu_has_vmx_pasid_trans()) {
+		rdmsrl(MSR_IA32_PASID, vmx->host_pasid);
+		if (vmx->host_pasid != vcpu->arch.ia32_pasid)
+			wrmsrl(MSR_IA32_PASID, vcpu->arch.ia32_pasid);
+	}
+
 	/*
 	 * If this vCPU has touched SPEC_CTRL, restore the guest's value if
 	 * it's non-zero. Since vmentry is serialising on affected CPUs, there
@@ -6612,6 +6866,12 @@ static void vmx_vcpu_run(struct kvm_vcpu *vcpu)
 				   vmx->loaded_vmcs->launched);
 
 	vcpu->arch.cr2 = read_cr2();
+
+	if (enable_pasid_trans && cpu_has_vmx_pasid_trans()) {
+		rdmsrl(MSR_IA32_PASID, vcpu->arch.ia32_pasid);
+		if (vcpu->arch.ia32_pasid != vmx->host_pasid)
+			wrmsrl(MSR_IA32_PASID, vmx->host_pasid);
+	}
 
 	/*
 	 * We do not use IBRS in the kernel. If this vCPU has used the
@@ -6698,16 +6958,100 @@ static void vmx_vcpu_run(struct kvm_vcpu *vcpu)
 	vmx_complete_interrupts(vmx);
 }
 
+static int vmx_pasid_trans_conf(struct kvm_vmx *kvm_vmx,
+				unsigned int gpasid, u32 table_entry)
+{
+	struct page *pasid_dir, *new_table;
+	unsigned int de_idx, te_idx;
+	u32 *table_base;
+	u64 *dir_base;
+	int ret = 0;
+
+	spin_lock(&kvm_vmx->pasid_trans_lock);
+
+	pasid_dir = PASID_HIGH_DIR(gpasid) ?
+			kvm_vmx->pasid_dir1 : kvm_vmx->pasid_dir0;
+	dir_base = page_address(pasid_dir);
+
+	de_idx = PASID_DIR_ENTRY_IDX(gpasid);
+	te_idx = PASID_TAB_ENTRY_IDX(gpasid);
+
+	if (dir_base[de_idx] & PASID_DIR_ENTRY_PRESENT) {
+		table_base = __va(dir_base[de_idx] & PAGE_MASK);
+	} else {
+		new_table = alloc_page(GFP_ATOMIC | __GFP_ZERO);
+		if (!new_table) {
+			pr_err("PASID translation: fail to alloc table page\n");
+			ret = -ENOMEM;
+			goto done;
+		}
+
+		table_base = page_address(new_table);
+		dir_base[de_idx] = (u64)page_to_phys(new_table) |
+					PASID_DIR_ENTRY_PRESENT;
+	}
+
+	table_base[te_idx] = table_entry;
+
+	pr_debug("%s: Guest PASID=0x%x Table Entry=0x%x\n", __func__,
+		 gpasid, table_entry);
+done:
+	spin_unlock(&kvm_vmx->pasid_trans_lock);
+	return ret;
+}
+
+#define vmx_pasid_trans_clear(kvm_vmx, gpasid) \
+	vmx_pasid_trans_conf(kvm_vmx, gpasid, 0)
+#define vmx_pasid_trans_set(kvm_vmx, gpasid, hpasid) \
+	vmx_pasid_trans_conf(kvm_vmx, gpasid, (hpasid) | PASID_TAB_ENTRY_VALID)
+
+static void vmx_pasid_trans_free(struct page *pasid_dir)
+{
+	u64 *dir_base = page_address(pasid_dir);
+	void *table_base;
+	int de_idx;
+
+	for (de_idx = 0; de_idx < PASID_DIR_ENTRY_NUM; de_idx++) {
+		if (dir_base[de_idx] & PASID_DIR_ENTRY_PRESENT) {
+			table_base = __va(dir_base[de_idx] & PAGE_MASK);
+
+			free_page((unsigned long)table_base);
+		}
+		dir_base[de_idx] = 0;
+	}
+	__free_page(pasid_dir);
+}
+
+static void vmx_vm_alloc_pasid_dirs(struct kvm_vmx *kvm_vmx)
+{
+	kvm_vmx->pasid_dir0 = alloc_page(GFP_KERNEL | __GFP_ZERO);
+	kvm_vmx->pasid_dir1 = alloc_page(GFP_KERNEL | __GFP_ZERO);
+
+	WARN_ON(!kvm_vmx->pasid_dir0 || !kvm_vmx->pasid_dir1);
+}
+
+static void vmx_vm_free_pasid_dirs(struct kvm_vmx *kvm_vmx)
+{
+	vmx_pasid_trans_free(kvm_vmx->pasid_dir0);
+	vmx_pasid_trans_free(kvm_vmx->pasid_dir1);
+}
+
 static struct kvm *vmx_vm_alloc(void)
 {
 	struct kvm_vmx *kvm_vmx = __vmalloc(sizeof(struct kvm_vmx),
 					    GFP_KERNEL_ACCOUNT | __GFP_ZERO,
 					    PAGE_KERNEL);
+
+	if (enable_pasid_trans && cpu_has_vmx_pasid_trans())
+		vmx_vm_alloc_pasid_dirs(kvm_vmx);
+
 	return &kvm_vmx->kvm;
 }
 
 static void vmx_vm_free(struct kvm *kvm)
 {
+	if (enable_pasid_trans && cpu_has_vmx_pasid_trans())
+		vmx_vm_free_pasid_dirs(to_kvm_vmx(kvm));
 	kfree(kvm->arch.hyperv.hv_pa_pg);
 	vfree(to_kvm_vmx(kvm));
 }
@@ -6796,6 +7140,8 @@ static int vmx_create_vcpu(struct kvm_vcpu *vcpu)
 		vmx_disable_intercept_for_msr(msr_bitmap, MSR_CORE_C6_RESIDENCY, MSR_TYPE_R);
 		vmx_disable_intercept_for_msr(msr_bitmap, MSR_CORE_C7_RESIDENCY, MSR_TYPE_R);
 	}
+	if (enable_pasid_trans && cpu_has_vmx_pasid_trans())
+		vmx_disable_intercept_for_msr(msr_bitmap, MSR_IA32_PASID, MSR_TYPE_RW);
 	vmx->msr_bitmap_mode = 0;
 
 	vmx->loaded_vmcs = &vmx->vmcs01;
@@ -6855,6 +7201,7 @@ free_vpid:
 static int vmx_vm_init(struct kvm *kvm)
 {
 	spin_lock_init(&to_kvm_vmx(kvm)->ept_pointer_lock);
+	spin_lock_init(&to_kvm_vmx(kvm)->pasid_trans_lock);
 
 	if (!ple_gap)
 		kvm->arch.pause_in_guest = true;
@@ -7110,6 +7457,52 @@ static void update_intel_pt_cfg(struct kvm_vcpu *vcpu)
 		vmx->pt_desc.ctl_bitmask &= ~(0xfULL << (32 + i * 4));
 }
 
+static void vmx_update_intercept_for_cet_msr(struct kvm_vcpu *vcpu)
+{
+	struct vcpu_vmx *vmx = to_vmx(vcpu);
+	unsigned long *msr_bitmap = vmx->vmcs01.msr_bitmap;
+
+	/*
+	 * U_CET is required for USER CET, per CET spec., meanwhile U_CET and
+	 * PL3_SPP are a bundle for USER CET xsaves.
+	 */
+	if ((kvm_supported_xss() & XFEATURE_MASK_CET_USER) &&
+	    (guest_cpuid_has(vcpu, X86_FEATURE_SHSTK) ||
+	    guest_cpuid_has(vcpu, X86_FEATURE_IBT))) {
+		vmx_disable_intercept_for_msr(msr_bitmap, MSR_IA32_U_CET, MSR_TYPE_RW);
+		vmx_disable_intercept_for_msr(msr_bitmap, MSR_IA32_PL3_SSP, MSR_TYPE_RW);
+	} else {
+		vmx_set_intercept_for_msr(msr_bitmap, MSR_IA32_U_CET, MSR_TYPE_RW, true);
+		vmx_set_intercept_for_msr(msr_bitmap, MSR_IA32_PL3_SSP, MSR_TYPE_RW, true);
+	}
+	/*
+	 * S_CET is required for KERNEL CET, meanwhile PL0_SSP ... PL2_SSP are a bundle
+	 * for CET KERNEL xsaves.
+	 */
+	if ((kvm_supported_xss() & XFEATURE_MASK_CET_KERNEL) &&
+	    (guest_cpuid_has(vcpu, X86_FEATURE_SHSTK) ||
+	    guest_cpuid_has(vcpu, X86_FEATURE_IBT))) {
+		vmx_disable_intercept_for_msr(msr_bitmap, MSR_IA32_S_CET, MSR_TYPE_RW);
+		vmx_disable_intercept_for_msr(msr_bitmap, MSR_IA32_PL0_SSP, MSR_TYPE_RW);
+		vmx_disable_intercept_for_msr(msr_bitmap, MSR_IA32_PL1_SSP, MSR_TYPE_RW);
+		vmx_disable_intercept_for_msr(msr_bitmap, MSR_IA32_PL2_SSP, MSR_TYPE_RW);
+
+		/* SSP_TAB only available for KERNEL SHSTK.*/
+		if (guest_cpuid_has(vcpu, X86_FEATURE_SHSTK))
+			vmx_disable_intercept_for_msr(msr_bitmap, MSR_IA32_INT_SSP_TAB,
+						      MSR_TYPE_RW);
+		else
+			vmx_set_intercept_for_msr(msr_bitmap, MSR_IA32_INT_SSP_TAB,
+						  MSR_TYPE_RW, true);
+	} else {
+		vmx_set_intercept_for_msr(msr_bitmap, MSR_IA32_S_CET, MSR_TYPE_RW, true);
+		vmx_set_intercept_for_msr(msr_bitmap, MSR_IA32_PL0_SSP, MSR_TYPE_RW, true);
+		vmx_set_intercept_for_msr(msr_bitmap, MSR_IA32_PL1_SSP, MSR_TYPE_RW, true);
+		vmx_set_intercept_for_msr(msr_bitmap, MSR_IA32_PL2_SSP, MSR_TYPE_RW, true);
+		vmx_set_intercept_for_msr(msr_bitmap, MSR_IA32_INT_SSP_TAB, MSR_TYPE_RW, true);
+	}
+}
+
 static void vmx_cpuid_update(struct kvm_vcpu *vcpu)
 {
 	struct vcpu_vmx *vmx = to_vmx(vcpu);
@@ -7148,6 +7541,7 @@ static void vmx_cpuid_update(struct kvm_vcpu *vcpu)
 			vmx_set_guest_msr(vmx, msr, enabled ? 0 : TSX_CTRL_RTM_DISABLE);
 		}
 	}
+	vmx_update_intercept_for_cet_msr(vcpu);
 }
 
 static void vmx_set_supported_cpuid(u32 func, struct kvm_cpuid_entry2 *entry)
@@ -7671,6 +8065,35 @@ static bool vmx_apic_init_signal_blocked(struct kvm_vcpu *vcpu)
 	return to_vmx(vcpu)->nested.vmxon;
 }
 
+static int vmx_set_user_pasid(struct kvm *kvm, struct kvm_user_pasid *pasid)
+{
+	struct kvm_vmx *kvm_vmx = to_kvm_vmx(kvm);
+	unsigned int gpasid = pasid->pasid;
+
+	if (!gpasid || gpasid >= (1 << 20))
+		return -EINVAL;
+
+	if (pasid->flags == KVM_USER_PASID_INVALIDATE) {
+		/*
+		 * TODO: ideally it needs to query Host PASID from ioasid using
+		 * Guest PASID + mm information. Compare it with related entry
+		 * value for double confirmation. And finally put Host PASID
+		 * (ioasid) refcount.
+		 */
+		return vmx_pasid_trans_clear(kvm_vmx, gpasid);
+	} else if (!pasid->flags) {
+		/*
+		 * TODO: ideally it needs to query Host PASID from ioasid using
+		 * Guest PASID + mm information. Increase Host PASID (ioasid)
+		 * refcount.
+		 * Currently it only supports 1:1 Host vs Guest PASID mapping.
+		 */
+		return vmx_pasid_trans_set(kvm_vmx, gpasid, gpasid);
+	}
+
+	return -EINVAL;
+}
+
 static __init int hardware_setup(void)
 {
 	unsigned long host_bndcfgs;
@@ -8002,7 +8425,11 @@ static struct kvm_x86_ops vmx_x86_ops __ro_after_init = {
 	.nested_enable_evmcs = NULL,
 	.nested_get_evmcs_version = NULL,
 	.need_emulation_on_page_fault = vmx_need_emulation_on_page_fault,
+
 	.apic_init_signal_blocked = vmx_apic_init_signal_blocked,
+
+	.pasid_trans_supported = vmx_pasid_trans_supported,
+	.set_user_pasid = vmx_set_user_pasid,
 };
 
 static void vmx_cleanup_l1d_flush(void)

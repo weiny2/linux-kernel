@@ -27,10 +27,12 @@ struct idxd_cdev_context {
  */
 static struct idxd_cdev_context ictx[IDXD_TYPE_MAX] = {
 	{ .name = "dsa" },
+	{ .name = "iax" }
 };
 
 struct idxd_user_context {
 	struct idxd_wq *wq;
+	int pasid;
 	struct task_struct *task;
 	unsigned int flags;
 };
@@ -74,16 +76,15 @@ static int idxd_cdev_open(struct inode *inode, struct file *filp)
 	struct idxd_device *idxd;
 	struct idxd_wq *wq;
 	struct device *dev;
-	struct idxd_cdev *idxd_cdev;
+	int rc;
 
 	wq = inode_wq(inode);
 	idxd = wq->idxd;
 	dev = &idxd->pdev->dev;
-	idxd_cdev = &wq->idxd_cdev;
 
-	dev_dbg(dev, "%s called\n", __func__);
+	dev_dbg(dev, "%s called: %d\n", __func__, idxd_wq_refcount(wq));
 
-	if (idxd_wq_refcount(wq) > 1 && wq_dedicated(wq))
+	if (idxd_wq_refcount(wq) > 0 && wq_dedicated(wq))
 		return -EBUSY;
 
 	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
@@ -92,8 +93,34 @@ static int idxd_cdev_open(struct inode *inode, struct file *filp)
 
 	ctx->wq = wq;
 	filp->private_data = ctx;
+
+	if (idxd->pasid_enabled) {
+		ctx->task = current;
+		get_task_struct(current);
+
+		rc = intel_svm_bind_mm(dev, &ctx->pasid, 0, NULL);
+		if (rc < 0) {
+			dev_err(dev, "pasid allocation failed: %d\n", rc);
+			goto failed;
+		}
+
+		if (wq_dedicated(wq)) {
+			rc = idxd_wq_set_pasid(wq, ctx->pasid);
+			if (rc < 0) {
+				dev_err(dev, "wq set pasid failed: %d\n", rc);
+				goto failed;
+			}
+		}
+	}
+
 	idxd_wq_get(wq);
 	return 0;
+
+failed:
+	if (ctx->task)
+		put_task_struct(current);
+	kfree(ctx);
+	return rc;
 }
 
 static int idxd_cdev_release(struct inode *node, struct file *filep)
@@ -102,9 +129,25 @@ static int idxd_cdev_release(struct inode *node, struct file *filep)
 	struct idxd_wq *wq = ctx->wq;
 	struct idxd_device *idxd = wq->idxd;
 	struct device *dev = &idxd->pdev->dev;
+	int rc;
 
 	dev_dbg(dev, "%s called\n", __func__);
 	filep->private_data = NULL;
+
+	if (idxd->pasid_enabled) {
+		rc = idxd_device_drain_pasid(idxd, ctx->pasid);
+		if (rc < 0)
+			dev_err(dev, "Failed to drain pasid: %d\n",
+				ctx->pasid);
+		intel_svm_unbind_mm(&idxd->pdev->dev, ctx->pasid);
+		put_task_struct(ctx->task);
+
+		if (wq_dedicated(wq)) {
+			rc = idxd_wq_disable_pasid(wq);
+			if (rc < 0)
+				dev_err(dev, "wq disable pasid failed.\n");
+		}
+	}
 
 	kfree(ctx);
 	idxd_wq_put(wq);
@@ -139,10 +182,13 @@ static int idxd_cdev_mmap(struct file *filp, struct vm_area_struct *vma)
 
 	dev_dbg(&pdev->dev, "%s called\n", __func__);
 	rc = check_vma(wq, vma, __func__);
+	if (rc < 0)
+		return rc;
 
-	vma->vm_flags |= VM_DONTCOPY;
+	vma->vm_flags |= VM_DONTCOPY | VM_DONTEXPAND | VM_WIPEONFORK;
 	pfn = (base + idxd_get_wq_portal_full_offset(wq->id,
-				IDXD_PORTAL_LIMITED)) >> PAGE_SHIFT;
+				IDXD_PORTAL_LIMITED,
+				IDXD_IRQ_MSIX)) >> PAGE_SHIFT;
 	vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
 	vma->vm_private_data = ctx;
 

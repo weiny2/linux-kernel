@@ -27,6 +27,7 @@
 #include <linux/netdevice.h>
 #include <linux/sched/signal.h>
 #include <linux/sysfs.h>
+#include <linux/pci.h>
 
 #include "base.h"
 #include "power/power.h"
@@ -3791,3 +3792,15 @@ int device_match_any(struct device *dev, const void *unused)
 	return 1;
 }
 EXPORT_SYMBOL_GPL(device_match_any);
+
+bool device_supports_cmdmem(struct device *dev)
+{
+	struct pci_dev *pdev;
+
+	if (!dev_is_pci(dev))
+		return false;
+
+	pdev = to_pci_dev(dev);
+	return pdev->cmdmem;
+}
+EXPORT_SYMBOL_GPL(device_supports_cmdmem);

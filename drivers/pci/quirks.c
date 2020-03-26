@@ -5461,3 +5461,15 @@ out_disable:
 DECLARE_PCI_FIXUP_CLASS_FINAL(PCI_VENDOR_ID_NVIDIA, 0x13b1,
 			      PCI_CLASS_DISPLAY_VGA, 8,
 			      quirk_reset_lenovo_thinkpad_p50_nvgpu);
+
+/*
+ * Until the PCI Sig defines a standard capaiblity check that indicates a
+ * device has cmdmem with synchronous write capability, we'll add a quirk
+ * for device that supports it.
+ */
+static void device_cmdmem_fixup(struct pci_dev *pdev)
+{
+	pdev->cmdmem = 1;
+}
+DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_INTEL, 0x0b25, device_cmdmem_fixup);
+DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_INTEL, 0x0cfe, device_cmdmem_fixup);

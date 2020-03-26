@@ -811,6 +811,7 @@ static inline bool dev_has_sync_state(struct device *dev)
 		return true;
 	return false;
 }
+extern bool device_supports_cmdmem(struct device *dev);
 
 /*
  * High level routines for use by the bus drivers
