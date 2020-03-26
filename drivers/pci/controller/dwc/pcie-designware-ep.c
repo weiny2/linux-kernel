@@ -67,7 +67,7 @@ static int dw_pcie_ep_write_header(struct pci_epc *epc, u8 func_no,
 
 static int dw_pcie_ep_inbound_atu(struct dw_pcie_ep *ep, enum pci_barno bar,
 				  dma_addr_t cpu_addr,
-				  enum dw_pcie_as_type as_type)
+				  enum dw_pcie_as_type as_type, u8 func_no)
 {
 	int ret;
 	u32 free_win;
@@ -80,7 +80,7 @@ static int dw_pcie_ep_inbound_atu(struct dw_pcie_ep *ep, enum pci_barno bar,
 	}
 
 	ret = dw_pcie_prog_inbound_atu(pci, free_win, bar, cpu_addr,
-				       as_type);
+				       as_type,func_no);
 	if (ret < 0) {
 		dev_err(pci->dev, "Failed to program IB window\n");
 		return ret;
@@ -144,7 +144,7 @@ static int dw_pcie_ep_set_bar(struct pci_epc *epc, u8 func_no,
 	else
 		as_type = DW_PCIE_AS_IO;
 
-	ret = dw_pcie_ep_inbound_atu(ep, bar, epf_bar->phys_addr, as_type);
+	ret = dw_pcie_ep_inbound_atu(ep, bar, epf_bar->phys_addr, as_type,func_no);
 	if (ret)
 		return ret;
 
@@ -375,19 +375,19 @@ int dw_pcie_ep_raise_msi_irq(struct dw_pcie_ep *ep, u8 func_no,
 		return -EINVAL;
 
 	/* Raise MSI per the PCI Local Bus Specification Revision 3.0, 6.8.1. */
-	reg = ep->msi_cap + PCI_MSI_FLAGS;
+	reg = (func_no * 0x10000) + ep->msi_cap + PCI_MSI_FLAGS;
 	msg_ctrl = dw_pcie_readw_dbi(pci, reg);
 	has_upper = !!(msg_ctrl & PCI_MSI_FLAGS_64BIT);
-	reg = ep->msi_cap + PCI_MSI_ADDRESS_LO;
+	reg = (func_no * 0x10000) + ep->msi_cap + PCI_MSI_ADDRESS_LO;
 	msg_addr_lower = dw_pcie_readl_dbi(pci, reg);
 	if (has_upper) {
-		reg = ep->msi_cap + PCI_MSI_ADDRESS_HI;
+		reg = (func_no * 0x10000) + ep->msi_cap + PCI_MSI_ADDRESS_HI;
 		msg_addr_upper = dw_pcie_readl_dbi(pci, reg);
-		reg = ep->msi_cap + PCI_MSI_DATA_64;
+		reg = (func_no * 0x10000) + ep->msi_cap + PCI_MSI_DATA_64;
 		msg_data = dw_pcie_readw_dbi(pci, reg);
 	} else {
 		msg_addr_upper = 0;
-		reg = ep->msi_cap + PCI_MSI_DATA_32;
+		reg = (func_no * 0x10000) + ep->msi_cap + PCI_MSI_DATA_32;
 		msg_data = dw_pcie_readw_dbi(pci, reg);
 	}
 	aligned_offset = msg_addr_lower & (epc->mem->page_size - 1);
@@ -562,9 +562,8 @@ int dw_pcie_ep_init(struct dw_pcie_ep *ep)
 
 	if (ep->ops->ep_init)
 		ep->ops->ep_init(ep);
-
 	hdr_type = dw_pcie_readb_dbi(pci, PCI_HEADER_TYPE);
-	if (hdr_type != PCI_HEADER_TYPE_NORMAL) {
+	if ((hdr_type & PCI_HEADER_TYPE_MASK) != PCI_HEADER_TYPE_NORMAL) {
 		dev_err(pci->dev, "PCIe controller is not set to EP mode (hdr_type:0x%x)!\n",
 			hdr_type);
 		return -EIO;
@@ -573,7 +572,7 @@ int dw_pcie_ep_init(struct dw_pcie_ep *ep)
 	ret = of_property_read_u8(np, "max-functions", &epc->max_functions);
 	if (ret < 0)
 		epc->max_functions = 1;
-
+	printk("pcie: ret=%d, max_functions=%d\n",ret, epc->max_functions);
 	ret = __pci_epc_mem_init(epc, ep->phys_base, ep->addr_size,
 				 ep->page_size);
 	if (ret < 0) {
