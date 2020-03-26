@@ -1,0 +1,18 @@
+config CRYPTO_DEV_THUNDERBAY_OCS_AES
+	tristate "Support for Thunderbay OCS AES HW acceleration"
+	help
+	  Support for Thunderbay Offload and Crypto Subsystem (OCS)
+	  AES hardware acceleration for use with Crypto API.
+
+	  Provides OCS versions of ecb(aes), cbc(aes), ctr(aes),
+	  and gcm(aes).
+
+config CRYPTO_DEV_THUNDERBAY_OCS_HCU
+	tristate "Support for Keembay OCS HCU HW acceleration"
+	help
+	  Support for Keembay Offload and Crypto Subsystem (OCS)
+	  HCU (Hash Control Unit) hardware acceleration for use
+	  with Crypto API.
+
+	  Provides OCS versions of sha224, sha256, sha384 and sha512.
+
