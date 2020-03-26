@@ -1197,3 +1197,16 @@ int __init buses_init(void)
 
 	return 0;
 }
+
+#ifdef CONFIG_SVOS
+ssize_t sv_driver_bind(struct device_driver *driver, const char *buf, size_t count)
+{
+	return bind_store(driver, buf, count);
+}
+ssize_t sv_driver_unbind(struct device_driver *driver, const char *buf, size_t count)
+{
+	return unbind_store(driver, buf, count);
+}
+EXPORT_SYMBOL(sv_driver_bind);
+EXPORT_SYMBOL(sv_driver_unbind);
+#endif
