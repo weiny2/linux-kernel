@@ -427,12 +427,15 @@ static int pmem_attach_disk(struct device *dev,
 		return -EBUSY;
 	}
 
+	dev_page_protection_init(&pmem->pgmap);
+
 	q = blk_alloc_queue(pmem_make_request, dev_to_node(dev));
 	if (!q)
 		return -ENOMEM;
 
 	pmem->pfn_flags = PFN_DEV;
 	pmem->pgmap.ref = &q->q_usage_counter;
+
 	if (is_nd_pfn(dev)) {
 		pmem->pgmap.type = MEMORY_DEVICE_FS_DAX;
 		pmem->pgmap.ops = &fsdax_pagemap_ops;
