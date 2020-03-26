@@ -9,6 +9,9 @@
 #include <linux/thread_info.h>
 #include <linux/init.h>
 #include <linux/uaccess.h>
+#include <linux//cred.h>
+#include <linux//delay.h>
+#include <linux/sched/user.h>
 
 #include <asm/cpufeature.h>
 #include <asm/pgtable.h>
@@ -20,6 +23,8 @@
 #include <asm/hwcap2.h>
 #include <asm/elf.h>
 #include <asm/mktme.h>
+#include <asm/cpu_device_id.h>
+#include <asm/cmdline.h>
 
 #ifdef CONFIG_X86_64
 #include <linux/topology.h>
@@ -31,6 +36,22 @@
 #include <asm/mpspec.h>
 #include <asm/apic.h>
 #endif
+
+enum split_lock_detect_state {
+	sld_off = 0,
+	sld_warn,
+	sld_fatal,
+	sld_ratelimit,
+};
+
+/*
+ * Default to sld_off because most systems do not support split lock detection
+ * split_lock_setup() will switch this to sld_warn on systems that support
+ * split lock detect, unless there is a command line override.
+ */
+static enum split_lock_detect_state sld_state = sld_off;
+/* Similar to sld_state. This state is for #DB for bus lock detection. */
+static enum split_lock_detect_state bld_state = sld_off;
 
 /*
  * Processors which have self-snooping capability can handle conflicting
@@ -603,6 +624,9 @@ static void init_intel_misc_features(struct cpuinfo_x86 *c)
 	wrmsrl(MSR_MISC_FEATURES_ENABLES, msr);
 }
 
+static void split_lock_init(void);
+static void bus_lock_init(void);
+
 static void init_intel(struct cpuinfo_x86 *c)
 {
 	early_init_intel(c);
@@ -717,6 +741,9 @@ static void init_intel(struct cpuinfo_x86 *c)
 		tsx_enable();
 	if (tsx_ctrl_state == TSX_CTRL_DISABLE)
 		tsx_disable();
+
+	split_lock_init();
+	bus_lock_init();
 }
 
 #ifdef CONFIG_X86_32
@@ -999,4 +1026,275 @@ const char *intel_get_hybrid_cpu_type_name(u8 cpu_type)
 	 * Please see the INTEL_FAM6_HYBRID_* definitions.
 	 */
 	return intel_family_hybrid_cpu_types[cpu_type >> 4];
+}
+
+#undef pr_fmt
+#define pr_fmt(fmt) "x86/split lock detection: " fmt
+
+static const struct {
+	const char			*option;
+	enum split_lock_detect_state	state;
+} sld_options[] __initconst = {
+	{ "off",	sld_off   },
+	{ "warn",	sld_warn  },
+	{ "fatal",	sld_fatal },
+	{ "ratelimit:", sld_ratelimit },
+};
+
+static inline bool match_option(const char *arg, int arglen, const char *opt)
+{
+	int len = strlen(opt), ratelimit;
+
+	if (strncmp(arg, opt, len))
+		return false;
+
+	if (sscanf(arg, "ratelimit:%d", &ratelimit) == 1 && ratelimit > 0) {
+		ratelimit_bl = ratelimit;
+
+		return true;
+	}
+
+	return len == arglen;
+}
+
+static void __init split_lock_setup(enum split_lock_detect_state *state)
+{
+	char arg[20];
+	int i, ret;
+
+	if (state == &sld_state)
+		setup_force_cpu_cap(X86_FEATURE_SPLIT_LOCK_DETECT);
+	*state = sld_warn;
+
+	ret = cmdline_find_option(boot_command_line, "split_lock_detect",
+				  arg, sizeof(arg));
+	if (ret >= 0) {
+		for (i = 0; i < ARRAY_SIZE(sld_options); i++) {
+			if (match_option(arg, ret, sld_options[i].option)) {
+				*state = sld_options[i].state;
+				break;
+			}
+		}
+	}
+
+}
+
+/*
+ * Soft copy of MSR_TEST_CTRL initialized when we first read the
+ * MSR. Used at runtime to avoid using rdmsr again just to collect
+ * the reserved bits in the MSR. We assume reserved bits are the
+ * same on all CPUs.
+ */
+static u64 test_ctrl_val;
+
+/*
+ * Locking is not required at the moment because only bit 29 of this
+ * MSR is implemented and locking would not prevent that the operation
+ * of one thread is immediately undone by the sibling thread.
+ * Use the "safe" versions of rdmsr/wrmsr here because although code
+ * checks CPUID and MSR bits to make sure the TEST_CTRL MSR should
+ * exist, there may be glitches in virtualization that leave a guest
+ * with an incorrect view of real h/w capabilities.
+ */
+static bool __sld_msr_init(void)
+{
+	u64 val;
+
+	if (rdmsrl_safe(MSR_TEST_CTRL, &val))
+		return false;
+	test_ctrl_val = val;
+
+	val |= MSR_TEST_CTRL_SPLIT_LOCK_DETECT;
+
+	return !wrmsrl_safe(MSR_TEST_CTRL, val);
+}
+
+static void __sld_msr_set(bool on)
+{
+	u64 val = test_ctrl_val;
+
+	if (on)
+		val |= MSR_TEST_CTRL_SPLIT_LOCK_DETECT;
+	else
+		val &= ~MSR_TEST_CTRL_SPLIT_LOCK_DETECT;
+
+	wrmsrl_safe(MSR_TEST_CTRL, val);
+}
+
+static void split_lock_init(void)
+{
+	if (!static_cpu_has(X86_FEATURE_SPLIT_LOCK_DETECT))
+		return;
+
+	/* Don't generate #AC for off and ratelimit. */
+	if (sld_state == sld_off || sld_state == sld_ratelimit)
+		return;
+
+	/* If supported, #DB for bus lock will handle warn. */
+	if (bld_state == sld_warn || sld_state == sld_ratelimit)
+		return;
+
+	if (__sld_msr_init())
+		return;
+
+	/*
+	 * If this is anything other than the boot-cpu, you've done
+	 * funny things and you get to keep whatever pieces.
+	 */
+	pr_warn("MSR fail -- disabled\n");
+	sld_state = sld_off;
+}
+
+static void bus_lock_init(void)
+{
+	u64 val;
+
+	if (!static_cpu_has(X86_FEATURE_BUS_LOCK_DETECT))
+		return;
+
+	if (bld_state == sld_off)
+		return;
+
+	/* If supported, #AC for split lock will handle fatal. */
+	if (sld_state == sld_fatal)
+		return;
+
+	rdmsrl(MSR_IA32_DEBUGCTLMSR, val);
+	val |= DEBUGCTLMSR_BUS_LOCK_DETECT;
+	wrmsrl(MSR_IA32_DEBUGCTLMSR, val);
+}
+
+bool handle_user_split_lock(struct pt_regs *regs, long error_code)
+{
+	if ((regs->flags & X86_EFLAGS_AC) || sld_state == sld_fatal)
+		return false;
+
+	pr_warn_ratelimited("#AC: %s/%d took a split_lock trap at address: 0x%lx\n",
+			    current->comm, current->pid, regs->ip);
+
+	/*
+	 * Disable the split lock detection for this task so it can make
+	 * progress and set TIF_SLD so the detection is re-enabled via
+	 * switch_to_sld() when the task is scheduled out.
+	 */
+	__sld_msr_set(false);
+	set_tsk_thread_flag(current, TIF_SLD);
+	return true;
+}
+
+bool handle_user_bus_lock(struct pt_regs *regs)
+{
+	if (bld_state == sld_fatal)
+		return false;
+
+	pr_warn_ratelimited("#DB: %s/%d took a bus_lock trap at address: 0x%lx\n",
+			    current->comm, current->pid, regs->ip);
+
+	if (bld_state == sld_ratelimit) {
+		while (!__ratelimit(&get_current_user()->ratelimit_bl)) {
+			if (!msleep_interruptible(50))
+				return true;
+		}
+	}
+
+	return true;
+}
+
+bool handle_kernel_bus_lock(struct pt_regs *regs)
+{
+	if (bld_state == sld_fatal)
+		return false;
+
+	pr_warn_ratelimited("#DB: %s/%d took a bus_lock trap at address: 0x%lx\n",
+			    current->comm, current->pid, regs->ip);
+
+	return true;
+}
+
+/*
+ * This function is called only when switching between tasks with
+ * different split-lock detection modes. It sets the MSR for the
+ * mode of the new task. This is right most of the time, but since
+ * the MSR is shared by hyperthreads on a physical core there can
+ * be glitches when the two threads need different modes.
+ */
+void switch_to_sld(unsigned long tifn)
+{
+	__sld_msr_set(!(tifn & _TIF_SLD));
+}
+
+#define SPLIT_LOCK_CPU(model) {X86_VENDOR_INTEL, 6, model, X86_FEATURE_ANY}
+
+/*
+ * The following processors have the split lock detection feature. But
+ * since they don't have the IA32_CORE_CAPABILITIES MSR, the feature cannot
+ * be enumerated. Enable it by family and model matching on these
+ * processors.
+ */
+static const struct x86_cpu_id split_lock_cpu_ids[] __initconst = {
+	SPLIT_LOCK_CPU(INTEL_FAM6_ICELAKE_X),
+	SPLIT_LOCK_CPU(INTEL_FAM6_ICELAKE_L),
+	SPLIT_LOCK_CPU(INTEL_FAM6_ROCKETLAKE),
+	{}
+};
+
+void __init cpu_set_core_cap_bits(struct cpuinfo_x86 *c)
+{
+	u64 ia32_core_caps = 0;
+
+	if (c->x86_vendor != X86_VENDOR_INTEL)
+		return;
+	if (cpu_has(c, X86_FEATURE_CORE_CAPABILITIES)) {
+		/* Enumerate features reported in IA32_CORE_CAPABILITIES MSR. */
+		rdmsrl(MSR_IA32_CORE_CAPS, ia32_core_caps);
+	} else if (!boot_cpu_has(X86_FEATURE_HYPERVISOR)) {
+		/* Enumerate split lock detection by family and model. */
+		if (x86_match_cpu(split_lock_cpu_ids))
+			ia32_core_caps |= MSR_IA32_CORE_CAPS_SPLIT_LOCK_DETECT;
+	}
+
+	if (ia32_core_caps & MSR_IA32_CORE_CAPS_SPLIT_LOCK_DETECT)
+		split_lock_setup(&sld_state);
+}
+
+static void split_lock_show(void)
+{
+	/*
+	 * If #AC for split lock is not available, sld_state is sld_off.
+	 * If #DB for bus lock is not available, bld_state is sld_off.
+	 * If both of the features are available, sld_state is equal to
+	 * bld_state.
+	 */
+	switch (sld_state | bld_state) {
+	case sld_off:
+		pr_info("disabled\n");
+		break;
+
+	case sld_warn:
+		if (bld_state == sld_warn)
+			pr_info("#DB: warning about kernel and user-space bus_locks\n");
+		else
+			pr_info("#AC: crashing the kernel about kernel split_locks and warning about user-space split_locks\n");
+		break;
+
+	case sld_fatal:
+		if (sld_state  == sld_fatal)
+			pr_info("#AC: crashing the kernel on kernel split_locks and sending SIGBUS on user-space split_locks\n");
+		else
+			pr_info("#DB: warning about kernel bus_locks and sending SIGBUS on user-space bus_locks\n");
+		break;
+
+	case sld_ratelimit:
+		if (bld_state == sld_ratelimit)
+			pr_info("#DB: warning about kernel bus_locks and setting silent rate limit to %d/sec per user on user-space bus_locks\n", ratelimit_bl);
+		break;
+	}
+}
+
+void __init bus_lock_setup(void)
+{
+	if (static_cpu_has(X86_FEATURE_BUS_LOCK_DETECT))
+		split_lock_setup(&bld_state);
+
+	split_lock_show();
 }

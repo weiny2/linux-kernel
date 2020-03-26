@@ -40,4 +40,30 @@ int mwait_usable(const struct cpuinfo_x86 *);
 unsigned int x86_family(unsigned int sig);
 unsigned int x86_model(unsigned int sig);
 unsigned int x86_stepping(unsigned int sig);
+#ifdef CONFIG_CPU_SUP_INTEL
+extern void __init cpu_set_core_cap_bits(struct cpuinfo_x86 *c);
+extern void __init bus_lock_setup(void);
+extern void switch_to_sld(unsigned long tifn);
+extern bool handle_user_split_lock(struct pt_regs *regs, long error_code);
+extern bool handle_user_bus_lock(struct pt_regs *regs);
+extern bool handle_kernel_bus_lock(struct pt_regs *regs);
+#else
+static inline void __init cpu_set_core_cap_bits(struct cpuinfo_x86 *c) {}
+static inline void __init bus_lock_setup(void) {}
+static inline void switch_to_sld(unsigned long tifn) {}
+static inline bool handle_user_split_lock(struct pt_regs *regs, long error_code)
+{
+	return false;
+}
+
+static inline bool handle_user_bus_lock(struct pt_regs *regs)
+{
+	return false;
+}
+
+static inline bool handle_kernel_bus_lock(struct pt_regs *regs)
+{
+	return false;
+}
+#endif
 #endif /* _ASM_X86_CPU_H */
