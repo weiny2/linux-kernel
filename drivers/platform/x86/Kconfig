@@ -1235,7 +1235,32 @@ config INTEL_SMARTCONNECT
 	  This driver checks to determine whether the device has Intel Smart
 	  Connect enabled, and if so disables it.
 
-source "drivers/platform/x86/intel_speed_select_if/Kconfig"
+config INTEL_CTA_TELEM
+	tristate "Intel CTA telemetry driver"
+	help
+	 The Intel CTA Telemetry driver provides access to hardware telemetry
+	 metrics on devices that support the feature.
+
+	 For more information, see
+	 <file:Documentation/ABI/testing/sysfs-class-cta_telem>
+
+config INTEL_CTA_CRASHLOG
+	tristate "Intel CTA crashlog driver"
+	help
+	 The Intel CTA crashlog driver provides access to hardware crashlog
+	 capabilities on devices that support the feature.
+
+	 For more information, see
+	 <file:Documentation/ABI/testing/sysfs-class-cta_crashlog>
+
+config INTEL_CTA_WATCHER
+	tristate "Intel CTA watcher driver"
+	help
+	 The Intel CTA Watcher driver provides access to hardware sampling and
+	 tracing capabilities on devices that support the feature.
+
+	 For more information, see
+	 <file:Documentation/ABI/testing/sysfs-class-cta_watcher>
 
 config INTEL_TURBO_MAX_3
 	bool "Intel Turbo Boost Max Technology 3.0 enumeration driver"
@@ -1388,3 +1413,4 @@ source "drivers/platform/x86/socperf/Kconfig"
 source "drivers/platform/x86/socwatch/Kconfig"
 source "drivers/platform/x86/socwatchhv/Kconfig"
 source "drivers/platform/x86/sepdk/Kconfig"
+source "drivers/platform/x86/intel_speed_select_if/Kconfig"

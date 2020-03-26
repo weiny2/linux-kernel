@@ -646,6 +646,15 @@ config MFD_INTEL_PMC_BXT
 	  Register and P-unit access. In addition this creates devices
 	  for iTCO watchdog and telemetry that are part of the PMC.
 
+config MFD_INTEL_CTA
+	tristate "Intel Converged Telemetry Aggregator support"
+	depends on PCI
+	help
+	  The Intel Converged Telemetry Aggregator (CTA) is an interface that
+	  provides access to hardware telemetry registers. This driver supports
+	  Telemetry, Watcher, and Crashlog CTA capabilities/devices for
+	  platforms starting from Tiger Lake PCH using PCI enumeration.
+
 config MFD_IPAQ_MICRO
 	bool "Atmel Micro ASIC (iPAQ h3100/h3600/h3700) Support"
 	depends on SA1100_H3100 || SA1100_H3600
