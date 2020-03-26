@@ -194,6 +194,10 @@
 	.byte 0x66
 	.endm
 
+	.macro PFX_RPT
+	.byte 0xf3
+	.endm
+
 	.macro PFX_REX opd1 opd2 W=0
 	.if ((\opd1 | \opd2) & 8) || \W
 	.byte 0x40 | ((\opd1 & 8) >> 3) | ((\opd2 & 8) >> 1) | (\W << 3)
@@ -305,6 +309,146 @@
 	.byte 0x0f, 0x6e
 	.endif
 	MODRM 0xc0 movq_r64_xmm_opd1 movq_r64_xmm_opd2
+	.endm
+
+	.macro ENCODEKEY128 reg1 reg2
+	R32_NUM encodekey128_opd1 \reg1
+	R32_NUM encodekey128_opd2 \reg2
+	PFX_RPT
+	.byte 0xf, 0x38, 0xfa
+	MODRM 0xc0  encodekey128_opd2 encodekey128_opd1
+	.endm
+
+	.macro ENCODEKEY256 reg1 reg2
+	R32_NUM encodekey256_opd1 \reg1
+	R32_NUM encodekey256_opd2 \reg2
+	PFX_RPT
+	.byte 0x0f, 0x38, 0xfb
+	MODRM 0xc0 encodekey256_opd1 encodekey256_opd2
+	.endm
+
+	.macro AESENC128KL reg, xmm
+	REG_TYPE aesenc128kl_opd1_type \reg
+	.if aesenc128kl_opd1_type == REG_TYPE_R64
+	R64_NUM aesenc128kl_opd1 \reg
+	.elseif aesenc128kl_opd1_type == REG_TYPE_R32
+	R32_NUM aesenc128kl_opd1 \reg
+	.else
+	aesenc128kl_opd1 = REG_NUM_INVALID
+	.endif
+	XMM_NUM aesenc128kl_opd2 \xmm
+	PFX_RPT
+	.byte 0x0f, 0x38, 0xdc
+	MODRM 0x0 aesenc128kl_opd1 aesenc128kl_opd2
+	.endm
+
+	.macro AESDEC128KL reg, xmm
+	REG_TYPE aesdec128kl_opd1_type \reg
+	.if aesdec128kl_opd1_type == REG_TYPE_R64
+	R64_NUM aesdec128kl_opd1 \reg
+	.elseif aesdec128kl_opd1_type == REG_TYPE_R32
+	R32_NUM aesdec128kl_opd1 \reg
+	.else
+	aesdec128kl_opd1 = REG_NUM_INVALID
+	.endif
+	XMM_NUM aesdec128kl_opd2 \xmm
+	PFX_RPT
+	.byte 0x0f, 0x38, 0xdd
+	MODRM 0x0 aesdec128kl_opd1 aesdec128kl_opd2
+	.endm
+
+	.macro AESENC256KL reg, xmm
+	REG_TYPE aesenc256kl_opd1_type \reg
+	.if aesenc256kl_opd1_type == REG_TYPE_R64
+	R64_NUM aesenc256kl_opd1 \reg
+	.elseif aesenc256kl_opd1_type == REG_TYPE_R32
+	R32_NUM aesenc256kl_opd1 \reg
+	.else
+	aesenc256kl_opd1 = REG_NUM_INVALID
+	.endif
+	XMM_NUM aesenc256kl_opd2 \xmm
+	PFX_RPT
+	.byte 0x0f, 0x38, 0xde
+	MODRM 0x0 aesenc256kl_opd1 aesenc256kl_opd2
+	.endm
+
+	.macro AESDEC256KL reg, xmm
+	REG_TYPE aesdec256kl_opd1_type \reg
+	.if aesdec256kl_opd1_type == REG_TYPE_R64
+	R64_NUM aesdec256kl_opd1 \reg
+	.elseif aesdec256kl_opd1_type == REG_TYPE_R32
+	R32_NUM aesdec256kl_opd1 \reg
+	.else
+	aesdec256kl_opd1 = REG_NUM_INVALID
+	.endif
+	XMM_NUM aesdec256kl_opd2 \xmm
+	PFX_RPT
+	.byte 0x0f, 0x38, 0xdf
+	MODRM 0x0 aesdec256kl_opd1 aesdec256kl_opd2
+	.endm
+
+	.macro AESENCWIDE128KL reg
+	REG_TYPE aesencwide128kl_opd1_type \reg
+	.if aesencwide128kl_opd1_type == REG_TYPE_R64
+	R64_NUM aesencwide128kl_opd1 \reg
+	.elseif aesencwide128kl_opd1_type == REG_TYPE_R32
+	R32_NUM aesencwide128kl_opd1 \reg
+	.else
+	aesencwide128kl_opd1 = REG_NUM_INVALID
+	.endif
+	PFX_RPT
+	.byte 0x0f, 0x38, 0xd8
+	MODRM 0x0 aesencwide128kl_opd1 0x0
+	.endm
+
+	.macro AESDECWIDE128KL reg
+	REG_TYPE aesdecwide128kl_opd1_type \reg
+	.if aesdecwide128kl_opd1_type == REG_TYPE_R64
+	R64_NUM aesdecwide128kl_opd1 \reg
+	.elseif aesdecwide128kl_opd1_type == REG_TYPE_R32
+	R32_NUM aesdecwide128kl_opd1 \reg
+	.else
+	aesdecwide128kl_opd1 = REG_NUM_INVALID
+	.endif
+	PFX_RPT
+	.byte 0x0f, 0x38, 0xd8
+	MODRM 0x0 aesdecwide128kl_opd1 0x1
+	.endm
+
+	.macro AESENCWIDE256KL reg
+	REG_TYPE aesencwide256kl_opd1_type \reg
+	.if aesencwide256kl_opd1_type == REG_TYPE_R64
+	R64_NUM aesencwide256kl_opd1 \reg
+	.elseif aesencwide256kl_opd1_type == REG_TYPE_R32
+	R32_NUM aesencwide256kl_opd1 \reg
+	.else
+	aesencwide256kl_opd1 = REG_NUM_INVALID
+	.endif
+	PFX_RPT
+	.byte 0x0f, 0x38, 0xd8
+	MODRM 0x0 aesencwide256kl_opd1 0x2
+	.endm
+
+	.macro AESDECWIDE256KL reg
+	REG_TYPE aesdecwide256kl_opd1_type \reg
+	.if aesdecwide256kl_opd1_type == REG_TYPE_R64
+	R64_NUM aesdecwide256kl_opd1 \reg
+	.elseif aesdecwide256kl_opd1_type == REG_TYPE_R32
+	R32_NUM aesdecwide256kl_opd1 \reg
+	.else
+	aesdecwide256kl_opd1 = REG_NUM_INVALID
+	.endif
+	PFX_RPT
+	.byte 0x0f, 0x38, 0xd8
+	MODRM 0x0 aesdecwide256kl_opd1 0x3
+	.endm
+
+	.macro LOADIWKEY xmm1, xmm2
+	XMM_NUM loadiwkey_opd1 \xmm1
+	XMM_NUM loadiwkey_opd2 \xmm2
+	PFX_RPT
+	.byte 0x0f, 0x38, 0xdc
+	MODRM 0xc0 loadiwkey_opd1 loadiwkey_opd2
 	.endm
 #endif
 
