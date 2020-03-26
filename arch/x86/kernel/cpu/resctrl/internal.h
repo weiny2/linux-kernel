@@ -9,6 +9,13 @@
 
 #define MSR_IA32_L3_QOS_CFG		0xc81
 #define MSR_IA32_L2_QOS_CFG		0xc82
+/*
+ * FIXME: IA32 prefix is reserved for architectural MSRs.
+ * Expectation is that this MSR will be documented in SDM but may not be
+ * needed for future versions of MBA. TBD if this is an architectural MSR
+ * and if naming that includes IA32 is appropriate.
+ */
+#define MSR_IA32_MBA_CFG		0xc84
 #define MSR_IA32_L3_CBM_BASE		0xc90
 #define MSR_IA32_L2_CBM_BASE		0xd10
 #define MSR_IA32_MBA_THRTL_BASE		0xd50
@@ -21,6 +28,8 @@
 
 #define L2_QOS_CDP_ENABLE		0x01ULL
 
+#define MBA_THROTTLE_MODE_MIN		0x01ULL
+
 /*
  * Event IDs are used to program IA32_QM_EVTSEL before reading event
  * counter from IA32_QM_CTR
@@ -31,15 +40,23 @@
 
 #define CQM_LIMBOCHECK_INTERVAL	1000
 
-#define MBM_CNTR_WIDTH			24
+#define MBM_CNTR_WIDTH_BASE		24
 #define MBM_OVERFLOW_INTERVAL		1000
 #define MAX_MBA_BW			100u
 #define MBA_IS_LINEAR			0x4
 #define MBA_MAX_MBPS			U32_MAX
 #define MAX_MBA_BW_AMD			0x800
 
+#define MBA_THREAD_THROTTLE_MODE	BIT_ULL(0)
+
 #define RMID_VAL_ERROR			BIT_ULL(63)
 #define RMID_VAL_UNAVAIL		BIT_ULL(62)
+/*
+ * With the above fields in use 62 bits remain in MSR_IA32_QM_CTR for
+ * data to be returned. The counter width is discovered from the hardware
+ * as an offset from MBM_CNTR_WIDTH_BASE.
+ */
+#define MBM_CNTR_WIDTH_OFFSET_MAX (62 - MBM_CNTR_WIDTH_BASE)
 
 
 struct rdt_fs_context {
@@ -87,6 +104,7 @@ union mon_data_bits {
 
 struct rmid_read {
 	struct rdtgroup		*rgrp;
+	struct rdt_resource	*r;
 	struct rdt_domain	*d;
 	int			evtid;
 	bool			first;
@@ -234,6 +252,7 @@ struct rdtgroup {
 #define RF_MON_INFO			(RFTYPE_INFO | RFTYPE_MON)
 #define RF_TOP_INFO			(RFTYPE_INFO | RFTYPE_TOP)
 #define RF_CTRL_BASE			(RFTYPE_BASE | RFTYPE_CTRL)
+#define RF_UNINITIALIZED		ULONG_MAX
 
 /* List of all resource groups */
 extern struct list_head rdt_all_groups;
@@ -460,6 +479,7 @@ struct rdt_resource {
 	struct list_head	evt_list;
 	int			num_rmid;
 	unsigned int		mon_scale;
+	unsigned int		mbm_width;
 	unsigned long		fflags;
 };
 
@@ -587,8 +607,9 @@ void rmdir_mondata_subdir_allrdtgrp(struct rdt_resource *r,
 				    unsigned int dom_id);
 void mkdir_mondata_subdir_allrdtgrp(struct rdt_resource *r,
 				    struct rdt_domain *d);
-void mon_event_read(struct rmid_read *rr, struct rdt_domain *d,
-		    struct rdtgroup *rdtgrp, int evtid, int first);
+void mon_event_read(struct rmid_read *rr, struct rdt_resource *r,
+		    struct rdt_domain *d, struct rdtgroup *rdtgrp,
+		    int evtid, int first);
 void mbm_setup_overflow_handler(struct rdt_domain *dom,
 				unsigned long delay_ms);
 void mbm_handle_overflow(struct work_struct *work);
@@ -601,5 +622,8 @@ bool has_busy_rmid(struct rdt_resource *r, struct rdt_domain *d);
 void __check_limbo(struct rdt_domain *d, bool force_free);
 bool cbm_validate_intel(char *buf, u32 *data, struct rdt_resource *r);
 bool cbm_validate_amd(char *buf, u32 *data, struct rdt_resource *r);
+bool mba_cfg_supports_min_max_intel(void);
+void thread_throttle_mode_init_intel_rw(void);
+void thread_throttle_mode_init_intel_ro(void);
 
 #endif /* _ASM_X86_RESCTRL_INTERNAL_H */
