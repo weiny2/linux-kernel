@@ -17,3 +17,4 @@
 /clear_dirty_log_test
 /dirty_log_test
 /kvm_create_max_vcpus
+/x86_64/arch_lbr_test
