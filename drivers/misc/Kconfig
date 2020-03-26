@@ -487,4 +487,5 @@ source "drivers/misc/xlink-pcie/Kconfig"
 source "drivers/misc/xlink-ipc/Kconfig"
 source "drivers/misc/vpu/Kconfig"
 source "drivers/misc/vpusmm/Kconfig"
+source "drivers/misc/xlink-secure/Kconfig"
 endmenu
