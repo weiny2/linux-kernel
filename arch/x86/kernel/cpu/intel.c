@@ -945,3 +945,25 @@ static const struct cpu_dev intel_cpu_dev = {
 };
 
 cpu_dev_register(intel_cpu_dev);
+
+static const char * const intel_family_hybrid_cpu_types[] = {
+	"Intel Non-hybrid",
+	"Intel Hybrid Quark",
+	"Intel Hybrid Atom",
+	"Intel Hybrid Knights",
+	"Intel Hybrid Core",
+};
+
+const char *intel_get_hybrid_cpu_type_name(u8 cpu_type)
+{
+	if (!static_cpu_has(X86_FEATURE_HYBRID_CPU))
+		return NULL;
+
+	if (cpu_type > INTEL_FAM6_HYBRID_CORE)
+		return NULL;
+	/*
+	 * We can identify the CPU with bits [7:4] of cpu_type.
+	 * Please see the INTEL_FAM6_HYBRID_* definitions.
+	 */
+	return intel_family_hybrid_cpu_types[cpu_type >> 4];
+}

@@ -7,6 +7,7 @@
 
 #include <linux/cpu.h>
 #include <asm/apic.h>
+#include <asm/intel-family.h>
 #include <asm/memtype.h>
 #include <asm/processor.h>
 
@@ -153,3 +154,65 @@ int detect_extended_topology(struct cpuinfo_x86 *c)
 #endif
 	return 0;
 }
+
+static void get_cpumask_type(cpumask_var_t mask, u8 type)
+{
+	int cpu;
+
+	preempt_disable();
+	cpumask_copy(mask, cpu_online_mask);
+
+	for_each_online_cpu(cpu) {
+		struct cpuinfo_x86 *c = &cpu_data(cpu);
+
+		if (c->cpu_type != type)
+			cpumask_clear_cpu(cpu, mask);
+	}
+	preempt_enable();
+}
+
+#define HYBRID_ATTR_SHOW(name, type) \
+static ssize_t type_##name##_show(struct kobject *kobj,			   \
+				  struct kobj_attribute *attr, char *buf)  \
+{									   \
+	cpumask_var_t mask;						   \
+	int ret;							   \
+									   \
+	if (!zalloc_cpumask_var(&mask, GFP_KERNEL))			   \
+		return -ENOMEM;						   \
+									   \
+	get_cpumask_type(mask, type);					   \
+	ret = cpumap_print_to_pagebuf(true, buf, mask);			   \
+	free_cpumask_var(mask);						   \
+	return ret;							   \
+}
+
+HYBRID_ATTR_SHOW(knights, INTEL_FAM6_HYBRID_KNIGHTS);
+HYBRID_ATTR_SHOW(quark, INTEL_FAM6_HYBRID_QUARK);
+HYBRID_ATTR_SHOW(atom, INTEL_FAM6_HYBRID_ATOM);
+HYBRID_ATTR_SHOW(core, INTEL_FAM6_HYBRID_CORE);
+
+static struct kobj_attribute cputype_type_knights = __ATTR_RO(type_knights);
+static struct kobj_attribute cputype_type_quark = __ATTR_RO(type_quark);
+static struct kobj_attribute cputype_type_atom = __ATTR_RO(type_atom);
+static struct kobj_attribute cputype_type_core = __ATTR_RO(type_core);
+
+static const struct attribute *cpu_cputype_attrs[] = {
+	&cputype_type_knights.attr,
+	&cputype_type_quark.attr,
+	&cputype_type_atom.attr,
+	&cputype_type_core.attr,
+	NULL,
+};
+
+int __init create_cputype_sysfs(void)
+{
+	int error = 0;
+
+	if (boot_cpu_has(X86_FEATURE_HYBRID_CPU))
+		error = sysfs_create_files(&cpu_subsys.dev_root->kobj,
+					   cpu_cputype_attrs);
+	return error;
+}
+
+late_initcall(create_cputype_sysfs);
