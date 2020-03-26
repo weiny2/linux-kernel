@@ -86,13 +86,60 @@ static void delay_tsc(unsigned long __loops)
 }
 
 /*
+ * On Intel the TPAUSE instruction waits until any of:
+ * 1) the TSC counter exceeds the value provided in EAX:EDX
+ * 2) global timeout in IA32_UMWAIT_CONTROL is exceeded
+ * 3) an external interrupt occurs
+ */
+static void tpause(u64 start, u64 cycles)
+{
+	u64 until = start + cycles;
+	unsigned int eax, edx;
+
+	eax = (unsigned int)(until & 0xffffffff);
+	edx = (unsigned int)(until >> 32);
+
+	/* Hard code the deeper (C0.2) sleep state because exit latency is
+	 * small compared to the "microseconds" that usleep() will delay.
+	 */
+	__tpause(TPAUSE_C02_STATE, edx, eax);
+}
+
+/*
  * On some AMD platforms, MWAITX has a configurable 32-bit timer, that
  * counts with TSC frequency. The input value is the loop of the
  * counter, it will exit when the timer expires.
  */
-static void delay_mwaitx(unsigned long __loops)
+static void mwaitx(u64 unused, u64 loops)
 {
-	u64 start, end, delay, loops = __loops;
+	u64 delay;
+
+	delay = min_t(u64, MWAITX_MAX_LOOPS, loops);
+	/*
+	 * Use cpu_tss_rw as a cacheline-aligned, seldomly
+	 * accessed per-cpu variable as the monitor target.
+	 */
+	__monitorx(raw_cpu_ptr(&cpu_tss_rw), 0, 0);
+
+	/*
+	 * AMD, like Intel, supports the EAX hint and EAX=0xf
+	 * means, do not enter any deep C-state and we use it
+	 * here in delay() to minimize wakeup latency.
+	 */
+	__mwaitx(MWAITX_DISABLE_CSTATES, delay, MWAITX_ECX_TIMER_ENABLE);
+}
+
+static void (*wait_func)(u64, u64);
+
+/*
+ * Call a vendor specific function to delay for a given
+ * amount of time. Because these functions may return
+ * earlier than requested, check for actual elapsed time
+ * and call again until done.
+ */
+static void delay_iterate(unsigned long __loops)
+{
+	u64 start, end, loops = __loops;
 
 	/*
 	 * Timer value of 0 causes MWAITX to wait indefinitely, unless there
@@ -104,20 +151,8 @@ static void delay_mwaitx(unsigned long __loops)
 	start = rdtsc_ordered();
 
 	for (;;) {
-		delay = min_t(u64, MWAITX_MAX_LOOPS, loops);
 
-		/*
-		 * Use cpu_tss_rw as a cacheline-aligned, seldomly
-		 * accessed per-cpu variable as the monitor target.
-		 */
-		__monitorx(raw_cpu_ptr(&cpu_tss_rw), 0, 0);
-
-		/*
-		 * AMD, like Intel's MWAIT version, supports the EAX hint and
-		 * EAX=0xf0 means, do not enter any deep C-state and we use it
-		 * here in delay() to minimize wakeup latency.
-		 */
-		__mwaitx(MWAITX_DISABLE_CSTATES, delay, MWAITX_ECX_TIMER_ENABLE);
+		wait_func(start, loops);
 
 		end = rdtsc_ordered();
 
@@ -134,22 +169,27 @@ static void delay_mwaitx(unsigned long __loops)
  * Since we calibrate only once at boot, this
  * function should be set once at boot and not changed
  */
-static void (*delay_fn)(unsigned long) = delay_loop;
+static void (*delay_platform)(unsigned long) = delay_loop;
 
 void use_tsc_delay(void)
 {
-	if (delay_fn == delay_loop)
-		delay_fn = delay_tsc;
+	if (static_cpu_has(X86_FEATURE_WAITPKG)) {
+		wait_func = tpause;
+		delay_platform = delay_iterate;
+	} else if (delay_platform == delay_loop) {
+		delay_platform = delay_tsc;
+	}
 }
 
 void use_mwaitx_delay(void)
 {
-	delay_fn = delay_mwaitx;
+	wait_func = mwaitx;
+	delay_platform = delay_iterate;
 }
 
 int read_current_timer(unsigned long *timer_val)
 {
-	if (delay_fn == delay_tsc) {
+	if (delay_platform == delay_tsc) {
 		*timer_val = rdtsc();
 		return 0;
 	}
@@ -158,7 +198,7 @@ int read_current_timer(unsigned long *timer_val)
 
 void __delay(unsigned long loops)
 {
-	delay_fn(loops);
+	delay_platform(loops);
 }
 EXPORT_SYMBOL(__delay);
 

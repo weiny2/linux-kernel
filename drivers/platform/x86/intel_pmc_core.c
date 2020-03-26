@@ -20,6 +20,7 @@
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/platform_device.h>
+#include <linux/slab.h>
 #include <linux/suspend.h>
 #include <linux/uaccess.h>
 
@@ -193,7 +194,7 @@ static const struct pmc_bit_map cnp_pfear_map[] = {
 	{"Fuse",                BIT(6)},
 	/*
 	 * Reserved for Cannon Lake but valid for Ice Lake, Comet Lake,
-	 * Tiger Lake, Elkhart Lake and Jasper Lake.
+	 * Tiger Lake, Elkhart Lake, Jasper Lake and Rocket Lake.
 	 */
 	{"SBR8",		BIT(7)},
 
@@ -240,7 +241,7 @@ static const struct pmc_bit_map cnp_pfear_map[] = {
 	{"HDA_PGD6",            BIT(4)},
 	/*
 	 * Reserved for Cannon Lake but valid for Ice Lake, Comet Lake,
-	 * Tiger Lake, ELkhart Lake and Jasper Lake.
+	 * Tiger Lake, ELkhart Lake, Jasper Lake and Rocket Lake.
 	 */
 	{"PSF6",		BIT(5)},
 	{"PSF7",		BIT(6)},
@@ -273,7 +274,10 @@ static const struct pmc_bit_map *ext_icl_pfear_map[] = {
 };
 
 static const struct pmc_bit_map tgl_pfear_map[] = {
-	/* Tiger Lake, Elkhart Lake and Jasper Lake generation onwards only */
+	/*
+	 * Tiger Lake, Elkhart Lake, Jasper Lake and Rocket Lake generation
+	 * onwards only.
+	 */
 	{"PSF9",		BIT(0)},
 	{"RES_66",		BIT(1)},
 	{"RES_67",		BIT(2)},
@@ -566,6 +570,7 @@ static const struct pmc_reg_map tgl_reg_map = {
 	.pm_cfg_offset = CNP_PMC_PM_CFG_OFFSET,
 	.pm_read_disable_bit = CNP_PMC_READ_DISABLE_BIT,
 	.ltr_ignore_max = TGL_NUM_IP_IGN_ALLOWED,
+	.lpm_modes = tgl_lpm_modes,
 	.lpm_en_offset = TGL_LPM_EN_OFFSET,
 	.lpm_residency_offset = TGL_LPM_RESIDENCY_OFFSET,
 	.lpm_sts = tgl_lpm_maps,
@@ -639,20 +644,35 @@ static void pmc_core_slps0_display(struct pmc_dev *pmcdev, struct device *dev,
 	}
 }
 
+static int pmc_core_lpm_get_arr_size(const struct pmc_bit_map **maps)
+{
+	int idx;
+
+	for (idx = 0; maps[idx]; idx++)
+		;/* Nothing */
+
+	return idx;
+}
+
 static void pmc_core_lpm_display(struct pmc_dev *pmcdev, struct device *dev,
 				 struct seq_file *s, u32 offset,
 				 const char *str,
 				 const struct pmc_bit_map **maps)
 {
-	u32 lpm_regs[ARRAY_SIZE(tgl_lpm_maps)-1];
-	int index, idx, len = 32, bit_mask;
+	int index, idx, len = 32, bit_mask, arr_size;
+	u32 *lpm_regs;
 
-	for (index = 0; tgl_lpm_maps[index]; index++) {
+	arr_size = pmc_core_lpm_get_arr_size(maps);
+	lpm_regs = kmalloc_array(arr_size, sizeof(*lpm_regs), GFP_KERNEL);
+	if (!lpm_regs)
+		return;
+
+	for (index = 0; index < arr_size; index++) {
 		lpm_regs[index] = pmc_core_reg_read(pmcdev, offset);
 		offset += 4;
 	}
 
-	for (idx = 0; maps[idx]; idx++) {
+	for (idx = 0; idx < arr_size; idx++) {
 		if (dev)
 			dev_dbg(dev, "\nLPM_%s_%d:\t0x%x\n", str, idx,
 				lpm_regs[idx]);
@@ -671,6 +691,7 @@ static void pmc_core_lpm_display(struct pmc_dev *pmcdev, struct device *dev,
 					   lpm_regs[idx] & bit_mask ? 1 : 0);
 		}
 	}
+	kfree(lpm_regs);
 }
 
 #if IS_ENABLED(CONFIG_DEBUG_FS)
@@ -991,6 +1012,7 @@ DEFINE_SHOW_ATTRIBUTE(pmc_core_ltr);
 static int pmc_core_substate_res_show(struct seq_file *s, void *unused)
 {
 	struct pmc_dev *pmcdev = s->private;
+	const char **lpm_modes = pmcdev->map->lpm_modes;
 	u32 offset = pmcdev->map->lpm_residency_offset;
 	u32 lpm_en;
 	int index;
@@ -1137,6 +1159,8 @@ static const struct x86_cpu_id intel_pmc_core_ids[] = {
 	INTEL_CPU_FAM6(TIGERLAKE, tgl_reg_map),
 	INTEL_CPU_FAM6(ATOM_TREMONT, tgl_reg_map),
 	INTEL_CPU_FAM6(ATOM_TREMONT_L, tgl_reg_map),
+	INTEL_CPU_FAM6(ROCKETLAKE_L, tgl_reg_map),
+	INTEL_CPU_FAM6(ROCKETLAKE, tgl_reg_map),
 	{}
 };
 
