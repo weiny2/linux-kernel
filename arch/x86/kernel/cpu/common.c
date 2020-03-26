@@ -61,6 +61,7 @@
 #include <asm/cet.h>
 #include <asm/uv/uv.h>
 #include <asm/rar.h>
+#include <asm/vsyscall.h>
 
 #include "cpu.h"
 
@@ -347,6 +348,14 @@ static __always_inline void setup_smap(struct cpuinfo_x86 *c)
 	}
 }
 
+static __always_inline void setup_lass(struct cpuinfo_x86 *c)
+{
+       if (cpu_has(c, X86_FEATURE_LASS))
+               cr4_set_bits(X86_CR4_LASS);
+       else
+               cr4_clear_bits(X86_CR4_LASS);
+}
+
 static __always_inline void setup_umip(struct cpuinfo_x86 *c)
 {
 	/* Check the boot processor, plus build option for UMIP. */
@@ -437,7 +446,7 @@ static void __init setup_cr_pinning(void)
 {
 	unsigned long mask;
 
-	mask = (X86_CR4_SMEP | X86_CR4_SMAP | X86_CR4_UMIP);
+	mask = (X86_CR4_SMEP | X86_CR4_SMAP | X86_CR4_UMIP | X86_CR4_LASS);
 	cr4_pinned_bits = this_cpu_read(cpu_tlbstate.cr4) & mask;
 	static_key_enable(&cr_pinning.key);
 }
@@ -1629,6 +1638,7 @@ static void identify_cpu(struct cpuinfo_x86 *c)
 
 	/* Set up User mode Interrupts */
 	setup_uintr(c);
+	setup_lass(c);
 
 	/*
 	 * The vendor-specific functions might have changed features.

@@ -1189,6 +1189,9 @@ void __init setup_arch(char **cmdline_p)
 
 	tboot_probe();
 
+	if (cpu_has(&boot_cpu_data, X86_FEATURE_LASS))
+		emulate_vsyscall_xonly();
+
 	map_vsyscall();
 
 	generic_apic_probe();

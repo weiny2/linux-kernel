@@ -65,6 +65,8 @@ int (*svMiscIntHandlerKernelP)(int irq, void *interrupt_res, struct pt_regs *reg
         /* Pointer to vector of interrupt resources for kernel's use in calling back to svfs.*/
 void ***svExternalInterruptDataKernelP = NULL;
 #endif
+#include <asm/vsyscall.h>
+
 #ifdef CONFIG_X86_64
 #include <asm/x86_init.h>
 #include <asm/pgalloc.h>
@@ -546,6 +548,12 @@ dotraplinkage void do_general_protection(struct pt_regs *regs, long error_code)
 	tsk = current;
 
 	if (user_mode(regs)) {
+		if (IS_ENABLED(CONFIG_X86_VSYSCALL_EMULATION) &&
+		    is_vsyscall_vaddr(regs->ip)) {
+			if (emulate_vsyscall(regs, regs->ip))
+				return;
+		}
+
 		tsk->thread.error_code = error_code;
 		tsk->thread.trap_nr = X86_TRAP_GP;
 
