@@ -532,8 +532,11 @@ struct ufs_dev_info {
 	/* Maximum number of general LU supported by the UFS device */
 	u8 max_lu_supported;
 	u16 wmanufacturerid;
-	/*UFS device Product Name */
+	/* UFS device Product Name */
 	u8 *model;
+	/* UFS Serial number */
+	u8 *serial_no;
+	size_t serial_no_len;
 };
 
 /**
