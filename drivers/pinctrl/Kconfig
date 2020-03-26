@@ -439,4 +439,11 @@ config PINCTRL_EQUILIBRIUM
 	  pin functions, configure GPIO attributes for LGM SoC pins. Pinmux and
 	  pinconf settings are retrieved from device tree.
 
+config PINCTRL_THUNDERBAY
+	tristate "Generic pinctrl and GPIO driver for Intel Thunderbay SoC"
+	help
+	  This pinctrl driver provides an interface that allows configuring
+	  of Intel Thunderbay pins and using them as GPIOs.
+
+
 endif

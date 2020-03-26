@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: GPL-2.0-only
+# #
+# # X-BAY devices
+# #
+#
+menu "xbay devices"
+
+source "drivers/misc/xbay/xlink-pcie/Kconfig"
+endmenu
+

@@ -293,6 +293,34 @@ config PCIE_THUNDERBAY_EP
           Say Y here to enable support for the PCIe controller in Thunder Bay
           to work in endpoint mode.
 
+config PCIE_TBH
+        bool
+
+config PCIE_TBH_HOST
+        bool "Intel TBH PCIe controller Host mode (EXPERIMENTAL)"
+        depends on ARM64 || COMPILE_TEST
+        depends on OF && HAS_IOMEM
+        depends on PCI && PCI_MSI_IRQ_DOMAIN
+        depends on !PCIE_THUNDERBAY_HOST
+        select PCIE_DW_HOST
+        select PCIE_TBH
+        help
+          Say Y here to enable support for the PCIe controller in TBH
+          to work in host mode.
+
+config PCIE_TBH_EP
+        bool "Intel TBH PCIe controller Endpoint mode (EXPERIMENTAL)"
+        depends on ARM64 || COMPILE_TEST
+        depends on OF && HAS_IOMEM
+        depends on PCI && PCI_MSI_IRQ_DOMAIN
+        depends on PCI_ENDPOINT
+        depends on !PCIE_THUNDERBAY_EP
+        select PCIE_DW_EP
+        select PCIE_TBH
+        help
+          Say Y here to enable support for the PCIe controller in TBH
+          to work in endpoint mode.
+
 config PCIE_AL
 	bool "Amazon Annapurna Labs PCIe controller"
 	depends on OF && (ARM64 || COMPILE_TEST)

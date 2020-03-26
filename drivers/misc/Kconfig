@@ -466,6 +466,7 @@ config PVPANIC
 	  (guest) communicate panic events to the host.
 
 source "drivers/misc/c2port/Kconfig"
+source "drivers/misc/xbay/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"
 source "drivers/misc/ti-st/Kconfig"
@@ -484,4 +485,5 @@ source "drivers/misc/keembay-ipc/Kconfig"
 source "drivers/misc/xlink-core/Kconfig"
 source "drivers/misc/xlink-pcie/Kconfig"
 source "drivers/misc/xlink-ipc/Kconfig"
+source "drivers/misc/vpu/Kconfig"
 endmenu
