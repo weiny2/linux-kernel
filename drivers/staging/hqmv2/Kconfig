@@ -1,0 +1,39 @@
+comment "Intel Hardware Queue Manager V2"
+
+config INTEL_HQMV2
+	tristate "Intel(R) Hardware Queue Manager V2 Driver"
+	default m
+	depends on 64BIT && PCI && X86 && PCI_IOV
+	---help---
+	  This driver supports the Intel(R) Hardware Queue Manager V2 (HQMV2)
+	  family of devices.
+
+	  To compile this driver as a module, choose M here. The module
+	  will be called hqm.
+
+          More information about the Intel(R) HQMV2 family as well as the Linux
+          OS and tools for HQM to use with this driver are available from
+          <TODO>.
+
+config INTEL_HQMV2_DATAPATH
+	bool "Intel(R) Hardware Queue Manager V2 kernel datapath support"
+	default y
+	depends on INTEL_HQMV2
+	---help---
+	  Say Y if you want to enable the HQMV2 kernel datapath support in the
+	  HQMV2 driver. This exposes interfaces for kernel software to use the
+	  device.
+
+config INTEL_HQMV2_SIOV
+	bool "Intel(R) Hardware Queue Manager V2 Scalable I/O Virtualization"
+	default n
+	depends on INTEL_HQMV2
+	depends on INTEL_IOMMU
+	depends on VFIO
+	depends on VFIO_MDEV
+	depends on VFIO_MDEV_DEVICE
+
+	---help---
+	  Say Y if you want to enable Scalable I/O Virtualization support in
+	  the HQMV2 driver. If enabled, the driver is capable of creating
+	  multiple virtual HQMs per physical device.
