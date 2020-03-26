@@ -161,7 +161,6 @@ static int intel_th_remove(struct device *dev)
 
 	pm_runtime_disable(dev);
 	pm_runtime_set_active(dev);
-	pm_runtime_enable(dev);
 
 	return 0;
 }
@@ -560,6 +559,10 @@ static const struct intel_th_subdevice {
 		.id	= -1,
 		.name	= "dcih",
 		.type	= INTEL_TH_OUTPUT,
+		.scrpd	= SCRPD_DBC_IS_PRIM_DEST |
+			  SCRPD_MSC0_IS_ENABLED  |
+			  SCRPD_MSC1_IS_ENABLED  |
+			  SCRPD_DCIH_IS_ENABLED,
 	},
 };
 

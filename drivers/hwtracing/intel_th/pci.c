@@ -120,6 +120,10 @@ static void intel_th_pci_remove(struct pci_dev *pdev)
 	pci_free_irq_vectors(pdev);
 }
 
+static const struct intel_th_drvdata intel_th_1x_multi_is_broken = {
+	.multi_is_broken	= 1,
+};
+
 static const struct intel_th_drvdata intel_th_2x = {
 	.tscu_enable	= 1,
 	.has_mintctl	= 1,
@@ -152,7 +156,7 @@ static const struct pci_device_id intel_th_pci_id_table[] = {
 	{
 		/* Kaby Lake PCH-H */
 		PCI_DEVICE(PCI_VENDOR_ID_INTEL, 0xa2a6),
-		.driver_data = (kernel_ulong_t)0,
+		.driver_data = (kernel_ulong_t)&intel_th_1x_multi_is_broken,
 	},
 	{
 		/* Denverton */
@@ -207,7 +211,7 @@ static const struct pci_device_id intel_th_pci_id_table[] = {
 	{
 		/* Comet Lake PCH-V */
 		PCI_DEVICE(PCI_VENDOR_ID_INTEL, 0xa3a6),
-		.driver_data = (kernel_ulong_t)&intel_th_2x,
+		.driver_data = (kernel_ulong_t)&intel_th_1x_multi_is_broken,
 	},
 	{
 		/* Ice Lake NNPI */
@@ -230,6 +234,11 @@ static const struct pci_device_id intel_th_pci_id_table[] = {
 		.driver_data = (kernel_ulong_t)&intel_th_2x,
 	},
 	{
+		/* Tiger Lake PCH-H */
+		PCI_DEVICE(PCI_VENDOR_ID_INTEL, 0x43a6),
+		.driver_data = (kernel_ulong_t)&intel_th_2x,
+	},
+	{
 		/* Jasper Lake PCH */
 		PCI_DEVICE(PCI_VENDOR_ID_INTEL, 0x4da6),
 		.driver_data = (kernel_ulong_t)&intel_th_2x,
@@ -244,16 +253,73 @@ static const struct pci_device_id intel_th_pci_id_table[] = {
 		PCI_DEVICE(PCI_VENDOR_ID_INTEL, 0x4b26),
 		.driver_data = (kernel_ulong_t)&intel_th_2x,
 	},
+	{
+		/* Emmitsburg PCH */
+		PCI_DEVICE(PCI_VENDOR_ID_INTEL, 0x1bcc),
+		.driver_data = (kernel_ulong_t)&intel_th_2x,
+	},
 	{ 0 },
 };
 
 MODULE_DEVICE_TABLE(pci, intel_th_pci_id_table);
+
+#ifdef CONFIG_PM
+static int intel_th_runtime_suspend(struct device *dev)
+{
+	struct intel_th *th = dev_get_drvdata(dev);
+	struct pci_dev *pdev = to_pci_dev(dev);
+
+	if (!INTEL_TH_CAP(th, does_d3))
+		return 0;
+
+	pci_save_state(pdev);
+	pci_disable_device(pdev);
+	pci_set_power_state(pdev, PCI_D3hot);
+
+	return 0;
+}
+
+static int intel_th_runtime_resume(struct device *dev)
+{
+	struct intel_th *th = dev_get_drvdata(dev);
+	struct pci_dev *pdev = to_pci_dev(dev);
+	int ret;
+
+	if (!INTEL_TH_CAP(th, does_d3))
+		return 0;
+
+	pci_set_power_state(pdev, PCI_D0);
+	pci_restore_state(pdev);
+	ret = pcim_enable_device(pdev);
+	if (ret) {
+		dev_err(dev, "failed to enable after resume (%d)\n", ret);
+		return ret;
+	}
+
+	pci_set_master(pdev);
+
+	return 0;
+}
+
+static struct dev_pm_ops intel_th_pm = {
+	SET_RUNTIME_PM_OPS(intel_th_runtime_suspend,
+			   intel_th_runtime_resume,
+			   NULL)
+};
+
+#define INTEL_TH_PM	&intel_th_pm
+#else
+#define INTEL_TH_PM	NULL
+#endif /* CONFIG_PM */
 
 static struct pci_driver intel_th_pci_driver = {
 	.name		= DRIVER_NAME,
 	.id_table	= intel_th_pci_id_table,
 	.probe		= intel_th_pci_probe,
 	.remove		= intel_th_pci_remove,
+	.driver		= {
+		.pm	= INTEL_TH_PM,
+	},
 };
 
 module_pci_driver(intel_th_pci_driver);
