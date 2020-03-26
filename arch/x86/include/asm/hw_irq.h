@@ -62,6 +62,7 @@ enum irq_alloc_type {
 	X86_IRQ_ALLOC_TYPE_MSIX,
 	X86_IRQ_ALLOC_TYPE_DMAR,
 	X86_IRQ_ALLOC_TYPE_UV,
+	X86_IRQ_ALLOC_TYPE_IMS,
 };
 
 struct irq_alloc_info {
@@ -81,6 +82,12 @@ struct irq_alloc_info {
 		struct {
 			struct pci_dev	*msi_dev;
 			irq_hw_number_t	msi_hwirq;
+		};
+#endif
+#ifdef	CONFIG_MSI_IMS
+		struct {
+			struct device	*dev;
+			irq_hw_number_t	ims_hwirq;
 		};
 #endif
 #ifdef	CONFIG_X86_IO_APIC

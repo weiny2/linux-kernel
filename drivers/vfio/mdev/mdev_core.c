@@ -33,6 +33,12 @@ struct device *mdev_parent_dev(struct mdev_device *mdev)
 }
 EXPORT_SYMBOL(mdev_parent_dev);
 
+struct device *mdev_dev_to_parent_dev(struct device *dev)
+{
+	return to_mdev_device(dev)->parent->dev;
+}
+EXPORT_SYMBOL(mdev_dev_to_parent_dev);
+
 void *mdev_get_drvdata(struct mdev_device *mdev)
 {
 	return mdev->driver_data;

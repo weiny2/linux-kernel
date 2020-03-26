@@ -557,6 +557,7 @@ struct intel_iommu {
 	struct ir_table *ir_table;	/* Interrupt remapping info */
 	struct irq_domain *ir_domain;
 	struct irq_domain *ir_msi_domain;
+	struct irq_domain *ir_ims_domain;
 #endif
 	struct iommu_device iommu;  /* IOMMU core code handle */
 	int		node;
@@ -701,6 +702,8 @@ extern struct intel_iommu *intel_svm_device_to_iommu(struct device *dev);
 static inline void intel_svm_check(struct intel_iommu *iommu) {}
 #endif
 
+extern struct intel_iommu *device_to_iommu(struct device *dev,
+					   u8 *bus, u8 *devfn);
 #ifdef CONFIG_INTEL_IOMMU_DEBUGFS
 void intel_iommu_debugfs_init(void);
 #else
