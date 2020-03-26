@@ -1913,6 +1913,17 @@ static bool cet_ctl_access_allowed(struct kvm_vcpu *vcpu, struct msr_data *msr)
 
 	return true;
 }
+
+static inline u64 vmx_get_supported_dbgctl(struct kvm_vcpu *vcpu)
+{
+	u64 val = 0;
+
+	if (guest_cpuid_has(vcpu, X86_FEATURE_BUS_LOCK_DETECT))
+		val |= DEBUGCTLMSR_BUS_LOCK_DETECT;
+
+	return val;
+}
+
 /*
  * Reads an msr value (of 'msr_index') into 'pdata'.
  * Returns 0 on success, non-0 otherwise.
@@ -1964,6 +1975,9 @@ static int vmx_get_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 		break;
 	case MSR_IA32_SYSENTER_ESP:
 		msr_info->data = vmcs_readl(GUEST_SYSENTER_ESP);
+		break;
+	case MSR_IA32_DEBUGCTLMSR:
+		msr_info->data = vmcs_read64(GUEST_IA32_DEBUGCTL);
 		break;
 	case MSR_IA32_BNDCFGS:
 		if (!kvm_mpx_supported() ||
@@ -2134,9 +2148,10 @@ static int vmx_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 						VM_EXIT_SAVE_DEBUG_CONTROLS)
 			get_vmcs12(vcpu)->guest_ia32_debugctl = data;
 
-		ret = kvm_set_msr_common(vcpu, msr_info);
+		if (data & ~vmx_get_supported_dbgctl(vcpu))
+			return 1;
+		vmcs_write64(GUEST_IA32_DEBUGCTL, data);
 		break;
-
 	case MSR_IA32_BNDCFGS:
 		if (!kvm_mpx_supported() ||
 		    (!msr_info->host_initiated &&
@@ -4888,6 +4903,12 @@ static int handle_exception_nmi(struct kvm_vcpu *vcpu)
 		      (KVM_GUESTDBG_SINGLESTEP | KVM_GUESTDBG_USE_HW_BP))) {
 			vcpu->arch.dr6 &= ~DR_TRAP_BITS;
 			vcpu->arch.dr6 |= dr6 | DR6_RTM;
+
+			if (dr6 & DR6_BUS_LOCK)
+				vcpu->arch.dr6 &= ~DR6_BUS_LOCK;
+			else
+				vcpu->arch.dr6 |= DR6_BUS_LOCK;
+
 			if (is_icebp(intr_info))
 				WARN_ON(!skip_emulated_instruction(vcpu));
 
