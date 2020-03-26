@@ -18,6 +18,7 @@
 #include <linux/kexec.h>
 #include <linux/of_device.h>
 #include <linux/acpi.h>
+#include <linux/delay.h>
 #include "pci.h"
 #include "pcie/portdrv.h"
 
@@ -784,6 +785,61 @@ static int pci_pm_suspend_late(struct device *dev)
 	return pm_generic_suspend_late(dev);
 }
 
+static const char *get_link_stat(u8 val)
+{
+	switch (val) {
+	case 0 ... 0x10:
+		return "Detect";
+	case 0x11 ... 0x1d:
+		return "Polling";
+	case 0x1e ... 0x32:
+		return "Config";
+	case 0x33 ... 0x36:
+		return "L0";
+	case 0x37 ... 0x3c:
+		return "L1";
+	case 0x3d ... 0x3e:
+		return "L1.1";
+	case 0x3f ... 0x40:
+		return "L1.2";
+	case 0x41 ... 0x49:
+		return "L2";
+	case 0x4a ... 0x58:
+		return "Loopback";
+	case 0x59 ... 0x61:
+		return "Disable";
+	case 0x62 ... 0x64:
+		return "Hot Reset";
+	case 0x65 ... 0x75:
+		return "Recovery";
+	default:
+		return "Other";
+	}
+}
+
+static bool pci_is_intel_pcie_port(struct pci_dev *pdev)
+{
+	u16 vendor, class;
+
+	pci_read_config_word(pdev, 0, &vendor);
+	pci_read_config_word(pdev, 10, &class);
+	if(vendor == 0x8086 && class == 0x0604)
+		return true;
+	else
+		return false;
+}
+
+static void pci_port_status(struct pci_dev *pdev)
+{
+	u8 val;
+
+	if(pci_is_intel_pcie_port(pdev)) {
+		mdelay(port_idle_delay);
+		pci_read_config_byte(pdev, 0x32b, &val);
+		pci_dbg(pdev, "PCI PM: Link status is %s 0x%x\n", get_link_stat(val), val);
+	}
+}
+
 static int pci_pm_suspend_noirq(struct device *dev)
 {
 	struct pci_dev *pci_dev = to_pci_dev(dev);
@@ -871,6 +927,8 @@ static int pci_pm_suspend_noirq(struct device *dev)
 		pci_write_config_word(pci_dev, PCI_COMMAND, 0);
 
 Fixup:
+	if (port_idle_delay)
+		pci_port_status(pci_dev);
 	pci_fixup_device(pci_fixup_suspend_late, pci_dev);
 
 	/*

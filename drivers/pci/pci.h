@@ -11,6 +11,9 @@
 
 #define PCI_VSEC_ID_INTEL_TBT	0x1234	/* Thunderbolt */
 
+extern bool skip_port_config_save;
+extern int port_idle_delay;
+
 extern const unsigned char pcie_link_speed[];
 extern bool pci_early_dump;
 
