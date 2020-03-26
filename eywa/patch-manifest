@@ -1,0 +1,59 @@
+Merging eywa ssh://git-amr-1.devtools.intel.com:29418/otc_intel_next-linux.git eywa 21a5707d78ae35f574bc4c08b2548e9f8751ae23
+Merging configs ssh://git-amr-1.devtools.intel.com:29418/otc_intel_next-linux.git configs aad9e841cc6b10d707b91e9103f41606a1ffaf5d
+Merging packaging ssh://git-amr-1.devtools.intel.com:29418/otc_intel_next-linux.git packaging ece5ea8ee3ce7d508f0090065c219764e122a140
+Merging len-x86 git://linux-os.sc.intel.com/~lenb/linux intel-next 16fbf79b0f83bc752cee8589279f1ebfe57b3b6e
+Merging pm-testing git://git.kernel.org/pub/scm/linux/kernel/git/rafael/linux-pm.git testing 8b4ddf47b7b4dd54539f1821c95a8dee3295fb0b
+Merging SGX git://github.com/jsakkine-intel/linux-sgx.git next 6366f0c67ce1d609da9cd8a482f60ebcc1506f5b
+Merging nvme ssh://git-gar-1.devtools.intel.com:29418/otc_nvme_linux-kernel for-intel-next bbcc0df2a70abc4eb16c695b8974d8cb186e8d01
+Merging mmc ssh://git-amr-3.devtools.intel.com:29418/otc_mmc-linux for-eywa 1a4d9e511d21ff725cf2d142041054474b53258d
+Merging ntb ssh://git-amr-1.devtools.intel.com:29418/csig_storage_group-linux-kernel.git ntb-next-upstream 58226aa4cbad5dd6750545b1461dccd4c1a4a93b
+Merging mei ssh://git-ger-8.devtools.intel.com:29418/sfip_linux-linux-mei.git cse-5.6 7a2da1b659e5a79711ea8c3d51aacfab93982508
+Merging usb-xhci ssh://git-amr-4.devtools.intel.com:29418/otc_usb-xhci.git for-eywa d9b9dd898eba93096fadf9e14d5c6156c92df48b
+Merging lpss ssh://git-amr-4.devtools.intel.com:29418/mwesterb-linux.git for-eywa 1031e5fae8bb5377131f48442d243072dc2e7ee0
+Merging perf ssh://git-amr-2.devtools.intel.com:29418/kan_lkp-perf-intel-next.git perf-intel-next ec38db43ca2e522dab6e748d4001dcec5e4ff565
+Merging powertop ssh://git@gitlab.devtools.intel.com:29418/otc-power-management-enabling-team/otc-power-kernel.git powertop 55c58c13363643abb8d8a3e6f9fd22e055aa99a1
+Merging keylocker ssh://git-amr-4.devtools.intel.com:29418/linux_cbae1_share-kl.git kl 2063969f7ac49d9c321d29b911756d34493e3646
+Merging rpmb ssh://git-ger-8.devtools.intel.com:29418/sfip_linux-linux-mei.git rpmb ff2ad23cde63662113e3cb2390c087b7afadb698
+Merging edac ssh://git-ccr-1.devtools.intel.com:29418/otc_edac_driver-linux.git for-intel-next 5b5892007b0cc5800566eb47017a25ba3540e24f
+Merging pmc_core ssh://git@gitlab.devtools.intel.com:29418/gkammela/pmc_core-intel-next.git pmc_core 389aa6d1b7144ae0b8f81cb14fa19ace0106a452
+Merging tracehub ssh://git-amr-4.devtools.intel.com:29418/ash-pullme.git intel_th-for-intel-next 76bcaf9c56000f949b8d1a42eaa53892b96dc4cb
+Merging usb-typec ssh://git-amr-4.devtools.intel.com:29418/otc_usb-typec.git for-eywa c6e1c6156904c26ea463c2af7321d76932a7b2f3
+Merging rapl/idle ssh://git-ccr-1.devtools.intel.com:29418/otc_linux_rui-rapl for-intel-next de580c4a0997e998eb837c565dca27116df4fc21
+Merging socwatch git://github.com/mchinth/linux.git sep_socwatch_linux_5_6 5e37c0b09f06a36916e7dc5b6da00c2edd1bbca6
+Merging ims ssh://git@gitlab.devtools.intel.com:29418/meghadey/linux.git interrupt_message_store 22789e6ddd371b420a074215e309f293f7743455
+Merging pci ssh://git@gitlab.devtools.intel.com:29418/skuppusw/linux.git pci-next 7b809ecd3f6077637ee2260999c688479a8d248a
+Merging chrome-dmc ssh://git@gitlab.devtools.intel.com:29418/otc-power-management-enabling-team/otc-power-kernel chrome-dmc-patch cd859b8d390a5e4cfd25581316b28994c64f823a
+Merging branding ssh://git@gitlab.devtools.intel.com:29418/otc-power-management-enabling-team/otc-power-kernel.git intel_next_branding 17233ff5ae5923acaa8643256f99e0dfd4bc750f
+Merging thermal ssh://git-amr-4.devtools.intel.com:29418/otc_linux_spandruv-internal.git to_eywa_thermal 4fc81855987c99ad59a0abd78f51e8cb948302fe
+Merging sst ssh://git-amr-4.devtools.intel.com:29418/otc_linux_spandruv-internal.git intel-sst 0d8139754c9152c7fd29be3d241d23430bb379dd
+Merging amx_xsaves_cet_pasid ssh://git-amr-4.devtools.intel.com:29418/enabling_cldemote_in_linux_kerne-linux_git.git amx 8c3cbe2c8fab64ca7b185436e3396ff1daa3ed84
+Merging idxd ssh://git@gitlab.devtools.intel.com:29418/otc-clk-server/linux-dsa/kernel.git intel-next ed3659430ff6d9c3724cf8348379833b5740edf2
+Merging clear_patches ssh://git@gitlab.devtools.intel.com:29418/otc-power-management-enabling-team/otc-power-kernel.git clear_linux_patches_for_next 3435d3bfe672bea4794d215eae9b86eb291b2d9a
+Merging perf-tools ssh://git-amr-3.devtools.intel.com:29418/otc_mmc-linux intel-pt-perf-tools-v5.6 3f0d100318b30341a3776cb18bf31f24af589180
+Merging rar ssh://git@gitlab.devtools.intel.com:29418/yyu32/rar.git rar 20664b93d58ce838ffd3a4ede2747904061247e7
+Merging ipc ssh://git@gitlab.devtools.intel.com:29418/mvds-linux-dev/thunder-bay-linux/tbh-linux.git release-v5.6-rc1 14fec730bb1d85eb7b17777cedbed1a14eeb58b3
+Merging iommu-workarounds ssh://git-amr-4.devtools.intel.com:29418/linux_iommu-iommu.git iommu-workarounds cf6e055d4f0b32f90a58b914364853474e051e15
+Merging cta ssh://git@gitlab.devtools.intel.com:29418/debox1/linux-kernel-dev.git cta_arch 0e542daef3e883e03771c84675fc28d8d774921b
+Merging ADC/TGPIO/PWM/QEP/MCAN git://git-amr-4.devtools.intel.com/jarkkoni-linux.git for-intel-next e13bb0fe13e8f8e7b35fd5f48c010ad7514f6724
+Merging Thunderbay IO ssh://git@gitlab.devtools.intel.com:29418/hspe_csw/bsp/linux.git tbh/dev 1f7eb791785cd88876534d76d70523d7d2d8db55
+Merging SVOS Kernel ssh://git-amr-1.devtools.intel.com:29418/svos_kernel-next.git svos-next-pull-5.6 d593c14a568950b7dc914dbc2210bff16457022a
+Merging Intel User interrupt ssh://git-ger-6.devtools.intel.com:29418/uli-linux-kernel.git uipi-intel-next aa16032c9a05d9133505721953377bd1269002c7
+Merging vpusmm ssh://git@gitlab.devtools.intel.com:29418/kmb_integration/vpusmm_driver.git for-intel-next-5.6 f542a76a9b4ede59aee910f6326391c1a1877a04
+Merging rdt ssh://git-amr-2.devtools.intel.com:29418/rt_linux-linux.git rdt/for-intel-next dba0484c8f7e620e380a9847a4e1345c05d3320b
+Merging hybrid ssh://git@gitlab.devtools.intel.com:29418/ranerica/linux-dev.git rneri/hybrid 313a85aa9d70b23bb06a66131036119f065fa6f1
+Merging PKS ssh://git-amr-4.devtools.intel.com:29418/enabling_cldemote_in_linux_kerne-linux_git.git pks 962d96945f81a27211a0265c13c712569b3dc1ed
+Merging resctrl_selftest ssh://git-amr-4.devtools.intel.com:29418/enabling_cldemote_in_linux_kerne-linux_git.git resctrl_selftest 5cdabf07b8438659af10ad8bb19a8391769d75c6
+Merging AES warning fix ssh://git@gitlab.devtools.intel.com:29418/hspe_csw/sbs/linux.git dev/sbhusare/THB_HCU_crypto_driver_with_fix 9ab7b7a4df9328f011c60f0f9654968fe84db2a4
+Merging mba ssh://git-amr-4.devtools.intel.com:29418/enabling_cldemote_in_linux_kerne-linux_git.git mba_per_thread 40fa7fb401ce041df0c7e0239903a873f5a2e138
+Merging LASS ssh://git@gitlab.devtools.intel.com:29418/chenyian/lass-kernel-v5.6-rc2.git lass-kernel 0bfeee71f67bcad552c6f1becb5d146ba3bb217e
+Merging MKTME ssh://git@gitlab.devtools.intel.com:29418/otc-clk-server/mktme/mktme_intel_next.git my_inext ed8be5bf085a96a29ea9bbbccc5adb5d3f162fd3
+Merging Workarounds for SLE ssh://git@gitlab.devtools.intel.com:29418/otc-power-management-enabling-team/otc-power-kernel.git sle_support f7330d01ff2e59561bec92a6d9012cf57c84c687
+Merging s0ix-debug ssh://git@gitlab.devtools.intel.com:29418/debox1/linux-kernel-dev.git s0ix_debug 79cd94eeddcd2d1cf980a335937e4ed51e3d803d
+Merging Secure Xlink ssh://git@gitlab.devtools.intel.com:29418/hspe_csw/sbs/linux.git dev/sagarpat/Xlink_char_driver aa5bda629e12604f2ca83c2ff44cbe4fd00bc146
+Merging TBH ARM ssh://git@gitlab.devtools.intel.com:29418/OWR/IoTG/GMS/Yocto/Graphics/Media/hantrodriver.git integration 449293ca0eae1ffb023a9fc337bd1a7b36bf8535
+Merging vmdos_split_lock ssh://git-amr-4.devtools.intel.com:29418/enabling_cldemote_in_linux_kerne-linux_git.git vmdos c0bb7a9253c0636195826416f948899694cfb6be
+Merging kvm-vmdos ssh://git@gitlab.devtools.intel.com:29418/cqiang/spr-po-kvm.git lxy/vm-dos-virt 80746dd1b852487a02a1b3764578c39d487052e1
+Merging kvm-vmdos-debug ssh://git@gitlab.devtools.intel.com:29418/cqiang/spr-po-kvm.git lxy/bus-lock-debug-exception 30316be71a9f6f36362f15da643ce65b3732552e
+Merging hqmv2 ssh://git@gitlab.devtools.intel.com:29418/cwa/linux-kernel.git hqmv2_for_intel_next-v5.6 27fa5245347923be1711d0560b34c6d361005493
+Merging CXL ssh://git@gitlab.devtools.intel.com:29418/svkelley/cxl-dev.git cxl-next bfd21c62ec945387f590da1c74ce62ebe975a4cc
+Merging libnvdimm ssh://git@gitlab.devtools.intel.com:29418/otc-clk-server/linux-nvdimm/linux.git for-5.7/firmware-activate ddcf979fd543b59ce134d1e7cfefaeacc2976f11

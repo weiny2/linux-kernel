@@ -1,0 +1,2633 @@
+{
+    "metadata": {
+        "kernel_cycle": "v5.6",
+        "jira_epic": "NEXT-1775"
+    },
+    "master_branch": {
+        "branch": "master",
+        "contributor": [],
+        "enabled": true,
+        "name": "Linus Upstream",
+        "repourl": "git://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git",
+        "status": "public",
+        "stuck_at_ref": null,
+        "use_latest_tag": true,
+        "tag": "v5.6-rc7",
+        "rev": "16fbf79b0f83bc752cee8589279f1ebfe57b3b6e"
+    },
+    "topic_branches": [
+        {
+            "branch": "eywa",
+            "branch_type": "internal nonexpiring",
+            "config_options": [],
+            "contributor": [],
+            "description": "intel-next scripts and patches",
+            "enabled": true,
+            "ip_owner": [],
+            "jira": "",
+            "name": "eywa",
+            "repourl": "ssh://git-amr-1.devtools.intel.com:29418/otc_intel_next-linux.git",
+            "sdl_contact": [],
+            "status": "intel confidential",
+            "stuck_at_ref": "",
+            "rev": "21a5707d78ae35f574bc4c08b2548e9f8751ae23"
+        },
+        {
+            "branch": "configs",
+            "branch_type": "internal nonexpiring",
+            "config_options": [],
+            "contributor": [],
+            "description": "intel-next scripts and patches",
+            "enabled": true,
+            "ip_owner": [],
+            "jira": "",
+            "name": "configs",
+            "repourl": "ssh://git-amr-1.devtools.intel.com:29418/otc_intel_next-linux.git",
+            "sdl_contact": [],
+            "status": "intel confidential",
+            "stuck_at_ref": "",
+            "rev": "aad9e841cc6b10d707b91e9103f41606a1ffaf5d"
+        },
+        {
+            "branch": "packaging",
+            "branch_type": "internal nonexpiring",
+            "config_options": [],
+            "contributor": [],
+            "description": "intel-next scripts and patches",
+            "enabled": true,
+            "ip_owner": [],
+            "jira": "",
+            "name": "packaging",
+            "repourl": "ssh://git-amr-1.devtools.intel.com:29418/otc_intel_next-linux.git",
+            "sdl_contact": [],
+            "status": "intel confidential",
+            "stuck_at_ref": "",
+            "rev": "ece5ea8ee3ce7d508f0090065c219764e122a140"
+        },
+        {
+            "branch": "intel-next",
+            "branch_type": "internal nonexpiring",
+            "config_options": [],
+            "contributor": [
+                {
+                    "name": "Len Brown",
+                    "email": "len.brown@intel.com"
+                }
+            ],
+            "description": "Len Brown's patches",
+            "enabled": true,
+            "ip_owner": [],
+            "jira": "NEXT-1781",
+            "name": "len-x86",
+            "repourl": "git://linux-os.sc.intel.com/~lenb/linux",
+            "sdl_contact": [
+                {
+                    "name": "Len Brown",
+                    "email": "len.brown@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": "",
+            "rev": "16fbf79b0f83bc752cee8589279f1ebfe57b3b6e"
+        },
+        {
+            "branch": "testing",
+            "branch_type": "public",
+            "config_options": [],
+            "contributor": [
+                {
+                    "name": "Rafael Wysocki",
+                    "email": "rafael.j.wysocki@intel.com"
+                }
+            ],
+            "description": "NEXT PM tree",
+            "enabled": true,
+            "ip_owner": [],
+            "jira": "NEXT-1780",
+            "name": "pm-testing",
+            "repourl": "git://git.kernel.org/pub/scm/linux/kernel/git/rafael/linux-pm.git",
+            "sdl_contact": [],
+            "status": "public",
+            "stuck_at_ref": "",
+            "rev": "8b4ddf47b7b4dd54539f1821c95a8dee3295fb0b"
+        },
+        {
+            "branch": "next",
+            "branch_type": "public",
+            "config_options": [
+                {
+                    "name": "CONFIG_INTEL_SGX",
+                    "value": "y"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Jarkko Sakkinen",
+                    "email": "jarkko.sakkinen@intel.com"
+                }
+            ],
+            "description": "SGX code",
+            "enabled": true,
+            "ip_owner": [],
+            "jira": "NEXT-1778",
+            "name": "SGX",
+            "repourl": "git://github.com/jsakkine-intel/linux-sgx.git",
+            "sdl_contact": [],
+            "status": "public",
+            "stuck_at_ref": "",
+            "rev": "6366f0c67ce1d609da9cd8a482f60ebcc1506f5b"
+        },
+        {
+            "branch": "for-intel-next",
+            "branch_type": "internal nonexpiring",
+            "config_options": [
+                {
+                    "name": "CONFIG_NVME_CORE",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_BLK_DEV_NVME",
+                    "value": "y"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Shyjumon",
+                    "email": "shyjumon.n@intel.com"
+                }
+            ],
+            "description": "NVME driver enabling",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Revanth Rajashekar",
+                    "email": "revanth.rajashekar@intel.com"
+                }
+            ],
+            "jira": "NEXT-1776",
+            "name": "nvme",
+            "repourl": "ssh://git-gar-1.devtools.intel.com:29418/otc_nvme_linux-kernel",
+            "sdl_contact": [
+                {
+                    "name": "Revanth Rajashekar",
+                    "email": "revanth.rajashekar@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": "",
+            "rev": "bbcc0df2a70abc4eb16c695b8974d8cb186e8d01"
+        },
+        {
+            "branch": "for-eywa",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "CONFIG_MMC",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_MMC_BLOCK",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_MMC_SDHCI",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_MMC_SDHCI_PCI",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_MMC_SDHCI_ACPI",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_SCSI_LOWLEVEL",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_SCSI_UFSHCD",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_SCSI_UFSHCD_PCI",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_PINCTRL_CEDARFORK",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_PINCTRL_DENVERTON",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_PINCTRL_ELKHARTLAKE",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_PINCTRL_EMMITSBURG",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_PINCTRL_ICELAKE",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_PINCTRL_TIGERLAKE",
+                    "value": "m"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Adrian Hunter",
+                    "email": "adrian.hunter@intel.com"
+                }
+            ],
+            "description": "MMC Subsystem and SCS (eMMC/SD card/SDIO/UFS) driver enabling",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Rajesh Bhaskar",
+                    "email": "rajesh.bhaskar@intel.com"
+                },
+                {
+                    "name": "Tomasz Pielaszkiewicz",
+                    "email": "tomasz.pielaszkiewicz@intel.com"
+                }
+            ],
+            "jira": "NEXT-1828",
+            "name": "mmc",
+            "repourl": "ssh://git-amr-3.devtools.intel.com:29418/otc_mmc-linux",
+            "sdl_contact": [
+                {
+                    "name": "Kai Svahn",
+                    "email": "kai.svahn@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": "",
+            "rev": "1a4d9e511d21ff725cf2d142041054474b53258d"
+        },
+        {
+            "branch": "ntb-next-upstream",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "CONFIG_NTB",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_NTB_INTEL",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_NTB_PINGPONG",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_NTB_TOOL",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_NTB_PERF",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_NTB_TRANSPORT",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_NTB_NETDEV",
+                    "value": "m"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Dave Jiang",
+                    "email": "dave.jiang@intel.com"
+                }
+            ],
+            "description": "ICX intel NTB enabling",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Rajesh Pamujula",
+                    "email": "rajesh.s.pamujula@intel.com"
+                }
+            ],
+            "jira": "NEXT-1795",
+            "name": "ntb",
+            "repourl": "ssh://git-amr-1.devtools.intel.com:29418/csig_storage_group-linux-kernel.git",
+            "sdl_contact": [
+                {
+                    "name": "Dave Jiang",
+                    "email": "dave.jiang@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": "",
+            "rev": "58226aa4cbad5dd6750545b1461dccd4c1a4a93b"
+        },
+        {
+            "branch": "cse-5.6",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "CONFIG_PCI",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_INTEL_MEI",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_INTEL_MEI_ME",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_INTEL_MEI_TXE",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_INTEL_MEI_DAL",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_INTEL_MEI_WDT",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_WATCHDOG_CORE",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_NFC",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_NFC_HCI",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_NFC_MEI_PHY",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_NFC_PN544",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_NFC_PN544_MEI",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_NFC_MICROREAD",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_NFC_MICROREAD_MEI",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_INTEL_MEI_HDCP",
+                    "value": "m"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Tomas Winkler",
+                    "email": "tomas.winkler@intel.com"
+                }
+            ],
+            "description": "CSE/CSME MEI driver and MEI client drivers",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "William A. Stevens",
+                    "email": "William.a.stevens@intel.com"
+                }
+            ],
+            "jira": "NEXT-1793",
+            "name": "mei",
+            "repourl": "ssh://git-ger-8.devtools.intel.com:29418/sfip_linux-linux-mei.git",
+            "sdl_contact": [
+                {
+                    "name": "Daniel Ohayon",
+                    "email": "daniel.ohayon@intel.com"
+                },
+                {
+                    "name": "Alexander Usyskin",
+                    "email": "alexander.usyskin@intel.com"
+                },
+                {
+                    "name": "Tomas Winkler",
+                    "email": "tomas.winkler@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": "",
+            "rev": "7a2da1b659e5a79711ea8c3d51aacfab93982508"
+        },
+        {
+            "branch": "for-eywa",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "CONFIG_USB_SUPPORT",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_USB",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_USB_PCI",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_USB_ANNOUNCE_NEW_DEVICES",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_USB_XHCI_HCD",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_USB_XHCI_PCI",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_USB_XHCI_DBGCAP",
+                    "value": "y"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Mathias Nyman",
+                    "email": "mathias.nyman@intel.com"
+                }
+            ],
+            "description": "USB host support and fixes",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Abdul Rahman Ismail",
+                    "email": "abdul.r.ismail@intel.com"
+                }
+            ],
+            "jira": "NEXT-1784",
+            "name": "usb-xhci",
+            "repourl": "ssh://git-amr-4.devtools.intel.com:29418/otc_usb-xhci.git",
+            "sdl_contact": [
+                {
+                    "name": "Kai Svahn",
+                    "email": "kai.svahn@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": "",
+            "rev": "d9b9dd898eba93096fadf9e14d5c6156c92df48b"
+        },
+        {
+            "branch": "for-eywa",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "CONFIG_MFD_INTEL_LPSS_ACPI",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_MFD_INTEL_LPSS_PCI",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_SERIAL_8250_DW",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_SPI_PXA2XX",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_SPI_PXA2XX_PCI",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_I2C_DESIGNWARE_PLATFORM",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_I2C_DESIGNWARE_PCI",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_I2C_I801",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_PINCTRL_CEDARFORK",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_PINCTRL_DENVERTON",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_PINCTRL_ELKHARTLAKE",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_PINCTRL_EMMITSBURG",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_PINCTRL_ICELAKE",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_PINCTRL_TIGERLAKE",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_SPI_INTEL_SPI_PCI",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_SPI_INTEL_SPI_PLATFORM",
+                    "value": "m"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Mika Westerberg",
+                    "email": "mika.westerberg@intel.com"
+                }
+            ],
+            "description": "LPSS/SMBus/GPIO/SPI-NOR/PCI/Thunderbolt driver enabling",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Rajesh Bhaskar",
+                    "email": "rajesh.bhaskar@intel.com"
+                },
+                {
+                    "name": "Ming Chew Lee",
+                    "email": "ming.chew.lee@intel.com"
+                },
+                {
+                    "name": "Eric Thian Aun Tan",
+                    "email": "eric.thian.aun.tan@intel.com"
+                },
+                {
+                    "name": "Kevin Zhenyu Zhu",
+                    "email": "kevin.zhenyu.zhu@intel.com"
+                },
+                {
+                    "name": "Reuven Rozic",
+                    "email": "reuven.rozic@intel.com"
+                }
+            ],
+            "jira": "NEXT-1798",
+            "name": "lpss",
+            "repourl": "ssh://git-amr-4.devtools.intel.com:29418/mwesterb-linux.git",
+            "sdl_contact": [
+                {
+                    "name": "Kai Svahn",
+                    "email": "kai.svahn@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": "",
+            "rev": "1031e5fae8bb5377131f48442d243072dc2e7ee0"
+        },
+        {
+            "branch": "perf-intel-next",
+            "branch_type": "expiring",
+            "config_options": [],
+            "contributor": [
+                {
+                    "name": "Kan Liang",
+                    "email": "kan.liang@intel.com"
+                }
+            ],
+            "description": "Linux perf PMU support for Cannonlake, Icelake, Tigerlake and Tremont",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Beeman Strong",
+                    "email": "beeman.strong@intel.com"
+                },
+                {
+                    "name": "Ahmad Yasin",
+                    "email": "ahmad.yasin@intel.com"
+                },
+                {
+                    "name": "Jeremiah D. Williamson",
+                    "email": "jeremiah.d.williamson@intel.com"
+                }
+            ],
+            "jira": "NEXT-1790",
+            "name": "perf",
+            "repourl": "ssh://git-amr-2.devtools.intel.com:29418/kan_lkp-perf-intel-next.git",
+            "sdl_contact": [
+                {
+                    "name": "Andi Kleen",
+                    "email": "andi.kleen@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": "",
+            "rev": "ec38db43ca2e522dab6e748d4001dcec5e4ff565"
+        },
+        {
+            "branch": "powertop",
+            "branch_type": "expiring",
+            "config_options": [],
+            "contributor": [
+                {
+                    "name": "Nivedita Swaminathan",
+                    "email": "nivedita.swaminathan@intel.com"
+                }
+            ],
+            "description": "Enable out of tree powertop",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Nivedita Swaminathan",
+                    "email": "Nivedita.Swaminathan@intel.com"
+                }
+            ],
+            "jira": "NEXT-1791",
+            "name": "powertop",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/otc-power-management-enabling-team/otc-power-kernel.git",
+            "sdl_contact": [
+                {
+                    "name": "Charles D Prestopine",
+                    "email": "charles.d.prestopine@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": "",
+            "rev": "55c58c13363643abb8d8a3e6f9fd22e055aa99a1"
+        },
+        {
+            "branch": "kl",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "CONFIG_CRYPTO_AES_KL_INTEL",
+                    "value": "m"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Chang S. Bae",
+                    "email": "chang.seok.bae@intel.com"
+                }
+            ],
+            "description": "Support for AES key hiding from memory during encryption and decryption process",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Jason W Brandt",
+                    "email": "jason.w.brandt@intel.com"
+                }
+            ],
+            "jira": "NEXT-1809",
+            "name": "keylocker",
+            "repourl": "ssh://git-amr-4.devtools.intel.com:29418/linux_cbae1_share-kl.git",
+            "sdl_contact": [
+                {
+                    "name": "Chang S. Bae",
+                    "email": "chang.seok.bae@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": "",
+            "rev": "2063969f7ac49d9c321d29b911756d34493e3646"
+        },
+        {
+            "branch": "rpmb",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "CONFIG_RPMB_SUPPORT",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_RPMB",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_RPMB_INTF_DEV",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_RPMB_SIM",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_VIRTIO_RPMB",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_RPMB_MUX",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_VIRTIO_RPMB",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_RPMB_MUX_KEY",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_MMC",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_MMC_BLOCK",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_SCSI",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_SCSI_DMA",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_SCSI_LOWLEVEL",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_SCSI_UFSHCD",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_PCI",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_SCSI_UFSHCD_PCI",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_NVME_CORE",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_BLK_DEV_NVME",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_INTEL_MEI_SPD",
+                    "value": "m"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Tomas Winkler",
+                    "email": "tomas.winkler@intel.com"
+                }
+            ],
+            "description": "RPMB (CSE) support and SPD (storage proxy driver)",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "William Stevens",
+                    "email": "william.a.stevens@intel.com"
+                }
+            ],
+            "jira": "NEXT-1856",
+            "name": "rpmb",
+            "repourl": "ssh://git-ger-8.devtools.intel.com:29418/sfip_linux-linux-mei.git",
+            "sdl_contact": [
+                {
+                    "name": "Daniel Ohayon",
+                    "email": "daniel.ohayon@intel.com"
+                },
+                {
+                    "name": "Alexander Usyskin",
+                    "email": "alexnder.usyskin@intel.com"
+                },
+                {
+                    "name": "Tomas Winkler",
+                    "email": "tomas.winkler@intel.com"
+                }
+            ],
+            "status": "public",
+            "stuck_at_ref": "",
+            "rev": "ff2ad23cde63662113e3cb2390c087b7afadb698"
+        },
+        {
+            "branch": "for-intel-next",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "CONFIG_ACPI_ADXL",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_EDAC_DEBUG",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_EDAC_PND2",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_EDAC_SKX",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_EDAC_IGEN6",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_EDAC_I10NM",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_EDAC_IEH",
+                    "value": "m"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Qiuxu Zhu",
+                    "email": "qiuxu.zhu@intel.com"
+                }
+            ],
+            "description": "Linux EDAC support for SPR, EHL, ICL NNPI and\u00a0and IEH support for TGL.",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Puneet Wadhawan",
+                    "email": "puneet.wadhawan@intel.com"
+                },
+                {
+                    "name": "Bezbroz, Henrietta",
+                    "email": "henrietta.bezbroz@intel.com"
+                },
+                {
+                    "name": "Ahmad, Annie",
+                    "email": "quarat-ul-ann.ahmad@intel.com"
+                },
+                {
+                    "name": "Revuelta, Julian J",
+                    "email": "julian.j.revuelta@intel.com"
+                }
+            ],
+            "jira": "NEXT-1812",
+            "name": "edac",
+            "repourl": "ssh://git-ccr-1.devtools.intel.com:29418/otc_edac_driver-linux.git",
+            "sdl_contact": [
+                {
+                    "name": "Tony Luck",
+                    "email": "tony.luck@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": "",
+            "rev": "5b5892007b0cc5800566eb47017a25ba3540e24f"
+        },
+        {
+            "branch": "pmc_core",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "CONFIG_INTEL_PMC_CORE",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_PM_SLEEP",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_DEBUG_FS",
+                    "value": "y"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Gayatri Kammela",
+                    "email": "gayatri.kammela@intel.com"
+                }
+            ],
+            "description": "TGL, JSL and RKL PMC core driver changes and new AVX512 cpuid support",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Mark Charney",
+                    "email": "mark.charney@intel.com"
+                },
+                {
+                    "name": "Christopher Lake",
+                    "email": "christopher.j.lake@intel.com"
+                }
+            ],
+            "jira": "NEXT-1807",
+            "name": "pmc_core",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/gkammela/pmc_core-intel-next.git",
+            "sdl_contact": [
+                {
+                    "name": "David Box",
+                    "email": "david.e.box@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": "",
+            "rev": "389aa6d1b7144ae0b8f81cb14fa19ace0106a452"
+        },
+        {
+            "branch": "intel_th-for-intel-next",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "CONFIG_STM",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_STM_DUMMY",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_STM_SOURCE_CONSOLE",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_STM_SOURCE_HEARTBEAT",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_STM_SOURCE_FTRACE",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_INTEL_TH",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_INTEL_TH_PCI",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_INTEL_TH_ACPI",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_INTEL_TH_GTH",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_INTEL_TH_STH",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_INTEL_TH_MSU",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_INTEL_TH_PTI",
+                    "value": "m"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Alexander Shishkin",
+                    "email": "alexander.shishkin@linux.intel.com"
+                }
+            ],
+            "description": "Contains support for Tiger Lake PCH-H, Emmitsburg",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Marcus Winston",
+                    "email": "marcus.winston@intel.com"
+                }
+            ],
+            "jira": "NEXT-1783",
+            "name": "tracehub",
+            "repourl": "ssh://git-amr-4.devtools.intel.com:29418/ash-pullme.git",
+            "sdl_contact": [
+                {
+                    "name": "Kai Svahn",
+                    "email": "kai.svahn@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": "",
+            "rev": "76bcaf9c56000f949b8d1a42eaa53892b96dc4cb"
+        },
+        {
+            "branch": "for-eywa",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "CONFIG_TYPEC",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_TYPEC_TCPM",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_TYPEC_FUSB302",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_TYPEC_WCOVE",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_TYPEC_UCSI",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_UCSI_ACPI",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_TYPEC_DP_ALTMODE",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_TYPEC_TPS6598X",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_TYPEC_MUX_PI3USB30532",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_USB_ROLE_SWITCH",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_USB_ROLES_INTEL_XHCI",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_INTEL_CHT_INT33FE",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_TYPEC_CCG_HPI",
+                    "value": "m"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Heikki Krogerus",
+                    "email": "heikki.krogerus@linux.intel.com"
+                }
+            ],
+            "description": "Type-C Support",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Vijay Kadgi",
+                    "email": "vijaykumar.b.kadgi@intel.com"
+                }
+            ],
+            "jira": "NEXT-1813",
+            "name": "usb-typec",
+            "repourl": "ssh://git-amr-4.devtools.intel.com:29418/otc_usb-typec.git",
+            "sdl_contact": [
+                {
+                    "name": "Svahn Kai",
+                    "email": "kai.svahn@intel.com"
+                }
+            ],
+            "status": "public",
+            "stuck_at_ref": "",
+            "rev": "c6e1c6156904c26ea463c2af7321d76932a7b2f3"
+        },
+        {
+            "branch": "for-intel-next",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "CONFIG_INTEL_RAPL",
+                    "value": "m"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Rui Zhang",
+                    "email": "rui.zhang@intel.com"
+                }
+            ],
+            "description": "intel_rapl/ntel_idle support for ElkhartLake, JaperLake, CometLake, TigerLake, CooperLake, RocketLake and Sapphire Rapids.",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Evelyn Fields",
+                    "email": "evelyn.fields@intel.com"
+                }
+            ],
+            "jira": "NEXT-1819",
+            "name": "rapl/idle",
+            "repourl": "ssh://git-ccr-1.devtools.intel.com:29418/otc_linux_rui-rapl",
+            "sdl_contact": [
+                {
+                    "name": "Charles D Prestopine",
+                    "email": "charles.d.prestopine@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": "",
+            "rev": "de580c4a0997e998eb837c565dca27116df4fc21"
+        },
+        {
+            "branch": "sep_socwatch_linux_5_6",
+            "branch_type": "public",
+            "config_options": [
+                {
+                    "name": "CONFIG_INTEL_SOCPERF",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_INTEL_SOCWATCH",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_INTEL_SOCWATCH_HV",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_INTEL_SEP",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_SEP",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_SEP_ACRN",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_SEP_SOCPERF",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_SEP_PAX",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_SEP_STANDARD_MODE",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_SEP_PRIVATE_BUILD",
+                    "value": "y"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Benmlih Faycal ",
+                    "email": "faycal.benmlih@intel.com"
+                }
+            ],
+            "description": "SoCWatch and SEP drivers for both native and ACRN hypervisor",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Benmlih, Faycal",
+                    "email": "faycal.benmlih@intel.com"
+                }
+            ],
+            "jira": "NEXT-1849",
+            "name": "socwatch",
+            "repourl": "git://github.com/mchinth/linux.git",
+            "sdl_contact": [
+                {
+                    "name": "Alexei Kalinin",
+                    "email": "alexei.v.kalinin@intel.com"
+                }
+            ],
+            "status": "public",
+            "stuck_at_ref": "",
+            "rev": "5e37c0b09f06a36916e7dc5b6da00c2edd1bbca6"
+        },
+        {
+            "branch": "interrupt_message_store",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "CONFIG_MSI_IMS",
+                    "value": "y"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Megha Dey",
+                    "email": "megha.dey@intel.com"
+                }
+            ],
+            "description": "Interrupt Message Store",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Megha Dey",
+                    "email": "megha.dey@intel.com"
+                }
+            ],
+            "jira": "NEXT-1825",
+            "name": "ims",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/meghadey/linux.git",
+            "sdl_contact": [
+                {
+                    "name": "Ashok Raj",
+                    "email": "ashok.raj@intel.com"
+                }
+            ],
+            "status": "public",
+            "stuck_at_ref": "",
+            "rev": "22789e6ddd371b420a074215e309f293f7743455"
+        },
+        {
+            "branch": "pci-next",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "CONFIG_PCIE_DPC",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_PCIE_EDR",
+                    "value": "y"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Sathyanarayanan",
+                    "email": "sathyanarayanan.kuppuswamy@intel.com"
+                }
+            ],
+            "description": "Intel PCI driver related fixes",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Ashok Raj",
+                    "email": "ashok.raj@intel.com"
+                }
+            ],
+            "jira": "NEXT-1794",
+            "name": "pci",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/skuppusw/linux.git",
+            "sdl_contact": [
+                {
+                    "name": "Ashok Raj",
+                    "email": "ashok.raj@intel.com"
+                }
+            ],
+            "status": "public",
+            "stuck_at_ref": "",
+            "rev": "7b809ecd3f6077637ee2260999c688479a8d248a"
+        },
+        {
+            "branch": "chrome-dmc-patch",
+            "branch_type": "expiring",
+            "config_options": [],
+            "contributor": [
+                {
+                    "name": "Nivedita Swaminathan",
+                    "email": "nivedita.swaminathan@intel.com"
+                }
+            ],
+            "description": "GFX patch to load DMC firmware",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Matthew Attwood",
+                    "email": "matthew.s.atwood@intel.com"
+                }
+            ],
+            "jira": "NEXT-1789",
+            "name": "chrome-dmc",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/otc-power-management-enabling-team/otc-power-kernel",
+            "sdl_contact": [
+                {
+                    "name": "Charles Prestopine",
+                    "email": "charles.d.prestopine@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": "",
+            "rev": "cd859b8d390a5e4cfd25581316b28994c64f823a"
+        },
+        {
+            "branch": "intel_next_branding",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "CONFIG_LOGO",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_LOGO_LINUX_NEXT_CLUT224",
+                    "value": "y"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Kyle Pelton",
+                    "email": "kyle.d.pelton@intel.com"
+                }
+            ],
+            "description": "Custom intel-next logo on bootup",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Kyle Pelton",
+                    "email": "kyle.d.pelton@intel.com"
+                }
+            ],
+            "jira": "NEXT-1786",
+            "name": "branding",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/otc-power-management-enabling-team/otc-power-kernel.git",
+            "sdl_contact": [
+                {
+                    "name": "Charles Prestopine",
+                    "email": "charles.d.prestopine@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": "",
+            "rev": "17233ff5ae5923acaa8643256f99e0dfd4bc750f"
+        },
+        {
+            "branch": "to_eywa_thermal",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "CONFIG_INT340X_THERMAL",
+                    "value": "m"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Srinivas Pandruvada",
+                    "email": "srinivas.pandruvada@intel.com"
+                }
+            ],
+            "description": "x86/DTT thermal",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Jim Hermerding",
+                    "email": "jim.g.hermerding@intel.com"
+                }
+            ],
+            "jira": "NEXT-1820",
+            "name": "thermal",
+            "repourl": "ssh://git-amr-4.devtools.intel.com:29418/otc_linux_spandruv-internal.git",
+            "sdl_contact": [
+                {
+                    "name": "Charles D Prestopine",
+                    "email": "charles.d.prestopine@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": "",
+            "rev": "4fc81855987c99ad59a0abd78f51e8cb948302fe"
+        },
+        {
+            "branch": "intel-sst",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "CONFIG_INTEL_SPEED_SELECT_INTERFACE",
+                    "value": "y"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Srinivas Pandruvada",
+                    "email": "srinivas.pandruvada@intel.com"
+                }
+            ],
+            "description": "Intel Speed Select Technology",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Vasudevan Srinivasan",
+                    "email": "vasudevan.srinivasan@intel.com"
+                }
+            ],
+            "jira": "NEXT-1808",
+            "name": "sst",
+            "repourl": "ssh://git-amr-4.devtools.intel.com:29418/otc_linux_spandruv-internal.git",
+            "sdl_contact": [
+                {
+                    "name": "Srinivas Pandruvada",
+                    "email": "srinivas.pandruvada@intel.com"
+                }
+            ],
+            "status": "public",
+            "stuck_at_ref": "",
+            "rev": "0d8139754c9152c7fd29be3d241d23430bb379dd"
+        },
+        {
+            "branch": "amx",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "CONFIG_X86_INTEL_SHADOW_STACK_USER",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_X86_INTEL_BRANCH_TRACKING_USER",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_X86_INTEL_CET",
+                    "value": "y"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Chang S. Bae",
+                    "email": "chang.seok.bae@intel.com"
+                }
+            ],
+            "description": "Advanced Matrix Extension (AMX/TMUL), including cet, xsaves and pasid code",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Bob Valentine",
+                    "email": "bob.valentine@intel.com"
+                }
+            ],
+            "jira": "NEXT-1822",
+            "name": "amx_xsaves_cet_pasid",
+            "repourl": "ssh://git-amr-4.devtools.intel.com:29418/enabling_cldemote_in_linux_kerne-linux_git.git",
+            "sdl_contact": [
+                {
+                    "name": "Israel Hirsh",
+                    "email": "israel.hirsh@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": "",
+            "rev": "8c3cbe2c8fab64ca7b185436e3396ff1daa3ed84"
+        },
+        {
+            "branch": "intel-next",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "CONFIG_INTEL_IOMMU",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_INTEL_IOMMU_SVM",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_DMA_ENGINE",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_DMATEST",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_MSI_IMS",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_PCI_ATS",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_PCI_PRI",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_PCI_PASID",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_INTEL_IDXD",
+                    "value": "m"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Dave Jiang",
+                    "email": "dave.jiang@intel.com"
+                }
+            ],
+            "description": "Intel combined Accelerator driver (DSA & IAX)",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Rajesh Pamujula",
+                    "email": "rajesh.s.pamujula@intel.com"
+                }
+            ],
+            "jira": "NEXT-1858",
+            "name": "idxd",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/otc-clk-server/linux-dsa/kernel.git",
+            "sdl_contact": [
+                {
+                    "name": "Dave Jiang",
+                    "email": "dave.jiang@intel.com"
+                }
+            ],
+            "status": "public",
+            "stuck_at_ref": "",
+            "rev": "ed3659430ff6d9c3724cf8348379833b5740edf2"
+        },
+        {
+            "branch": "clear_linux_patches_for_next",
+            "branch_type": "expiring",
+            "config_options": [],
+            "contributor": [
+                {
+                    "name": "Kyle Pelton",
+                    "email": "kyle.d.pelton@intel.com"
+                }
+            ],
+            "description": "Add Custom clear linux patches required to boot clear linux",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Kyle Pelton",
+                    "email": "kyle.d.pelton@intel.com"
+                }
+            ],
+            "jira": "NEXT-1785",
+            "name": "clear_patches",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/otc-power-management-enabling-team/otc-power-kernel.git",
+            "sdl_contact": [
+                {
+                    "name": "Charles Prestopine",
+                    "email": "charles.d.prestopine@intel.com"
+                }
+            ],
+            "status": "public",
+            "stuck_at_ref": "",
+            "rev": "3435d3bfe672bea4794d215eae9b86eb291b2d9a"
+        },
+        {
+            "branch": "intel-pt-perf-tools-v5.6",
+            "branch_type": "expiring",
+            "config_options": [],
+            "contributor": [
+                {
+                    "name": "Adrian Hunter",
+                    "email": "adrian.hunter@intel.com"
+                }
+            ],
+            "description": "Updates to perf tools for Intel PT",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Beeman Strong",
+                    "email": "beeman.strong@intel.com"
+                }
+            ],
+            "jira": "NEXT-1841",
+            "name": "perf-tools",
+            "repourl": "ssh://git-amr-3.devtools.intel.com:29418/otc_mmc-linux",
+            "sdl_contact": [
+                {
+                    "name": "Kai Svahn",
+                    "email": "kai.svahn@intel.com"
+                }
+            ],
+            "status": "public",
+            "stuck_at_ref": "",
+            "rev": "3f0d100318b30341a3776cb18bf31f24af589180"
+        },
+        {
+            "branch": "rar",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "CONFIG_X86_INTEL_RAR",
+                    "value": "y"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Yu-cheng Yu",
+                    "email": "yu-cheng.yu@intel.com"
+                }
+            ],
+            "description": "Remove Action Request (RAR) TLB Shootdown",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Ido\u00a0 Ouziel",
+                    "email": "ido.ouziel@intel.com"
+                }
+            ],
+            "jira": "NEXT-1787",
+            "name": "rar",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/yyu32/rar.git",
+            "sdl_contact": [
+                {
+                    "name": "Yu-cheng Yu",
+                    "email": "yu-cheng.yu@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": "",
+            "rev": "20664b93d58ce838ffd3a4ede2747904061247e7"
+        },
+        {
+            "branch": "release-v5.6-rc1",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "CONFIG_KEEMBAY_IPC",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_KEEMBAY_VPU_IPC",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_KEEMBAY_IPC_TEST",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_KEEMBAY_VPU_IPC_TEST",
+                    "value": "m"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Daniele\u00a0Alessandrelli ",
+                    "email": "daniele.alessandrelli@intel.com"
+                }
+            ],
+            "description": "VPU/IPC support for Keem Bay and TBH",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Farrell, David T",
+                    "email": "david.t.farrell@intel.com"
+                }
+            ],
+            "jira": "NEXT-1811",
+            "name": "ipc",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/mvds-linux-dev/thunder-bay-linux/tbh-linux.git",
+            "sdl_contact": [
+                {
+                    "name": "Walsh, Liz",
+                    "email": "liz.walsh@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": "",
+            "rev": "14fec730bb1d85eb7b17777cedbed1a14eeb58b3"
+        },
+        {
+            "branch": "iommu-workarounds",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "CONFIG_INTEL_IOMMU_WORKAROUND",
+                    "value": "y"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Sohil Mehta ",
+                    "email": "sohil.mehta@intel.com"
+                }
+            ],
+            "description": "IOMMU workarounds/fixes for upcoming affected platforms.",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Ashok Raj",
+                    "email": "ashok.raj@intel.com"
+                }
+            ],
+            "jira": "NEXT-1844",
+            "name": "iommu-workarounds",
+            "repourl": "ssh://git-amr-4.devtools.intel.com:29418/linux_iommu-iommu.git",
+            "sdl_contact": [
+                {
+                    "name": "Ashok Raj",
+                    "email": "ashok.raj@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": "",
+            "rev": "cf6e055d4f0b32f90a58b914364853474e051e15"
+        },
+        {
+            "branch": "cta_arch",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "CONFIG_MFD_INTEL_CTA",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_INTEL_CTA_TELEM",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_INTEL_CTA_WATCHER",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_INTEL_CTA_CRASHLOG",
+                    "value": "m"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "David E Box ",
+                    "email": "david.e.box@intel.com"
+                }
+            ],
+            "description": "Intel Converged Telemetry Architecture support for TGL",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Van De Groenendaal, Johan",
+                    "email": "johan.van.de.groenendaal@intel.com"
+                },
+                {
+                    "name": "Ayinala, Manohar",
+                    "email": "manohar.ayinala@intel.com"
+                },
+                {
+                    "name": "Krithivas, Ramamurthy",
+                    "email": "ramamurthy.krithivas@intel.com"
+                }
+            ],
+            "jira": "NEXT-1836",
+            "name": "cta",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/debox1/linux-kernel-dev.git",
+            "sdl_contact": [
+                {
+                    "name": "Prestopine, Charles D",
+                    "email": "charles.d.prestopine@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": "",
+            "rev": "0e542daef3e883e03771c84675fc28d8d774921b"
+        },
+        {
+            "branch": "for-intel-next",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "CONFIG_INTEL_ADC",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_PWM_DWC",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_COUNTER",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_INTEL_QEP",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_CAN_M_CAN",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_CAN_M_CAN_PCI",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_CAN_CALC_BITTIMING",
+                    "value": "y"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Jarkko Nikula ",
+                    "email": "jarkko.nikula@linux.intel.com"
+                }
+            ],
+            "description": "TGPIO branch",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Abdul Rahman Ismail",
+                    "email": "abdul.r.ismail@intel.com"
+                },
+                {
+                    "name": "Tan, Raymond",
+                    "email": "raymond.tan@intel.com"
+                }
+            ],
+            "jira": "NEXT-1800",
+            "name": "ADC/TGPIO/PWM/QEP/MCAN",
+            "repourl": "git://git-amr-4.devtools.intel.com/jarkkoni-linux.git",
+            "sdl_contact": [
+                {
+                    "name": "Svahn, Kai",
+                    "email": "kai.svahn@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": "",
+            "rev": "e13bb0fe13e8f8e7b35fd5f48c010ad7514f6724"
+        },
+        {
+            "branch": "tbh/dev",
+            "branch_type": "expiring",
+            "config_options": [],
+            "contributor": [
+                {
+                    "name": "Rathina Thalaiappan ",
+                    "email": "rathina.thalaiappan@intel.com"
+                }
+            ],
+            "description": "Thunderbay I/O drivers",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Ajit Tapkir",
+                    "email": "ajit.tapkir@intel.com"
+                }
+            ],
+            "jira": "NEXT-1782",
+            "name": "Thunderbay IO",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/hspe_csw/bsp/linux.git",
+            "sdl_contact": [
+                {
+                    "name": "Ajit Tapkir",
+                    "email": "ajit.tapkir@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": "",
+            "rev": "1f7eb791785cd88876534d76d70523d7d2d8db55"
+        },
+        {
+            "branch": "svos-next-pull-5.6",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "CONFIG_SVOS",
+                    "value": "n"
+                },
+                {
+                    "name": "CONFIG_SVFS_ACPI",
+                    "value": "n"
+                },
+                {
+                    "name": "CONFIG_SVOS_RAS_ERRORCORRECT",
+                    "value": "n"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Tom Stonecypher",
+                    "email": "tom.stonecypher@intel.com"
+                }
+            ],
+            "description": "SVOS Kernel/Driver Changes for v5.6",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Tom Stonecypher",
+                    "email": "tom.stonecypher@intel.com"
+                }
+            ],
+            "jira": "NEXT-1818",
+            "name": "SVOS Kernel",
+            "repourl": "ssh://git-amr-1.devtools.intel.com:29418/svos_kernel-next.git",
+            "sdl_contact": [
+                {
+                    "name": "Tom Stonecypher",
+                    "email": "tom.stonecypher@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": "",
+            "rev": "d593c14a568950b7dc914dbc2210bff16457022a"
+        },
+        {
+            "branch": "uipi-intel-next",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "CONFIG_X86_INTEL_USER_INTERRUPT",
+                    "value": "y"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Sohil Mehta",
+                    "email": "sohil.mehta@intel.com"
+                }
+            ],
+            "description": "Intel User interrupt support",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Jacob Pan",
+                    "email": "jacob.jun.pan@intel.com"
+                },
+                {
+                    "name": "Ashok Raj",
+                    "email": "ashok.raj@intel.com"
+                }
+            ],
+            "jira": "NEXT-1824",
+            "name": "Intel User interrupt",
+            "repourl": "ssh://git-ger-6.devtools.intel.com:29418/uli-linux-kernel.git",
+            "sdl_contact": [
+                {
+                    "name": "Jacob Pan",
+                    "email": "jacob.jun.pan@intel.com"
+                },
+                {
+                    "name": "Ashok Raj",
+                    "email": "ashok.raj@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": "",
+            "rev": "aa16032c9a05d9133505721953377bd1269002c7"
+        },
+        {
+            "branch": "for-intel-next-5.6",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "CONFIG_VPUSMM",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_DMA_CMA",
+                    "value": "y"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Wang Jue",
+                    "email": "wang.jue@intel.com"
+                }
+            ],
+            "description": "VPUSMM kernel module",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Yu Xu",
+                    "email": "yu.xu@intel.com"
+                }
+            ],
+            "jira": "NEXT-1843",
+            "name": "vpusmm",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/kmb_integration/vpusmm_driver.git",
+            "sdl_contact": [
+                {
+                    "name": "Peter Chen",
+                    "email": "peter.chan@intel.com"
+                }
+            ],
+            "status": "public",
+            "stuck_at_ref": "",
+            "rev": "f542a76a9b4ede59aee910f6326391c1a1877a04"
+        },
+        {
+            "branch": "rdt/for-intel-next",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "CONFIG_X86_CPU_RESCTRL",
+                    "value": "y"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Reinette Chatre",
+                    "email": "reinette.chatre@intel.com"
+                }
+            ],
+            "description": "Collection of new Intel RDT features",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Tony Luck",
+                    "email": "tony.luck@intel.com"
+                }
+            ],
+            "jira": "NEXT-1788",
+            "name": "rdt",
+            "repourl": "ssh://git-amr-2.devtools.intel.com:29418/rt_linux-linux.git",
+            "sdl_contact": [
+                {
+                    "name": "Reinette Chatre",
+                    "email": "reinette.chatre@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": "",
+            "rev": "dba0484c8f7e620e380a9847a4e1345c05d3320b"
+        },
+        {
+            "branch": "rneri/hybrid",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "CONFIG_INTEL_HFI",
+                    "value": "y"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Ricardo Neri",
+                    "email": "ricardo.neri-calderon@linux.intel.com"
+                }
+            ],
+            "description": "Support for Hybrid CPUs and Hardware-Guided Scheduling",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Eugene Gorbatov",
+                    "email": "eugene.gorbatov@intel.com"
+                },
+                {
+                    "name": "Muhammad Abozaed",
+                    "email": "muhammad.abozaed@intel.com"
+                }
+            ],
+            "jira": "NEXT-1806",
+            "name": "hybrid",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/ranerica/linux-dev.git",
+            "sdl_contact": [
+                {
+                    "name": "Ravi V. Shankar",
+                    "email": "ravi.v.shankar@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": "",
+            "rev": "313a85aa9d70b23bb06a66131036119f065fa6f1"
+        },
+        {
+            "branch": "pks",
+            "branch_type": "expiring",
+            "config_options": [],
+            "contributor": [
+                {
+                    "name": "Fenghua Yu",
+                    "email": "fenghua.yu@intel.com"
+                }
+            ],
+            "description": "These patches are preparation for follow-one PKSpatches",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Ravi Shankar",
+                    "email": "ravi.v.shankar@intel.com"
+                }
+            ],
+            "jira": "NEXT-1869",
+            "name": "PKS",
+            "repourl": "ssh://git-amr-4.devtools.intel.com:29418/enabling_cldemote_in_linux_kerne-linux_git.git",
+            "sdl_contact": [
+                {
+                    "name": "Dave Hansen",
+                    "email": "dave.hansen@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": "",
+            "rev": "962d96945f81a27211a0265c13c712569b3dc1ed"
+        },
+        {
+            "branch": "resctrl_selftest",
+            "branch_type": "expiring",
+            "config_options": [],
+            "contributor": [
+                {
+                    "name": "Fenghua Yu",
+                    "email": "fenghua.yu@intel.com"
+                }
+            ],
+            "description": "Introduces resctrl selftest in Intel Next.",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Ravi Shankar",
+                    "email": "ravi.v.shankar@intel.com"
+                }
+            ],
+            "jira": "NEXT-1834",
+            "name": "resctrl_selftest",
+            "repourl": "ssh://git-amr-4.devtools.intel.com:29418/enabling_cldemote_in_linux_kerne-linux_git.git",
+            "sdl_contact": [
+                {
+                    "name": "Tony Luck",
+                    "email": "tony.luck@intel.com"
+                }
+            ],
+            "status": "public",
+            "stuck_at_ref": "",
+            "rev": "5cdabf07b8438659af10ad8bb19a8391769d75c6"
+        },
+        {
+            "branch": "dev/sbhusare/THB_HCU_crypto_driver_with_fix",
+            "branch_type": "expiring",
+            "config_options": [],
+            "contributor": [
+                {
+                    "name": "Hemanthkumar S",
+                    "email": "Hemanthkumar S"
+                },
+                {
+                    "name": "",
+                    "email": "Hemanthkumar.Sm@intel.com"
+                }
+            ],
+            "description": "THB crypto AES driver warning fix",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Kumaresan\u00a0Sarveswaran",
+                    "email": "kumaresan.sarveswaran@intel.com"
+                }
+            ],
+            "jira": "NEXT-1799",
+            "name": "AES warning fix",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/hspe_csw/sbs/linux.git",
+            "sdl_contact": [
+                {
+                    "name": "Kumaresan Sarveswaran",
+                    "email": "kumaresan.sarveswaran@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": "",
+            "rev": "9ab7b7a4df9328f011c60f0f9654968fe84db2a4"
+        },
+        {
+            "branch": "mba_per_thread",
+            "branch_type": "expiring",
+            "config_options": [],
+            "contributor": [
+                {
+                    "name": "Fenghua Yu",
+                    "email": "fenghua.yu@intel.com"
+                }
+            ],
+            "description": "enabling MBA per thread",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Ravi Shankar",
+                    "email": "ravi.v.shankar@intel.com"
+                }
+            ],
+            "jira": "NEXT-1829",
+            "name": "mba",
+            "repourl": "ssh://git-amr-4.devtools.intel.com:29418/enabling_cldemote_in_linux_kerne-linux_git.git",
+            "sdl_contact": [
+                {
+                    "name": "Tony Luck",
+                    "email": "tony.luck@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": "",
+            "rev": "40fa7fb401ce041df0c7e0239903a873f5a2e138"
+        },
+        {
+            "branch": "lass-kernel",
+            "branch_type": "expiring",
+            "config_options": [],
+            "contributor": [
+                {
+                    "name": "Yian Chen",
+                    "email": "yian.chen@intel.com"
+                }
+            ],
+            "description": "Enable ISA extension of LASS",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Vedvyas Shanbhogue",
+                    "email": "vedvyas.shanbhogue@intel.com"
+                }
+            ],
+            "jira": "NEXT-1831",
+            "name": "LASS",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/chenyian/lass-kernel-v5.6-rc2.git",
+            "sdl_contact": [
+                {
+                    "name": "Vedvyas Shanbhogue",
+                    "email": "Vedvyas.shanbhogue@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": "",
+            "rev": "0bfeee71f67bcad552c6f1becb5d146ba3bb217e"
+        },
+        {
+            "branch": "my_inext",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "CONFIG_X86_INTEL_MKTME",
+                    "value": "y"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Alison Schofield",
+                    "email": "alison.schofield@intel.com"
+                }
+            ],
+            "description": "Multi-Key Total Memory Encryption (MKTME) partial enabling",
+            "enabled": true,
+            "ip_owner": [],
+            "jira": "NEXT-1833",
+            "name": "MKTME",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/otc-clk-server/mktme/mktme_intel_next.git",
+            "sdl_contact": [],
+            "status": "public",
+            "stuck_at_ref": "",
+            "rev": "ed8be5bf085a96a29ea9bbbccc5adb5d3f162fd3"
+        },
+        {
+            "branch": "sle_support",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "CONFIG_X86_SLE_SUPPORT",
+                    "value": "n"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Kyle Pelton",
+                    "email": "kyle.d.pelton@intel.com"
+                }
+            ],
+            "description": "Workarounds for the SLE emulation environmentused by validation teams",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "kyle.d.pelton@intel.com",
+                    "email": "kyle.d.pelton@intel.com"
+                }
+            ],
+            "jira": "NEXT-1838",
+            "name": "Workarounds for SLE",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/otc-power-management-enabling-team/otc-power-kernel.git",
+            "sdl_contact": [
+                {
+                    "name": "Charles Prestopine",
+                    "email": "charles.d.prestopine@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": "",
+            "rev": "f7330d01ff2e59561bec92a6d9012cf57c84c687"
+        },
+        {
+            "branch": "s0ix_debug",
+            "branch_type": "expiring",
+            "config_options": [],
+            "contributor": [
+                {
+                    "name": "David Box",
+                    "email": "david.e.box@intel.com"
+                }
+            ],
+            "description": "s0ix debug patches",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "David Box",
+                    "email": "david.e.box@intel.com"
+                }
+            ],
+            "jira": "NEXT-1842",
+            "name": "s0ix-debug",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/debox1/linux-kernel-dev.git",
+            "sdl_contact": [
+                {
+                    "name": "Charles Prestopine",
+                    "email": "charles.d.prestopine@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": "",
+            "rev": "79cd94eeddcd2d1cf980a335937e4ed51e3d803d"
+        },
+        {
+            "branch": "dev/sagarpat/Xlink_char_driver",
+            "branch_type": "expiring",
+            "config_options": [],
+            "contributor": [
+                {
+                    "name": "Sagar Patil",
+                    "email": "sagar.patil@intel.com"
+                }
+            ],
+            "description": "Secure Xlink driver",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Sarveswaran, Kumaresan",
+                    "email": "kumaresan.sarveswaran@intel.com"
+                }
+            ],
+            "jira": "NEXT-1848",
+            "name": "Secure Xlink",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/hspe_csw/sbs/linux.git",
+            "sdl_contact": [
+                {
+                    "name": "Sarveswaran, Kumaresan",
+                    "email": "kumaresan.sarveswaran@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": "",
+            "rev": "aa5bda629e12604f2ca83c2ff44cbe4fd00bc146"
+        },
+        {
+            "branch": "integration",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "CONFIG_DRM",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_DRM_KMS_HELPER",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_DRM_PANEL_ORIENTATION_QUIRKS",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_DRM_HANTRO",
+                    "value": "m"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Sheng Yang Hoe",
+                    "email": "Sheng.Yang.Hoe@intel.com"
+                }
+            ],
+            "description": "add the media codecdriver module for TBH ARM Media",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Arshad Mehmood",
+                    "email": "arshad.mehmood@intel.com"
+                }
+            ],
+            "jira": "NEXT-1851",
+            "name": "TBH ARM",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/OWR/IoTG/GMS/Yocto/Graphics/Media/hantrodriver.git",
+            "sdl_contact": [
+                {
+                    "name": "Arshad Mehmood",
+                    "email": "arshad.mehmood@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": "",
+            "rev": "449293ca0eae1ffb023a9fc337bd1a7b36bf8535"
+        },
+        {
+            "branch": "vmdos",
+            "branch_type": "expiring",
+            "config_options": [],
+            "contributor": [
+                {
+                    "name": "Fenghua Yu",
+                    "email": "fenghua.yu@intel.com"
+                }
+            ],
+            "description": "Enable vmdos",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Ravi Shankar",
+                    "email": "ravi.v.shankar@intel.com"
+                }
+            ],
+            "jira": "NEXT-1853",
+            "name": "vmdos_split_lock",
+            "repourl": "ssh://git-amr-4.devtools.intel.com:29418/enabling_cldemote_in_linux_kerne-linux_git.git",
+            "sdl_contact": [
+                {
+                    "name": "Ashok Raj",
+                    "email": "ashok.raj@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": "",
+            "rev": "c0bb7a9253c0636195826416f948899694cfb6be"
+        },
+        {
+            "branch": "lxy/vm-dos-virt",
+            "branch_type": "expiring",
+            "config_options": [],
+            "contributor": [
+                {
+                    "name": "Chenyi Qiang",
+                    "email": "chenyi.qiang@intel.com"
+                }
+            ],
+            "description": "Bus Lock VM exit & No-commit VM exit",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Shanbhogue, Vedvyas",
+                    "email": "vedvyas.shanbhogue@intel.com"
+                }
+            ],
+            "jira": "NEXT-1855",
+            "name": "kvm-vmdos",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/cqiang/spr-po-kvm.git",
+            "sdl_contact": [
+                {
+                    "name": "Xiaoyao Li",
+                    "email": "xiaoyao.li@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": "",
+            "rev": "80746dd1b852487a02a1b3764578c39d487052e1"
+        },
+        {
+            "branch": "lxy/bus-lock-debug-exception",
+            "branch_type": "expiring",
+            "config_options": [],
+            "contributor": [
+                {
+                    "name": "Chenyi Qiang",
+                    "email": "chenyi.qiang@intel.com"
+                }
+            ],
+            "description": "Additional KVM implementation of VMDOS which hasa dependency on kernel patches",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Shanbhogue, Vedvyas",
+                    "email": "vedvyas.shanbhogue@intel.com"
+                }
+            ],
+            "jira": "NEXT-1857",
+            "name": "kvm-vmdos-debug",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/cqiang/spr-po-kvm.git",
+            "sdl_contact": [
+                {
+                    "name": "Xiaoyao Li",
+                    "email": "xiaoyao.li@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": "",
+            "rev": "30316be71a9f6f36362f15da643ce65b3732552e"
+        },
+        {
+            "branch": "hqmv2_for_intel_next-v5.6",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "CONFIG_INTEL_HQMV2",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_INTEL_HQMV2_DATAPATH",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_INTEL_HQMV2_SIOV",
+                    "value": "n"
+                },
+                {
+                    "name": "CONFIG_INTEL_IOMMU",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_VFIO",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_VFIO_MDEV",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_VFIO_MDEV_DEVICE",
+                    "value": "y"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Gage Eads",
+                    "email": "gage.eads@intel.com"
+                }
+            ],
+            "description": "driver for Intel Hardware Queue Manager",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "McDonnell, Niall",
+                    "email": "niall.mcdonnell@intel.com"
+                }
+            ],
+            "jira": "NEXT-1859",
+            "name": "hqmv2",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/cwa/linux-kernel.git",
+            "sdl_contact": [
+                {
+                    "name": "Eads, Gage",
+                    "email": "gage.eads@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": "",
+            "rev": "27fa5245347923be1711d0560b34c6d361005493"
+        },
+        {
+            "branch": "cxl-next",
+            "branch_type": "expiring",
+            "config_options": [],
+            "contributor": [
+                {
+                    "name": "Sean Kelley",
+                    "email": "sean.v.kelley@linux.intel.com"
+                }
+            ],
+            "description": "CXL Preliminary Enumeration / PCIe for A0",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Prajwal Mohan",
+                    "email": "prajwal.karur.mohan@intel.com"
+                }
+            ],
+            "jira": "NEXT-1863",
+            "name": "CXL",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/svkelley/cxl-dev.git",
+            "sdl_contact": [
+                {
+                    "name": "Sean Kelley",
+                    "email": "sean.v.kelley@linux.intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": "",
+            "rev": "bfd21c62ec945387f590da1c74ce62ebe975a4cc"
+        },
+        {
+            "branch": "for-5.7/firmware-activate",
+            "branch_type": "expiring",
+            "config_options": [],
+            "contributor": [
+                {
+                    "name": "Dan Williams",
+                    "email": "dan.j.williams@intel.com"
+                }
+            ],
+            "description": "Implementation for DCPMM Runtime Firmware\u00a0Activation support",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Murugasamy Nachimuthu",
+                    "email": "murugasamy.nachimuthu@intel.com"
+                }
+            ],
+            "jira": "NEXT-1866",
+            "name": "libnvdimm",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/otc-clk-server/linux-nvdimm/linux.git",
+            "sdl_contact": [
+                {
+                    "name": "Dan Williams",
+                    "email": "dan.j.williams@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": "",
+            "rev": "ddcf979fd543b59ce134d1e7cfefaeacc2976f11"
+        }
+    ]
+}
