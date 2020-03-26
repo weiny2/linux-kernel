@@ -174,6 +174,7 @@ struct ieh_dev {
 
 static struct ieh_config {
 	u16 did;
+	u16 did2;
 	enum action_on_fatal_err action;
 	int typever_offset;
 } *ieh_cfg;
@@ -207,6 +208,7 @@ static struct ieh_config tgl_h_cfg = {
 
 /* Sapphire Rapids server defines */
 #define SPR_IEH_DID		0x0998
+#define SPR_IEH_DID2		0x0b23
 #define SPR_IEHTYPEVER_OFFSET	0xd0
 /* Local uncorrectable error mask */
 #define SPR_LERRUNCMSK_OFFSET	0x28c
@@ -217,6 +219,7 @@ static struct ieh_config tgl_h_cfg = {
 
 static struct ieh_config spr_cfg = {
 	.did		= SPR_IEH_DID,
+	.did2		= SPR_IEH_DID2,
 	.action		= RESTART,
 	.typever_offset = SPR_IEHTYPEVER_OFFSET,
 };
@@ -761,6 +764,10 @@ static int __init ieh_init(void)
 	ieh_cfg = (struct ieh_config *)id->driver_data;
 
 	rc = get_all_iehs(ieh_cfg->did);
+
+	/* If the first did absent, try the second did */
+	if (rc && ieh_cfg->did2)
+		rc = get_all_iehs(ieh_cfg->did2);
 	if (rc)
 		return rc;
 
