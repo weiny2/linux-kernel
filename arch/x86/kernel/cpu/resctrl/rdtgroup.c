@@ -1020,23 +1020,17 @@ static int max_threshold_occ_show(struct kernfs_open_file *of,
 
 /*
  * As documented in the Intel SDM, on systems supporting the original MBA
- * implementation the delay value allocated to a core is always the maximum
+ * implementation the delay value applied to a core is always the maximum
  * of the delay values assigned to the hardware threads sharing the core.
  *
  * Some systems support a model-specific MSR with which this default
- * behavior can be changed. On these systems the core can be allocated
+ * behavior can be changed. On these systems the core can be configured
  * with either the minimum or maximum delay value assigned to its hardware
  * threads.
  *
- * NOTE: The hardware deals with memory delay values that may be programmed
- * from zero (implying zero delay, and full bandwidth available) to the
- * maximum specified in CPUID. The software interface deals with memory
- * bandwidth percentages that are the inverse of the delay values (100%
- * memory bandwith from user perspective is zero MBA delay from hardware
- * perspective). When maximum throttling is active the core is allocated
- * with the maximum delay value that from the software interface will be
- * the minimum of the bandwidth percentages assigned to the hardware threads
- * sharing the core.
+ * Some systems support MBA per thread. On these systems hardware doesn't
+ * use the minimum or maximum delay value per core. Instead, each hardware
+ * thread uses the delay value assigned to it.
  */
 static int rdt_thread_throttle_mode_show(struct kernfs_open_file *of,
 					 struct seq_file *seq, void *v)
@@ -1044,6 +1038,12 @@ static int rdt_thread_throttle_mode_show(struct kernfs_open_file *of,
 	unsigned int throttle_mode = 0;
 	u64 mba_cfg;
 	int ret;
+
+	if (static_cpu_has(X86_FEATURE_MBA_PER_THREAD)) {
+		seq_printf(seq, "%s\n", "per-thread");
+
+		return 0;
+	}
 
 	if (mba_cfg_supports_min_max_intel()) {
 		ret = rdmsrl_safe(MSR_IA32_MBA_CFG, &mba_cfg);

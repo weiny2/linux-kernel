@@ -142,16 +142,16 @@ with respect to allocation:
 		The memory bandwidth control applied to a core when
 		control is provided per core but each hardware
 		thread can be assigned a unique CLOSID.
-		"thread_throttle_mode" displays how the bandwidth
-		percentage allocated to the core is selected:
-		either "max" or "min" throttling of the bandwidth
-		percentages of the per-thread CLOS. Specifically, when
-		throttling is "max" then the lowest bandwith percentage
-		is allocated to the core and when throttling is "min"
-		then the highest bandwidth percentage is allocated to
-		the core.
+		
+		"thread_throttle_mode" displays how the delay value
+		applied to the core is selected: either the "max" or
+		"min" of the delay values of the per-thread CLOS.
 		Configurable on systems that support both modes by
 		writing "min" or "max" to the file.
+
+		Some systems support MBA per thread that each hardware
+		thread uses the delay value assigned to it. On these
+		systems, this read-only file shows "per-thread".
 
 If RDT monitoring is available there will be an "L3_MON" directory
 with the following files:
