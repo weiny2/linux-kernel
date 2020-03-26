@@ -63,3 +63,4 @@ obj-$(CONFIG_XLINK_CORE)	+= xlink-core/
 obj-$(CONFIG_XLINK_CORE)	+= xlink-pcie/
 obj-$(CONFIG_XLINK_IPC)		+= xlink-ipc/
 obj-$(CONFIG_VPU)		+= vpu/
+obj-$(CONFIG_VPUSMM)		+= vpusmm/
