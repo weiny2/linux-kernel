@@ -421,6 +421,47 @@ struct dlb_sample_perf_counters_args {
 };
 
 /*
+ * DLB_CMD_SET_SN_ALLOCATION: Configure a sequence number group
+ *
+ * Input parameters:
+ * - group: Sequence number group ID.
+ * - num: Number of sequence numbers per queue.
+ *
+ * Output parameters:
+ * - response: pointer to a struct dlb_cmd_response.
+ *	response.status: Detailed error code. In certain cases, such as if the
+ *		response pointer is invalid, the driver won't set status.
+ */
+struct dlb_set_sn_allocation_args {
+	/* Output parameters */
+	__u64 response;
+	/* Input parameters */
+	__u32 group;
+	__u32 num;
+};
+
+/*
+ * DLB_CMD_GET_SN_ALLOCATION: Get a sequence number group's configuration
+ *
+ * Input parameters:
+ * - group: Sequence number group ID.
+ * - padding0: Reserved for future use.
+ *
+ * Output parameters:
+ * - response: pointer to a struct dlb_cmd_response.
+ *	response.status: Detailed error code. In certain cases, such as if the
+ *		response pointer is invalid, the driver won't set status.
+ *	response.id: Specified group's number of sequence numbers per queue.
+ */
+struct dlb_get_sn_allocation_args {
+	/* Output parameters */
+	__u64 response;
+	/* Input parameters */
+	__u32 group;
+	__u32 padding0;
+};
+
+/*
  * DLB_CMD_MEASURE_SCHED_COUNTS: Measure the DLB scheduling activity for a
  *	user-specified measurement duration. This ioctl is blocking; the
  *	calling thread sleeps in the kernel driver for the duration of the
@@ -483,14 +524,48 @@ enum dlb_cq_poll_modes {
 	NUM_DLB_CQ_POLL_MODE,
 };
 
+/*
+ * DLB_CMD_GET_SN_OCCUPANCY: Get a sequence number group's occupancy
+ *
+ * Each sequence number group has one or more slots, depending on its
+ * configuration. I.e.:
+ * - If configured for 1024 sequence numbers per queue, the group has 1 slot
+ * - If configured for 512 sequence numbers per queue, the group has 2 slots
+ *   ...
+ * - If configured for 32 sequence numbers per queue, the group has 32 slots
+ *
+ * This ioctl returns the group's number of in-use slots. If its occupancy is
+ * 0, the group's sequence number allocation can be reconfigured.
+ *
+ * Input parameters:
+ * - group: Sequence number group ID.
+ * - padding0: Reserved for future use.
+ *
+ * Output parameters:
+ * - response: pointer to a struct dlb_cmd_response.
+ *	response.status: Detailed error code. In certain cases, such as if the
+ *		response pointer is invalid, the driver won't set status.
+ *	response.id: Specified group's number of used slots.
+ */
+struct dlb_get_sn_occupancy_args {
+	/* Output parameters */
+	__u64 response;
+	/* Input parameters */
+	__u32 group;
+	__u32 padding0;
+};
+
 enum dlb_user_interface_commands {
 	DLB_CMD_GET_DEVICE_VERSION,
 	DLB_CMD_CREATE_SCHED_DOMAIN,
 	DLB_CMD_GET_NUM_RESOURCES,
 	DLB_CMD_GET_DRIVER_VERSION,
 	DLB_CMD_SAMPLE_PERF_COUNTERS,
+	DLB_CMD_SET_SN_ALLOCATION,
+	DLB_CMD_GET_SN_ALLOCATION,
 	DLB_CMD_MEASURE_SCHED_COUNTS,
 	DLB_CMD_QUERY_CQ_POLL_MODE,
+	DLB_CMD_GET_SN_OCCUPANCY,
 
 	/* NUM_DLB_CMD must be last */
 	NUM_DLB_CMD,
@@ -1180,6 +1255,14 @@ enum dlb_domain_user_interface_commands {
 		_IOWR(DLB_IOC_MAGIC,				\
 		      DLB_CMD_SAMPLE_PERF_COUNTERS,		\
 		      struct dlb_sample_perf_counters_args)
+#define DLB_IOC_SET_SN_ALLOCATION				\
+		_IOWR(DLB_IOC_MAGIC,				\
+		      DLB_CMD_SET_SN_ALLOCATION,		\
+		      struct dlb_set_sn_allocation_args)
+#define DLB_IOC_GET_SN_ALLOCATION				\
+		_IOWR(DLB_IOC_MAGIC,				\
+		      DLB_CMD_GET_SN_ALLOCATION,		\
+		      struct dlb_get_sn_allocation_args)
 #define DLB_IOC_MEASURE_SCHED_COUNTS				\
 		_IOWR(DLB_IOC_MAGIC,				\
 		      DLB_CMD_MEASURE_SCHED_COUNTS,		\
@@ -1188,6 +1271,10 @@ enum dlb_domain_user_interface_commands {
 		_IOWR(DLB_IOC_MAGIC,				\
 		      DLB_CMD_QUERY_CQ_POLL_MODE,		\
 		      struct dlb_query_cq_poll_mode_args)
+#define DLB_IOC_GET_SN_OCCUPANCY				\
+		_IOWR(DLB_IOC_MAGIC,				\
+		      DLB_CMD_GET_SN_OCCUPANCY,			\
+		      struct dlb_get_sn_occupancy_args)
 #define DLB_IOC_CREATE_LDB_POOL					\
 		_IOWR(DLB_IOC_MAGIC,				\
 		      DLB_DOMAIN_CMD_CREATE_LDB_POOL,		\

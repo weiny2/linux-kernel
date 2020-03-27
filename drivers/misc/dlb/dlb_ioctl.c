@@ -807,6 +807,86 @@ done:
 	return ret;
 }
 
+static int dlb_ioctl_set_sn_allocation(struct dlb_dev *dev,
+				       unsigned long user_arg)
+{
+	struct dlb_set_sn_allocation_args arg;
+	struct dlb_cmd_response response;
+	int ret;
+
+	dev_dbg(dev->dlb_device, "Entering %s()\n", __func__);
+
+	if (copy_from_user(&arg, (void __user *)user_arg, sizeof(arg))) {
+		dev_err(dev->dlb_device,
+			"[%s()] Invalid ioctl argument pointer\n",
+			__func__);
+		return -EFAULT;
+	}
+
+	response.status = 0;
+
+	mutex_lock(&dev->resource_mutex);
+
+	ret = dev->ops->set_sn_allocation(&dev->hw, arg.group, arg.num);
+
+	mutex_unlock(&dev->resource_mutex);
+
+	if (copy_to_user((void __user *)arg.response,
+			 &response,
+			 sizeof(response))) {
+		dev_err(dev->dlb_device,
+			"[%s()] Invalid ioctl response pointer\n",
+			__func__);
+		return -EFAULT;
+	}
+
+	dev_dbg(dev->dlb_device, "Exiting %s()\n", __func__);
+
+	return ret;
+}
+
+static int dlb_ioctl_get_sn_allocation(struct dlb_dev *dev,
+				       unsigned long user_arg)
+{
+	struct dlb_get_sn_allocation_args arg;
+	struct dlb_cmd_response response;
+	int ret;
+
+	dev_dbg(dev->dlb_device, "Entering %s()\n", __func__);
+
+	if (copy_from_user(&arg, (void __user *)user_arg, sizeof(arg))) {
+		dev_err(dev->dlb_device,
+			"[%s()] Invalid ioctl argument pointer\n",
+			__func__);
+		return -EFAULT;
+	}
+
+	response.status = 0;
+
+	mutex_lock(&dev->resource_mutex);
+
+	ret = dev->ops->get_sn_allocation(&dev->hw, arg.group);
+
+	response.id = ret;
+
+	ret = (ret > 0) ? 0 : ret;
+
+	mutex_unlock(&dev->resource_mutex);
+
+	if (copy_to_user((void __user *)arg.response,
+			 &response,
+			 sizeof(response))) {
+		dev_err(dev->dlb_device,
+			"[%s()] Invalid ioctl response pointer\n",
+			__func__);
+		return -EFAULT;
+	}
+
+	dev_dbg(dev->dlb_device, "Exiting %s()\n", __func__);
+
+	return ret;
+}
+
 static int dlb_ioctl_measure_sched_count(struct dlb_dev *dev,
 					 unsigned long user_arg)
 {
@@ -871,6 +951,48 @@ static int dlb_ioctl_query_cq_poll_mode(struct dlb_dev *dev,
 	return ret;
 }
 
+static int dlb_ioctl_get_sn_occupancy(struct dlb_dev *dev,
+				      unsigned long user_arg)
+{
+	struct dlb_get_sn_occupancy_args arg;
+	struct dlb_cmd_response response;
+	int ret;
+
+	dev_dbg(dev->dlb_device, "Entering %s()\n", __func__);
+
+	if (copy_from_user(&arg, (void __user *)user_arg, sizeof(arg))) {
+		dev_err(dev->dlb_device,
+			"[%s()] Invalid ioctl argument pointer\n",
+			__func__);
+		return -EFAULT;
+	}
+
+	response.status = 0;
+
+	mutex_lock(&dev->resource_mutex);
+
+	ret = dev->ops->get_sn_occupancy(&dev->hw, arg.group);
+
+	response.id = ret;
+
+	ret = (ret > 0) ? 0 : ret;
+
+	mutex_unlock(&dev->resource_mutex);
+
+	if (copy_to_user((void __user *)arg.response,
+			 &response,
+			 sizeof(response))) {
+		dev_err(dev->dlb_device,
+			"[%s()] Invalid ioctl response pointer\n",
+			__func__);
+		return -EFAULT;
+	}
+
+	dev_dbg(dev->dlb_device, "Exiting %s()\n", __func__);
+
+	return ret;
+}
+
 typedef int (*dlb_ioctl_callback_fn_t)(struct dlb_dev *dev, unsigned long arg);
 
 static dlb_ioctl_callback_fn_t dlb_ioctl_callback_fns[NUM_DLB_CMD] = {
@@ -879,8 +1001,11 @@ static dlb_ioctl_callback_fn_t dlb_ioctl_callback_fns[NUM_DLB_CMD] = {
 	dlb_ioctl_get_num_resources,
 	dlb_ioctl_get_driver_version,
 	dlb_ioctl_sample_perf_counters,
+	dlb_ioctl_set_sn_allocation,
+	dlb_ioctl_get_sn_allocation,
 	dlb_ioctl_measure_sched_count,
 	dlb_ioctl_query_cq_poll_mode,
+	dlb_ioctl_get_sn_occupancy,
 };
 
 int dlb_ioctl_dispatcher(struct dlb_dev *dev,

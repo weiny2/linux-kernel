@@ -6015,6 +6015,74 @@ void dlb_ack_compressed_cq_intr(struct dlb_hw *hw,
 	dlb_ack_msix_interrupt(hw, DLB_PF_COMPRESSED_MODE_CQ_VECTOR_ID);
 }
 
+int dlb_get_group_sequence_numbers(struct dlb_hw *hw, unsigned int group_id)
+{
+	if (group_id >= DLB_MAX_NUM_SEQUENCE_NUMBER_GROUPS)
+		return -EINVAL;
+
+	return hw->rsrcs.sn_groups[group_id].sequence_numbers_per_queue;
+}
+
+int dlb_get_group_sequence_number_occupancy(struct dlb_hw *hw,
+					    unsigned int group_id)
+{
+	if (group_id >= DLB_MAX_NUM_SEQUENCE_NUMBER_GROUPS)
+		return -EINVAL;
+
+	return dlb_sn_group_used_slots(&hw->rsrcs.sn_groups[group_id]);
+}
+
+static void dlb_log_set_group_sequence_numbers(struct dlb_hw *hw,
+					       unsigned int group_id,
+					       unsigned long val)
+{
+	DLB_HW_DBG(hw, "DLB set group sequence numbers:\n");
+	DLB_HW_DBG(hw, "\tGroup ID: %u\n", group_id);
+	DLB_HW_DBG(hw, "\tValue:    %lu\n", val);
+}
+
+int dlb_set_group_sequence_numbers(struct dlb_hw *hw,
+				   unsigned int group_id,
+				   unsigned long val)
+{
+	u32 valid_allocations[6] = {32, 64, 128, 256, 512, 1024};
+	union dlb_ro_pipe_grp_sn_mode r0 = { {0} };
+	struct dlb_sn_group *group;
+	int mode;
+
+	if (group_id >= DLB_MAX_NUM_SEQUENCE_NUMBER_GROUPS)
+		return -EINVAL;
+
+	group = &hw->rsrcs.sn_groups[group_id];
+
+	/* Once the first load-balanced queue using an SN group is configured,
+	 * the group cannot be changed.
+	 */
+	if (group->slot_use_bitmap != 0)
+		return -EPERM;
+
+	for (mode = 0; mode < DLB_MAX_NUM_SEQUENCE_NUMBER_MODES; mode++)
+		if (val == valid_allocations[mode])
+			break;
+
+	if (mode == DLB_MAX_NUM_SEQUENCE_NUMBER_MODES)
+		return -EINVAL;
+
+	group->mode = mode;
+	group->sequence_numbers_per_queue = val;
+
+	r0.field.sn_mode_0 = hw->rsrcs.sn_groups[0].mode;
+	r0.field.sn_mode_1 = hw->rsrcs.sn_groups[1].mode;
+	r0.field.sn_mode_2 = hw->rsrcs.sn_groups[2].mode;
+	r0.field.sn_mode_3 = hw->rsrcs.sn_groups[3].mode;
+
+	DLB_CSR_WR(hw, DLB_RO_PIPE_GRP_SN_MODE, r0.val);
+
+	dlb_log_set_group_sequence_numbers(hw, group_id, val);
+
+	return 0;
+}
+
 void dlb_disable_dp_vasr_feature(struct dlb_hw *hw)
 {
 	union dlb_dp_dir_csr_ctrl r0;

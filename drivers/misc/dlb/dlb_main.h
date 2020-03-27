@@ -149,6 +149,9 @@ struct dlb_device_ops {
 	int (*dir_port_owned_by_domain)(struct dlb_hw *hw,
 					u32 domain_id,
 					u32 port_id);
+	int (*get_sn_allocation)(struct dlb_hw *hw, u32 group_id);
+	int (*set_sn_allocation)(struct dlb_hw *hw, u32 group_id, u32 num);
+	int (*get_sn_occupancy)(struct dlb_hw *hw, u32 group_id);
 	int (*get_ldb_queue_depth)(struct dlb_hw *hw,
 				   u32 domain_id,
 				   struct dlb_get_ldb_queue_depth_args *args,
