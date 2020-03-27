@@ -313,6 +313,155 @@ struct dlb_get_num_resources_args {
 };
 
 /*
+ * DLB_CMD_SAMPLE_PERF_COUNTERS: Gather a set of DLB performance data by
+ *	enabling performance counters for a user-specified measurement duration.
+ *	This ioctl is blocking; the calling thread sleeps in the kernel driver
+ *	for the duration of the measurement, then writes the data to user
+ *	memory before returning.
+ *
+ *	Certain metrics cannot be measured simultaneously, so multiple
+ *	invocations of this command are necessary to gather all metrics.
+ *	Metrics that can be collected simultaneously are grouped together in
+ *	struct dlb_perf_metric_group_X.
+ *
+ *	The driver allows only one active measurement at a time. If a thread
+ *	calls this command while a measurement is ongoing, the thread will
+ *	block until the original measurement completes.
+ *
+ *	This ioctl is not supported for VF devices.
+ *
+ * Input parameters:
+ * - measurement_duration_us: Duration, in microseconds, of the
+ *	measurement period. The duration must be between 1us and 60s,
+ *	inclusive.
+ * - perf_metric_group_id: ID of the metric group to measure.
+ * - perf_metric_group_data: Pointer to union dlb_perf_metric_group_data
+ *	structure. The driver will interpret the union according to
+ *	perf_metric_group_ID.
+ *
+ * Output parameters:
+ * - response: pointer to a struct dlb_cmd_response.
+ *	response.status: Detailed error code. In certain cases, such as if the
+ *		response pointer is invalid, the driver won't set status.
+ */
+struct dlb_perf_metric_group_0 {
+	__u32 dlb_iosf_to_sys_enq_count;
+	__u32 dlb_sys_to_iosf_deq_count;
+	__u32 dlb_sys_to_dlb_enq_count;
+	__u32 dlb_dlb_to_sys_deq_count;
+};
+
+struct dlb_perf_metric_group_1 {
+	__u32 dlb_push_ptr_update_count;
+};
+
+struct dlb_perf_metric_group_2 {
+	__u32 dlb_avg_hist_list_depth;
+};
+
+struct dlb_perf_metric_group_3 {
+	__u32 dlb_avg_qed_depth;
+};
+
+struct dlb_perf_metric_group_4 {
+	__u32 dlb_avg_dqed_depth;
+};
+
+struct dlb_perf_metric_group_5 {
+	__u32 dlb_noop_hcw_count;
+	__u32 dlb_bat_t_hcw_count;
+};
+
+struct dlb_perf_metric_group_6 {
+	__u32 dlb_comp_hcw_count;
+	__u32 dlb_comp_t_hcw_count;
+};
+
+struct dlb_perf_metric_group_7 {
+	__u32 dlb_enq_hcw_count;
+	__u32 dlb_enq_t_hcw_count;
+};
+
+struct dlb_perf_metric_group_8 {
+	__u32 dlb_renq_hcw_count;
+	__u32 dlb_renq_t_hcw_count;
+};
+
+struct dlb_perf_metric_group_9 {
+	__u32 dlb_rel_hcw_count;
+};
+
+struct dlb_perf_metric_group_10 {
+	__u32 dlb_frag_hcw_count;
+	__u32 dlb_frag_t_hcw_count;
+};
+
+union dlb_perf_metric_group_data {
+	struct dlb_perf_metric_group_0 group_0;
+	struct dlb_perf_metric_group_1 group_1;
+	struct dlb_perf_metric_group_2 group_2;
+	struct dlb_perf_metric_group_3 group_3;
+	struct dlb_perf_metric_group_4 group_4;
+	struct dlb_perf_metric_group_5 group_5;
+	struct dlb_perf_metric_group_6 group_6;
+	struct dlb_perf_metric_group_7 group_7;
+	struct dlb_perf_metric_group_8 group_8;
+	struct dlb_perf_metric_group_9 group_9;
+	struct dlb_perf_metric_group_10 group_10;
+};
+
+struct dlb_sample_perf_counters_args {
+	/* Output parameters */
+	__u64 elapsed_time_us;
+	__u64 response;
+	/* Input parameters */
+	__u32 measurement_duration_us;
+	__u32 perf_metric_group_id;
+	__u64 perf_metric_group_data;
+};
+
+/*
+ * DLB_CMD_MEASURE_SCHED_COUNTS: Measure the DLB scheduling activity for a
+ *	user-specified measurement duration. This ioctl is blocking; the
+ *	calling thread sleeps in the kernel driver for the duration of the
+ *	measurement, then writes the result to user memory before returning.
+ *
+ *	Unlike the DLB_CMD_SAMPLE_PERF_COUNTERS ioctl, multiple threads can
+ *	measure scheduling counts simultaneously.
+ *
+ *	Note: VF devices can only measure the scheduling counts of their CQs;
+ *	all other counts will be set to 0.
+ *
+ * Input parameters:
+ * - measurement_duration_us: Duration, in microseconds, of the
+ *	measurement period. The duration must be between 1us and 60s,
+ *	inclusive.
+ * - padding0: Reserved for future use.
+ * - sched_count_data: Pointer to a struct dlb_sched_count data structure.
+ *
+ * Output parameters:
+ * - response: pointer to a struct dlb_cmd_response.
+ *	response.status: Detailed error code. In certain cases, such as if the
+ *		response pointer is invalid, the driver won't set status.
+ */
+struct dlb_sched_counts {
+	__u64 ldb_sched_count;
+	__u64 dir_sched_count;
+	__u64 ldb_cq_sched_count[64];
+	__u64 dir_cq_sched_count[128];
+};
+
+struct dlb_measure_sched_count_args {
+	/* Output parameters */
+	__u64 elapsed_time_us;
+	__u64 response;
+	/* Input parameters */
+	__u32 measurement_duration_us;
+	__u32 padding0;
+	__u64 sched_count_data;
+};
+
+/*
  * DLB_CMD_QUERY_CQ_POLL_MODE: Query the CQ poll mode the kernel driver is using
  *
  * Output parameters:
@@ -339,6 +488,8 @@ enum dlb_user_interface_commands {
 	DLB_CMD_CREATE_SCHED_DOMAIN,
 	DLB_CMD_GET_NUM_RESOURCES,
 	DLB_CMD_GET_DRIVER_VERSION,
+	DLB_CMD_SAMPLE_PERF_COUNTERS,
+	DLB_CMD_MEASURE_SCHED_COUNTS,
 	DLB_CMD_QUERY_CQ_POLL_MODE,
 
 	/* NUM_DLB_CMD must be last */
@@ -1025,6 +1176,14 @@ enum dlb_domain_user_interface_commands {
 		_IOWR(DLB_IOC_MAGIC,				\
 		      DLB_CMD_GET_DRIVER_VERSION,		\
 		      struct dlb_get_driver_version_args)
+#define DLB_IOC_SAMPLE_PERF_COUNTERS				\
+		_IOWR(DLB_IOC_MAGIC,				\
+		      DLB_CMD_SAMPLE_PERF_COUNTERS,		\
+		      struct dlb_sample_perf_counters_args)
+#define DLB_IOC_MEASURE_SCHED_COUNTS				\
+		_IOWR(DLB_IOC_MAGIC,				\
+		      DLB_CMD_MEASURE_SCHED_COUNTS,		\
+		      struct dlb_measure_sched_count_args)
 #define DLB_IOC_QUERY_CQ_POLL_MODE				\
 		_IOWR(DLB_IOC_MAGIC,				\
 		      DLB_CMD_QUERY_CQ_POLL_MODE,		\

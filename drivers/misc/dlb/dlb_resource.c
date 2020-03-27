@@ -11,6 +11,7 @@
 #include "dlb_main.h"
 #include "dlb_regs.h"
 #include "dlb_resource.h"
+#include "dlb_smon.h"
 
 #define DLB_DOM_LIST_HEAD(head, type) \
 	list_first_entry_or_null(&(head), type, domain_list)
@@ -8058,6 +8059,217 @@ int dlb_hw_get_num_resources(struct dlb_hw *hw,
 	return 0;
 }
 
+static inline bool dlb_ldb_port_owned_by_vf(struct dlb_hw *hw,
+					    u32 vf_id,
+					    u32 port_id)
+{
+	return (hw->rsrcs.ldb_ports[port_id].id.vf_owned &&
+		hw->rsrcs.ldb_ports[port_id].id.vf_id == vf_id);
+}
+
+static inline bool dlb_dir_port_owned_by_vf(struct dlb_hw *hw,
+					    u32 vf_id,
+					    u32 port_id)
+{
+	return (hw->rsrcs.dir_pq_pairs[port_id].id.vf_owned &&
+		hw->rsrcs.dir_pq_pairs[port_id].id.vf_id == vf_id);
+}
+
+static u64 dlb_atomic_read_perf_counter(struct dlb_hw *hw,
+					u32 low_offset,
+					u32 high_offset)
+{
+	u32 low, high, cmp;
+
+	high = DLB_CSR_RD(hw, high_offset);
+	low  = DLB_CSR_RD(hw, low_offset);
+	cmp  = DLB_CSR_RD(hw, high_offset);
+
+	/* Handle the wrap case */
+	if (high != cmp) {
+		high = cmp;
+		low = DLB_CSR_RD(hw, low_offset);
+	}
+
+	return ((((u64)high) << 32) | low);
+}
+
+void dlb_read_sched_counts(struct dlb_hw *hw,
+			   struct dlb_sched_counts *data,
+			   bool vf_request,
+			   unsigned int vf_id)
+{
+	u32 lo, hi;
+	int i, id;
+
+	memset(data, 0, sizeof(*data));
+
+	lo = DLB_LSP_LDB_SCH_CNT_L;
+	hi = DLB_LSP_LDB_SCH_CNT_H;
+
+	data->ldb_sched_count = dlb_atomic_read_perf_counter(hw, lo, hi);
+
+	lo = DLB_LSP_DIR_SCH_CNT_L;
+	hi = DLB_LSP_DIR_SCH_CNT_H;
+
+	data->dir_sched_count = dlb_atomic_read_perf_counter(hw, lo, hi);
+
+	for (i = 0; i < DLB_MAX_NUM_LDB_PORTS; i++) {
+		if (vf_request && !dlb_ldb_port_owned_by_vf(hw, vf_id, i))
+			continue;
+
+		/* If this is a VF request, translate the port ID */
+		if (vf_request)
+			id = hw->rsrcs.ldb_ports[i].id.virt_id;
+		else
+			id = i;
+
+		lo = DLB_LSP_CQ_LDB_TOT_SCH_CNTL(i);
+		hi = DLB_LSP_CQ_LDB_TOT_SCH_CNTH(i);
+
+		data->ldb_cq_sched_count[id] =
+			dlb_atomic_read_perf_counter(hw, lo, hi);
+	}
+
+	for (i = 0; i < DLB_MAX_NUM_DIR_PORTS; i++) {
+		if (vf_request && !dlb_dir_port_owned_by_vf(hw, vf_id, i))
+			continue;
+
+		/* If this is a VF request, translate the port ID */
+		if (vf_request)
+			id = hw->rsrcs.dir_pq_pairs[i].id.virt_id;
+		else
+			id = i;
+
+		lo = DLB_LSP_CQ_DIR_TOT_SCH_CNTL(i);
+		hi = DLB_LSP_CQ_DIR_TOT_SCH_CNTH(i);
+
+		data->dir_cq_sched_count[id] =
+			dlb_atomic_read_perf_counter(hw, lo, hi);
+	}
+}
+
+static void dlb_collect_pm_grp_0(struct dlb_hw *hw,
+				 union dlb_perf_metric_group_data *data)
+{
+	u32 cnt[2];
+
+	dlb_smon_read_sys_perf_counter(hw, SMON_MEASURE_CNT, cnt);
+
+	data->group_0.dlb_iosf_to_sys_enq_count = cnt[0];
+	data->group_0.dlb_sys_to_iosf_deq_count = cnt[1];
+
+	dlb_smon_read_chp_perf_counter(hw, SMON_MEASURE_CNT, cnt);
+
+	data->group_0.dlb_sys_to_dlb_enq_count = cnt[0];
+	data->group_0.dlb_dlb_to_sys_deq_count = cnt[1];
+}
+
+static void dlb_collect_pm_grp_1(struct dlb_hw *hw,
+				 union dlb_perf_metric_group_data *data)
+{
+	u32 counter[2];
+
+	dlb_smon_read_chp_perf_counter(hw,
+				       SMON_MEASURE_CNT,
+				       counter);
+
+	data->group_1.dlb_push_ptr_update_count = counter[0];
+}
+
+static void dlb_collect_chp_hcw_avg(struct dlb_hw *hw,
+				    union dlb_perf_metric_group_data *data)
+{
+	u32 counter[2];
+
+	dlb_smon_read_chp_perf_counter(hw,
+				       SMON_MEASURE_AVG,
+				       counter);
+
+	((u32 *)data)[0] = counter[0];
+}
+
+static void dlb_collect_chp_hcw_count(struct dlb_hw *hw,
+				      union dlb_perf_metric_group_data *data)
+{
+	u32 counter[2];
+
+	dlb_smon_read_chp_perf_counter(hw,
+				       SMON_MEASURE_CNT,
+				       counter);
+
+	((u32 *)data)[0] = counter[0];
+	((u32 *)data)[1] = counter[1];
+}
+
+void dlb_init_perf_metric_measurement(struct dlb_hw *hw,
+				      u32 id,
+				      u32 duration_us)
+{
+	union dlb_chp_ctrl_diag_02 r0;
+	u32 clks = duration_us * (DLB_HZ / 1000000);
+	enum dlb_chp_smon_component chp_component[3] = {
+		SMON_COMP_HIST_LIST,
+		SMON_COMP_QED,
+		SMON_COMP_DQED};
+	enum dlb_chp_smon_hcw_type hcw_types[][2] = {
+		{SMON_HCW_NOOP,	SMON_HCW_BAT_T},
+		{SMON_HCW_COMP,	SMON_HCW_COMP_T},
+		{SMON_HCW_ENQ,	SMON_HCW_ENQ_T},
+		{SMON_HCW_RENQ,	SMON_HCW_RENQ_T},
+		{SMON_HCW_REL,	SMON_HCW_REL},
+		{SMON_HCW_FRAG,	SMON_HCW_FRAG_T},
+		{}
+	};
+
+	/* Control word must be initialized before using the CHP perf SMON */
+	r0.field.control = 0xF;
+
+	DLB_CSR_WR(hw, DLB_CHP_CTRL_DIAG_02, r0.val);
+
+	if (id == 0) {
+		dlb_smon_setup_sys_iosf_measurements(hw, clks);
+
+		dlb_smon_setup_chp_ing_egr_measurements(hw, clks);
+	} else if (id == 1) {
+		dlb_smon_setup_chp_pp_count_measurement(hw, clks);
+	} else if (id >= 2 && id <= 4) {
+		dlb_smon_setup_chp_avg_measurement(hw,
+						   chp_component[id - 2],
+						   clks);
+	} else if (id >= 5) {
+		dlb_smon_setup_chp_hcw_measurements(hw,
+						    hcw_types[id - 5][0],
+						    hcw_types[id - 5][1],
+						    clks);
+	}
+
+	dlb_flush_csr(hw);
+}
+
+void dlb_collect_perf_metric_data(struct dlb_hw *hw,
+				  u32 id,
+				  union dlb_perf_metric_group_data *data)
+{
+	union dlb_chp_ctrl_diag_02 r0;
+
+	if (id == 0)
+		dlb_collect_pm_grp_0(hw, data);
+	else if (id == 1)
+		dlb_collect_pm_grp_1(hw, data);
+	else if (id >= 2 && id <= 4)
+		dlb_collect_chp_hcw_avg(hw, data);
+	else if (id >= 5)
+		dlb_collect_chp_hcw_count(hw, data);
+
+	/* CHP SMON is no longer in use, so reset the control word */
+	r0.field.control = 0;
+
+	DLB_CSR_WR(hw, DLB_CHP_CTRL_DIAG_02, r0.val);
+
+	dlb_flush_csr(hw);
+}
+
 void dlb_hw_enable_sparse_ldb_cq_mode(struct dlb_hw *hw)
 {
 	union dlb_sys_cq_mode r0;
@@ -8078,4 +8290,5 @@ void dlb_hw_enable_sparse_dir_cq_mode(struct dlb_hw *hw)
 	r0.field.dir_cq64 = 1;
 
 	DLB_CSR_WR(hw, DLB_SYS_CQ_MODE, r0.val);
+
 }

@@ -767,6 +767,80 @@ static int dlb_ioctl_get_driver_version(struct dlb_dev *dev,
 	return 0;
 }
 
+static int dlb_ioctl_sample_perf_counters(struct dlb_dev *dev,
+					  unsigned long user_arg)
+{
+	struct dlb_sample_perf_counters_args arg;
+	struct dlb_cmd_response response;
+	int ret = 0;
+
+	if (copy_from_user(&arg, (void __user *)user_arg, sizeof(arg))) {
+		pr_err("Invalid ioctl argument pointer\n");
+		return -EFAULT;
+	}
+
+	response.status = 0;
+
+	if (arg.measurement_duration_us == 0 ||
+	    arg.measurement_duration_us > 60000000) {
+		response.status = DLB_ST_INVALID_MEASUREMENT_DURATION;
+		ret = -EINVAL;
+		goto done;
+	}
+
+	if (arg.perf_metric_group_id > 10) {
+		response.status = DLB_ST_INVALID_PERF_METRIC_GROUP_ID;
+		ret = -EINVAL;
+		goto done;
+	}
+
+	ret = dev->ops->measure_perf(dev, &arg, &response);
+
+done:
+	if (copy_to_user((void __user *)arg.response,
+			 &response,
+			 sizeof(response))) {
+		pr_err("Invalid ioctl response pointer\n");
+		return -EFAULT;
+	}
+
+	return ret;
+}
+
+static int dlb_ioctl_measure_sched_count(struct dlb_dev *dev,
+					 unsigned long user_arg)
+{
+	struct dlb_measure_sched_count_args arg;
+	struct dlb_cmd_response response;
+	int ret = 0;
+
+	if (copy_from_user(&arg, (void __user *)user_arg, sizeof(arg))) {
+		pr_err("Invalid ioctl argument pointer\n");
+		return -EFAULT;
+	}
+
+	response.status = 0;
+
+	if (arg.measurement_duration_us == 0 ||
+	    arg.measurement_duration_us > 60000000) {
+		response.status = DLB_ST_INVALID_MEASUREMENT_DURATION;
+		ret = -EINVAL;
+		goto done;
+	}
+
+	ret = dev->ops->measure_sched_count(dev, &arg, &response);
+
+done:
+	if (copy_to_user((void __user *)arg.response,
+			 &response,
+			 sizeof(response))) {
+		pr_err("Invalid ioctl response pointer\n");
+		return -EFAULT;
+	}
+
+	return ret;
+}
+
 static int dlb_ioctl_query_cq_poll_mode(struct dlb_dev *dev,
 					unsigned long user_arg)
 {
@@ -804,6 +878,8 @@ static dlb_ioctl_callback_fn_t dlb_ioctl_callback_fns[NUM_DLB_CMD] = {
 	dlb_ioctl_create_sched_domain,
 	dlb_ioctl_get_num_resources,
 	dlb_ioctl_get_driver_version,
+	dlb_ioctl_sample_perf_counters,
+	dlb_ioctl_measure_sched_count,
 	dlb_ioctl_query_cq_poll_mode,
 };
 

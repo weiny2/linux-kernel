@@ -472,7 +472,10 @@ static int dlb_pf_init_driver_state(struct dlb_dev *dlb_dev)
 		init_waitqueue_head(&domain->wq_head);
 	}
 
+	init_waitqueue_head(&dlb_dev->measurement_wq);
+
 	mutex_init(&dlb_dev->resource_mutex);
+	mutex_init(&dlb_dev->measurement_mutex);
 
 	return 0;
 }
@@ -747,6 +750,62 @@ static int dlb_pf_reset_domain(struct dlb_dev *dev, u32 id)
 	return dlb_reset_domain(&dev->hw, id, false, 0);
 }
 
+static int dlb_pf_measure_perf(struct dlb_dev *dev,
+			       struct dlb_sample_perf_counters_args *args,
+			       struct dlb_cmd_response *response)
+{
+	union dlb_perf_metric_group_data data;
+	struct timespec64 start, end;
+	long timeout;
+	u32 elapsed;
+
+	memset(&data, 0, sizeof(data));
+
+	/* Only one active measurement is allowed at a time. */
+	if (!mutex_trylock(&dev->measurement_mutex))
+		return -EBUSY;
+
+	ktime_get_real_ts64(&start);
+
+	dlb_init_perf_metric_measurement(&dev->hw,
+					 args->perf_metric_group_id,
+					 args->measurement_duration_us);
+
+	timeout = usecs_to_jiffies(args->measurement_duration_us);
+
+	wait_event_interruptible_timeout(dev->measurement_wq,
+					 false,
+					 timeout);
+
+	ktime_get_real_ts64(&end);
+
+	dlb_collect_perf_metric_data(&dev->hw,
+				     args->perf_metric_group_id,
+				     &data);
+
+	mutex_unlock(&dev->measurement_mutex);
+
+	/* Calculate the elapsed time in microseconds */
+	elapsed = (end.tv_sec - start.tv_sec) * 1000000 +
+		  (end.tv_nsec - start.tv_nsec) / 1000;
+
+	if (copy_to_user((void __user *)args->elapsed_time_us,
+			 &elapsed,
+			 sizeof(elapsed))) {
+		pr_err("Invalid elapsed time pointer\n");
+		return -EFAULT;
+	}
+
+	if (copy_to_user((void __user *)args->perf_metric_group_data,
+			 &data,
+			 sizeof(data))) {
+		pr_err("Invalid performance metric group data pointer\n");
+		return -EFAULT;
+	}
+
+	return 0;
+}
+
 static int dlb_pf_get_ldb_queue_depth(struct dlb_hw *hw,
 				      u32 id,
 				      struct dlb_get_ldb_queue_depth_args *args,
@@ -761,6 +820,72 @@ static int dlb_pf_get_dir_queue_depth(struct dlb_hw *hw,
 				      struct dlb_cmd_response *resp)
 {
 	return dlb_hw_get_dir_queue_depth(hw, id, args, resp, false, 0);
+}
+
+static int dlb_pf_measure_sched_count(struct dlb_dev *dev,
+				      struct dlb_measure_sched_count_args *args,
+				      struct dlb_cmd_response *response)
+{
+	struct dlb_sched_counts *cnt = NULL;
+	struct timespec64 start, end;
+	int ret = 0, i;
+	long timeout;
+	u32 elapsed;
+
+	cnt = devm_kzalloc(&dev->pdev->dev, 2 * sizeof(*cnt), GFP_KERNEL);
+	if (!cnt) {
+		ret = -ENOMEM;
+		goto done;
+	}
+
+	ktime_get_real_ts64(&start);
+
+	dlb_read_sched_counts(&dev->hw, &cnt[0], false, 0);
+
+	timeout = usecs_to_jiffies(args->measurement_duration_us);
+
+	wait_event_interruptible_timeout(dev->measurement_wq,
+					 false,
+					 timeout);
+	ktime_get_real_ts64(&end);
+
+	dlb_read_sched_counts(&dev->hw, &cnt[1], false, 0);
+
+	/* Calculate the elapsed time in microseconds */
+	elapsed = (end.tv_sec - start.tv_sec) * 1000000 +
+		  (end.tv_nsec - start.tv_nsec) / 1000;
+
+	if (copy_to_user((void __user *)args->elapsed_time_us,
+			 &elapsed,
+			 sizeof(elapsed))) {
+		pr_err("Invalid elapsed time pointer\n");
+		ret = -EFAULT;
+		goto done;
+	}
+
+	/* Calculate the scheduling count difference */
+	cnt[1].ldb_sched_count -= cnt[0].ldb_sched_count;
+	cnt[1].dir_sched_count -= cnt[0].dir_sched_count;
+
+	for (i = 0; i < DLB_MAX_NUM_LDB_PORTS; i++)
+		cnt[1].ldb_cq_sched_count[i] -= cnt[0].ldb_cq_sched_count[i];
+
+	for (i = 0; i < DLB_MAX_NUM_DIR_PORTS; i++)
+		cnt[1].dir_cq_sched_count[i] -= cnt[0].dir_cq_sched_count[i];
+
+	if (copy_to_user((void __user *)args->sched_count_data,
+			 &cnt[1],
+			 sizeof(cnt[1]))) {
+		pr_err("Invalid performance metric group data pointer\n");
+		ret = -EFAULT;
+		goto done;
+	}
+
+done:
+	if (cnt)
+		devm_kfree(&dev->pdev->dev, cnt);
+
+	return ret;
 }
 
 static int dlb_pf_query_cq_poll_mode(struct dlb_dev *dlb_dev,
@@ -840,6 +965,8 @@ struct dlb_device_ops dlb_pf_ops = {
 	.disable_dir_port = dlb_pf_disable_dir_port,
 	.get_num_resources = dlb_pf_get_num_resources,
 	.reset_domain = dlb_pf_reset_domain,
+	.measure_perf = dlb_pf_measure_perf,
+	.measure_sched_count = dlb_pf_measure_sched_count,
 	.ldb_port_owned_by_domain = dlb_pf_ldb_port_owned_by_domain,
 	.dir_port_owned_by_domain = dlb_pf_dir_port_owned_by_domain,
 	.get_ldb_queue_depth = dlb_pf_get_ldb_queue_depth,
