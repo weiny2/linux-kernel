@@ -11,3 +11,4 @@ dlb-objs :=      \
   dlb_mem.o      \
   dlb_pf_ops.o   \
   dlb_resource.o \
+  dlb_smon.o     \

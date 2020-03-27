@@ -137,6 +137,12 @@ struct dlb_device_ops {
 	int (*get_num_resources)(struct dlb_hw *hw,
 				 struct dlb_get_num_resources_args *args);
 	int (*reset_domain)(struct dlb_dev *dev, u32 domain_id);
+	int (*measure_perf)(struct dlb_dev *dev,
+			    struct dlb_sample_perf_counters_args *args,
+			    struct dlb_cmd_response *response);
+	int (*measure_sched_count)(struct dlb_dev *dev,
+				   struct dlb_measure_sched_count_args *args,
+				   struct dlb_cmd_response *response);
 	int (*ldb_port_owned_by_domain)(struct dlb_hw *hw,
 					u32 domain_id,
 					u32 port_id);
@@ -243,6 +249,14 @@ struct dlb_dev {
 	 * hardware registers.
 	 */
 	struct mutex resource_mutex;
+	/* The measurement waitqueue holds threads sleeping in the measurement
+	 * ioctls.
+	 */
+	wait_queue_head_t measurement_wq;
+	/* The measurement mutex serializes access to performance monitoring
+	 * hardware.
+	 */
+	struct mutex measurement_mutex;
 	/* This workqueue thread is responsible for processing all CQ->QID unmap
 	 * requests.
 	 */

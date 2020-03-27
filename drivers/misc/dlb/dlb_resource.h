@@ -688,6 +688,50 @@ int dlb_hw_get_num_resources(struct dlb_hw *hw,
 			     unsigned int vf_id);
 
 /**
+ * dlb_init_perf_metric_measurement() - initialize perf metric h/w counters
+ * @hw: dlb_hw handle for a particular device.
+ * @id: perf metric group ID.
+ * @duration_us: measurement duration (microseconds).
+ *
+ * This function starts the performance measurement hardware for the requested
+ * performance metric group.
+ *
+ * Note: Only one metric group can be measured at a time. Calling this function
+ * successively without calling dlb_collect_perf_metric_data() will halt the
+ * first measurement.
+ */
+void dlb_init_perf_metric_measurement(struct dlb_hw *hw,
+				      u32 id,
+				      u32 duration_us);
+
+/**
+ * dlb_collect_perf_metric_data() - collect perf metric h/w counter results
+ * @hw: dlb_hw handle for a particular device.
+ * @id: perf metric group ID.
+ * @data: measurement results (output argument).
+ *
+ * This function collects SMON-measured performance measurement data.
+ */
+void dlb_collect_perf_metric_data(struct dlb_hw *hw,
+				  u32 id,
+				  union dlb_perf_metric_group_data *data);
+
+/**
+ * dlb_read_sched_counts() - read the current DLB scheduling counter values
+ * @hw: dlb_hw handle for a particular device.
+ * @data: current scheduling counter values (output argument).
+ * @vf_request: indicates whether this request came from a VF.
+ * @vf_id: If vf_request is true, this contains the VF's ID.
+ *
+ * This function returns the current values in the DLB scheduling counters.
+ * These counters increase monotonically until the device is reset.
+ */
+void dlb_read_sched_counts(struct dlb_hw *hw,
+			   struct dlb_sched_counts *data,
+			   bool vf_request,
+			   unsigned int vf_id);
+
+/**
  * dlb_disable_dp_vasr_feature() - disable directed pipe VAS reset hardware
  * @hw: dlb_hw handle for a particular device.
  *
