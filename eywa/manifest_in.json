@@ -2033,8 +2033,8 @@
                     "email": "kyle.d.pelton@intel.com"
                 }
             ],
-            "description": "Fix up branch to revert a dma-buf patch from GFX, Fixup for PKS/DRM",
-            "enabled": false,
+            "description": "Fixup patch for issue between camera/pm-testing",
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Kyle Pelton",
