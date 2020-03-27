@@ -800,6 +800,21 @@ static int dlb_pf_dir_port_owned_by_domain(struct dlb_hw *hw,
 	return dlb_dir_port_owned_by_domain(hw, domain_id, port_id, false, 0);
 }
 
+static int dlb_pf_get_sn_allocation(struct dlb_hw *hw, u32 group_id)
+{
+	return dlb_get_group_sequence_numbers(hw, group_id);
+}
+
+static int dlb_pf_set_sn_allocation(struct dlb_hw *hw, u32 group_id, u32 num)
+{
+	return dlb_set_group_sequence_numbers(hw, group_id, num);
+}
+
+static int dlb_pf_get_sn_occupancy(struct dlb_hw *hw, u32 group_id)
+{
+	return dlb_get_group_sequence_number_occupancy(hw, group_id);
+}
+
 /*******************************/
 /****** DLB PF Device Ops ******/
 /*******************************/
@@ -842,6 +857,9 @@ struct dlb_device_ops dlb_pf_ops = {
 	.reset_domain = dlb_pf_reset_domain,
 	.ldb_port_owned_by_domain = dlb_pf_ldb_port_owned_by_domain,
 	.dir_port_owned_by_domain = dlb_pf_dir_port_owned_by_domain,
+	.get_sn_allocation = dlb_pf_get_sn_allocation,
+	.set_sn_allocation = dlb_pf_set_sn_allocation,
+	.get_sn_occupancy = dlb_pf_get_sn_occupancy,
 	.get_ldb_queue_depth = dlb_pf_get_ldb_queue_depth,
 	.get_dir_queue_depth = dlb_pf_get_dir_queue_depth,
 	.query_cq_poll_mode = dlb_pf_query_cq_poll_mode,

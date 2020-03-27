@@ -600,6 +600,52 @@ void dlb_ack_compressed_cq_intr(struct dlb_hw *hw,
 				u32 *dir_interrupts);
 
 /**
+ * dlb_get_group_sequence_numbers() - return a group's number of SNs per queue
+ * @hw: dlb_hw handle for a particular device.
+ * @group_id: sequence number group ID.
+ *
+ * This function returns the configured number of sequence numbers per queue
+ * for the specified group.
+ *
+ * Return:
+ * Returns -EINVAL if group_id is invalid, else the group's SNs per queue.
+ */
+int dlb_get_group_sequence_numbers(struct dlb_hw *hw, unsigned int group_id);
+
+/**
+ * dlb_get_group_sequence_number_occupancy() - return a group's in-use slots
+ * @hw: dlb_hw handle for a particular device.
+ * @group_id: sequence number group ID.
+ *
+ * This function returns the group's number of in-use slots (i.e. load-balanced
+ * queues using the specified group).
+ *
+ * Return:
+ * Returns -EINVAL if group_id is invalid, else the group's occupancy.
+ */
+int dlb_get_group_sequence_number_occupancy(struct dlb_hw *hw,
+					    unsigned int group_id);
+
+/**
+ * dlb_set_group_sequence_numbers() - assign a group's number of SNs per queue
+ * @hw: dlb_hw handle for a particular device.
+ * @group_id: sequence number group ID.
+ * @val: requested amount of sequence numbers per queue.
+ *
+ * This function configures the group's number of sequence numbers per queue.
+ * val can be a power-of-two between 32 and 1024, inclusive. This setting can
+ * be configured until the first ordered load-balanced queue is configured, at
+ * which point the configuration is locked.
+ *
+ * Return:
+ * Returns 0 upon success; -EINVAL if group_id or val is invalid, -EPERM if an
+ * ordered queue is configured.
+ */
+int dlb_set_group_sequence_numbers(struct dlb_hw *hw,
+				   unsigned int group_id,
+				   unsigned long val);
+
+/**
  * dlb_reset_domain() - reset a scheduling domain
  * @hw: dlb_hw handle for a particular device.
  * @domain_id: domain ID.
