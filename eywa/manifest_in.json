@@ -1477,15 +1477,15 @@
                     "email": "wei.meng@intel.com"
                 }
             ],
-            "description": "IPU driver 20WW03 release to intel-next/mainline-tracking",
-            "enabled": false,
+            "description": "IPU driver 20WW13 release to intel-next/mainline-tracking",
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Cao Bingbu",
                     "email": "bingbu.cao@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1871",
             "name": "camera",
             "repourl": "ssh://git-ccr-1.devtools.intel.com:29418/icg_camera-kernel",
             "sdl_contact": [
