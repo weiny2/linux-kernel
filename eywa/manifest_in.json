@@ -1478,7 +1478,7 @@
                 }
             ],
             "description": "IPU driver 20WW13 release to intel-next/mainline-tracking",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Cao Bingbu",
@@ -2034,7 +2034,7 @@
                 }
             ],
             "description": "Fixup patch for issue between camera/pm-testing",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Kyle Pelton",
