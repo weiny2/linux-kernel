@@ -1130,6 +1130,314 @@ static void dlb_vf_init_hardware(struct dlb_dev *dlb_dev)
 }
 
 /*****************************/
+/****** Sysfs callbacks ******/
+/*****************************/
+
+static int dlb_vf_get_num_used_rsrcs(struct dlb_hw *hw,
+				     struct dlb_get_num_resources_args *args)
+{
+	struct dlb_mbox_get_num_resources_cmd_resp resp;
+	struct dlb_mbox_get_num_resources_cmd_req req;
+	struct dlb_dev *dlb_dev;
+	int ret;
+
+	dlb_dev = container_of(hw, struct dlb_dev, hw);
+
+	req.hdr.type = DLB_MBOX_CMD_GET_NUM_USED_RESOURCES;
+
+	ret = dlb_send_sync_mbox_cmd(dlb_dev, &req, sizeof(req), 1);
+	if (ret)
+		return ret;
+
+	BUILD_BUG_ON(sizeof(resp) > DLB_PF2VF_RESP_BYTES);
+
+	dlb_vf_read_pf_mbox_resp(&dlb_dev->hw, &resp, sizeof(resp));
+
+	if (resp.hdr.status != DLB_MBOX_ST_SUCCESS) {
+		dev_err(dlb_dev->dlb_device,
+			"[%s()]: failed with mailbox error: %s\n",
+			__func__,
+			DLB_MBOX_ST_STRING(&resp));
+
+		return -1;
+	}
+
+	args->num_sched_domains = resp.num_sched_domains;
+	args->num_ldb_queues = resp.num_ldb_queues;
+	args->num_ldb_ports = resp.num_ldb_ports;
+	args->num_dir_ports = resp.num_dir_ports;
+	args->num_atomic_inflights = resp.num_atomic_inflights;
+	args->max_contiguous_atomic_inflights =
+		resp.max_contiguous_atomic_inflights;
+	args->num_hist_list_entries = resp.num_hist_list_entries;
+	args->max_contiguous_hist_list_entries =
+		resp.max_contiguous_hist_list_entries;
+	args->num_ldb_credits = resp.num_ldb_credits;
+	args->max_contiguous_ldb_credits = resp.max_contiguous_ldb_credits;
+	args->num_dir_credits = resp.num_dir_credits;
+	args->max_contiguous_dir_credits = resp.max_contiguous_dir_credits;
+	args->num_ldb_credit_pools = resp.num_ldb_credit_pools;
+	args->num_dir_credit_pools = resp.num_dir_credit_pools;
+
+	return resp.error_code;
+}
+
+#define DLB_VF_TOTAL_SYSFS_SHOW(name)				     \
+static ssize_t total_##name##_show(				     \
+	struct device *dev,					     \
+	struct device_attribute *attr,				     \
+	char *buf)						     \
+{								     \
+	struct dlb_dev *dlb_dev = dev_get_drvdata(dev);		     \
+	struct dlb_get_num_resources_args rsrcs[2];		     \
+	struct dlb_hw *hw = &dlb_dev->hw;			     \
+	int val, i;						     \
+								     \
+	mutex_lock(&dlb_dev->resource_mutex);			     \
+								     \
+	val = dlb_dev->ops->get_num_resources(hw, &rsrcs[0]);	     \
+	if (val) {						     \
+		mutex_unlock(&dlb_dev->resource_mutex);		     \
+		return -1;					     \
+	}							     \
+								     \
+	val = dlb_vf_get_num_used_rsrcs(hw, &rsrcs[1]);		     \
+	if (val) {						     \
+		mutex_unlock(&dlb_dev->resource_mutex);		     \
+		return -1;					     \
+	}							     \
+								     \
+	mutex_unlock(&dlb_dev->resource_mutex);			     \
+								     \
+	val = 0;						     \
+	for (i = 0; i < ARRAY_SIZE(rsrcs); i++)			     \
+		val += rsrcs[i].name;				     \
+								     \
+	return scnprintf(buf, PAGE_SIZE, "%d\n", val);		     \
+}
+
+DLB_VF_TOTAL_SYSFS_SHOW(num_sched_domains)
+DLB_VF_TOTAL_SYSFS_SHOW(num_ldb_queues)
+DLB_VF_TOTAL_SYSFS_SHOW(num_ldb_ports)
+DLB_VF_TOTAL_SYSFS_SHOW(num_dir_ports)
+DLB_VF_TOTAL_SYSFS_SHOW(num_ldb_credit_pools)
+DLB_VF_TOTAL_SYSFS_SHOW(num_dir_credit_pools)
+DLB_VF_TOTAL_SYSFS_SHOW(num_ldb_credits)
+DLB_VF_TOTAL_SYSFS_SHOW(num_dir_credits)
+DLB_VF_TOTAL_SYSFS_SHOW(num_atomic_inflights)
+DLB_VF_TOTAL_SYSFS_SHOW(num_hist_list_entries)
+
+#define DLB_VF_AVAIL_SYSFS_SHOW(name)				     \
+static ssize_t avail_##name##_show(				     \
+	struct device *dev,					     \
+	struct device_attribute *attr,				     \
+	char *buf)						     \
+{								     \
+	struct dlb_dev *dlb_dev = dev_get_drvdata(dev);		     \
+	struct dlb_get_num_resources_args num_avail_rsrcs;	     \
+	struct dlb_hw *hw = &dlb_dev->hw;			     \
+	int val;						     \
+								     \
+	mutex_lock(&dlb_dev->resource_mutex);			     \
+								     \
+	val = dlb_dev->ops->get_num_resources(hw, &num_avail_rsrcs); \
+								     \
+	mutex_unlock(&dlb_dev->resource_mutex);			     \
+								     \
+	if (val)						     \
+		return -1;					     \
+								     \
+	val = num_avail_rsrcs.name;				     \
+								     \
+	return scnprintf(buf, PAGE_SIZE, "%d\n", val);		     \
+}
+
+DLB_VF_AVAIL_SYSFS_SHOW(num_sched_domains)
+DLB_VF_AVAIL_SYSFS_SHOW(num_ldb_queues)
+DLB_VF_AVAIL_SYSFS_SHOW(num_ldb_ports)
+DLB_VF_AVAIL_SYSFS_SHOW(num_dir_ports)
+DLB_VF_AVAIL_SYSFS_SHOW(num_ldb_credit_pools)
+DLB_VF_AVAIL_SYSFS_SHOW(num_dir_credit_pools)
+DLB_VF_AVAIL_SYSFS_SHOW(num_ldb_credits)
+DLB_VF_AVAIL_SYSFS_SHOW(num_dir_credits)
+DLB_VF_AVAIL_SYSFS_SHOW(num_atomic_inflights)
+DLB_VF_AVAIL_SYSFS_SHOW(num_hist_list_entries)
+
+static ssize_t max_ctg_atm_inflights_show(struct device *dev,
+					  struct device_attribute *attr,
+					  char *buf)
+{
+	struct dlb_dev *dlb_dev = dev_get_drvdata(dev);
+	struct dlb_get_num_resources_args num_avail_rsrcs;
+	struct dlb_hw *hw = &dlb_dev->hw;
+	int val;
+
+	mutex_lock(&dlb_dev->resource_mutex);
+
+	val = dlb_dev->ops->get_num_resources(hw, &num_avail_rsrcs);
+
+	mutex_unlock(&dlb_dev->resource_mutex);
+
+	if (val)
+		return -1;
+
+	val = num_avail_rsrcs.max_contiguous_atomic_inflights;
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n", val);
+}
+
+static ssize_t max_ctg_hl_entries_show(struct device *dev,
+				       struct device_attribute *attr,
+				       char *buf)
+{
+	struct dlb_dev *dlb_dev = dev_get_drvdata(dev);
+	struct dlb_get_num_resources_args num_avail_rsrcs;
+	struct dlb_hw *hw = &dlb_dev->hw;
+	int val;
+
+	mutex_lock(&dlb_dev->resource_mutex);
+
+	val = dlb_dev->ops->get_num_resources(hw, &num_avail_rsrcs);
+
+	mutex_unlock(&dlb_dev->resource_mutex);
+
+	if (val)
+		return -1;
+
+	val = num_avail_rsrcs.max_contiguous_hist_list_entries;
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n", val);
+}
+
+/* Device attribute name doesn't match the show function name, so we define our
+ * own DEVICE_ATTR macro.
+ */
+#define DLB_DEVICE_ATTR_RO(_prefix, _name) \
+struct device_attribute dev_attr_##_prefix##_##_name = {\
+	.attr = { .name = __stringify(_name), .mode = 0444 },\
+	.show = _prefix##_##_name##_show,\
+}
+
+static DLB_DEVICE_ATTR_RO(total, num_sched_domains);
+static DLB_DEVICE_ATTR_RO(total, num_ldb_queues);
+static DLB_DEVICE_ATTR_RO(total, num_ldb_ports);
+static DLB_DEVICE_ATTR_RO(total, num_dir_ports);
+static DLB_DEVICE_ATTR_RO(total, num_ldb_credit_pools);
+static DLB_DEVICE_ATTR_RO(total, num_dir_credit_pools);
+static DLB_DEVICE_ATTR_RO(total, num_ldb_credits);
+static DLB_DEVICE_ATTR_RO(total, num_dir_credits);
+static DLB_DEVICE_ATTR_RO(total, num_atomic_inflights);
+static DLB_DEVICE_ATTR_RO(total, num_hist_list_entries);
+
+static struct attribute *dlb_total_attrs[] = {
+	&dev_attr_total_num_sched_domains.attr,
+	&dev_attr_total_num_ldb_queues.attr,
+	&dev_attr_total_num_ldb_ports.attr,
+	&dev_attr_total_num_dir_ports.attr,
+	&dev_attr_total_num_ldb_credit_pools.attr,
+	&dev_attr_total_num_dir_credit_pools.attr,
+	&dev_attr_total_num_ldb_credits.attr,
+	&dev_attr_total_num_dir_credits.attr,
+	&dev_attr_total_num_atomic_inflights.attr,
+	&dev_attr_total_num_hist_list_entries.attr,
+	NULL
+};
+
+const static struct attribute_group dlb_vf_total_attr_group = {
+	.attrs = dlb_total_attrs,
+	.name = "total_resources",
+};
+
+static DLB_DEVICE_ATTR_RO(avail, num_sched_domains);
+static DLB_DEVICE_ATTR_RO(avail, num_ldb_queues);
+static DLB_DEVICE_ATTR_RO(avail, num_ldb_ports);
+static DLB_DEVICE_ATTR_RO(avail, num_dir_ports);
+static DLB_DEVICE_ATTR_RO(avail, num_ldb_credit_pools);
+static DLB_DEVICE_ATTR_RO(avail, num_dir_credit_pools);
+static DLB_DEVICE_ATTR_RO(avail, num_ldb_credits);
+static DLB_DEVICE_ATTR_RO(avail, num_dir_credits);
+static DLB_DEVICE_ATTR_RO(avail, num_atomic_inflights);
+static DLB_DEVICE_ATTR_RO(avail, num_hist_list_entries);
+static DEVICE_ATTR_RO(max_ctg_atm_inflights);
+static DEVICE_ATTR_RO(max_ctg_hl_entries);
+
+static struct attribute *dlb_avail_attrs[] = {
+	&dev_attr_avail_num_sched_domains.attr,
+	&dev_attr_avail_num_ldb_queues.attr,
+	&dev_attr_avail_num_ldb_ports.attr,
+	&dev_attr_avail_num_dir_ports.attr,
+	&dev_attr_avail_num_ldb_credit_pools.attr,
+	&dev_attr_avail_num_dir_credit_pools.attr,
+	&dev_attr_avail_num_ldb_credits.attr,
+	&dev_attr_avail_num_dir_credits.attr,
+	&dev_attr_avail_num_atomic_inflights.attr,
+	&dev_attr_avail_num_hist_list_entries.attr,
+	&dev_attr_max_ctg_atm_inflights.attr,
+	&dev_attr_max_ctg_hl_entries.attr,
+	NULL
+};
+
+const static struct attribute_group dlb_vf_avail_attr_group = {
+	.attrs = dlb_avail_attrs,
+	.name = "avail_resources",
+};
+
+static ssize_t dev_id_show(struct device *dev,
+			   struct device_attribute *attr,
+			   char *buf)
+{
+	struct dlb_dev *dlb_dev = dev_get_drvdata(dev);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n", dlb_dev->id);
+}
+
+static DEVICE_ATTR_RO(dev_id);
+
+static int dlb_vf_sysfs_create(struct dlb_dev *dlb_dev)
+{
+	struct kobject *kobj;
+	int ret;
+
+	kobj = &dlb_dev->pdev->dev.kobj;
+
+	ret = sysfs_create_file(kobj, &dev_attr_dev_id.attr);
+	if (ret)
+		goto dlb_dev_id_attr_group_fail;
+
+	ret = sysfs_create_group(kobj, &dlb_vf_total_attr_group);
+	if (ret)
+		goto dlb_total_attr_group_fail;
+
+	ret = sysfs_create_group(kobj, &dlb_vf_avail_attr_group);
+	if (ret)
+		goto dlb_avail_attr_group_fail;
+
+	return 0;
+
+dlb_avail_attr_group_fail:
+	sysfs_remove_group(kobj, &dlb_vf_total_attr_group);
+dlb_total_attr_group_fail:
+	sysfs_remove_file(kobj, &dev_attr_dev_id.attr);
+dlb_dev_id_attr_group_fail:
+	return ret;
+}
+
+static void dlb_vf_sysfs_destroy(struct dlb_dev *dlb_dev)
+{
+	struct kobject *kobj;
+
+	kobj = &dlb_dev->pdev->dev.kobj;
+
+	sysfs_remove_group(kobj, &dlb_vf_avail_attr_group);
+	sysfs_remove_group(kobj, &dlb_vf_total_attr_group);
+	sysfs_remove_file(kobj, &dev_attr_dev_id.attr);
+}
+
+static void dlb_vf_sysfs_reapply_configuration(struct dlb_dev *dlb_dev)
+{
+}
+
+/*****************************/
 /****** IOCTL callbacks ******/
 /*****************************/
 
@@ -1902,55 +2210,6 @@ static int dlb_vf_collect_cq_sched_count(struct dlb_dev *dlb_dev,
 	return resp.error_code;
 }
 
-static int dlb_vf_get_num_used_rsrcs(struct dlb_hw *hw,
-				     struct dlb_get_num_resources_args *args)
-{
-	struct dlb_mbox_get_num_resources_cmd_resp resp;
-	struct dlb_mbox_get_num_resources_cmd_req req;
-	struct dlb_dev *dlb_dev;
-	int ret;
-
-	dlb_dev = container_of(hw, struct dlb_dev, hw);
-
-	req.hdr.type = DLB_MBOX_CMD_GET_NUM_USED_RESOURCES;
-
-	ret = dlb_send_sync_mbox_cmd(dlb_dev, &req, sizeof(req), 1);
-	if (ret)
-		return ret;
-
-	BUILD_BUG_ON(sizeof(resp) > DLB_PF2VF_RESP_BYTES);
-
-	dlb_vf_read_pf_mbox_resp(&dlb_dev->hw, &resp, sizeof(resp));
-
-	if (resp.hdr.status != DLB_MBOX_ST_SUCCESS) {
-		dev_err(dlb_dev->dlb_device,
-			"[%s()]: failed with mailbox error: %s\n",
-			__func__,
-			DLB_MBOX_ST_STRING(&resp));
-
-		return -1;
-	}
-
-	args->num_sched_domains = resp.num_sched_domains;
-	args->num_ldb_queues = resp.num_ldb_queues;
-	args->num_ldb_ports = resp.num_ldb_ports;
-	args->num_dir_ports = resp.num_dir_ports;
-	args->num_atomic_inflights = resp.num_atomic_inflights;
-	args->max_contiguous_atomic_inflights =
-		resp.max_contiguous_atomic_inflights;
-	args->num_hist_list_entries = resp.num_hist_list_entries;
-	args->max_contiguous_hist_list_entries =
-		resp.max_contiguous_hist_list_entries;
-	args->num_ldb_credits = resp.num_ldb_credits;
-	args->max_contiguous_ldb_credits = resp.max_contiguous_ldb_credits;
-	args->num_dir_credits = resp.num_dir_credits;
-	args->max_contiguous_dir_credits = resp.max_contiguous_dir_credits;
-	args->num_ldb_credit_pools = resp.num_ldb_credit_pools;
-	args->num_dir_credit_pools = resp.num_dir_credit_pools;
-
-	return resp.error_code;
-}
-
 static int dlb_vf_collect_cq_sched_counts(struct dlb_dev *dlb_dev,
 					  struct dlb_sched_counts *data,
 					  u32 *elapsed)
@@ -2405,6 +2664,9 @@ struct dlb_device_ops dlb_vf_ops = {
 	.device_destroy = dlb_vf_device_destroy,
 	.cdev_add = dlb_vf_cdev_add,
 	.cdev_del = dlb_vf_cdev_del,
+	.sysfs_create = dlb_vf_sysfs_create,
+	.sysfs_destroy = dlb_vf_sysfs_destroy,
+	.sysfs_reapply = dlb_vf_sysfs_reapply_configuration,
 	.init_interrupts = dlb_vf_init_interrupts,
 	.enable_ldb_cq_interrupts = dlb_vf_enable_ldb_cq_interrupts,
 	.enable_dir_cq_interrupts = dlb_vf_enable_dir_cq_interrupts,
