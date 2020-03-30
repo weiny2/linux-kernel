@@ -12,3 +12,5 @@ dlb-objs :=      \
   dlb_pf_ops.o   \
   dlb_resource.o \
   dlb_smon.o     \
+  dlb_sriov.o    \
+  dlb_vf_ops.o   \

@@ -35,6 +35,8 @@ static const char dlb_driver_name[] = KBUILD_MODNAME;
 
 #define DLB_DEFAULT_RESET_TIMEOUT_S 5
 
+extern struct list_head dlb_dev_list;
+extern struct mutex dlb_driver_lock;
 extern unsigned int dlb_qe_sa_pct;
 extern unsigned int dlb_qid_sa_pct;
 
@@ -172,7 +174,9 @@ struct dlb_device_ops {
 				  struct dlb_cmd_response *user_resp);
 };
 
+extern const struct attribute_group *dlb_vf_attrs[];
 extern struct dlb_device_ops dlb_pf_ops;
+extern struct dlb_device_ops dlb_vf_ops;
 
 struct dlb_port_memory {
 	void *cq_base;
@@ -220,6 +224,28 @@ struct dlb_intr {
 	int num_dir_ports;
 };
 
+struct vf_id_state {
+	/* pf_id and vf_id contain unique identifiers given by the PF at driver
+	 * register time. These IDs can be used to identify VFs from the same
+	 * physical device.
+	 */
+	u8 pf_id;
+	u8 vf_id;
+	/* An auxiliary VF has no resources of its own. It exists to provide
+	 * its primary VF sibling with MSI vectors, so a VF user can exceed the
+	 * 31 vector per VF limit.
+	 */
+	u8 is_auxiliary_vf;
+	/* If this is an auxiliary VF, primary_vf_id is the 'vf_id' of its
+	 * primary sibling.
+	 */
+	u8 primary_vf_id;
+	/* If this is an auxiliary VF, primary_vf points to the dlb_dev
+	 * structure of its primary sibling.
+	 */
+	struct dlb_dev *primary_vf;
+};
+
 #define DLB_DOMAIN_ALERT_RING_SIZE 256
 
 struct dlb_domain_dev {
@@ -255,6 +281,8 @@ struct dlb_alarm {
 
 struct dlb_dev {
 	int id;
+	struct vf_id_state vf_id_state; /* (VF only) */
+	struct vf_id_state child_id_state[DLB_MAX_NUM_VFS]; /* (PF only) */
 	struct pci_dev *pdev;
 	struct dlb_hw hw;
 	struct cdev cdev;
@@ -315,5 +343,7 @@ int dlb_write_domain_alert(struct dlb_dev *dev,
 			   u32 domain_id,
 			   u64 alert_id,
 			   u64 aux_alert_data);
+
+bool dlb_in_use(struct dlb_dev *dev);
 
 #endif /* __DLB_MAIN_H */

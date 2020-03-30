@@ -556,6 +556,401 @@ static struct dlb_ldb_queue *dlb_get_domain_ldb_queue(u32 id,
 	return NULL;
 }
 
+#define DLB_XFER_LL_RSRC(dst, src, num, type_t, name) ({	    \
+	struct dlb_function_resources *_src = src;		    \
+	struct dlb_function_resources *_dst = dst;		    \
+	type_t *ptr, *tmp __attribute__((unused));		    \
+	unsigned int i = 0;					    \
+								    \
+	DLB_FUNC_LIST_FOR_SAFE(_src->avail_##name##s, ptr, tmp) {   \
+		if (i++ == (num))				    \
+			break;					    \
+								    \
+		list_del(&ptr->func_list);			    \
+		list_add(&ptr->func_list, &_dst->avail_##name##s);  \
+		_src->num_avail_##name##s--;			    \
+		_dst->num_avail_##name##s++;			    \
+	}							    \
+})
+
+#define DLB_VF_ID_CLEAR(head, type_t) ({  \
+	type_t *var;			  \
+					  \
+	DLB_FUNC_LIST_FOR(head, var)	  \
+		var->id.vf_owned = false; \
+})
+
+int dlb_update_vf_sched_domains(struct dlb_hw *hw, u32 vf_id, u32 num)
+{
+	struct dlb_function_resources *src, *dst;
+	struct dlb_domain *domain;
+	unsigned int orig;
+	int ret;
+
+	if (vf_id >= DLB_MAX_NUM_VFS)
+		return -EINVAL;
+
+	src = &hw->pf;
+	dst = &hw->vf[vf_id];
+
+	/* If the VF is locked, its resource assignment can't be changed */
+	if (dlb_vf_is_locked(hw, vf_id))
+		return -EPERM;
+
+	orig = dst->num_avail_domains;
+
+	/* Detach the destination VF's current resources before checking if
+	 * enough are available, and set their IDs accordingly.
+	 */
+	DLB_VF_ID_CLEAR(dst->avail_domains, struct dlb_domain);
+
+	DLB_XFER_LL_RSRC(src, dst, orig, struct dlb_domain, domain);
+
+	/* Are there enough available resources to satisfy the request? */
+	if (num > src->num_avail_domains) {
+		num = orig;
+		ret = -EINVAL;
+	} else {
+		ret = 0;
+	}
+
+	DLB_XFER_LL_RSRC(dst, src, num, struct dlb_domain, domain);
+
+	/* Set the domains' VF backpointer */
+	DLB_FUNC_LIST_FOR(dst->avail_domains, domain)
+		domain->parent_func = dst;
+
+	return ret;
+}
+
+int dlb_update_vf_ldb_queues(struct dlb_hw *hw, u32 vf_id, u32 num)
+{
+	struct dlb_function_resources *src, *dst;
+	unsigned int orig;
+	int ret;
+
+	if (vf_id >= DLB_MAX_NUM_VFS)
+		return -EINVAL;
+
+	src = &hw->pf;
+	dst = &hw->vf[vf_id];
+
+	/* If the VF is locked, its resource assignment can't be changed */
+	if (dlb_vf_is_locked(hw, vf_id))
+		return -EPERM;
+
+	orig = dst->num_avail_ldb_queues;
+
+	/* Detach the destination VF's current resources before checking if
+	 * enough are available, and set their IDs accordingly.
+	 */
+	DLB_VF_ID_CLEAR(dst->avail_ldb_queues, struct dlb_ldb_queue);
+
+	DLB_XFER_LL_RSRC(src, dst, orig, struct dlb_ldb_queue, ldb_queue);
+
+	/* Are there enough available resources to satisfy the request? */
+	if (num > src->num_avail_ldb_queues) {
+		num = orig;
+		ret = -EINVAL;
+	} else {
+		ret = 0;
+	}
+
+	DLB_XFER_LL_RSRC(dst, src, num, struct dlb_ldb_queue, ldb_queue);
+
+	return ret;
+}
+
+int dlb_update_vf_ldb_ports(struct dlb_hw *hw, u32 vf_id, u32 num)
+{
+	struct dlb_function_resources *src, *dst;
+	unsigned int orig;
+	int ret;
+
+	if (vf_id >= DLB_MAX_NUM_VFS)
+		return -EINVAL;
+
+	src = &hw->pf;
+	dst = &hw->vf[vf_id];
+
+	/* If the VF is locked, its resource assignment can't be changed */
+	if (dlb_vf_is_locked(hw, vf_id))
+		return -EPERM;
+
+	orig = dst->num_avail_ldb_ports;
+
+	/* Detach the destination VF's current resources before checking if
+	 * enough are available, and set their IDs accordingly.
+	 */
+	DLB_VF_ID_CLEAR(dst->avail_ldb_ports, struct dlb_ldb_port);
+
+	DLB_XFER_LL_RSRC(src, dst, orig, struct dlb_ldb_port, ldb_port);
+
+	/* Are there enough available resources to satisfy the request? */
+	if (num > src->num_avail_ldb_ports) {
+		num = orig;
+		ret = -EINVAL;
+	} else {
+		ret = 0;
+	}
+
+	DLB_XFER_LL_RSRC(dst, src, num, struct dlb_ldb_port, ldb_port);
+
+	return ret;
+}
+
+int dlb_update_vf_dir_ports(struct dlb_hw *hw, u32 vf_id, u32 num)
+{
+	struct dlb_function_resources *src, *dst;
+	unsigned int orig;
+	int ret;
+
+	if (vf_id >= DLB_MAX_NUM_VFS)
+		return -EINVAL;
+
+	src = &hw->pf;
+	dst = &hw->vf[vf_id];
+
+	/* If the VF is locked, its resource assignment can't be changed */
+	if (dlb_vf_is_locked(hw, vf_id))
+		return -EPERM;
+
+	orig = dst->num_avail_dir_pq_pairs;
+
+	/* Detach the destination VF's current resources before checking if
+	 * enough are available, and set their IDs accordingly.
+	 */
+	DLB_VF_ID_CLEAR(dst->avail_dir_pq_pairs, struct dlb_dir_pq_pair);
+
+	DLB_XFER_LL_RSRC(src, dst, orig, struct dlb_dir_pq_pair, dir_pq_pair);
+
+	/* Are there enough available resources to satisfy the request? */
+	if (num > src->num_avail_dir_pq_pairs) {
+		num = orig;
+		ret = -EINVAL;
+	} else {
+		ret = 0;
+	}
+
+	DLB_XFER_LL_RSRC(dst, src, num, struct dlb_dir_pq_pair, dir_pq_pair);
+
+	return ret;
+}
+
+int dlb_update_vf_ldb_credit_pools(struct dlb_hw *hw,
+				   u32 vf_id,
+				   u32 num)
+{
+	struct dlb_function_resources *src, *dst;
+	unsigned int orig;
+	int ret;
+
+	if (vf_id >= DLB_MAX_NUM_VFS)
+		return -EINVAL;
+
+	src = &hw->pf;
+	dst = &hw->vf[vf_id];
+
+	/* If the VF is locked, its resource assignment can't be changed */
+	if (dlb_vf_is_locked(hw, vf_id))
+		return -EPERM;
+
+	orig = dst->num_avail_ldb_credit_pools;
+
+	/* Detach the destination VF's current resources before checking if
+	 * enough are available, and set their IDs accordingly.
+	 */
+	DLB_VF_ID_CLEAR(dst->avail_ldb_credit_pools, struct dlb_credit_pool);
+
+	DLB_XFER_LL_RSRC(src,
+			 dst,
+			 orig,
+			 struct dlb_credit_pool,
+			 ldb_credit_pool);
+
+	/* Are there enough available resources to satisfy the request? */
+	if (num > src->num_avail_ldb_credit_pools) {
+		num = orig;
+		ret = -EINVAL;
+	} else {
+		ret = 0;
+	}
+
+	DLB_XFER_LL_RSRC(dst,
+			 src,
+			 num,
+			 struct dlb_credit_pool,
+			 ldb_credit_pool);
+
+	return ret;
+}
+
+int dlb_update_vf_dir_credit_pools(struct dlb_hw *hw,
+				   u32 vf_id,
+				   u32 num)
+{
+	struct dlb_function_resources *src, *dst;
+	unsigned int orig;
+	int ret;
+
+	if (vf_id >= DLB_MAX_NUM_VFS)
+		return -EINVAL;
+
+	src = &hw->pf;
+	dst = &hw->vf[vf_id];
+
+	/* If the VF is locked, its resource assignment can't be changed */
+	if (dlb_vf_is_locked(hw, vf_id))
+		return -EPERM;
+
+	orig = dst->num_avail_dir_credit_pools;
+
+	/* Detach the VF's current resources before checking if enough are
+	 * available, and set their IDs accordingly.
+	 */
+	DLB_VF_ID_CLEAR(dst->avail_dir_credit_pools, struct dlb_credit_pool);
+
+	DLB_XFER_LL_RSRC(src,
+			 dst,
+			 orig,
+			 struct dlb_credit_pool,
+			 dir_credit_pool);
+
+	/* Are there enough available resources to satisfy the request? */
+	if (num > src->num_avail_dir_credit_pools) {
+		num = orig;
+		ret = -EINVAL;
+	} else {
+		ret = 0;
+	}
+
+	DLB_XFER_LL_RSRC(dst,
+			 src,
+			 num,
+			 struct dlb_credit_pool,
+			 dir_credit_pool);
+
+	return ret;
+}
+
+static int dlb_transfer_bitmap_resources(struct dlb_bitmap *src,
+					 struct dlb_bitmap *dst,
+					 u32 num)
+{
+	int orig, ret, base;
+
+	/* Validate bitmaps before use */
+	if (dlb_bitmap_count(dst) < 0 || dlb_bitmap_count(src) < 0)
+		return -EINVAL;
+
+	/* Reassign the dest's bitmap entries to the source's before checking
+	 * if a contiguous chunk of size 'num' is available. The reassignment
+	 * may be necessary to create a sufficiently large contiguous chunk.
+	 */
+	orig = dlb_bitmap_count(dst);
+
+	dlb_bitmap_or(src, src, dst);
+
+	dlb_bitmap_zero(dst);
+
+	/* Are there enough available resources to satisfy the request? */
+	base = dlb_bitmap_find_set_bit_range(src, num);
+
+	if (base == -ENOENT) {
+		num = orig;
+		base = dlb_bitmap_find_set_bit_range(src, num);
+		ret = -EINVAL;
+	} else {
+		ret = 0;
+	}
+
+	dlb_bitmap_set_range(dst, base, num);
+
+	dlb_bitmap_clear_range(src, base, num);
+
+	return ret;
+}
+
+int dlb_update_vf_ldb_credits(struct dlb_hw *hw, u32 vf_id, u32 num)
+{
+	struct dlb_function_resources *src, *dst;
+
+	if (vf_id >= DLB_MAX_NUM_VFS)
+		return -EINVAL;
+
+	src = &hw->pf;
+	dst = &hw->vf[vf_id];
+
+	/* If the VF is locked, its resource assignment can't be changed */
+	if (dlb_vf_is_locked(hw, vf_id))
+		return -EPERM;
+
+	return dlb_transfer_bitmap_resources(src->avail_qed_freelist_entries,
+					     dst->avail_qed_freelist_entries,
+					     num);
+}
+
+int dlb_update_vf_dir_credits(struct dlb_hw *hw, u32 vf_id, u32 num)
+{
+	struct dlb_function_resources *src, *dst;
+
+	if (vf_id >= DLB_MAX_NUM_VFS)
+		return -EINVAL;
+
+	src = &hw->pf;
+	dst = &hw->vf[vf_id];
+
+	/* If the VF is locked, its resource assignment can't be changed */
+	if (dlb_vf_is_locked(hw, vf_id))
+		return -EPERM;
+
+	return dlb_transfer_bitmap_resources(src->avail_dqed_freelist_entries,
+					     dst->avail_dqed_freelist_entries,
+					     num);
+}
+
+int dlb_update_vf_hist_list_entries(struct dlb_hw *hw,
+				    u32 vf_id,
+				    u32 num)
+{
+	struct dlb_function_resources *src, *dst;
+
+	if (vf_id >= DLB_MAX_NUM_VFS)
+		return -EINVAL;
+
+	src = &hw->pf;
+	dst = &hw->vf[vf_id];
+
+	/* If the VF is locked, its resource assignment can't be changed */
+	if (dlb_vf_is_locked(hw, vf_id))
+		return -EPERM;
+
+	return dlb_transfer_bitmap_resources(src->avail_hist_list_entries,
+					     dst->avail_hist_list_entries,
+					     num);
+}
+
+int dlb_update_vf_atomic_inflights(struct dlb_hw *hw,
+				   u32 vf_id,
+				   u32 num)
+{
+	struct dlb_function_resources *src, *dst;
+
+	if (vf_id >= DLB_MAX_NUM_VFS)
+		return -EINVAL;
+
+	src = &hw->pf;
+	dst = &hw->vf[vf_id];
+
+	/* If the VF is locked, its resource assignment can't be changed */
+	if (dlb_vf_is_locked(hw, vf_id))
+		return -EPERM;
+
+	return dlb_transfer_bitmap_resources(src->avail_aqed_freelist_entries,
+					     dst->avail_aqed_freelist_entries,
+					     num);
+}
+
 static int dlb_attach_ldb_queues(struct dlb_hw *hw,
 				 struct dlb_function_resources *rsrcs,
 				 struct dlb_domain *domain,
@@ -6021,6 +6416,24 @@ void dlb_ack_compressed_cq_intr(struct dlb_hw *hw,
 	dlb_ack_msix_interrupt(hw, DLB_PF_COMPRESSED_MODE_CQ_VECTOR_ID);
 }
 
+void dlb_set_vf_reset_in_progress(struct dlb_hw *hw, int vf)
+{
+	u32 bitvec = DLB_FUNC_RD(hw, DLB_FUNC_PF_VF_RESET_IN_PROGRESS(0));
+
+	bitvec |= (1 << vf);
+
+	DLB_FUNC_WR(hw, DLB_FUNC_PF_VF_RESET_IN_PROGRESS(0), bitvec);
+}
+
+void dlb_clr_vf_reset_in_progress(struct dlb_hw *hw, int vf)
+{
+	u32 bitvec = DLB_FUNC_RD(hw, DLB_FUNC_PF_VF_RESET_IN_PROGRESS(0));
+
+	bitvec &= ~(1 << vf);
+
+	DLB_FUNC_WR(hw, DLB_FUNC_PF_VF_RESET_IN_PROGRESS(0), bitvec);
+}
+
 void dlb_enable_alarm_interrupts(struct dlb_hw *hw)
 {
 	union dlb_sys_ingress_alarm_enbl r0;
@@ -8400,6 +8813,76 @@ int dlb_hw_get_num_resources(struct dlb_hw *hw,
 	return 0;
 }
 
+int dlb_hw_get_num_used_resources(struct dlb_hw *hw,
+				  struct dlb_get_num_resources_args *arg,
+				  bool vf_request,
+				  unsigned int vf_id)
+{
+	struct dlb_function_resources *rsrcs;
+	struct dlb_domain *domain;
+
+	if (vf_request && vf_id >= DLB_MAX_NUM_VFS)
+		return -EINVAL;
+
+	rsrcs = (vf_request) ? &hw->vf[vf_id] : &hw->pf;
+
+	memset(arg, 0, sizeof(*arg));
+
+	DLB_FUNC_LIST_FOR(rsrcs->used_domains, domain) {
+		struct dlb_dir_pq_pair *dir_port;
+		struct dlb_ldb_port *ldb_port;
+		struct dlb_credit_pool *pool;
+		struct dlb_ldb_queue *queue;
+
+		arg->num_sched_domains++;
+
+		arg->num_atomic_inflights +=
+			domain->aqed_freelist.bound -
+			domain->aqed_freelist.base;
+
+		DLB_DOM_LIST_FOR(domain->used_ldb_queues, queue)
+			arg->num_ldb_queues++;
+		DLB_DOM_LIST_FOR(domain->avail_ldb_queues, queue)
+			arg->num_ldb_queues++;
+
+		DLB_DOM_LIST_FOR(domain->used_ldb_ports, ldb_port)
+			arg->num_ldb_ports++;
+		DLB_DOM_LIST_FOR(domain->avail_ldb_ports, ldb_port)
+			arg->num_ldb_ports++;
+
+		DLB_DOM_LIST_FOR(domain->used_dir_pq_pairs, dir_port)
+			arg->num_dir_ports++;
+		DLB_DOM_LIST_FOR(domain->avail_dir_pq_pairs, dir_port)
+			arg->num_dir_ports++;
+
+		arg->num_ldb_credits +=
+			domain->qed_freelist.bound -
+			domain->qed_freelist.base;
+
+		DLB_DOM_LIST_FOR(domain->avail_ldb_credit_pools, pool)
+			arg->num_ldb_credit_pools++;
+		DLB_DOM_LIST_FOR(domain->used_ldb_credit_pools, pool) {
+			arg->num_ldb_credit_pools++;
+			arg->num_ldb_credits += pool->total_credits;
+		}
+
+		arg->num_dir_credits +=
+			domain->dqed_freelist.bound -
+			domain->dqed_freelist.base;
+
+		DLB_DOM_LIST_FOR(domain->avail_dir_credit_pools, pool)
+			arg->num_dir_credit_pools++;
+		DLB_DOM_LIST_FOR(domain->used_dir_credit_pools, pool) {
+			arg->num_dir_credit_pools++;
+			arg->num_dir_credits += pool->total_credits;
+		}
+
+		arg->num_hist_list_entries += domain->total_hist_list_entries;
+	}
+
+	return 0;
+}
+
 static inline bool dlb_ldb_port_owned_by_vf(struct dlb_hw *hw,
 					    u32 vf_id,
 					    u32 port_id)
@@ -8609,6 +9092,107 @@ void dlb_collect_perf_metric_data(struct dlb_hw *hw,
 	DLB_CSR_WR(hw, DLB_CHP_CTRL_DIAG_02, r0.val);
 
 	dlb_flush_csr(hw);
+}
+
+bool dlb_vf_is_locked(struct dlb_hw *hw, unsigned int vf_id)
+{
+	return hw->vf[vf_id].locked;
+}
+
+static void dlb_vf_set_rsrc_virt_ids(struct dlb_function_resources *rsrcs,
+				     unsigned int vf_id)
+{
+	struct dlb_dir_pq_pair *dir_port;
+	struct dlb_ldb_queue *ldb_queue;
+	struct dlb_ldb_port *ldb_port;
+	struct dlb_credit_pool *pool;
+	struct dlb_domain *domain;
+	int i;
+
+	i = 0;
+	DLB_FUNC_LIST_FOR(rsrcs->avail_domains, domain) {
+		domain->id.virt_id = i;
+		domain->id.vf_owned = true;
+		domain->id.vf_id = vf_id;
+		i++;
+	}
+
+	i = 0;
+	DLB_FUNC_LIST_FOR(rsrcs->avail_ldb_queues, ldb_queue) {
+		ldb_queue->id.virt_id = i;
+		ldb_queue->id.vf_owned = true;
+		ldb_queue->id.vf_id = vf_id;
+		i++;
+	}
+
+	i = 0;
+	DLB_FUNC_LIST_FOR(rsrcs->avail_ldb_ports, ldb_port) {
+		ldb_port->id.virt_id = i;
+		ldb_port->id.vf_owned = true;
+		ldb_port->id.vf_id = vf_id;
+		i++;
+	}
+
+	i = 0;
+	DLB_FUNC_LIST_FOR(rsrcs->avail_dir_pq_pairs, dir_port) {
+		dir_port->id.virt_id = i;
+		dir_port->id.vf_owned = true;
+		dir_port->id.vf_id = vf_id;
+		i++;
+	}
+
+	i = 0;
+	DLB_FUNC_LIST_FOR(rsrcs->avail_ldb_credit_pools, pool) {
+		pool->id.virt_id = i;
+		pool->id.vf_owned = true;
+		pool->id.vf_id = vf_id;
+		i++;
+	}
+
+	i = 0;
+	DLB_FUNC_LIST_FOR(rsrcs->avail_dir_credit_pools, pool) {
+		pool->id.virt_id = i;
+		pool->id.vf_owned = true;
+		pool->id.vf_id = vf_id;
+		i++;
+	}
+}
+
+void dlb_lock_vf(struct dlb_hw *hw, unsigned int vf_id)
+{
+	struct dlb_function_resources *rsrcs = &hw->vf[vf_id];
+
+	rsrcs->locked = true;
+
+	dlb_vf_set_rsrc_virt_ids(rsrcs, vf_id);
+}
+
+void dlb_unlock_vf(struct dlb_hw *hw, unsigned int vf_id)
+{
+	hw->vf[vf_id].locked = false;
+}
+
+int dlb_reset_vf_resources(struct dlb_hw *hw, unsigned int vf_id)
+{
+	if (vf_id >= DLB_MAX_NUM_VFS)
+		return -EINVAL;
+
+	/* If the VF is locked, its resource assignment can't be changed */
+	if (dlb_vf_is_locked(hw, vf_id))
+		return -EPERM;
+
+	dlb_update_vf_sched_domains(hw, vf_id, 0);
+	dlb_update_vf_ldb_queues(hw, vf_id, 0);
+	dlb_update_vf_ldb_ports(hw, vf_id, 0);
+	dlb_update_vf_dir_ports(hw, vf_id, 0);
+	dlb_update_vf_ldb_credit_pools(hw, vf_id, 0);
+	dlb_update_vf_dir_credit_pools(hw, vf_id, 0);
+	dlb_update_vf_ldb_credits(hw, vf_id, 0);
+	dlb_update_vf_dir_credits(hw, vf_id, 0);
+	dlb_update_vf_hist_list_entries(hw, vf_id, 0);
+	dlb_update_vf_atomic_inflights(hw, vf_id, 0);
+
+	return 0;
 }
 
 void dlb_hw_enable_sparse_ldb_cq_mode(struct dlb_hw *hw)
