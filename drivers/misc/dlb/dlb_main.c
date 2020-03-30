@@ -15,6 +15,7 @@
 #include "dlb_intr.h"
 #include "dlb_ioctl.h"
 #include "dlb_main.h"
+#include "dlb_mbox.h"
 #include "dlb_mem.h"
 #include "dlb_resource.h"
 #include "dlb_sriov.h"
@@ -837,6 +838,18 @@ static int dlb_probe(struct pci_dev *pdev,
 	if (ret)
 		goto map_pci_bar_fail;
 
+	/* (VF only) Register the driver with the PF driver */
+	ret = dlb_dev->ops->register_driver(dlb_dev);
+	if (ret)
+		goto driver_registration_fail;
+
+	/* If this is an auxiliary VF, it can skip the rest of the probe
+	 * function. This VF is only used for its MSI interrupt vectors, and
+	 * the VF's register_driver callback will initialize them.
+	 */
+	if (dlb_dev->type == DLB_VF && dlb_dev->vf_id_state.is_auxiliary_vf)
+		goto aux_vf_probe;
+
 	ret = dlb_dev->ops->cdev_add(dlb_dev, dlb_dev_number_base, &dlb_fops);
 	if (ret)
 		goto cdev_add_fail;
@@ -881,6 +894,7 @@ static int dlb_probe(struct pci_dev *pdev,
 
 	dlb_set_id_in_use(dlb_dev->id, true);
 
+aux_vf_probe:
 	return 0;
 
 resource_init_fail:
@@ -896,6 +910,8 @@ dma_set_mask_fail:
 device_add_fail:
 	dlb_dev->ops->cdev_del(dlb_dev);
 cdev_add_fail:
+	dlb_dev->ops->unregister_driver(dlb_dev);
+driver_registration_fail:
 	dlb_dev->ops->unmap_pci_bar_space(dlb_dev, pdev);
 map_pci_bar_fail:
 	pci_disable_pcie_error_reporting(pdev);
@@ -921,6 +937,10 @@ static void dlb_remove(struct pci_dev *pdev)
 	/* Undo all the dlb_probe() operations */
 	dev_dbg(&pdev->dev, "Cleaning up the DLB driver for removal\n");
 	dlb_dev = pci_get_drvdata(pdev);
+
+	/* If this is an auxiliary VF, it skipped past most of the probe code */
+	if (dlb_dev->type == DLB_VF && dlb_dev->vf_id_state.is_auxiliary_vf)
+		goto aux_vf_remove;
 
 	/* Attempt to remove VFs before taking down the PF, since VFs cannot
 	 * operate without a PF driver (in part because hardware doesn't
@@ -971,6 +991,7 @@ static void dlb_remove(struct pci_dev *pdev)
 
 	dlb_dev->ops->cdev_del(dlb_dev);
 
+aux_vf_remove:
 	dlb_dev->ops->unmap_pci_bar_space(dlb_dev, pdev);
 
 	pci_disable_pcie_error_reporting(pdev);
@@ -1023,6 +1044,29 @@ static struct pci_device_id dlb_id_table[] = {
 };
 MODULE_DEVICE_TABLE(pci, dlb_id_table);
 
+static int dlb_vfs_in_use(struct dlb_dev *dev)
+{
+	int i;
+
+	/* For each VF with 1+ domains configured, query whether it is still in
+	 * use, where "in use" is determined by the VF calling dlb_in_use().
+	 */
+
+	for (i = 0; i < DLB_MAX_NUM_VFS; i++) {
+		struct dlb_get_num_resources_args used_rsrcs;
+
+		dlb_hw_get_num_used_resources(&dev->hw, &used_rsrcs, true, i);
+
+		if (!used_rsrcs.num_sched_domains)
+			continue;
+
+		if (dlb_vf_in_use(&dev->hw, i))
+			return true;
+	}
+
+	return false;
+}
+
 static int dlb_total_device_file_refcnt(struct dlb_dev *dev)
 {
 	int cnt = 0, i;
@@ -1039,7 +1083,8 @@ static int dlb_total_device_file_refcnt(struct dlb_dev *dev)
 
 bool dlb_in_use(struct dlb_dev *dev)
 {
-	return (dlb_total_device_file_refcnt(dev) != 0 ||
+	return ((dev->type == DLB_PF && dlb_vfs_in_use(dev)) ||
+		dlb_total_device_file_refcnt(dev) != 0 ||
 		(dev->active_users > 0) ||
 		!list_empty(&dev->vma_list));
 }
@@ -1319,6 +1364,21 @@ static void dlb_reset_prepare(struct pci_dev *pdev)
 	 */
 	dlb_dev->ops->inc_pm_refcnt(pdev, true);
 
+	/* Notify all registered VF drivers so they stop their applications
+	 * from attempting to use the VF while the PF FLR is in progress.
+	 */
+	if (dlb_dev->type == DLB_PF) {
+		enum dlb_mbox_vf_notification_type notif;
+		int i;
+
+		notif = DLB_MBOX_VF_NOTIFICATION_PRE_RESET;
+
+		for (i = 0; i < DLB_MAX_NUM_VFS; i++) {
+			if (dlb_is_registered_vf(dlb_dev, i))
+				dlb_notify_vf(&dlb_dev->hw, i, notif);
+		}
+	}
+
 	/* PF FLR resets the VF config space as well, so save it here. We need
 	 * to restore their config spaces after the FLR in order to send the
 	 * post-reset mailbox message (since a reset VF config space loses its
@@ -1398,6 +1458,35 @@ static void dlb_reset_done(struct pci_dev *pdev)
 	/* Reset the hardware state, but don't issue an additional FLR */
 	dlb_reset_hardware_state(dlb_dev, false);
 
+	/* VF FLR is a software procedure executed by the PF driver. Wait
+	 * until the PF indicates that the VF reset is done.
+	 */
+	if (dlb_dev->type == DLB_VF) {
+		int retry_cnt;
+
+		/* Timeout after DLB_VF_FLR_DONE_POLL_TIMEOUT_MS of inactivity,
+		 * sleep-polling every DLB_VF_FLR_DONE_SLEEP_PERIOD_MS.
+		 */
+		retry_cnt = DLB_VF_FLR_DONE_POLL_TIMEOUT_MS;
+		do {
+			unsigned long sleep_us;
+
+			if (dlb_vf_flr_complete(&dlb_dev->hw))
+				break;
+
+			sleep_us = DLB_VF_FLR_DONE_SLEEP_PERIOD_MS * 1000;
+
+			usleep_range(sleep_us, sleep_us + 1);
+		} while (--retry_cnt);
+
+		if (!retry_cnt)
+			dev_err(dlb_dev->dlb_device,
+				"VF driver timed out waiting for FLR response\n");
+
+		if (dlb_dev->revision < DLB_REV_B0)
+			dlb_vf_ack_vf_flr_done(&dlb_dev->hw);
+	}
+
 	if (dlb_dev->type == DLB_PF && dlb_dev->revision < DLB_REV_B0)
 		dlb_clr_aer_vf_hdr_log(pdev);
 
@@ -1406,6 +1495,19 @@ static void dlb_reset_done(struct pci_dev *pdev)
 	 */
 	if (dlb_dev->type == DLB_PF)
 		dlb_restore_pfs_vf_config_state(pdev);
+
+	/* Notify all registered VF drivers */
+	if (dlb_dev->type == DLB_PF) {
+		enum dlb_mbox_vf_notification_type notif;
+		int i;
+
+		notif = DLB_MBOX_VF_NOTIFICATION_POST_RESET;
+
+		for (i = 0; i < DLB_MAX_NUM_VFS; i++) {
+			if (dlb_is_registered_vf(dlb_dev, i))
+				dlb_notify_vf(&dlb_dev->hw, i, notif);
+		}
+	}
 
 	dev_dbg(dlb_dev->dlb_device, "DLB driver reset done\n");
 

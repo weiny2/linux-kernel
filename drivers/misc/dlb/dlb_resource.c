@@ -6148,6 +6148,124 @@ int dlb_hw_disable_dir_port(struct dlb_hw *hw,
 	return 0;
 }
 
+int dlb_notify_vf(struct dlb_hw *hw,
+		  unsigned int vf_id,
+		  enum dlb_mbox_vf_notification_type notification)
+{
+	struct dlb_mbox_vf_notification_cmd_req req;
+	int ret, retry_cnt;
+
+	req.hdr.type = DLB_MBOX_VF_CMD_NOTIFICATION;
+	req.notification = notification;
+
+	ret = dlb_pf_write_vf_mbox_req(hw, vf_id, &req, sizeof(req));
+	if (ret)
+		return ret;
+
+	dlb_send_async_pf_to_vf_msg(hw, vf_id);
+
+	/* Timeout after 1 second of inactivity */
+	retry_cnt = 1000;
+	do {
+		if (dlb_pf_to_vf_complete(hw, vf_id))
+			break;
+		msleep(1);
+	} while (--retry_cnt);
+
+	if (!retry_cnt) {
+		DLB_HW_ERR(hw,
+			   "PF driver timed out waiting for mbox response\n");
+		return -ETIMEDOUT;
+	}
+
+	/* No response data expected for notifications. */
+
+	return 0;
+}
+
+int dlb_vf_in_use(struct dlb_hw *hw, unsigned int vf_id)
+{
+	struct dlb_mbox_vf_in_use_cmd_resp resp;
+	struct dlb_mbox_vf_in_use_cmd_req req;
+	int ret, retry_cnt;
+
+	req.hdr.type = DLB_MBOX_VF_CMD_IN_USE;
+
+	ret = dlb_pf_write_vf_mbox_req(hw, vf_id, &req, sizeof(req));
+	if (ret)
+		return ret;
+
+	dlb_send_async_pf_to_vf_msg(hw, vf_id);
+
+	/* Timeout after 1 second of inactivity */
+	retry_cnt = 1000;
+	do {
+		if (dlb_pf_to_vf_complete(hw, vf_id))
+			break;
+		msleep(1);
+	} while (--retry_cnt);
+
+	if (!retry_cnt) {
+		DLB_HW_ERR(hw,
+			   "PF driver timed out waiting for mbox response\n");
+		return -ETIMEDOUT;
+	}
+
+	ret = dlb_pf_read_vf_mbox_resp(hw, vf_id, &resp, sizeof(resp));
+	if (ret)
+		return ret;
+
+	if (resp.hdr.status != DLB_MBOX_ST_SUCCESS) {
+		DLB_HW_ERR(hw,
+			   "[%s()]: failed with mailbox error: %s\n",
+			   __func__,
+			   DLB_MBOX_ST_STRING(&resp));
+
+		return -EINVAL;
+	}
+
+	return resp.in_use;
+}
+
+static int dlb_vf_domain_alert(struct dlb_hw *hw,
+			       unsigned int vf_id,
+			       u32 domain_id,
+			       u32 alert_id,
+			       u32 aux_alert_data)
+{
+	struct dlb_mbox_vf_alert_cmd_req req;
+	int ret, retry_cnt;
+
+	req.hdr.type = DLB_MBOX_VF_CMD_DOMAIN_ALERT;
+	req.domain_id = domain_id;
+	req.alert_id = alert_id;
+	req.aux_alert_data = aux_alert_data;
+
+	ret = dlb_pf_write_vf_mbox_req(hw, vf_id, &req, sizeof(req));
+	if (ret)
+		return ret;
+
+	dlb_send_async_pf_to_vf_msg(hw, vf_id);
+
+	/* Timeout after 1 second of inactivity */
+	retry_cnt = 1000;
+	do {
+		if (dlb_pf_to_vf_complete(hw, vf_id))
+			break;
+		msleep(1);
+	} while (--retry_cnt);
+
+	if (!retry_cnt) {
+		DLB_HW_ERR(hw,
+			   "PF driver timed out waiting for mbox response\n");
+		return -ETIMEDOUT;
+	}
+
+	/* No response data expected for alarm notifications. */
+
+	return 0;
+}
+
 void dlb_set_msix_mode(struct dlb_hw *hw, int mode)
 {
 	union dlb_sys_msix_mode r0 = { {0} };
@@ -6703,10 +6821,17 @@ static void dlb_process_ingress_error(struct dlb_hw *hw,
 
 	dev = container_of(hw, struct dlb_dev, hw);
 
-	ret = dlb_write_domain_alert(dev,
-				     domain->id.phys_id,
-				     alert_id,
-				     (is_ldb << 8) | port_id);
+	if (vf_error)
+		ret = dlb_vf_domain_alert(hw,
+					  vf_id,
+					  domain->id.virt_id,
+					  alert_id,
+					  (is_ldb << 8) | port_id);
+	else
+		ret = dlb_write_domain_alert(dev,
+					     domain->id.phys_id,
+					     alert_id,
+					     (is_ldb << 8) | port_id);
 
 	if (ret)
 		DLB_HW_ERR(hw,
@@ -6744,6 +6869,7 @@ void dlb_process_ingress_error_interrupt(struct dlb_hw *hw)
 	union dlb_sys_alarm_pf_synd1 r1;
 	union dlb_sys_alarm_pf_synd2 r2;
 	u32 alert_id;
+	int i;
 
 	r0.val = DLB_CSR_RD(hw, DLB_SYS_ALARM_PF_SYND0);
 
@@ -6760,6 +6886,27 @@ void dlb_process_ingress_error_interrupt(struct dlb_hw *hw)
 		dlb_clear_syndrome_register(hw, DLB_SYS_ALARM_PF_SYND0);
 
 		dlb_process_ingress_error(hw, r0, alert_id, false, 0);
+	}
+
+	for (i = 0; i < DLB_MAX_NUM_VFS; i++) {
+		r0.val = DLB_CSR_RD(hw, DLB_SYS_ALARM_VF_SYND0(i));
+
+		if (!r0.field.valid)
+			continue;
+
+		r1.val = DLB_CSR_RD(hw, DLB_SYS_ALARM_VF_SYND1(i));
+		r2.val = DLB_CSR_RD(hw, DLB_SYS_ALARM_VF_SYND2(i));
+
+		alert_id = dlb_alert_id(r0);
+
+		dlb_log_pf_vf_syndrome(hw,
+				       "VF Ingress error alarm",
+				       r0, r1, r2, alert_id);
+
+		dlb_clear_syndrome_register(hw,
+					    DLB_SYS_ALARM_VF_SYND0(i));
+
+		dlb_process_ingress_error(hw, r0, alert_id, true, i);
 	}
 
 	dlb_ack_msix_interrupt(hw, DLB_INT_INGRESS_ERROR);

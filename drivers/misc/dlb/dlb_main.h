@@ -34,6 +34,8 @@ static const char dlb_driver_name[] = KBUILD_MODNAME;
 				     DLB_MAX_NUM_DOMAINS)
 
 #define DLB_DEFAULT_RESET_TIMEOUT_S 5
+#define DLB_VF_FLR_DONE_POLL_TIMEOUT_MS 1000
+#define DLB_VF_FLR_DONE_SLEEP_PERIOD_MS 1
 
 extern struct list_head dlb_dev_list;
 extern struct mutex dlb_driver_lock;
@@ -81,6 +83,8 @@ struct dlb_device_ops {
 	void (*reinit_interrupts)(struct dlb_dev *dev);
 	void (*free_interrupts)(struct dlb_dev *dev, struct pci_dev *pdev);
 	void (*init_hardware)(struct dlb_dev *dev);
+	int (*register_driver)(struct dlb_dev *dev);
+	void (*unregister_driver)(struct dlb_dev *dev);
 	int (*create_sched_domain)(struct dlb_hw *hw,
 				   struct dlb_create_sched_domain_args *args,
 				   struct dlb_cmd_response *resp);
@@ -178,6 +182,8 @@ extern const struct attribute_group *dlb_vf_attrs[];
 extern struct dlb_device_ops dlb_pf_ops;
 extern struct dlb_device_ops dlb_vf_ops;
 
+void dlb_vf_ack_vf_flr_done(struct dlb_hw *hw);
+
 struct dlb_port_memory {
 	void *cq_base;
 	dma_addr_t cq_dma_base;
@@ -209,6 +215,12 @@ struct dlb_cq_intr {
 	struct mutex mutex;
 } __aligned(64);
 
+struct dlb_vf_cq_int_info {
+	char name[32];
+	u8 is_ldb;
+	s16 port_id;
+};
+
 struct dlb_intr {
 	int num_vectors;
 	int base_vector;
@@ -222,6 +234,12 @@ struct dlb_intr {
 	struct dlb_cq_intr dir_cq_intr[DLB_MAX_NUM_DIR_PORTS];
 	int num_ldb_ports;
 	int num_dir_ports;
+
+	/* The following state is VF only */
+	u8 num_cq_interrupts;
+	struct dlb_vf_cq_int_info msi_map[DLB_VF_TOTAL_NUM_INTERRUPT_VECTORS];
+	struct dlb_dev *ldb_cq_intr_owner[DLB_MAX_NUM_LDB_PORTS];
+	struct dlb_dev *dir_cq_intr_owner[DLB_MAX_NUM_DIR_PORTS];
 };
 
 struct vf_id_state {
@@ -352,11 +370,30 @@ int dlb_add_domain_device_file(struct dlb_dev *dlb_dev, u32 domain_id);
 	dev_dbg(dev->dlb_device, __VA_ARGS__);	    \
 } while (0)
 
+/* Return the number of registered VFs */
+static inline bool dlb_is_registered_vf(struct dlb_dev *dlb_dev, int vf_id)
+{
+	return dlb_dev->vf_registered[vf_id];
+}
+
+/* Return the number of registered VFs */
+static inline int dlb_num_vfs_registered(struct dlb_dev *dlb_dev)
+{
+	int i, cnt = 0;
+
+	for (i = 0; i < DLB_MAX_NUM_VFS; i++)
+		cnt += !!dlb_is_registered_vf(dlb_dev, i);
+
+	return cnt;
+}
+
 int dlb_write_domain_alert(struct dlb_dev *dev,
 			   u32 domain_id,
 			   u64 alert_id,
 			   u64 aux_alert_data);
 
 bool dlb_in_use(struct dlb_dev *dev);
+void dlb_stop_users(struct dlb_dev *dlb_dev);
+void dlb_zap_vma_entries(struct dlb_dev *dlb_dev);
 
 #endif /* __DLB_MAIN_H */
