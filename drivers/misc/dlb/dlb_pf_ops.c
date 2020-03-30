@@ -774,7 +774,7 @@ static int dlb_pf_measure_perf(struct dlb_dev *dev,
 	timeout = usecs_to_jiffies(args->measurement_duration_us);
 
 	wait_event_interruptible_timeout(dev->measurement_wq,
-					 false,
+					 READ_ONCE(dev->reset_active),
 					 timeout);
 
 	ktime_get_real_ts64(&end);
@@ -845,7 +845,7 @@ static int dlb_pf_measure_sched_count(struct dlb_dev *dev,
 	timeout = usecs_to_jiffies(args->measurement_duration_us);
 
 	wait_event_interruptible_timeout(dev->measurement_wq,
-					 false,
+					 READ_ONCE(dev->reset_active),
 					 timeout);
 	ktime_get_real_ts64(&end);
 

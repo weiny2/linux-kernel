@@ -33,6 +33,8 @@ static const char dlb_driver_name[] = KBUILD_MODNAME;
 #define IS_DLB_DEV_FILE(base, file) (DLB_FILE_ID_FROM_DEV_T(base, file) == \
 				     DLB_MAX_NUM_DOMAINS)
 
+#define DLB_DEFAULT_RESET_TIMEOUT_S 5
+
 enum dlb_device_type {
 	DLB_PF,
 	DLB_VF,
@@ -242,12 +244,18 @@ struct dlb_dev {
 	dev_t dev_number;
 	struct list_head list;
 	struct device *dlb_device;
+	struct dlb_status *status;
 	struct dlb_domain_dev sched_domains[DLB_MAX_NUM_DOMAINS];
 	struct dlb_port_memory ldb_port_mem[DLB_MAX_NUM_LDB_PORTS];
 	struct dlb_port_memory dir_port_mem[DLB_MAX_NUM_DIR_PORTS];
 	struct list_head vma_list;
+	/* Number of threads currently executing a file read, mmap, or ioctl.
+	 * Protected by the resource_mutex.
+	 */
+	unsigned long active_users;
 	struct dlb_intr intr;
 	u8 domain_reset_failed;
+	u8 reset_active;
 	/* The resource mutex serializes access to driver data structures and
 	 * hardware registers.
 	 */

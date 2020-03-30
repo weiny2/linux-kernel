@@ -20,7 +20,8 @@ int dlb_block_on_cq_interrupt(struct dlb_dev *dev,
 
 enum dlb_wake_reason {
 	WAKE_CQ_INTR,
-	WAKE_PORT_DISABLED
+	WAKE_PORT_DISABLED,
+	WAKE_DEV_RESET
 };
 
 void dlb_wake_thread(struct dlb_dev *dev,
