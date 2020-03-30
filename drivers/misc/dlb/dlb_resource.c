@@ -6021,6 +6021,237 @@ void dlb_ack_compressed_cq_intr(struct dlb_hw *hw,
 	dlb_ack_msix_interrupt(hw, DLB_PF_COMPRESSED_MODE_CQ_VECTOR_ID);
 }
 
+void dlb_enable_alarm_interrupts(struct dlb_hw *hw)
+{
+	union dlb_sys_ingress_alarm_enbl r0;
+
+	r0.val = DLB_CSR_RD(hw, DLB_SYS_INGRESS_ALARM_ENBL);
+
+	r0.field.illegal_hcw = 1;
+	r0.field.illegal_pp = 1;
+	r0.field.disabled_pp = 1;
+	r0.field.illegal_qid = 1;
+	r0.field.disabled_qid = 1;
+	r0.field.illegal_ldb_qid_cfg = 1;
+	r0.field.illegal_cqid = 1;
+
+	DLB_CSR_WR(hw, DLB_SYS_INGRESS_ALARM_ENBL, r0.val);
+}
+
+void dlb_disable_alarm_interrupts(struct dlb_hw *hw)
+{
+	union dlb_sys_ingress_alarm_enbl r0;
+
+	r0.val = DLB_CSR_RD(hw, DLB_SYS_INGRESS_ALARM_ENBL);
+
+	r0.field.illegal_hcw = 0;
+	r0.field.illegal_pp = 0;
+	r0.field.disabled_pp = 0;
+	r0.field.illegal_qid = 0;
+	r0.field.disabled_qid = 0;
+	r0.field.illegal_ldb_qid_cfg = 0;
+	r0.field.illegal_cqid = 0;
+
+	DLB_CSR_WR(hw, DLB_SYS_INGRESS_ALARM_ENBL, r0.val);
+}
+
+static void dlb_log_alarm_syndrome(struct dlb_hw *hw,
+				   const char *str,
+				   union dlb_sys_alarm_hw_synd r0)
+{
+	DLB_HW_ERR(hw, "%s:\n", str);
+	DLB_HW_ERR(hw, "\tsyndrome: 0x%x\n", r0.field.syndrome);
+	DLB_HW_ERR(hw, "\trtype:    0x%x\n", r0.field.rtype);
+	DLB_HW_ERR(hw, "\tfrom_dmv: 0x%x\n", r0.field.from_dmv);
+	DLB_HW_ERR(hw, "\tis_ldb:   0x%x\n", r0.field.is_ldb);
+	DLB_HW_ERR(hw, "\tcls:      0x%x\n", r0.field.cls);
+	DLB_HW_ERR(hw, "\taid:      0x%x\n", r0.field.aid);
+	DLB_HW_ERR(hw, "\tunit:     0x%x\n", r0.field.unit);
+	DLB_HW_ERR(hw, "\tsource:   0x%x\n", r0.field.source);
+	DLB_HW_ERR(hw, "\tmore:     0x%x\n", r0.field.more);
+	DLB_HW_ERR(hw, "\tvalid:    0x%x\n", r0.field.valid);
+}
+
+/* Note: this array's contents must match dlb_alert_id() */
+static const char dlb_alert_strings[NUM_DLB_DOMAIN_ALERTS][128] = {
+	[DLB_DOMAIN_ALERT_PP_OUT_OF_CREDITS] = "Insufficient credits",
+	[DLB_DOMAIN_ALERT_PP_ILLEGAL_ENQ] = "Illegal enqueue",
+	[DLB_DOMAIN_ALERT_PP_EXCESS_TOKEN_POPS] = "Excess token pops",
+	[DLB_DOMAIN_ALERT_ILLEGAL_HCW] = "Illegal HCW",
+	[DLB_DOMAIN_ALERT_ILLEGAL_QID] = "Illegal QID",
+	[DLB_DOMAIN_ALERT_DISABLED_QID] = "Disabled QID",
+};
+
+static void dlb_log_pf_vf_syndrome(struct dlb_hw *hw,
+				   const char *str,
+				   union dlb_sys_alarm_pf_synd0 r0,
+				   union dlb_sys_alarm_pf_synd1 r1,
+				   union dlb_sys_alarm_pf_synd2 r2,
+				   u32 alert_id)
+{
+	DLB_HW_ERR(hw, "%s:\n", str);
+	if (alert_id < NUM_DLB_DOMAIN_ALERTS)
+		DLB_HW_ERR(hw, "Alert: %s\n", dlb_alert_strings[alert_id]);
+	DLB_HW_ERR(hw, "\tsyndrome:     0x%x\n", r0.field.syndrome);
+	DLB_HW_ERR(hw, "\trtype:        0x%x\n", r0.field.rtype);
+	DLB_HW_ERR(hw, "\tfrom_dmv:     0x%x\n", r0.field.from_dmv);
+	DLB_HW_ERR(hw, "\tis_ldb:       0x%x\n", r0.field.is_ldb);
+	DLB_HW_ERR(hw, "\tcls:          0x%x\n", r0.field.cls);
+	DLB_HW_ERR(hw, "\taid:          0x%x\n", r0.field.aid);
+	DLB_HW_ERR(hw, "\tunit:         0x%x\n", r0.field.unit);
+	DLB_HW_ERR(hw, "\tsource:       0x%x\n", r0.field.source);
+	DLB_HW_ERR(hw, "\tmore:         0x%x\n", r0.field.more);
+	DLB_HW_ERR(hw, "\tvalid:        0x%x\n", r0.field.valid);
+	DLB_HW_ERR(hw, "\tdsi:          0x%x\n", r1.field.dsi);
+	DLB_HW_ERR(hw, "\tqid:          0x%x\n", r1.field.qid);
+	DLB_HW_ERR(hw, "\tqtype:        0x%x\n", r1.field.qtype);
+	DLB_HW_ERR(hw, "\tqpri:         0x%x\n", r1.field.qpri);
+	DLB_HW_ERR(hw, "\tmsg_type:     0x%x\n", r1.field.msg_type);
+	DLB_HW_ERR(hw, "\tlock_id:      0x%x\n", r2.field.lock_id);
+	DLB_HW_ERR(hw, "\tmeas:         0x%x\n", r2.field.meas);
+	DLB_HW_ERR(hw, "\tdebug:        0x%x\n", r2.field.debug);
+	DLB_HW_ERR(hw, "\tcq_pop:       0x%x\n", r2.field.cq_pop);
+	DLB_HW_ERR(hw, "\tqe_uhl:       0x%x\n", r2.field.qe_uhl);
+	DLB_HW_ERR(hw, "\tqe_orsp:      0x%x\n", r2.field.qe_orsp);
+	DLB_HW_ERR(hw, "\tqe_valid:     0x%x\n", r2.field.qe_valid);
+	DLB_HW_ERR(hw, "\tcq_int_rearm: 0x%x\n", r2.field.cq_int_rearm);
+	DLB_HW_ERR(hw, "\tdsi_error:    0x%x\n", r2.field.dsi_error);
+}
+
+static void dlb_clear_syndrome_register(struct dlb_hw *hw, u32 offset)
+{
+	union dlb_sys_alarm_hw_synd r0 = { {0} };
+
+	r0.field.valid = 1;
+	r0.field.more = 1;
+
+	DLB_CSR_WR(hw, offset, r0.val);
+}
+
+void dlb_process_alarm_interrupt(struct dlb_hw *hw)
+{
+	union dlb_sys_alarm_hw_synd r0;
+
+	r0.val = DLB_CSR_RD(hw, DLB_SYS_ALARM_HW_SYND);
+
+	dlb_log_alarm_syndrome(hw, "HW alarm syndrome", r0);
+
+	dlb_clear_syndrome_register(hw, DLB_SYS_ALARM_HW_SYND);
+
+	dlb_ack_msix_interrupt(hw, DLB_INT_ALARM);
+}
+
+static void dlb_process_ingress_error(struct dlb_hw *hw,
+				      union dlb_sys_alarm_pf_synd0 r0,
+				      u32 alert_id,
+				      bool vf_error,
+				      unsigned int vf_id)
+{
+	struct dlb_domain *domain;
+	struct dlb_dev *dev;
+	bool is_ldb;
+	u8 port_id;
+	int ret;
+
+	port_id = r0.field.syndrome & 0x7F;
+	if (r0.field.source == DLB_ALARM_HW_SOURCE_SYS)
+		is_ldb = r0.field.is_ldb;
+	else
+		is_ldb = (r0.field.syndrome & 0x80) != 0;
+
+	/* Get the domain ID and, if it's a VF domain, the virtual port ID */
+	if (is_ldb) {
+		struct dlb_ldb_port *port;
+
+		port = dlb_get_ldb_port_from_id(hw, port_id, vf_error, vf_id);
+
+		if (!port) {
+			DLB_HW_ERR(hw,
+				   "[%s()]: Internal error: unable to find LDB port\n\tport: %u, vf_error: %u, vf_id: %u\n",
+				   __func__, port_id, vf_error, vf_id);
+			return;
+		}
+
+		domain = &hw->domains[port->domain_id.phys_id];
+	} else {
+		struct dlb_dir_pq_pair *port;
+
+		port = dlb_get_dir_pq_from_id(hw, port_id, vf_error, vf_id);
+
+		if (!port) {
+			DLB_HW_ERR(hw,
+				   "[%s()]: Internal error: unable to find DIR port\n\tport: %u, vf_error: %u, vf_id: %u\n",
+				   __func__, port_id, vf_error, vf_id);
+			return;
+		}
+
+		domain = &hw->domains[port->domain_id.phys_id];
+	}
+
+	dev = container_of(hw, struct dlb_dev, hw);
+
+	ret = dlb_write_domain_alert(dev,
+				     domain->id.phys_id,
+				     alert_id,
+				     (is_ldb << 8) | port_id);
+
+	if (ret)
+		DLB_HW_ERR(hw,
+			   "[%s()] Internal error: failed to notify\n",
+			   __func__);
+}
+
+static u32 dlb_alert_id(union dlb_sys_alarm_pf_synd0 r0)
+{
+	if (r0.field.unit == DLB_ALARM_HW_UNIT_CHP &&
+	    r0.field.aid == DLB_ALARM_HW_CHP_AID_OUT_OF_CREDITS)
+		return DLB_DOMAIN_ALERT_PP_OUT_OF_CREDITS;
+	else if (r0.field.unit == DLB_ALARM_HW_UNIT_CHP &&
+		 r0.field.aid == DLB_ALARM_HW_CHP_AID_ILLEGAL_ENQ)
+		return DLB_DOMAIN_ALERT_PP_ILLEGAL_ENQ;
+	else if (r0.field.unit == DLB_ALARM_HW_UNIT_LSP &&
+		 r0.field.aid == DLB_ALARM_HW_LSP_AID_EXCESS_TOKEN_POPS)
+		return DLB_DOMAIN_ALERT_PP_EXCESS_TOKEN_POPS;
+	else if (r0.field.source == DLB_ALARM_HW_SOURCE_SYS &&
+		 r0.field.aid == DLB_ALARM_SYS_AID_ILLEGAL_HCW)
+		return DLB_DOMAIN_ALERT_ILLEGAL_HCW;
+	else if (r0.field.source == DLB_ALARM_HW_SOURCE_SYS &&
+		 r0.field.aid == DLB_ALARM_SYS_AID_ILLEGAL_QID)
+		return DLB_DOMAIN_ALERT_ILLEGAL_QID;
+	else if (r0.field.source == DLB_ALARM_HW_SOURCE_SYS &&
+		 r0.field.aid == DLB_ALARM_SYS_AID_DISABLED_QID)
+		return DLB_DOMAIN_ALERT_DISABLED_QID;
+	else
+		return NUM_DLB_DOMAIN_ALERTS;
+}
+
+void dlb_process_ingress_error_interrupt(struct dlb_hw *hw)
+{
+	union dlb_sys_alarm_pf_synd0 r0;
+	union dlb_sys_alarm_pf_synd1 r1;
+	union dlb_sys_alarm_pf_synd2 r2;
+	u32 alert_id;
+
+	r0.val = DLB_CSR_RD(hw, DLB_SYS_ALARM_PF_SYND0);
+
+	if (r0.field.valid) {
+		r1.val = DLB_CSR_RD(hw, DLB_SYS_ALARM_PF_SYND1);
+		r2.val = DLB_CSR_RD(hw, DLB_SYS_ALARM_PF_SYND2);
+
+		alert_id = dlb_alert_id(r0);
+
+		dlb_log_pf_vf_syndrome(hw,
+				       "PF Ingress error alarm",
+				       r0, r1, r2, alert_id);
+
+		dlb_clear_syndrome_register(hw, DLB_SYS_ALARM_PF_SYND0);
+
+		dlb_process_ingress_error(hw, r0, alert_id, false, 0);
+	}
+
+	dlb_ack_msix_interrupt(hw, DLB_INT_INGRESS_ERROR);
+}
+
 int dlb_get_group_sequence_numbers(struct dlb_hw *hw, unsigned int group_id)
 {
 	if (group_id >= DLB_MAX_NUM_SEQUENCE_NUMBER_GROUPS)
@@ -6098,6 +6329,28 @@ void dlb_disable_dp_vasr_feature(struct dlb_hw *hw)
 	r0.field.cfg_vasr_dis = 1;
 
 	DLB_CSR_WR(hw, DLB_DP_DIR_CSR_CTRL, r0.val);
+}
+
+void dlb_enable_excess_tokens_alarm(struct dlb_hw *hw)
+{
+	union dlb_chp_cfg_chp_csr_ctrl r0;
+
+	r0.val = DLB_CSR_RD(hw, DLB_CHP_CFG_CHP_CSR_CTRL);
+
+	r0.val |= 1 << DLB_CHP_CFG_EXCESS_TOKENS_SHIFT;
+
+	DLB_CSR_WR(hw, DLB_CHP_CFG_CHP_CSR_CTRL, r0.val);
+}
+
+void dlb_disable_excess_tokens_alarm(struct dlb_hw *hw)
+{
+	union dlb_chp_cfg_chp_csr_ctrl r0;
+
+	r0.val = DLB_CSR_RD(hw, DLB_CHP_CFG_CHP_CSR_CTRL);
+
+	r0.val &= ~(1 << DLB_CHP_CFG_EXCESS_TOKENS_SHIFT);
+
+	DLB_CSR_WR(hw, DLB_CHP_CFG_CHP_CSR_CTRL, r0.val);
 }
 
 static int dlb_reset_hw_resource(struct dlb_hw *hw, int type, int id)
@@ -8379,4 +8632,36 @@ void dlb_hw_enable_sparse_dir_cq_mode(struct dlb_hw *hw)
 
 	DLB_CSR_WR(hw, DLB_SYS_CQ_MODE, r0.val);
 
+}
+
+void dlb_hw_enable_pp_sw_alarms(struct dlb_hw *hw)
+{
+	union dlb_chp_cfg_ldb_pp_sw_alarm_en r0 = { {0} };
+	union dlb_chp_cfg_dir_pp_sw_alarm_en r1 = { {0} };
+	int i;
+
+	r0.field.alarm_enable = 1;
+	r1.field.alarm_enable = 1;
+
+	for (i = 0; i < DLB_MAX_NUM_LDB_PORTS; i++)
+		DLB_CSR_WR(hw, DLB_CHP_CFG_LDB_PP_SW_ALARM_EN(i), r0.val);
+
+	for (i = 0; i < DLB_MAX_NUM_DIR_PORTS; i++)
+		DLB_CSR_WR(hw, DLB_CHP_CFG_DIR_PP_SW_ALARM_EN(i), r1.val);
+}
+
+void dlb_hw_disable_pp_sw_alarms(struct dlb_hw *hw)
+{
+	union dlb_chp_cfg_ldb_pp_sw_alarm_en r0 = { {0} };
+	union dlb_chp_cfg_dir_pp_sw_alarm_en r1 = { {0} };
+	int i;
+
+	r0.field.alarm_enable = 0;
+	r1.field.alarm_enable = 0;
+
+	for (i = 0; i < DLB_MAX_NUM_LDB_PORTS; i++)
+		DLB_CSR_WR(hw, DLB_CHP_CFG_LDB_PP_SW_ALARM_EN(i), r0.val);
+
+	for (i = 0; i < DLB_MAX_NUM_DIR_PORTS; i++)
+		DLB_CSR_WR(hw, DLB_CHP_CFG_DIR_PP_SW_ALARM_EN(i), r1.val);
 }

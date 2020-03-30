@@ -236,6 +236,20 @@ struct dlb_vma_node {
 	struct vm_area_struct *vma;
 };
 
+/* ISR overload is defined as more than DLB_ISR_OVERLOAD_THRESH interrupts (of
+ * a particular type) occurring in a 1s period. If overload is detected, the
+ * driver blocks that interrupt (exact mechanism depending on the interrupt)
+ * from overloading the PF driver.
+ */
+#define DLB_ISR_OVERLOAD_THRESH 1000
+#define DLB_ISR_OVERLOAD_PERIOD_S 1
+
+struct dlb_alarm {
+	u32 count;
+	ktime_t ts;
+	unsigned int enabled;
+};
+
 struct dlb_dev {
 	int id;
 	struct pci_dev *pdev;
@@ -277,6 +291,7 @@ struct dlb_dev {
 	struct workqueue_struct *wq;
 	struct work_struct work;
 	u8 worker_launched;
+	struct dlb_alarm ingress_err;
 };
 
 int dlb_add_domain_device_file(struct dlb_dev *dlb_dev, u32 domain_id);
@@ -292,5 +307,10 @@ int dlb_add_domain_device_file(struct dlb_dev *dlb_dev, u32 domain_id);
 	dev = container_of(hw, struct dlb_dev, hw); \
 	dev_dbg(dev->dlb_device, __VA_ARGS__);	    \
 } while (0)
+
+int dlb_write_domain_alert(struct dlb_dev *dev,
+			   u32 domain_id,
+			   u64 alert_id,
+			   u64 aux_alert_data);
 
 #endif /* __DLB_MAIN_H */

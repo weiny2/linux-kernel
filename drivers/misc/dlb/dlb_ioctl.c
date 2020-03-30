@@ -548,9 +548,6 @@ static int dlb_domain_ioctl_enqueue_domain_alert(struct dlb_dev *dev,
 						 u32 domain_id)
 {
 	struct dlb_enqueue_domain_alert_args arg;
-	struct dlb_domain_dev *domain;
-	struct dlb_domain_alert alert;
-	int idx;
 
 	dev_dbg(dev->dlb_device, "Entering %s()\n", __func__);
 
@@ -560,35 +557,10 @@ static int dlb_domain_ioctl_enqueue_domain_alert(struct dlb_dev *dev,
 		return -EFAULT;
 	}
 
-	domain = &dev->sched_domains[domain_id];
-
-	/* Grab the alert mutex to access the read and write indexes */
-	if (mutex_lock_interruptible(&domain->alert_mutex))
-		return -ERESTARTSYS;
-
-	/* If there's no space for this notification, return */
-	if ((domain->alert_wr_idx - domain->alert_rd_idx) ==
-	    (DLB_DOMAIN_ALERT_RING_SIZE - 1)) {
-		mutex_unlock(&domain->alert_mutex);
-		return 0;
-	}
-
-	alert.alert_id = DLB_DOMAIN_ALERT_USER;
-	alert.aux_alert_data = arg.aux_alert_data;
-
-	idx = domain->alert_wr_idx % DLB_DOMAIN_ALERT_RING_SIZE;
-
-	domain->alerts[idx] = alert;
-
-	domain->alert_wr_idx++;
-
-	mutex_unlock(&domain->alert_mutex);
-
-	wake_up_interruptible(&domain->wq_head);
-
-	dev_dbg(dev->dlb_device, "Exiting %s()\n", __func__);
-
-	return 0;
+	return dlb_write_domain_alert(dev,
+				      domain_id,
+				      DLB_DOMAIN_ALERT_USER,
+				      arg.aux_alert_data);
 }
 
 static dlb_domain_ioctl_callback_fn_t

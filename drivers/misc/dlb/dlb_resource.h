@@ -547,6 +547,24 @@ int dlb_configure_dir_cq_interrupt(struct dlb_hw *hw,
 				   u16 threshold);
 
 /**
+ * dlb_enable_alarm_interrupts() - enable certain hardware alarm interrupts
+ * @hw: dlb_hw handle for a particular device.
+ *
+ * This function configures the ingress error alarm. (Other alarms are enabled
+ * by default.)
+ */
+void dlb_enable_alarm_interrupts(struct dlb_hw *hw);
+
+/**
+ * dlb_disable_alarm_interrupts() - disable certain hardware alarm interrupts
+ * @hw: dlb_hw handle for a particular device.
+ *
+ * This function configures the ingress error alarm. (Other alarms are disabled
+ * by default.)
+ */
+void dlb_disable_alarm_interrupts(struct dlb_hw *hw);
+
+/**
  * dlb_set_msix_mode() - enable certain hardware alarm interrupts
  * @hw: dlb_hw handle for a particular device.
  * @mode: MSI-X mode (DLB_MSIX_MODE_PACKED or DLB_MSIX_MODE_COMPRESSED)
@@ -607,6 +625,26 @@ void dlb_read_compressed_cq_intr_status(struct dlb_hw *hw,
 void dlb_ack_compressed_cq_intr(struct dlb_hw *hw,
 				u32 *ldb_interrupts,
 				u32 *dir_interrupts);
+
+/**
+ * dlb_process_alarm_interrupt() - process an alarm interrupt
+ * @hw: dlb_hw handle for a particular device.
+ *
+ * This function reads the alarm syndrome, logs its, and acks the interrupt.
+ * This function should be called from the alarm interrupt handler when
+ * interrupt vector DLB_INT_ALARM fires.
+ */
+void dlb_process_alarm_interrupt(struct dlb_hw *hw);
+
+/**
+ * dlb_process_ingress_error_interrupt() - process ingress error interrupts
+ * @hw: dlb_hw handle for a particular device.
+ *
+ * This function reads the alarm syndrome, logs it, notifies user-space, and
+ * acks the interrupt. This function should be called from the alarm interrupt
+ * handler when interrupt vector DLB_INT_INGRESS_ERROR fires.
+ */
+void dlb_process_ingress_error_interrupt(struct dlb_hw *hw);
 
 /**
  * dlb_get_group_sequence_numbers() - return a group's number of SNs per queue
@@ -796,6 +834,26 @@ void dlb_read_sched_counts(struct dlb_hw *hw,
 void dlb_disable_dp_vasr_feature(struct dlb_hw *hw);
 
 /**
+ * dlb_enable_excess_tokens_alarm() - enable interrupts for the excess token
+ * pop alarm
+ * @hw: dlb_hw handle for a particular device.
+ *
+ * This function enables the PF ingress error alarm interrupt to fire when an
+ * excess token pop occurs.
+ */
+void dlb_enable_excess_tokens_alarm(struct dlb_hw *hw);
+
+/**
+ * dlb_disable_excess_tokens_alarm() - disable interrupts for the excess token
+ * pop alarm
+ * @hw: dlb_hw handle for a particular device.
+ *
+ * This function disables the PF ingress error alarm interrupt to fire when an
+ * excess token pop occurs.
+ */
+void dlb_disable_excess_tokens_alarm(struct dlb_hw *hw);
+
+/**
  * dlb_hw_get_ldb_queue_depth() - returns the depth of a load-balanced queue
  * @hw: dlb_hw handle for a particular device.
  * @domain_id: domain ID.
@@ -885,5 +943,19 @@ void dlb_hw_enable_sparse_ldb_cq_mode(struct dlb_hw *hw);
  * This function must be called prior to configuring scheduling domains.
  */
 void dlb_hw_enable_sparse_dir_cq_mode(struct dlb_hw *hw);
+
+/**
+ * dlb_hw_enable_pp_sw_alarms() - enable out-of-credit alarm for all producer
+ * ports
+ * @hw: dlb_hw handle for a particular device.
+ */
+void dlb_hw_enable_pp_sw_alarms(struct dlb_hw *hw);
+
+/**
+ * dlb_hw_disable_pp_sw_alarms() - disable out-of-credit alarm for all producer
+ * ports
+ * @hw: dlb_hw handle for a particular device.
+ */
+void dlb_hw_disable_pp_sw_alarms(struct dlb_hw *hw);
 
 #endif /* __DLB_RESOURCE_H */
