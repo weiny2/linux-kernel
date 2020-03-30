@@ -5,6 +5,7 @@
 
 #include "dlb_intr.h"
 #include "dlb_main.h"
+#include "dlb_mbox.h"
 #include "dlb_regs.h"
 #include "dlb_resource.h"
 
@@ -248,9 +249,1186 @@ static int dlb_pf_mmap(struct file *f,
 				  pgprot);
 }
 
+/*******************************/
+/****** Mailbox callbacks ******/
+/*******************************/
+
+/* Return -1 if no interfaces in the range are supported, else return the
+ * newest version.
+ */
+static int dlb_mbox_version_supported(u16 min, u16 max)
+{
+	/* Only version 1 exists at this time */
+	if (min > DLB_MBOX_INTERFACE_VERSION)
+		return -1;
+
+	return DLB_MBOX_INTERFACE_VERSION;
+}
+
+static void dlb_mbox_cmd_register_fn(struct dlb_dev *dev,
+				     int vf_id,
+				     void *data)
+{
+	struct dlb_mbox_register_cmd_resp resp = { {0} };
+	struct dlb_mbox_register_cmd_req *req = data;
+	int ret;
+
+	/* Given an interface version range ('min' to 'max', inclusive)
+	 * requested by the VF driver:
+	 * - If PF supports any versions in that range, it returns the newest
+	 *   supported version.
+	 * - Else PF responds with MBOX_ST_VERSION_MISMATCH
+	 */
+	ret = dlb_mbox_version_supported(req->min_interface_version,
+					 req->max_interface_version);
+
+	if (ret == -1) {
+		resp.hdr.status = DLB_MBOX_ST_VERSION_MISMATCH;
+		resp.interface_version = DLB_MBOX_INTERFACE_VERSION;
+
+		goto done;
+	}
+
+	resp.interface_version = ret;
+
+	dlb_lock_vf(&dev->hw, vf_id);
+
+	/* The VF can re-register without sending an unregister mailbox
+	 * command (for example if the guest OS crashes). To protect against
+	 * this, reset any in-use resources assigned to the driver now.
+	 */
+	if (dlb_reset_vf(&dev->hw, vf_id))
+		dev_err(dev->dlb_device, "[%s()] Internal error\n", __func__);
+
+	dev->vf_registered[vf_id] = true;
+
+	resp.pf_id = dev->id;
+	resp.vf_id = vf_id;
+	resp.is_auxiliary_vf = dev->child_id_state[vf_id].is_auxiliary_vf;
+	resp.primary_vf_id = dev->child_id_state[vf_id].primary_vf_id;
+	resp.hdr.status = DLB_MBOX_ST_SUCCESS;
+
+done:
+	BUILD_BUG_ON(sizeof(resp) > DLB_PF2VF_RESP_BYTES);
+
+	dlb_pf_write_vf_mbox_resp(&dev->hw, vf_id, &resp, sizeof(resp));
+}
+
+static void dlb_mbox_cmd_unregister_fn(struct dlb_dev *dev,
+				       int vf_id,
+				       void *data)
+{
+	struct dlb_mbox_unregister_cmd_resp resp = { {0} };
+
+	dev->vf_registered[vf_id] = false;
+
+	if (dlb_reset_vf(&dev->hw, vf_id))
+		dev_err(dev->dlb_device, "[%s()] Internal error\n", __func__);
+
+	dlb_unlock_vf(&dev->hw, vf_id);
+
+	resp.hdr.status = DLB_MBOX_ST_SUCCESS;
+
+	BUILD_BUG_ON(sizeof(resp) > DLB_PF2VF_RESP_BYTES);
+
+	dlb_pf_write_vf_mbox_resp(&dev->hw, vf_id, &resp, sizeof(resp));
+}
+
+static void dlb_mbox_cmd_get_num_resources_fn(struct dlb_dev *dev,
+					      int vf_id,
+					      void *data)
+{
+	struct dlb_mbox_get_num_resources_cmd_resp resp = { {0} };
+	struct dlb_get_num_resources_args arg;
+	int ret;
+
+	ret = dlb_hw_get_num_resources(&dev->hw, &arg, true, vf_id);
+
+	resp.num_sched_domains = arg.num_sched_domains;
+	resp.num_ldb_queues = arg.num_ldb_queues;
+	resp.num_ldb_ports = arg.num_ldb_ports;
+	resp.num_dir_ports = arg.num_dir_ports;
+	resp.num_atomic_inflights = arg.num_atomic_inflights;
+	resp.max_contiguous_atomic_inflights =
+		arg.max_contiguous_atomic_inflights;
+	resp.num_hist_list_entries = arg.num_hist_list_entries;
+	resp.max_contiguous_hist_list_entries =
+		arg.max_contiguous_hist_list_entries;
+	resp.num_ldb_credits = arg.num_ldb_credits;
+	resp.max_contiguous_ldb_credits = arg.max_contiguous_ldb_credits;
+	resp.num_dir_credits = arg.num_dir_credits;
+	resp.max_contiguous_dir_credits = arg.max_contiguous_dir_credits;
+	resp.num_ldb_credit_pools = arg.num_ldb_credit_pools;
+	resp.num_dir_credit_pools = arg.num_dir_credit_pools;
+
+	resp.hdr.status = DLB_MBOX_ST_SUCCESS;
+	resp.error_code = ret;
+
+	BUILD_BUG_ON(sizeof(resp) > DLB_PF2VF_RESP_BYTES);
+
+	dlb_pf_write_vf_mbox_resp(&dev->hw, vf_id, &resp, sizeof(resp));
+}
+
+static void dlb_mbox_cmd_create_sched_domain_fn(struct dlb_dev *dev,
+						int vf_id,
+						void *data)
+{
+	struct dlb_mbox_create_sched_domain_cmd_resp resp = { {0} };
+	struct dlb_mbox_create_sched_domain_cmd_req *req = data;
+	struct dlb_create_sched_domain_args hw_arg;
+	struct dlb_cmd_response hw_response = {0};
+	int ret;
+
+	hw_arg.response = (uintptr_t)&hw_response;
+	hw_arg.num_ldb_queues = req->num_ldb_queues;
+	hw_arg.num_ldb_ports = req->num_ldb_ports;
+	hw_arg.num_dir_ports = req->num_dir_ports;
+	hw_arg.num_hist_list_entries = req->num_hist_list_entries;
+	hw_arg.num_atomic_inflights = req->num_atomic_inflights;
+	hw_arg.num_ldb_credits = req->num_ldb_credits;
+	hw_arg.num_dir_credits = req->num_dir_credits;
+	hw_arg.num_ldb_credit_pools = req->num_ldb_credit_pools;
+	hw_arg.num_dir_credit_pools = req->num_dir_credit_pools;
+
+	ret = dlb_hw_create_sched_domain(&dev->hw,
+					 &hw_arg,
+					 &hw_response,
+					 true,
+					 vf_id);
+
+	resp.hdr.status = DLB_MBOX_ST_SUCCESS;
+	resp.error_code = ret;
+	resp.status = hw_response.status;
+	resp.id = hw_response.id;
+
+	BUILD_BUG_ON(sizeof(resp) > DLB_PF2VF_RESP_BYTES);
+
+	dlb_pf_write_vf_mbox_resp(&dev->hw, vf_id, &resp, sizeof(resp));
+}
+
+static void dlb_mbox_cmd_reset_sched_domain_fn(struct dlb_dev *dev,
+					       int vf_id,
+					       void *data)
+{
+	struct dlb_mbox_reset_sched_domain_cmd_resp resp = { {0} };
+	struct dlb_mbox_reset_sched_domain_cmd_req *req = data;
+	int ret;
+
+	ret = dlb_reset_domain(&dev->hw, req->id, true, vf_id);
+
+	resp.hdr.status = DLB_MBOX_ST_SUCCESS;
+	resp.error_code = ret;
+
+	BUILD_BUG_ON(sizeof(resp) > DLB_PF2VF_RESP_BYTES);
+
+	dlb_pf_write_vf_mbox_resp(&dev->hw, vf_id, &resp, sizeof(resp));
+}
+
+static void dlb_mbox_cmd_create_ldb_pool_fn(struct dlb_dev *dev,
+					    int vf_id,
+					    void *data)
+{
+	struct dlb_mbox_create_credit_pool_cmd_resp resp = { {0} };
+	struct dlb_mbox_create_credit_pool_cmd_req *req = data;
+	struct dlb_cmd_response hw_response = {0};
+	struct dlb_create_ldb_pool_args hw_arg;
+	int ret;
+
+	hw_arg.response = (uintptr_t)&hw_response;
+	hw_arg.num_ldb_credits = req->num_credits;
+
+	ret = dlb_hw_create_ldb_pool(&dev->hw,
+				     req->domain_id,
+				     &hw_arg,
+				     &hw_response,
+				     true,
+				     vf_id);
+
+	resp.hdr.status = DLB_MBOX_ST_SUCCESS;
+	resp.error_code = ret;
+	resp.status = hw_response.status;
+	resp.id = hw_response.id;
+
+	BUILD_BUG_ON(sizeof(resp) > DLB_PF2VF_RESP_BYTES);
+
+	dlb_pf_write_vf_mbox_resp(&dev->hw, vf_id, &resp, sizeof(resp));
+}
+
+static void dlb_mbox_cmd_create_dir_pool_fn(struct dlb_dev *dev,
+					    int vf_id,
+					    void *data)
+{
+	struct dlb_mbox_create_credit_pool_cmd_resp resp = { {0} };
+	struct dlb_mbox_create_credit_pool_cmd_req *req = data;
+	struct dlb_cmd_response hw_response = {0};
+	struct dlb_create_dir_pool_args hw_arg;
+	int ret;
+
+	hw_arg.response = (uintptr_t)&hw_response;
+	hw_arg.num_dir_credits = req->num_credits;
+
+	ret = dlb_hw_create_dir_pool(&dev->hw,
+				     req->domain_id,
+				     &hw_arg,
+				     &hw_response,
+				     true,
+				     vf_id);
+
+	resp.hdr.status = DLB_MBOX_ST_SUCCESS;
+	resp.error_code = ret;
+	resp.status = hw_response.status;
+	resp.id = hw_response.id;
+
+	BUILD_BUG_ON(sizeof(resp) > DLB_PF2VF_RESP_BYTES);
+
+	dlb_pf_write_vf_mbox_resp(&dev->hw, vf_id, &resp, sizeof(resp));
+}
+
+static void dlb_mbox_cmd_create_ldb_queue_fn(struct dlb_dev *dev,
+					     int vf_id,
+					     void *data)
+{
+	struct dlb_mbox_create_ldb_queue_cmd_resp resp = { {0} };
+	struct dlb_mbox_create_ldb_queue_cmd_req *req = data;
+	struct dlb_cmd_response hw_response = {0};
+	struct dlb_create_ldb_queue_args hw_arg;
+	int ret;
+
+	hw_arg.response = (uintptr_t)&hw_response;
+	hw_arg.num_sequence_numbers = req->num_sequence_numbers;
+	hw_arg.num_qid_inflights = req->num_qid_inflights;
+	hw_arg.num_atomic_inflights = req->num_atomic_inflights;
+
+	ret = dlb_hw_create_ldb_queue(&dev->hw,
+				      req->domain_id,
+				      &hw_arg,
+				      &hw_response,
+				      true,
+				      vf_id);
+
+	resp.hdr.status = DLB_MBOX_ST_SUCCESS;
+	resp.error_code = ret;
+	resp.status = hw_response.status;
+	resp.id = hw_response.id;
+
+	BUILD_BUG_ON(sizeof(resp) > DLB_PF2VF_RESP_BYTES);
+
+	dlb_pf_write_vf_mbox_resp(&dev->hw, vf_id, &resp, sizeof(resp));
+}
+
+static void dlb_mbox_cmd_create_dir_queue_fn(struct dlb_dev *dev,
+					     int vf_id,
+					     void *data)
+{
+	struct dlb_mbox_create_dir_queue_cmd_resp resp = { {0} };
+	struct dlb_mbox_create_dir_queue_cmd_req *req;
+	struct dlb_cmd_response hw_response = {0};
+	struct dlb_create_dir_queue_args hw_arg;
+	int ret;
+
+	req = (struct dlb_mbox_create_dir_queue_cmd_req *)data;
+
+	hw_arg.response = (uintptr_t)&hw_response;
+	hw_arg.port_id = req->port_id;
+
+	ret = dlb_hw_create_dir_queue(&dev->hw,
+				      req->domain_id,
+				      &hw_arg,
+				      &hw_response,
+				      true,
+				      vf_id);
+
+	resp.hdr.status = DLB_MBOX_ST_SUCCESS;
+	resp.error_code = ret;
+	resp.status = hw_response.status;
+	resp.id = hw_response.id;
+
+	BUILD_BUG_ON(sizeof(resp) > DLB_PF2VF_RESP_BYTES);
+
+	dlb_pf_write_vf_mbox_resp(&dev->hw, vf_id, &resp, sizeof(resp));
+}
+
+static void dlb_mbox_cmd_create_ldb_port_fn(struct dlb_dev *dev,
+					    int vf_id,
+					    void *data)
+{
+	struct dlb_mbox_create_ldb_port_cmd_resp resp = { {0} };
+	struct dlb_mbox_create_ldb_port_cmd_req *req = data;
+	struct dlb_cmd_response hw_response = {0};
+	struct dlb_create_ldb_port_args hw_arg;
+	int ret;
+
+	hw_arg.response = (uintptr_t)&hw_response;
+	hw_arg.ldb_credit_pool_id = req->ldb_credit_pool_id;
+	hw_arg.dir_credit_pool_id = req->dir_credit_pool_id;
+	hw_arg.ldb_credit_high_watermark = req->ldb_credit_high_watermark;
+	hw_arg.ldb_credit_low_watermark = req->ldb_credit_low_watermark;
+	hw_arg.ldb_credit_quantum = req->ldb_credit_quantum;
+	hw_arg.dir_credit_high_watermark = req->dir_credit_high_watermark;
+	hw_arg.dir_credit_low_watermark = req->dir_credit_low_watermark;
+	hw_arg.dir_credit_quantum = req->dir_credit_quantum;
+	hw_arg.cq_depth = req->cq_depth;
+	hw_arg.cq_history_list_size = req->cq_history_list_size;
+
+	ret = dlb_hw_create_ldb_port(&dev->hw,
+				     req->domain_id,
+				     &hw_arg,
+				     req->pop_count_address,
+				     req->cq_base_address,
+				     &hw_response,
+				     true,
+				     vf_id);
+
+	resp.hdr.status = DLB_MBOX_ST_SUCCESS;
+	resp.error_code = ret;
+	resp.status = hw_response.status;
+	resp.id = hw_response.id;
+
+	BUILD_BUG_ON(sizeof(resp) > DLB_PF2VF_RESP_BYTES);
+
+	dlb_pf_write_vf_mbox_resp(&dev->hw, vf_id, &resp, sizeof(resp));
+}
+
+static void dlb_mbox_cmd_create_dir_port_fn(struct dlb_dev *dev,
+					    int vf_id,
+					    void *data)
+{
+	struct dlb_mbox_create_dir_port_cmd_resp resp = { {0} };
+	struct dlb_mbox_create_dir_port_cmd_req *req;
+	struct dlb_cmd_response hw_response = {0};
+	struct dlb_create_dir_port_args hw_arg;
+	int ret;
+
+	req = (struct dlb_mbox_create_dir_port_cmd_req *)data;
+
+	hw_arg.response = (uintptr_t)&hw_response;
+	hw_arg.ldb_credit_pool_id = req->ldb_credit_pool_id;
+	hw_arg.dir_credit_pool_id = req->dir_credit_pool_id;
+	hw_arg.ldb_credit_high_watermark = req->ldb_credit_high_watermark;
+	hw_arg.ldb_credit_low_watermark = req->ldb_credit_low_watermark;
+	hw_arg.ldb_credit_quantum = req->ldb_credit_quantum;
+	hw_arg.dir_credit_high_watermark = req->dir_credit_high_watermark;
+	hw_arg.dir_credit_low_watermark = req->dir_credit_low_watermark;
+	hw_arg.dir_credit_quantum = req->dir_credit_quantum;
+	hw_arg.cq_depth = req->cq_depth;
+	hw_arg.queue_id = req->queue_id;
+
+	ret = dlb_hw_create_dir_port(&dev->hw,
+				     req->domain_id,
+				     &hw_arg,
+				     req->pop_count_address,
+				     req->cq_base_address,
+				     &hw_response,
+				     true,
+				     vf_id);
+
+	resp.hdr.status = DLB_MBOX_ST_SUCCESS;
+	resp.error_code = ret;
+	resp.status = hw_response.status;
+	resp.id = hw_response.id;
+
+	BUILD_BUG_ON(sizeof(resp) > DLB_PF2VF_RESP_BYTES);
+
+	dlb_pf_write_vf_mbox_resp(&dev->hw, vf_id, &resp, sizeof(resp));
+}
+
+static void dlb_mbox_cmd_enable_ldb_port_fn(struct dlb_dev *dev,
+					    int vf_id,
+					    void *data)
+{
+	struct dlb_mbox_enable_ldb_port_cmd_resp resp = { {0} };
+	struct dlb_mbox_enable_ldb_port_cmd_req *req = data;
+	struct dlb_cmd_response hw_response = {0};
+	struct dlb_enable_ldb_port_args hw_arg;
+	int ret;
+
+	hw_arg.response = (uintptr_t)&hw_response;
+	hw_arg.port_id = req->port_id;
+
+	ret = dlb_hw_enable_ldb_port(&dev->hw,
+				     req->domain_id,
+				     &hw_arg,
+				     &hw_response,
+				     true,
+				     vf_id);
+
+	resp.hdr.status = DLB_MBOX_ST_SUCCESS;
+
+	resp.error_code = ret;
+	resp.status = hw_response.status;
+
+	BUILD_BUG_ON(sizeof(resp) > DLB_PF2VF_RESP_BYTES);
+
+	dlb_pf_write_vf_mbox_resp(&dev->hw, vf_id, &resp, sizeof(resp));
+}
+
+static void dlb_mbox_cmd_disable_ldb_port_fn(struct dlb_dev *dev,
+					     int vf_id,
+					    void *data)
+{
+	struct dlb_mbox_disable_ldb_port_cmd_resp resp = { {0} };
+	struct dlb_mbox_disable_ldb_port_cmd_req *req = data;
+	struct dlb_cmd_response hw_response = {0};
+	struct dlb_disable_ldb_port_args hw_arg;
+	int ret;
+
+	hw_arg.response = (uintptr_t)&hw_response;
+	hw_arg.port_id = req->port_id;
+
+	ret = dlb_hw_disable_ldb_port(&dev->hw,
+				      req->domain_id,
+				      &hw_arg,
+				      &hw_response,
+				      true,
+				      vf_id);
+
+	resp.hdr.status = DLB_MBOX_ST_SUCCESS;
+	resp.error_code = ret;
+	resp.status = hw_response.status;
+
+	BUILD_BUG_ON(sizeof(resp) > DLB_PF2VF_RESP_BYTES);
+
+	dlb_pf_write_vf_mbox_resp(&dev->hw, vf_id, &resp, sizeof(resp));
+}
+
+static void dlb_mbox_cmd_enable_dir_port_fn(struct dlb_dev *dev,
+					    int vf_id,
+					    void *data)
+{
+	struct dlb_mbox_enable_dir_port_cmd_resp resp = { {0} };
+	struct dlb_mbox_enable_dir_port_cmd_req *req = data;
+	struct dlb_cmd_response hw_response = {0};
+	struct dlb_enable_dir_port_args hw_arg;
+	int ret;
+
+	hw_arg.response = (uintptr_t)&hw_response;
+	hw_arg.port_id = req->port_id;
+
+	ret = dlb_hw_enable_dir_port(&dev->hw,
+				     req->domain_id,
+				     &hw_arg,
+				     &hw_response,
+				     true,
+				     vf_id);
+
+	resp.hdr.status = DLB_MBOX_ST_SUCCESS;
+	resp.error_code = ret;
+	resp.status = hw_response.status;
+
+	BUILD_BUG_ON(sizeof(resp) > DLB_PF2VF_RESP_BYTES);
+
+	dlb_pf_write_vf_mbox_resp(&dev->hw, vf_id, &resp, sizeof(resp));
+}
+
+static void dlb_mbox_cmd_disable_dir_port_fn(struct dlb_dev *dev,
+					     int vf_id,
+					    void *data)
+{
+	struct dlb_mbox_disable_dir_port_cmd_resp resp = { {0} };
+	struct dlb_mbox_disable_dir_port_cmd_req *req = data;
+	struct dlb_cmd_response hw_response = {0};
+	struct dlb_disable_dir_port_args hw_arg;
+	int ret;
+
+	hw_arg.response = (uintptr_t)&hw_response;
+	hw_arg.port_id = req->port_id;
+
+	ret = dlb_hw_disable_dir_port(&dev->hw,
+				      req->domain_id,
+				      &hw_arg,
+				      &hw_response,
+				      true,
+				      vf_id);
+
+	resp.hdr.status = DLB_MBOX_ST_SUCCESS;
+	resp.error_code = ret;
+	resp.status = hw_response.status;
+
+	BUILD_BUG_ON(sizeof(resp) > DLB_PF2VF_RESP_BYTES);
+
+	dlb_pf_write_vf_mbox_resp(&dev->hw, vf_id, &resp, sizeof(resp));
+}
+
+static void dlb_mbox_cmd_ldb_port_owned_by_domain_fn(struct dlb_dev *dev,
+						     int vf_id,
+						     void *data)
+{
+	struct dlb_mbox_ldb_port_owned_by_domain_cmd_resp resp = { {0} };
+	struct dlb_mbox_ldb_port_owned_by_domain_cmd_req *req = data;
+	int ret;
+
+	ret = dlb_ldb_port_owned_by_domain(&dev->hw,
+					   req->domain_id,
+					   req->port_id,
+					   true,
+					   vf_id);
+
+	resp.hdr.status = DLB_MBOX_ST_SUCCESS;
+	resp.owned = ret;
+
+	BUILD_BUG_ON(sizeof(resp) > DLB_PF2VF_RESP_BYTES);
+
+	dlb_pf_write_vf_mbox_resp(&dev->hw, vf_id, &resp, sizeof(resp));
+}
+
+static void dlb_mbox_cmd_dir_port_owned_by_domain_fn(struct dlb_dev *dev,
+						     int vf_id,
+						     void *data)
+{
+	struct dlb_mbox_dir_port_owned_by_domain_cmd_resp resp = { {0} };
+	struct dlb_mbox_dir_port_owned_by_domain_cmd_req *req = data;
+	int ret;
+
+	ret = dlb_dir_port_owned_by_domain(&dev->hw,
+					   req->domain_id,
+					   req->port_id,
+					   true,
+					   vf_id);
+
+	resp.hdr.status = DLB_MBOX_ST_SUCCESS;
+	resp.owned = ret;
+
+	BUILD_BUG_ON(sizeof(resp) > DLB_PF2VF_RESP_BYTES);
+
+	dlb_pf_write_vf_mbox_resp(&dev->hw, vf_id, &resp, sizeof(resp));
+}
+
+static void dlb_mbox_cmd_map_qid_fn(struct dlb_dev *dev,
+				    int vf_id,
+				    void *data)
+{
+	struct dlb_mbox_map_qid_cmd_resp resp = { {0} };
+	struct dlb_mbox_map_qid_cmd_req *req = data;
+	struct dlb_cmd_response hw_response = {0};
+	struct dlb_map_qid_args hw_arg;
+	int ret;
+
+	hw_arg.response = (uintptr_t)&hw_response;
+	hw_arg.port_id = req->port_id;
+	hw_arg.qid = req->qid;
+	hw_arg.priority = req->priority;
+
+	ret = dlb_hw_map_qid(&dev->hw,
+			     req->domain_id,
+			     &hw_arg,
+			     &hw_response,
+			     true,
+			     vf_id);
+
+	resp.hdr.status = DLB_MBOX_ST_SUCCESS;
+	resp.error_code = ret;
+	resp.status = hw_response.status;
+
+	BUILD_BUG_ON(sizeof(resp) > DLB_PF2VF_RESP_BYTES);
+
+	dlb_pf_write_vf_mbox_resp(&dev->hw, vf_id, &resp, sizeof(resp));
+}
+
+static void dlb_mbox_cmd_unmap_qid_fn(struct dlb_dev *dev,
+				      int vf_id,
+				      void *data)
+{
+	struct dlb_mbox_unmap_qid_cmd_resp resp = { {0} };
+	struct dlb_mbox_unmap_qid_cmd_req *req = data;
+	struct dlb_cmd_response hw_response = {0};
+	struct dlb_unmap_qid_args hw_arg;
+	int ret;
+
+	hw_arg.response = (uintptr_t)&hw_response;
+	hw_arg.port_id = req->port_id;
+	hw_arg.qid = req->qid;
+
+	ret = dlb_hw_unmap_qid(&dev->hw,
+			       req->domain_id,
+			       &hw_arg,
+			       &hw_response,
+			       true,
+			       vf_id);
+
+	resp.hdr.status = DLB_MBOX_ST_SUCCESS;
+	resp.error_code = ret;
+	resp.status = hw_response.status;
+
+	BUILD_BUG_ON(sizeof(resp) > DLB_PF2VF_RESP_BYTES);
+
+	dlb_pf_write_vf_mbox_resp(&dev->hw, vf_id, &resp, sizeof(resp));
+}
+
+static void dlb_mbox_cmd_start_domain_fn(struct dlb_dev *dev,
+					 int vf_id,
+					 void *data)
+{
+	struct dlb_mbox_start_domain_cmd_resp resp = { {0} };
+	struct dlb_mbox_start_domain_cmd_req *req = data;
+	struct dlb_cmd_response hw_response = {0};
+	struct dlb_start_domain_args hw_arg;
+	int ret;
+
+	hw_arg.response = (uintptr_t)&hw_response;
+
+	ret = dlb_hw_start_domain(&dev->hw,
+				  req->domain_id,
+				  &hw_arg,
+				  &hw_response,
+				  true,
+				  vf_id);
+
+	resp.hdr.status = DLB_MBOX_ST_SUCCESS;
+	resp.error_code = ret;
+	resp.status = hw_response.status;
+
+	BUILD_BUG_ON(sizeof(resp) > DLB_PF2VF_RESP_BYTES);
+
+	dlb_pf_write_vf_mbox_resp(&dev->hw, vf_id, &resp, sizeof(resp));
+}
+
+static void dlb_mbox_cmd_enable_ldb_port_intr_fn(struct dlb_dev *dev,
+						 int vf_id,
+						 void *data)
+{
+	struct dlb_mbox_enable_ldb_port_intr_cmd_resp resp = { {0} };
+	struct dlb_mbox_enable_ldb_port_intr_cmd_req *req = data;
+	int ret;
+
+	if (req->owner_vf >= DLB_MAX_NUM_VFS ||
+	    (dev->child_id_state[req->owner_vf].is_auxiliary_vf &&
+	     dev->child_id_state[req->owner_vf].primary_vf_id != vf_id) ||
+	    (!dev->child_id_state[req->owner_vf].is_auxiliary_vf &&
+	     req->owner_vf != vf_id)) {
+		resp.hdr.status = DLB_MBOX_ST_INVALID_OWNER_VF;
+		goto finish;
+	}
+
+	ret = dlb_configure_ldb_cq_interrupt(&dev->hw,
+					     req->port_id,
+					     req->vector,
+					     DLB_CQ_ISR_MODE_MSI,
+					     vf_id,
+					     req->owner_vf,
+					     req->thresh);
+
+	resp.hdr.status = DLB_MBOX_ST_SUCCESS;
+	resp.error_code = ret;
+
+finish:
+	BUILD_BUG_ON(sizeof(resp) > DLB_PF2VF_RESP_BYTES);
+
+	dlb_pf_write_vf_mbox_resp(&dev->hw, vf_id, &resp, sizeof(resp));
+}
+
+static void dlb_mbox_cmd_enable_dir_port_intr_fn(struct dlb_dev *dev,
+						 int vf_id,
+						 void *data)
+{
+	struct dlb_mbox_enable_dir_port_intr_cmd_resp resp = { {0} };
+	struct dlb_mbox_enable_dir_port_intr_cmd_req *req = data;
+	int ret;
+
+	if (req->owner_vf >= DLB_MAX_NUM_VFS ||
+	    (dev->child_id_state[req->owner_vf].is_auxiliary_vf &&
+	     dev->child_id_state[req->owner_vf].primary_vf_id != vf_id) ||
+	    (!dev->child_id_state[req->owner_vf].is_auxiliary_vf &&
+	     req->owner_vf != vf_id)) {
+		resp.hdr.status = DLB_MBOX_ST_INVALID_OWNER_VF;
+		goto finish;
+	}
+
+	ret = dlb_configure_dir_cq_interrupt(&dev->hw,
+					     req->port_id,
+					     req->vector,
+					     DLB_CQ_ISR_MODE_MSI,
+					     vf_id,
+					     req->owner_vf,
+					     req->thresh);
+
+	resp.hdr.status = DLB_MBOX_ST_SUCCESS;
+	resp.error_code = ret;
+
+finish:
+	BUILD_BUG_ON(sizeof(resp) > DLB_PF2VF_RESP_BYTES);
+
+	dlb_pf_write_vf_mbox_resp(&dev->hw, vf_id, &resp, sizeof(resp));
+}
+
+static void dlb_mbox_cmd_arm_cq_intr_fn(struct dlb_dev *dev,
+					int vf_id,
+					void *data)
+{
+	struct dlb_mbox_arm_cq_intr_cmd_resp resp = { {0} };
+	struct dlb_mbox_arm_cq_intr_cmd_req *req = data;
+	int ret;
+
+	if (req->is_ldb)
+		ret = dlb_ldb_port_owned_by_domain(&dev->hw,
+						   req->domain_id,
+						   req->port_id,
+						   true,
+						   vf_id);
+	else
+		ret = dlb_dir_port_owned_by_domain(&dev->hw,
+						   req->domain_id,
+						   req->port_id,
+						   true,
+						   vf_id);
+
+	if (ret != 1) {
+		resp.error_code = -EINVAL;
+		goto finish;
+	}
+
+	resp.error_code = dlb_arm_cq_interrupt(&dev->hw,
+					       req->port_id,
+					       req->is_ldb,
+					       true,
+					       vf_id);
+
+finish:
+	resp.hdr.status = DLB_MBOX_ST_SUCCESS;
+
+	BUILD_BUG_ON(sizeof(resp) > DLB_PF2VF_RESP_BYTES);
+
+	dlb_pf_write_vf_mbox_resp(&dev->hw, vf_id, &resp, sizeof(resp));
+}
+
+static void dlb_mbox_cmd_get_num_used_resources_fn(struct dlb_dev *dev,
+						   int vf_id,
+						   void *data)
+{
+	struct dlb_mbox_get_num_resources_cmd_resp resp = { {0} };
+	struct dlb_get_num_resources_args arg;
+	int ret;
+
+	ret = dlb_hw_get_num_used_resources(&dev->hw, &arg, true, vf_id);
+
+	resp.num_sched_domains = arg.num_sched_domains;
+	resp.num_ldb_queues = arg.num_ldb_queues;
+	resp.num_ldb_ports = arg.num_ldb_ports;
+	resp.num_dir_ports = arg.num_dir_ports;
+	resp.num_atomic_inflights = arg.num_atomic_inflights;
+	resp.max_contiguous_atomic_inflights =
+		arg.max_contiguous_atomic_inflights;
+	resp.num_hist_list_entries = arg.num_hist_list_entries;
+	resp.max_contiguous_hist_list_entries =
+		arg.max_contiguous_hist_list_entries;
+	resp.num_ldb_credits = arg.num_ldb_credits;
+	resp.max_contiguous_ldb_credits = arg.max_contiguous_ldb_credits;
+	resp.num_dir_credits = arg.num_dir_credits;
+	resp.max_contiguous_dir_credits = arg.max_contiguous_dir_credits;
+	resp.num_ldb_credit_pools = arg.num_ldb_credit_pools;
+	resp.num_dir_credit_pools = arg.num_dir_credit_pools;
+
+	resp.hdr.status = DLB_MBOX_ST_SUCCESS;
+	resp.error_code = ret;
+
+	BUILD_BUG_ON(sizeof(resp) > DLB_PF2VF_RESP_BYTES);
+
+	dlb_pf_write_vf_mbox_resp(&dev->hw, vf_id, &resp, sizeof(resp));
+}
+
+static void dlb_mbox_cmd_init_cq_sched_count_fn(struct dlb_dev *dev,
+						int vf_id,
+						void *data)
+{
+	struct dlb_mbox_init_cq_sched_count_measure_cmd_resp resp = { {0} };
+	struct dlb_mbox_init_cq_sched_count_measure_cmd_req *req = data;
+	struct dlb_vf_sched_measurement *vf_sched;
+	struct timespec64 start;
+	int ret = 0;
+
+	/* See dlb_reset_prepare() for more details */
+	if (READ_ONCE(dev->reset_active)) {
+		ret = -EINVAL;
+		goto finish;
+	}
+
+	vf_sched = &dev->vf_sched[vf_id];
+
+	ktime_get_real_ts64(&start);
+
+	dlb_read_sched_counts(&dev->hw, &vf_sched->data, true, vf_id);
+
+	vf_sched->start = start;
+	vf_sched->measurement_duration_us = req->duration_us;
+	vf_sched->valid = false;
+
+finish:
+	resp.hdr.status = DLB_MBOX_ST_SUCCESS;
+	resp.error_code = ret;
+
+	BUILD_BUG_ON(sizeof(resp) > DLB_PF2VF_RESP_BYTES);
+
+	dlb_pf_write_vf_mbox_resp(&dev->hw, vf_id, &resp, sizeof(resp));
+}
+
+static void dlb_mbox_cmd_collect_cq_sched_count_fn(struct dlb_dev *dev,
+						   int vf_id,
+						   void *data)
+{
+	struct dlb_mbox_collect_cq_sched_count_cmd_resp resp = { {0} };
+	struct dlb_mbox_collect_cq_sched_count_cmd_req *req = data;
+	struct dlb_vf_sched_measurement *vf_sched;
+	int i, ret = 0;
+
+	if ((req->is_ldb && req->cq_id >= DLB_MAX_NUM_LDB_PORTS) ||
+	    (!req->is_ldb && req->cq_id >= DLB_MAX_NUM_DIR_PORTS)) {
+		ret = -EINVAL;
+		goto finish;
+	}
+
+	vf_sched = &dev->vf_sched[vf_id];
+
+	/* If this is the first time collecting data for a measurement, we
+	 * extract the CQ sched count data from hardware and store it in
+	 * memory.
+	 */
+	if (!vf_sched->valid) {
+		struct dlb_sched_counts *data;
+		struct timespec64 start, end;
+		u32 elapsed;
+
+		data = devm_kzalloc(dev->dlb_device, sizeof(*data), GFP_KERNEL);
+		if (!data) {
+			ret = -ENOMEM;
+			goto finish;
+		}
+
+		/* Collect the CQ sched count data */
+		dlb_read_sched_counts(&dev->hw, data, true, vf_id);
+
+		ktime_get_real_ts64(&end);
+
+		start = vf_sched->start;
+
+		elapsed = (end.tv_sec - start.tv_sec) * 1000000 +
+			(end.tv_nsec - start.tv_nsec) / 1000;
+
+		/* Store the data for the VF to read later */
+		for (i = 0; i < DLB_MAX_NUM_LDB_PORTS; i++)
+			vf_sched->data.ldb_cq_sched_count[i] =
+				data->ldb_cq_sched_count[i] -
+				vf_sched->data.ldb_cq_sched_count[i];
+
+		for (i = 0; i < DLB_MAX_NUM_DIR_PORTS; i++)
+			vf_sched->data.dir_cq_sched_count[i] =
+				data->dir_cq_sched_count[i] -
+				vf_sched->data.dir_cq_sched_count[i];
+
+		devm_kfree(dev->dlb_device, data);
+
+		vf_sched->elapsed = elapsed;
+		vf_sched->valid = true;
+	}
+
+	if (req->is_ldb)
+		resp.cq_sched_count =
+			vf_sched->data.ldb_cq_sched_count[req->cq_id];
+	else
+		resp.cq_sched_count =
+			vf_sched->data.dir_cq_sched_count[req->cq_id];
+
+	resp.elapsed = vf_sched->elapsed;
+
+finish:
+	resp.hdr.status = DLB_MBOX_ST_SUCCESS;
+	resp.error_code = ret;
+
+	BUILD_BUG_ON(sizeof(resp) > DLB_PF2VF_RESP_BYTES);
+
+	dlb_pf_write_vf_mbox_resp(&dev->hw, vf_id, &resp, sizeof(resp));
+}
+
+static void dlb_mbox_cmd_ack_vf_flr_done(struct dlb_dev *dev,
+					 int vf_id,
+					 void *data)
+{
+	struct dlb_mbox_ack_vf_flr_done_cmd_resp resp = { {0} };
+
+	/* Once the VF has observed the cleared reset-in-progress bit, it has
+	 * to alert the PF driver to reset it. Workaround for A-stepping
+	 * devices only.
+	 */
+	dlb_set_vf_reset_in_progress(&dev->hw, vf_id);
+
+	resp.hdr.status = DLB_MBOX_ST_SUCCESS;
+	resp.error_code = 0;
+
+	BUILD_BUG_ON(sizeof(resp) > DLB_PF2VF_RESP_BYTES);
+
+	dlb_pf_write_vf_mbox_resp(&dev->hw, vf_id, &resp, sizeof(resp));
+}
+
+static void dlb_mbox_cmd_get_sn_allocation_fn(struct dlb_dev *dev,
+					      int vf_id,
+					      void *data)
+{
+	struct dlb_mbox_get_sn_allocation_cmd_resp resp = { {0} };
+	struct dlb_mbox_get_sn_allocation_cmd_req *req = data;
+
+	resp.num = dlb_get_group_sequence_numbers(&dev->hw, req->group_id);
+
+	resp.hdr.status = DLB_MBOX_ST_SUCCESS;
+
+	BUILD_BUG_ON(sizeof(resp) > DLB_PF2VF_RESP_BYTES);
+
+	dlb_pf_write_vf_mbox_resp(&dev->hw, vf_id, &resp, sizeof(resp));
+}
+
+static void dlb_mbox_cmd_get_sn_occupancy_fn(struct dlb_dev *dev,
+					     int vf_id,
+					     void *data)
+{
+	struct dlb_mbox_get_sn_occupancy_cmd_resp resp = { {0} };
+	struct dlb_mbox_get_sn_occupancy_cmd_req *req = data;
+
+	resp.num = dlb_get_group_sequence_number_occupancy(&dev->hw,
+							   req->group_id);
+
+	resp.hdr.status = DLB_MBOX_ST_SUCCESS;
+
+	BUILD_BUG_ON(sizeof(resp) > DLB_PF2VF_RESP_BYTES);
+
+	dlb_pf_write_vf_mbox_resp(&dev->hw, vf_id, &resp, sizeof(resp));
+}
+
+static void dlb_mbox_cmd_get_ldb_queue_depth_fn(struct dlb_dev *dev,
+						int vf_id,
+						void *data)
+{
+	struct dlb_mbox_get_ldb_queue_depth_cmd_resp resp = { {0} };
+	struct dlb_mbox_get_ldb_queue_depth_cmd_req *req = data;
+	struct dlb_get_ldb_queue_depth_args hw_arg;
+	struct dlb_cmd_response hw_response = {0};
+	int ret;
+
+	hw_arg.response = (uintptr_t)&hw_response;
+	hw_arg.queue_id = req->queue_id;
+
+	ret = dlb_hw_get_ldb_queue_depth(&dev->hw,
+					 req->domain_id,
+					 &hw_arg,
+					 &hw_response,
+					 true,
+					 vf_id);
+
+	resp.hdr.status = DLB_MBOX_ST_SUCCESS;
+	resp.error_code = ret;
+	resp.status = hw_response.status;
+	resp.depth = hw_response.id;
+
+	BUILD_BUG_ON(sizeof(resp) > DLB_PF2VF_RESP_BYTES);
+
+	dlb_pf_write_vf_mbox_resp(&dev->hw, vf_id, &resp, sizeof(resp));
+}
+
+static void dlb_mbox_cmd_get_dir_queue_depth_fn(struct dlb_dev *dev,
+						int vf_id,
+						void *data)
+{
+	struct dlb_mbox_get_dir_queue_depth_cmd_resp resp = { {0} };
+	struct dlb_mbox_get_dir_queue_depth_cmd_req *req = data;
+	struct dlb_get_dir_queue_depth_args hw_arg;
+	struct dlb_cmd_response hw_response = {0};
+	int ret;
+
+	hw_arg.response = (uintptr_t)&hw_response;
+	hw_arg.queue_id = req->queue_id;
+
+	ret = dlb_hw_get_dir_queue_depth(&dev->hw,
+					 req->domain_id,
+					 &hw_arg,
+					 &hw_response,
+					 true,
+					 vf_id);
+
+	resp.hdr.status = DLB_MBOX_ST_SUCCESS;
+	resp.error_code = ret;
+	resp.status = hw_response.status;
+	resp.depth = hw_response.id;
+
+	BUILD_BUG_ON(sizeof(resp) > DLB_PF2VF_RESP_BYTES);
+
+	dlb_pf_write_vf_mbox_resp(&dev->hw, vf_id, &resp, sizeof(resp));
+}
+
+static void dlb_mbox_cmd_pending_port_unmaps_fn(struct dlb_dev *dev,
+						int vf_id,
+						void *data)
+{
+	struct dlb_mbox_pending_port_unmaps_cmd_resp resp = { {0} };
+	struct dlb_mbox_pending_port_unmaps_cmd_req *req = data;
+	struct dlb_pending_port_unmaps_args hw_arg;
+	struct dlb_cmd_response hw_response = {0};
+	int ret;
+
+	hw_arg.port_id = req->port_id;
+
+	ret = dlb_hw_pending_port_unmaps(&dev->hw,
+					 req->domain_id,
+					 &hw_arg,
+					 &hw_response,
+					 true,
+					 vf_id);
+
+	resp.hdr.status = DLB_MBOX_ST_SUCCESS;
+	resp.error_code = ret;
+	resp.status = hw_response.status;
+	resp.num = hw_response.id;
+
+	BUILD_BUG_ON(sizeof(resp) > DLB_PF2VF_RESP_BYTES);
+
+	dlb_pf_write_vf_mbox_resp(&dev->hw, vf_id, &resp, sizeof(resp));
+}
+
+static int dlb_pf_query_cq_poll_mode(struct dlb_dev *dlb_dev,
+				     struct dlb_cmd_response *user_resp);
+
+static void dlb_mbox_cmd_query_cq_poll_mode_fn(struct dlb_dev *dev,
+					       int vf_id,
+					       void *data)
+{
+	struct dlb_mbox_query_cq_poll_mode_cmd_resp resp = { {0} };
+	struct dlb_cmd_response response = {0};
+	int ret;
+
+	ret = dlb_pf_query_cq_poll_mode(dev, &response);
+
+	resp.hdr.status = DLB_MBOX_ST_SUCCESS;
+	resp.error_code = ret;
+	resp.status = response.status;
+	resp.mode = response.id;
+
+	BUILD_BUG_ON(sizeof(resp) > DLB_PF2VF_RESP_BYTES);
+
+	dlb_pf_write_vf_mbox_resp(&dev->hw, vf_id, &resp, sizeof(resp));
+}
+
+static void (*mbox_fn_table[])(struct dlb_dev *dev, int vf_id, void *data) = {
+	dlb_mbox_cmd_register_fn,
+	dlb_mbox_cmd_unregister_fn,
+	dlb_mbox_cmd_get_num_resources_fn,
+	dlb_mbox_cmd_create_sched_domain_fn,
+	dlb_mbox_cmd_reset_sched_domain_fn,
+	dlb_mbox_cmd_create_ldb_pool_fn,
+	dlb_mbox_cmd_create_dir_pool_fn,
+	dlb_mbox_cmd_create_ldb_queue_fn,
+	dlb_mbox_cmd_create_dir_queue_fn,
+	dlb_mbox_cmd_create_ldb_port_fn,
+	dlb_mbox_cmd_create_dir_port_fn,
+	dlb_mbox_cmd_enable_ldb_port_fn,
+	dlb_mbox_cmd_disable_ldb_port_fn,
+	dlb_mbox_cmd_enable_dir_port_fn,
+	dlb_mbox_cmd_disable_dir_port_fn,
+	dlb_mbox_cmd_ldb_port_owned_by_domain_fn,
+	dlb_mbox_cmd_dir_port_owned_by_domain_fn,
+	dlb_mbox_cmd_map_qid_fn,
+	dlb_mbox_cmd_unmap_qid_fn,
+	dlb_mbox_cmd_start_domain_fn,
+	dlb_mbox_cmd_enable_ldb_port_intr_fn,
+	dlb_mbox_cmd_enable_dir_port_intr_fn,
+	dlb_mbox_cmd_arm_cq_intr_fn,
+	dlb_mbox_cmd_get_num_used_resources_fn,
+	dlb_mbox_cmd_init_cq_sched_count_fn,
+	dlb_mbox_cmd_collect_cq_sched_count_fn,
+	dlb_mbox_cmd_ack_vf_flr_done,
+	dlb_mbox_cmd_get_sn_allocation_fn,
+	dlb_mbox_cmd_get_ldb_queue_depth_fn,
+	dlb_mbox_cmd_get_dir_queue_depth_fn,
+	dlb_mbox_cmd_pending_port_unmaps_fn,
+	dlb_mbox_cmd_query_cq_poll_mode_fn,
+	dlb_mbox_cmd_get_sn_occupancy_fn,
+};
+
+static u32 dlb_handle_vf_flr_interrupt(struct dlb_dev *dev)
+{
+	u32 bitvec;
+	int i;
+
+	bitvec = dlb_read_vf_flr_int_bitvec(&dev->hw);
+
+	for (i = 0; i < DLB_MAX_NUM_VFS; i++) {
+		if (!(bitvec & (1 << i)))
+			continue;
+
+		dev_dbg(dev->dlb_device,
+			"Received VF FLR ISR from VF %d\n",
+			i);
+
+		if (dlb_reset_vf(&dev->hw, i))
+			dev_err(dev->dlb_device,
+				"[%s()] Internal error\n",
+				__func__);
+	}
+
+	dlb_ack_vf_flr_int(&dev->hw, bitvec, dev->revision < DLB_REV_B0);
+
+	return bitvec;
+}
+
 /**********************************/
 /****** Interrupt management ******/
 /**********************************/
+
+static u32 dlb_handle_vf_to_pf_interrupt(struct dlb_dev *dev)
+{
+	u8 data[DLB_VF2PF_REQ_BYTES];
+	u32 bitvec;
+	int i;
+
+	bitvec = dlb_read_vf_to_pf_int_bitvec(&dev->hw);
+
+	for (i = 0; i < DLB_MAX_NUM_VFS; i++) {
+		if (!(bitvec & (1 << i)))
+			continue;
+
+		dev_dbg(dev->dlb_device,
+			"Received VF->PF ISR from VF %d\n",
+			i);
+
+		BUILD_BUG_ON(sizeof(data) > DLB_VF2PF_REQ_BYTES);
+
+		dlb_pf_read_vf_mbox_req(&dev->hw, i, data, sizeof(data));
+
+		/* Unrecognized request command, send an error response */
+		if (DLB_MBOX_CMD_TYPE(data) >= NUM_DLB_MBOX_CMD_TYPES) {
+			struct dlb_mbox_resp_hdr resp = {0};
+
+			resp.status = DLB_MBOX_ST_INVALID_CMD_TYPE;
+
+			BUILD_BUG_ON(sizeof(resp) > DLB_PF2VF_RESP_BYTES);
+
+			dlb_pf_write_vf_mbox_resp(&dev->hw,
+						  i,
+						  &resp,
+						  sizeof(resp));
+
+			continue;
+		}
+
+		dev_dbg(dev->dlb_device,
+			"Received mbox command %s\n",
+			DLB_MBOX_CMD_STRING(data));
+
+		mbox_fn_table[DLB_MBOX_CMD_TYPE(data)](dev, i, data);
+	}
+
+	dlb_ack_vf_mbox_int(&dev->hw, bitvec);
+
+	return bitvec;
+}
+
+static u32 dlb_handle_vf_requests(struct dlb_dev *dev)
+{
+	u32 mbox_bitvec;
+	u32 flr_bitvec;
+
+	flr_bitvec = dlb_handle_vf_flr_interrupt(dev);
+
+	mbox_bitvec = dlb_handle_vf_to_pf_interrupt(dev);
+
+	dlb_ack_vf_to_pf_int(&dev->hw, mbox_bitvec, flr_bitvec);
+
+	return mbox_bitvec | flr_bitvec;
+}
 
 static void dlb_enable_alarms(struct dlb_dev *dev)
 {
@@ -305,6 +1483,45 @@ static void dlb_detect_ingress_err_overload(struct dlb_dev *dev)
 		__func__);
 }
 
+static void dlb_detect_mbox_overload(struct dlb_dev *dev, int id)
+{
+	union dlb_sys_func_vf_bar_dsbl r0 = { {0} };
+	s64 delta_us;
+
+	if (dev->mbox[id].count == 0)
+		dev->mbox[id].ts = ktime_get();
+
+	dev->mbox[id].count++;
+
+	/* Don't check for overload until OVERLOAD_THRESH ISRs have run */
+	if (dev->mbox[id].count < DLB_ISR_OVERLOAD_THRESH)
+		return;
+
+	delta_us = ktime_us_delta(ktime_get(), dev->mbox[id].ts);
+
+	/* Reset stats for next measurement period */
+	dev->mbox[id].count = 0;
+	dev->mbox[id].ts = ktime_get();
+
+	/* Check for overload during this measurement period */
+	if (delta_us > DLB_ISR_OVERLOAD_PERIOD_S * USEC_PER_SEC)
+		return;
+
+	/* Mailbox interrupt overload: disable the VF FUNC BAR to prevent
+	 * further abuse. The FUNC BAR is re-enabled when the device is reset
+	 * or the driver is reloaded.
+	 */
+	r0.field.func_vf_bar_dis = 1;
+
+	DLB_CSR_WR(&dev->hw, DLB_SYS_FUNC_VF_BAR_DSBL(id), r0.val);
+
+	dev->mbox[id].enabled = false;
+
+	dev_err(dev->dlb_device,
+		"[%s()] Overloaded detected: disabling VF %d's FUNC BAR",
+		__func__, id);
+}
+
 /* The alarm handler logs the alarm syndrome and, for user-caused errors,
  * reports the alarm to user-space through the per-domain device file interface.
  *
@@ -318,7 +1535,8 @@ static void dlb_detect_ingress_err_overload(struct dlb_dev *dev)
 static irqreturn_t dlb_alarm_handler(int irq, void *hdlr_ptr)
 {
 	struct dlb_dev *dev = (struct dlb_dev *)hdlr_ptr;
-	int id;
+	u32 bitvec;
+	int id, i;
 
 	id = irq - dev->intr.base_vector;
 
@@ -329,6 +1547,13 @@ static irqreturn_t dlb_alarm_handler(int irq, void *hdlr_ptr)
 	switch (id) {
 	case DLB_INT_ALARM:
 		dlb_process_alarm_interrupt(&dev->hw);
+		break;
+	case DLB_INT_VF_TO_PF_MBOX:
+		bitvec = dlb_handle_vf_requests(dev);
+		for (i = 0; i < DLB_MAX_NUM_VFS; i++) {
+			if (bitvec & (1 << i))
+				dlb_detect_mbox_overload(dev, i);
+		}
 		break;
 	case DLB_INT_INGRESS_ERROR:
 		dlb_process_ingress_error_interrupt(&dev->hw);
@@ -346,6 +1571,7 @@ static irqreturn_t dlb_alarm_handler(int irq, void *hdlr_ptr)
 
 static const char *alarm_hdlr_names[DLB_PF_NUM_ALARM_INTERRUPT_VECTORS] = {
 	[DLB_INT_ALARM]		= "dlb_alarm",
+	[DLB_INT_VF_TO_PF_MBOX]	= "dlb_vf_to_pf_mbox",
 	[DLB_INT_INGRESS_ERROR]	= "dlb_ingress_err",
 };
 
@@ -507,6 +1733,8 @@ static int dlb_pf_init_interrupts(struct dlb_dev *dev, struct pci_dev *pdev)
  */
 static void dlb_pf_reinit_interrupts(struct dlb_dev *dev)
 {
+	int i;
+
 	/* Re-enable alarms after device reset */
 	dlb_enable_alarms(dev);
 
@@ -516,6 +1744,15 @@ static void dlb_pf_reinit_interrupts(struct dlb_dev *dev)
 			__func__);
 
 	dev->ingress_err.enabled = true;
+
+	for (i = 0; i < DLB_MAX_NUM_VFS; i++) {
+		if (!dev->mbox[i].enabled)
+			dev_err(dev->dlb_device,
+				"[%s()] Re-enabling VF %d's FUNC BAR",
+				__func__, i);
+
+		dev->mbox[i].enabled = true;
+	}
 
 	dlb_set_msix_mode(&dev->hw, dev->intr.mode);
 }
@@ -608,6 +1845,9 @@ static int dlb_pf_init_driver_state(struct dlb_dev *dlb_dev)
 		init_waitqueue_head(&domain->wq_head);
 	}
 
+	for (i = 0; i < DLB_MAX_NUM_VFS; i++)
+		dlb_dev->child_id_state[i].is_auxiliary_vf = false;
+
 	init_waitqueue_head(&dlb_dev->measurement_wq);
 
 	mutex_init(&dlb_dev->resource_mutex);
@@ -615,6 +1855,11 @@ static int dlb_pf_init_driver_state(struct dlb_dev *dlb_dev)
 
 	dlb_dev->ingress_err.count = 0;
 	dlb_dev->ingress_err.enabled = true;
+
+	for (i = 0; i < DLB_MAX_NUM_VFS; i++) {
+		dlb_dev->mbox[i].count = 0;
+		dlb_dev->mbox[i].enabled = true;
+	}
 
 	return 0;
 }
@@ -956,6 +2201,9 @@ static ssize_t dlb_sysfs_vf_read(struct device *dev,
 	else if (strncmp(attr->attr.name, "locked",
 			 sizeof("locked")) == 0)
 		val = (int)dlb_vf_is_locked(hw, vf_id);
+	else if (strncmp(attr->attr.name, "func_bar_en",
+			 sizeof("func_bar_en")) == 0)
+		val = (int)dlb_dev->mbox[vf_id].enabled;
 	else
 		return -1;
 
@@ -1011,6 +2259,23 @@ static ssize_t dlb_sysfs_vf_write(struct device *dev,
 	} else if (strncmp(attr->attr.name, "num_atomic_inflights",
 			   sizeof("num_atomic_inflights")) == 0) {
 		ret = dlb_update_vf_atomic_inflights(&dlb_dev->hw, vf_id, num);
+	} else if (strncmp(attr->attr.name, "func_bar_en",
+			   sizeof("func_bar_en")) == 0) {
+		if (!dlb_dev->mbox[vf_id].enabled && num) {
+			union dlb_sys_func_vf_bar_dsbl r0 = { {0} };
+
+			r0.field.func_vf_bar_dis = 0;
+
+			DLB_CSR_WR(&dlb_dev->hw,
+				   DLB_SYS_FUNC_VF_BAR_DSBL(vf_id),
+				   r0.val);
+
+			dev_err(dlb_dev->dlb_device,
+				"[%s()] Re-enabling VF %d's FUNC BAR",
+				__func__, vf_id);
+
+			dlb_dev->mbox[vf_id].enabled = true;
+		}
 	} else {
 		mutex_unlock(&dlb_dev->resource_mutex);
 		return -1;
@@ -1128,6 +2393,12 @@ dev_attr_vf ## id ## _locked =			    \
 	       dlb_sysfs_vf ## id ## _read,	    \
 	       NULL);				    \
 static struct device_attribute			    \
+dev_attr_vf ## id ## _func_bar_en =		    \
+	__ATTR(func_bar_en,			    \
+	       0644,				    \
+	       dlb_sysfs_vf ## id ## _read,	    \
+	       dlb_sysfs_vf ## id ## _write);	    \
+static struct device_attribute			    \
 dev_attr_vf ## id ## _aux_vf_ids =		    \
 	__ATTR(aux_vf_ids,			    \
 	       0644,				    \
@@ -1148,6 +2419,7 @@ static struct attribute *dlb_vf ## id ## _attrs[] = {	\
 	&dev_attr_vf ## id ## _hist_list_entries.attr,	\
 	&dev_attr_vf ## id ## _atomic_inflights.attr,	\
 	&dev_attr_vf ## id ## _locked.attr,		\
+	&dev_attr_vf ## id ## _func_bar_en.attr,	\
 	&dev_attr_vf ## id ## _aux_vf_ids.attr,		\
 	NULL						\
 }

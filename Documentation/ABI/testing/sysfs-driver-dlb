@@ -283,3 +283,19 @@ Description:	Interface for assigning auxiliary VFs to a primary VF.
 		When a primary VF has one or more auxiliary VFs, the entire VF
 		group must be assigned to the same virtual machine, or else the
 		primary VF will not function correctly.
+
+What:		/sys/bus/pci/devices/.../vf<N>_resources/func_bar_en
+Date:		February 27, 2020
+KernelVersion:	5.7
+Contact:	gage.eads@intel.com
+Description:	Interface for re-enabling the VF BAR
+
+		If the PF driver detects an overload of VF mailbox interrupts,
+		it will -- to prevent a possible denial-of-service attack --
+		disable the VF's FUNC BAR, effectively preventing access to the
+		device through the VF.
+
+		If the BAR is disabled, it will be re-enabled when the device
+		is reset or the driver is reloaded. This interface can be used
+		to re-enable the BAR as well, and can be read to determine
+		whether the BAR is enabled.

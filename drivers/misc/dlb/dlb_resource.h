@@ -627,6 +627,115 @@ void dlb_ack_compressed_cq_intr(struct dlb_hw *hw,
 				u32 *dir_interrupts);
 
 /**
+ * dlb_read_vf_intr_status() - read the VF interrupt status register
+ * @hw: dlb_hw handle for a particular device.
+ *
+ * This function can be called from a VF's interrupt handler to determine
+ * which interrupts have fired. The first 31 bits correspond to CQ interrupt
+ * vectors, and the final bit is for the PF->VF mailbox interrupt vector.
+ *
+ * Return:
+ * Returns a bit vector indicating which interrupt vectors are active.
+ */
+u32 dlb_read_vf_intr_status(struct dlb_hw *hw);
+
+/**
+ * dlb_ack_vf_intr_status() - ack VF interrupts
+ * @hw: dlb_hw handle for a particular device.
+ * @interrupts: 32-bit bitmap
+ *
+ * This function ACKs a VF's interrupts. Its interrupts argument should be the
+ * value returned by dlb_read_vf_intr_status().
+ */
+void dlb_ack_vf_intr_status(struct dlb_hw *hw, u32 interrupts);
+
+/**
+ * dlb_ack_vf_msi_intr() - ack VF MSI interrupt
+ * @hw: dlb_hw handle for a particular device.
+ * @interrupts: 32-bit bitmap
+ *
+ * This function clears the VF's MSI interrupt pending register. Its interrupts
+ * argument should be contain the MSI vectors to ACK. For example, if MSI MME
+ * is in mode 0, then one bit 0 should ever be set.
+ */
+void dlb_ack_vf_msi_intr(struct dlb_hw *hw, u32 interrupts);
+
+/**
+ * dlb_ack_vf_mbox_int() - ack PF->VF mailbox interrupt
+ * @hw: dlb_hw handle for a particular device.
+ *
+ * When done processing the PF mailbox request, this function unsets
+ * the PF's mailbox ISR register.
+ */
+void dlb_ack_pf_mbox_int(struct dlb_hw *hw);
+
+/**
+ * dlb_read_vf_to_pf_int_bitvec() - return a bit vector of all requesting VFs
+ * @hw: dlb_hw handle for a particular device.
+ *
+ * When the VF->PF ISR fires, this function can be called to determine which
+ * VF(s) are requesting service. This bitvector must be passed to
+ * dlb_ack_vf_to_pf_int() when processing is complete for all requesting VFs.
+ *
+ * Return:
+ * Returns a bit vector indicating which VFs (0-15) have requested service.
+ */
+u32 dlb_read_vf_to_pf_int_bitvec(struct dlb_hw *hw);
+
+/**
+ * dlb_ack_vf_mbox_int() - ack processed VF->PF mailbox interrupt
+ * @hw: dlb_hw handle for a particular device.
+ * @bitvec: bit vector returned by dlb_read_vf_to_pf_int_bitvec()
+ *
+ * When done processing all VF mailbox requests, this function unsets the VF's
+ * mailbox ISR register.
+ */
+void dlb_ack_vf_mbox_int(struct dlb_hw *hw, u32 bitvec);
+
+/**
+ * dlb_read_vf_flr_int_bitvec() - return a bit vector of all VFs requesting FLR
+ * @hw: dlb_hw handle for a particular device.
+ *
+ * When the VF FLR ISR fires, this function can be called to determine which
+ * VF(s) are requesting FLRs. This bitvector must passed to
+ * dlb_ack_vf_flr_int() when processing is complete for all requesting VFs.
+ *
+ * Return:
+ * Returns a bit vector indicating which VFs (0-15) have requested FLRs.
+ */
+u32 dlb_read_vf_flr_int_bitvec(struct dlb_hw *hw);
+
+/**
+ * dlb_ack_vf_flr_int() - ack processed VF<->PF interrupt(s)
+ * @hw: dlb_hw handle for a particular device.
+ * @bitvec: bit vector returned by dlb_read_vf_flr_int_bitvec()
+ * @a_stepping: device is A-stepping
+ *
+ * When done processing all VF FLR requests, this function unsets the VF's FLR
+ * ISR register.
+ *
+ * Note: The caller must ensure dlb_set_vf_reset_in_progress(),
+ * dlb_clr_vf_reset_in_progress(), and dlb_ack_vf_flr_int() are not executed in
+ * parallel, because the reset-in-progress register does not support atomic
+ * updates on A-stepping devices.
+ */
+void dlb_ack_vf_flr_int(struct dlb_hw *hw, u32 bitvec, bool a_stepping);
+
+/**
+ * dlb_ack_vf_to_pf_int() - ack processed VF mbox and FLR interrupt(s)
+ * @hw: dlb_hw handle for a particular device.
+ * @mbox_bitvec: bit vector returned by dlb_read_vf_to_pf_int_bitvec()
+ * @flr_bitvec: bit vector returned by dlb_read_vf_flr_int_bitvec()
+ *
+ * When done processing all VF requests, this function communicates to the
+ * hardware that processing is complete. When this function completes, hardware
+ * can immediately generate another VF mbox or FLR interrupt.
+ */
+void dlb_ack_vf_to_pf_int(struct dlb_hw *hw,
+			  u32 mbox_bitvec,
+			  u32 flr_bitvec);
+
+/**
  * dlb_process_alarm_interrupt() - process an alarm interrupt
  * @hw: dlb_hw handle for a particular device.
  *
@@ -846,6 +955,37 @@ void dlb_read_sched_counts(struct dlb_hw *hw,
 			   unsigned int vf_id);
 
 /**
+ * dlb_send_async_vf_to_pf_msg() - (VF only) send a mailbox message to the PF
+ * @hw: dlb_hw handle for a particular device.
+ *
+ * This function sends a VF->PF mailbox message. It is asynchronous, so it
+ * returns once the message is sent but potentially before the PF has processed
+ * the message. The caller must call dlb_vf_to_pf_complete() to determine when
+ * the PF has finished processing the request.
+ */
+void dlb_send_async_vf_to_pf_msg(struct dlb_hw *hw);
+
+/**
+ * dlb_vf_to_pf_complete() - check the status of an asynchronous mailbox request
+ * @hw: dlb_hw handle for a particular device.
+ *
+ * This function returns a boolean indicating whether the PF has finished
+ * processing a VF->PF mailbox request. It should only be called after sending
+ * an asynchronous request with dlb_send_async_vf_to_pf_msg().
+ */
+bool dlb_vf_to_pf_complete(struct dlb_hw *hw);
+
+/**
+ * dlb_vf_flr_complete() - check the status of a VF FLR
+ * @hw: dlb_hw handle for a particular device.
+ *
+ * This function returns a boolean indicating whether the PF has finished
+ * executing the VF FLR. It should only be called after setting the VF's FLR
+ * bit.
+ */
+bool dlb_vf_flr_complete(struct dlb_hw *hw);
+
+/**
  * dlb_set_vf_reset_in_progress() - set a VF's reset in progress bit
  * @hw: dlb_hw handle for a particular device.
  * @vf_id: VF ID.
@@ -872,6 +1012,183 @@ void dlb_set_vf_reset_in_progress(struct dlb_hw *hw, int vf_id);
  * updates on A-stepping devices.
  */
 void dlb_clr_vf_reset_in_progress(struct dlb_hw *hw, int vf_id);
+
+/**
+ * dlb_send_async_pf_to_vf_msg() - (PF only) send a mailbox message to the VF
+ * @hw: dlb_hw handle for a particular device.
+ * @vf_id: VF ID.
+ *
+ * This function sends a PF->VF mailbox message. It is asynchronous, so it
+ * returns once the message is sent but potentially before the VF has processed
+ * the message. The caller must call dlb_pf_to_vf_complete() to determine when
+ * the VF has finished processing the request.
+ */
+void dlb_send_async_pf_to_vf_msg(struct dlb_hw *hw, unsigned int vf_id);
+
+/**
+ * dlb_pf_to_vf_complete() - check the status of an asynchronous mailbox request
+ * @hw: dlb_hw handle for a particular device.
+ * @vf_id: VF ID.
+ *
+ * This function returns a boolean indicating whether the VF has finished
+ * processing a PF->VF mailbox request. It should only be called after sending
+ * an asynchronous request with dlb_send_async_pf_to_vf_msg().
+ */
+bool dlb_pf_to_vf_complete(struct dlb_hw *hw, unsigned int vf_id);
+
+/**
+ * dlb_pf_read_vf_mbox_req() - (PF only) read a VF->PF mailbox request
+ * @hw: dlb_hw handle for a particular device.
+ * @vf_id: VF ID.
+ * @data: pointer to message data.
+ * @len: size, in bytes, of the data array.
+ *
+ * This function copies one of the PF's VF->PF mailboxes into the array pointed
+ * to by data.
+ *
+ * Return:
+ * Returns 0 upon success, <0 otherwise.
+ *
+ * EINVAL - len >= DLB_VF2PF_REQ_BYTES.
+ */
+int dlb_pf_read_vf_mbox_req(struct dlb_hw *hw,
+			    unsigned int vf_id,
+			    void *data,
+			    int len);
+
+/**
+ * dlb_pf_read_vf_mbox_resp() - (PF only) read a VF->PF mailbox response
+ * @hw: dlb_hw handle for a particular device.
+ * @vf_id: VF ID.
+ * @data: pointer to message data.
+ * @len: size, in bytes, of the data array.
+ *
+ * This function copies one of the PF's VF->PF mailboxes into the array pointed
+ * to by data.
+ *
+ * Return:
+ * Returns 0 upon success, <0 otherwise.
+ *
+ * EINVAL - len >= DLB_VF2PF_RESP_BYTES.
+ */
+int dlb_pf_read_vf_mbox_resp(struct dlb_hw *hw,
+			     unsigned int vf_id,
+			     void *data,
+			     int len);
+
+/**
+ * dlb_pf_write_vf_mbox_resp() - (PF only) write a PF->VF mailbox response
+ * @hw: dlb_hw handle for a particular device.
+ * @vf_id: VF ID.
+ * @data: pointer to message data.
+ * @len: size, in bytes, of the data array.
+ *
+ * This function copies the user-provided message data into of the PF's VF->PF
+ * mailboxes.
+ *
+ * Return:
+ * Returns 0 upon success, <0 otherwise.
+ *
+ * EINVAL - len >= DLB_PF2VF_RESP_BYTES.
+ */
+int dlb_pf_write_vf_mbox_resp(struct dlb_hw *hw,
+			      unsigned int vf_id,
+			      void *data,
+			      int len);
+
+/**
+ * dlb_pf_write_vf_mbox_req() - (PF only) write a PF->VF mailbox request
+ * @hw: dlb_hw handle for a particular device.
+ * @vf_id: VF ID.
+ * @data: pointer to message data.
+ * @len: size, in bytes, of the data array.
+ *
+ * This function copies the user-provided message data into of the PF's VF->PF
+ * mailboxes.
+ *
+ * Return:
+ * Returns 0 upon success, <0 otherwise.
+ *
+ * EINVAL - len >= DLB_PF2VF_REQ_BYTES.
+ */
+int dlb_pf_write_vf_mbox_req(struct dlb_hw *hw,
+			     unsigned int vf_id,
+			     void *data,
+			     int len);
+
+/**
+ * dlb_vf_read_pf_mbox_resp() - (VF only) read a PF->VF mailbox response
+ * @hw: dlb_hw handle for a particular device.
+ * @data: pointer to message data.
+ * @len: size, in bytes, of the data array.
+ *
+ * This function copies the VF's PF->VF mailbox into the array pointed to by
+ * data.
+ *
+ * Return:
+ * Returns 0 upon success, <0 otherwise.
+ *
+ * EINVAL - len >= DLB_PF2VF_RESP_BYTES.
+ */
+int dlb_vf_read_pf_mbox_resp(struct dlb_hw *hw, void *data, int len);
+
+/**
+ * dlb_vf_read_pf_mbox_req() - (VF only) read a PF->VF mailbox request
+ * @hw: dlb_hw handle for a particular device.
+ * @data: pointer to message data.
+ * @len: size, in bytes, of the data array.
+ *
+ * This function copies the VF's PF->VF mailbox into the array pointed to by
+ * data.
+ *
+ * Return:
+ * Returns 0 upon success, <0 otherwise.
+ *
+ * EINVAL - len >= DLB_PF2VF_REQ_BYTES.
+ */
+int dlb_vf_read_pf_mbox_req(struct dlb_hw *hw, void *data, int len);
+
+/**
+ * dlb_vf_write_pf_mbox_req() - (VF only) write a VF->PF mailbox request
+ * @hw: dlb_hw handle for a particular device.
+ * @data: pointer to message data.
+ * @len: size, in bytes, of the data array.
+ *
+ * This function copies the user-provided message data into of the VF's PF->VF
+ * mailboxes.
+ *
+ * Return:
+ * Returns 0 upon success, <0 otherwise.
+ *
+ * EINVAL - len >= DLB_VF2PF_REQ_BYTES.
+ */
+int dlb_vf_write_pf_mbox_req(struct dlb_hw *hw, void *data, int len);
+
+/**
+ * dlb_vf_write_pf_mbox_resp() - (VF only) write a VF->PF mailbox response
+ * @hw: dlb_hw handle for a particular device.
+ * @data: pointer to message data.
+ * @len: size, in bytes, of the data array.
+ *
+ * This function copies the user-provided message data into of the VF's PF->VF
+ * mailboxes.
+ *
+ * Return:
+ * Returns 0 upon success, <0 otherwise.
+ *
+ * EINVAL - len >= DLB_VF2PF_RESP_BYTES.
+ */
+int dlb_vf_write_pf_mbox_resp(struct dlb_hw *hw, void *data, int len);
+
+/**
+ * dlb_reset_vf() - reset the hardware owned by a VF
+ * @hw: dlb_hw handle for a particular device.
+ * @vf_id: VF ID
+ *
+ * This function resets the hardware owned by a VF (if any), by resetting the
+ * VF's domains one by one.
+ */
+int dlb_reset_vf(struct dlb_hw *hw, unsigned int vf_id);
 
 /**
  * dlb_vf_is_locked() - check whether the VF's resources are locked
@@ -1133,6 +1450,35 @@ int dlb_update_vf_atomic_inflights(struct dlb_hw *hw,
  * EPERM  - The VF's resource assignment is locked and cannot be changed.
  */
 int dlb_reset_vf_resources(struct dlb_hw *hw, unsigned int vf_id);
+
+/**
+ * dlb_notify_vf() - send a notification to a VF
+ * @hw: dlb_hw handle for a particular device.
+ * @vf_id: VF ID
+ * @notification: notification
+ *
+ * This function sends a notification (as defined in dlb_mbox.h) to a VF.
+ *
+ * Return:
+ * Returns 0 upon success, -1 if the VF doesn't ACK the PF->VF interrupt.
+ */
+int dlb_notify_vf(struct dlb_hw *hw,
+		  unsigned int vf_id,
+		  u32 notification);
+
+/**
+ * dlb_vf_in_use() - query whether a VF is in use
+ * @hw: dlb_hw handle for a particular device.
+ * @vf_id: VF ID
+ *
+ * This function sends a mailbox request to the VF to query whether the VF is in
+ * use.
+ *
+ * Return:
+ * Returns 0 for false, 1 for true, and -1 if the mailbox request times out or
+ * an internal error occurs.
+ */
+int dlb_vf_in_use(struct dlb_hw *hw, unsigned int vf_id);
 
 /**
  * dlb_disable_dp_vasr_feature() - disable directed pipe VAS reset hardware
