@@ -186,3 +186,100 @@ Description:	Interface for re-enabling ingress error interrupts
 		re-enabled when the device is reset or the driver is reloaded.
 		This interface can be used to re-enable the interrupt as well,
 		and can be read to determine whether the interrupt is enabled.
+
+What:		/sys/bus/pci/devices/.../vf<N>_resources/num_atomic_inflights
+What:		/sys/bus/pci/devices/.../vf<N>_resources/num_dir_credit_pools
+What:		/sys/bus/pci/devices/.../vf<N>_resources/num_dir_credits
+What:		/sys/bus/pci/devices/.../vf<N>_resources/num_dir_ports
+What:		/sys/bus/pci/devices/.../vf<N>_resources/num_hist_list_entries
+What:		/sys/bus/pci/devices/.../vf<N>_resources/num_ldb_credit_pools
+What:		/sys/bus/pci/devices/.../vf<N>_resources/num_ldb_credits
+What:		/sys/bus/pci/devices/.../vf<N>_resources/num_ldb_ports
+What:		/sys/bus/pci/devices/.../vf<N>_resources/num_ldb_queues
+Date:		February 27, 2020
+KernelVersion:	5.7
+Contact:	gage.eads@intel.com
+Description:
+		The vf<N>_resources subdirectory contains a set of read-write
+		files used to assign/remove device resources to/from virtual
+		function (VF) devices.
+
+		Writing a resource's file causes the driver to reassign that
+		many of the resource from the physical function (PF) to the VF.
+		This operation will fail if the PF does not contain sufficient
+		available resources.
+
+		When an assignment is reduced, i.e. a smaller number is written
+		to a file than its current value, the difference is returned
+		to the physical function.
+
+		Reading a file returns the VF's current allocation of the
+		resource.
+
+		This subdirectory is only present for physical function DLB
+		devices, and its contents are only writable when VF N is not
+		locked.
+
+		num_atomic_inflights:  Number of atomic inflights assigned to
+				       VF N.
+
+		num_dir_credit_pools:  Number of directed credit pools assigned
+				       to VF N.
+
+		num_dir_credits:       Number of directed credits assigned to
+				       VF N.
+
+		num_dir_ports:	       Number of directed ports (and queues)
+				       assigned to VF N.
+
+		num_hist_list_entries: Number of history list entries assigned
+				       to VF N.
+
+		num_ldb_credit_pools:  Number of load-balanced credit pools
+				       assigned to VF N.
+
+		num_ldb_credits:       Number of load-balanced credits assigned
+				       to VF N.
+
+		num_ldb_ports:	       Number of load-balanced ports assigned
+				       to VF N.
+
+		num_ldb_queues:	       Number of load-balanced queues assigned
+				       to VF N.
+
+		num_sched_domains:     Number of scheduling domains assigned to
+				       VF N.
+
+What:		/sys/bus/pci/devices/.../vf<N>_resources/locked
+Date:		February 27, 2020
+KernelVersion:	5.7
+Contact:	gage.eads@intel.com
+Description:	Read-only file that indicates if virtual function N is locked
+
+		When a VF is locked, its resource allocation is fixed. A VF is
+		locked when it is bound to a kernel driver.
+
+What:		/sys/bus/pci/devices/.../vf<N>_resources/aux_vf_ids
+Date:		February 27, 2020
+KernelVersion:	5.7
+Contact:	gage.eads@intel.com
+Description:	Interface for assigning auxiliary VFs to a primary VF.
+
+		Each DLB VF is limited to 32 MSI interrupt vectors, 31 of which
+		are available for CQ interrupts. If a VF user (e.g. a guest OS)
+		needs more CQ interrupts, they have to use more than one VF.
+		To support this, the driver has a notion of "primary" and
+		"auxiliary" VFs:
+		* Primary: the VF is used as a normal DLB device. The
+		  primary VF has 0+ auxiliary VFs supporting it.
+		* Auxiliary: the VF doesn't have any resources of its
+		  own, and serves only to provide the primary
+		  VF with MSI vectors for its CQ interrupts.
+
+		This file is used to assign auxiliary VFs. When a VF is made
+		auxiliary to another, any resources it had are relinquished to
+		the PF.
+
+		When a primary VF has one or more auxiliary VFs, the entire VF
+		group must be assigned to the same virtual machine, or else the
+		primary VF will not function correctly.
