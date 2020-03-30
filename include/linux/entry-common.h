@@ -343,6 +343,9 @@ void irqentry_exit_to_user_mode(struct pt_regs *regs);
 #ifndef irqentry_state
 typedef struct irqentry_state {
 #ifdef CONFIG_ARCH_HAS_SUPERVISOR_PKEYS
+#ifdef CONFIG_ZONE_DEVICE_ACCESS_PROTECTION
+	unsigned int pkrs_ref;
+#endif
 	u32 pkrs;
 	u32 thread_pkrs;
 #endif
