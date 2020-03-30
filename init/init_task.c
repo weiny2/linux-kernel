@@ -204,6 +204,9 @@ struct task_struct init_task
 #ifdef CONFIG_SECURITY
 	.security	= NULL,
 #endif
+#if defined(CONFIG_ZONE_DEVICE) && defined(CONFIG_ARCH_HAS_PKEYS)
+	.dev_page_pkey_ref = ATOMIC_INIT(0),
+#endif
 };
 EXPORT_SYMBOL(init_task);
 

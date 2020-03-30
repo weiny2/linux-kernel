@@ -958,6 +958,9 @@ static struct task_struct *dup_task_struct(struct task_struct *orig, int node)
 #ifdef CONFIG_MEMCG
 	tsk->active_memcg = NULL;
 #endif
+#if defined(CONFIG_ZONE_DEVICE) && defined(CONFIG_ARCH_HAS_PKEYS)
+	atomic_set(&tsk->dev_page_pkey_ref, 0);
+#endif
 	return tsk;
 
 free_stack:
