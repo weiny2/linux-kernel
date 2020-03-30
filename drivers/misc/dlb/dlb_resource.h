@@ -781,6 +781,27 @@ int dlb_hw_get_num_resources(struct dlb_hw *hw,
 			     unsigned int vf_id);
 
 /**
+ * dlb_hw_get_num_used_resources() - query the PCI function's used resources
+ * @arg: pointer to resource counts.
+ * @vf_request: indicates whether this request came from a VF.
+ * @vf_id: If vf_request is true, this contains the VF's ID.
+ *
+ * This function returns the number of resources in use by the PF or a VF. It
+ * fills in the fields that args points to, except the following:
+ * - max_contiguous_atomic_inflights
+ * - max_contiguous_hist_list_entries
+ * - max_contiguous_ldb_credits
+ * - max_contiguous_dir_credits
+ *
+ * Return:
+ * Returns 0 upon success, -EINVAL if vf_request is true and vf_id is invalid.
+ */
+int dlb_hw_get_num_used_resources(struct dlb_hw *hw,
+				  struct dlb_get_num_resources_args *arg,
+				  bool vf_request,
+				  unsigned int vf_id);
+
+/**
  * dlb_init_perf_metric_measurement() - initialize perf metric h/w counters
  * @hw: dlb_hw handle for a particular device.
  * @id: perf metric group ID.
@@ -823,6 +844,295 @@ void dlb_read_sched_counts(struct dlb_hw *hw,
 			   struct dlb_sched_counts *data,
 			   bool vf_request,
 			   unsigned int vf_id);
+
+/**
+ * dlb_set_vf_reset_in_progress() - set a VF's reset in progress bit
+ * @hw: dlb_hw handle for a particular device.
+ * @vf_id: VF ID.
+ *
+ * Note: This function is only supported on A-stepping devices.
+ *
+ * Note: The caller must ensure dlb_set_vf_reset_in_progress(),
+ * dlb_clr_vf_reset_in_progress(), and dlb_ack_vf_flr_int() are not executed in
+ * parallel, because the reset-in-progress register does not support atomic
+ * updates on A-stepping devices.
+ */
+void dlb_set_vf_reset_in_progress(struct dlb_hw *hw, int vf_id);
+
+/**
+ * dlb_clr_vf_reset_in_progress() - clear a VF's reset in progress bit
+ * @hw: dlb_hw handle for a particular device.
+ * @vf_id: VF ID.
+ *
+ * Note: This function is only supported on A-stepping devices.
+ *
+ * Note: The caller must ensure dlb_set_vf_reset_in_progress(),
+ * dlb_clr_vf_reset_in_progress(), and dlb_ack_vf_flr_int() are not executed in
+ * parallel, because the reset-in-progress register does not support atomic
+ * updates on A-stepping devices.
+ */
+void dlb_clr_vf_reset_in_progress(struct dlb_hw *hw, int vf_id);
+
+/**
+ * dlb_vf_is_locked() - check whether the VF's resources are locked
+ * @hw: dlb_hw handle for a particular device.
+ * @vf_id: VF ID
+ *
+ * This function returns whether or not the VF's resource assignments are
+ * locked. If locked, no resources can be added to or subtracted from the
+ * group.
+ */
+bool dlb_vf_is_locked(struct dlb_hw *hw, unsigned int vf_id);
+
+/**
+ * dlb_lock_vf() - lock the VF's resources
+ * @hw: dlb_hw handle for a particular device.
+ * @vf_id: VF ID
+ *
+ * This function sets a flag indicating that the VF is using its resources.
+ * When VF is locked, its resource assignment cannot be changed.
+ */
+void dlb_lock_vf(struct dlb_hw *hw, unsigned int vf_id);
+
+/**
+ * dlb_unlock_vf() - unlock the VF's resources
+ * @hw: dlb_hw handle for a particular device.
+ * @vf_id: VF ID
+ *
+ * This function unlocks the VF's resource assignment, allowing it to be
+ * modified.
+ */
+void dlb_unlock_vf(struct dlb_hw *hw, unsigned int vf_id);
+
+/**
+ * dlb_update_vf_sched_domains() - update the domains assigned to a VF
+ * @hw: dlb_hw handle for a particular device.
+ * @vf_id: VF ID
+ * @num: number of scheduling domains to assign to this VF
+ *
+ * This function assigns num scheduling domains to the specified VF. If the VF
+ * already has domains assigned, this existing assignment is adjusted
+ * accordingly.
+ *
+ * Return:
+ * Returns 0 upon success, <0 otherwise.
+ *
+ * Errors:
+ * EINVAL - vf_id is invalid, or the requested number of resources are
+ *	    unavailable.
+ * EPERM  - The VF's resource assignment is locked and cannot be changed.
+ */
+int dlb_update_vf_sched_domains(struct dlb_hw *hw,
+				u32 vf_id,
+				u32 num);
+
+/**
+ * dlb_update_vf_ldb_queues() - update the LDB queues assigned to a VF
+ * @hw: dlb_hw handle for a particular device.
+ * @vf_id: VF ID
+ * @num: number of LDB queues to assign to this VF
+ *
+ * This function assigns num LDB queues to the specified VF. If the VF already
+ * has LDB queues assigned, this existing assignment is adjusted
+ * accordingly.
+ *
+ * Return:
+ * Returns 0 upon success, <0 otherwise.
+ *
+ * Errors:
+ * EINVAL - vf_id is invalid, or the requested number of resources are
+ *	    unavailable.
+ * EPERM  - The VF's resource assignment is locked and cannot be changed.
+ */
+int dlb_update_vf_ldb_queues(struct dlb_hw *hw, u32 vf_id, u32 num);
+
+/**
+ * dlb_update_vf_ldb_ports() - update the LDB ports assigned to a VF
+ * @hw: dlb_hw handle for a particular device.
+ * @vf_id: VF ID
+ * @num: number of LDB ports to assign to this VF
+ *
+ * This function assigns num LDB ports to the specified VF. If the VF already
+ * has LDB ports assigned, this existing assignment is adjusted accordingly.
+ *
+ * Return:
+ * Returns 0 upon success, <0 otherwise.
+ *
+ * Errors:
+ * EINVAL - vf_id is invalid, or the requested number of resources are
+ *	    unavailable.
+ * EPERM  - The VF's resource assignment is locked and cannot be changed.
+ */
+int dlb_update_vf_ldb_ports(struct dlb_hw *hw, u32 vf_id, u32 num);
+
+/**
+ * dlb_update_vf_dir_ports() - update the DIR ports assigned to a VF
+ * @hw: dlb_hw handle for a particular device.
+ * @vf_id: VF ID
+ * @num: number of DIR ports to assign to this VF
+ *
+ * This function assigns num DIR ports to the specified VF. If the VF already
+ * has DIR ports assigned, this existing assignment is adjusted accordingly.
+ *
+ * Return:
+ * Returns 0 upon success, <0 otherwise.
+ *
+ * Errors:
+ * EINVAL - vf_id is invalid, or the requested number of resources are
+ *	    unavailable.
+ * EPERM  - The VF's resource assignment is locked and cannot be changed.
+ */
+int dlb_update_vf_dir_ports(struct dlb_hw *hw, u32 vf_id, u32 num);
+
+/**
+ * dlb_update_vf_ldb_credit_pools() - update the VF's assigned LDB pools
+ * @hw: dlb_hw handle for a particular device.
+ * @vf_id: VF ID
+ * @num: number of LDB credit pools to assign to this VF
+ *
+ * This function assigns num LDB credit pools to the specified VF. If the VF
+ * already has LDB credit pools assigned, this existing assignment is adjusted
+ * accordingly.
+ *
+ * Return:
+ * Returns 0 upon success, <0 otherwise.
+ *
+ * Errors:
+ * EINVAL - vf_id is invalid, or the requested number of resources are
+ *	    unavailable.
+ * EPERM  - The VF's resource assignment is locked and cannot be changed.
+ */
+int dlb_update_vf_ldb_credit_pools(struct dlb_hw *hw,
+				   u32 vf_id,
+				   u32 num);
+
+/**
+ * dlb_update_vf_dir_credit_pools() - update the VF's assigned DIR pools
+ * @hw: dlb_hw handle for a particular device.
+ * @vf_id: VF ID
+ * @num: number of DIR credit pools to assign to this VF
+ *
+ * This function assigns num DIR credit pools to the specified VF. If the VF
+ * already has DIR credit pools assigned, this existing assignment is adjusted
+ * accordingly.
+ *
+ * Return:
+ * Returns 0 upon success, <0 otherwise.
+ *
+ * Errors:
+ * EINVAL - vf_id is invalid, or the requested number of resources are
+ *	    unavailable.
+ * EPERM  - The VF's resource assignment is locked and cannot be changed.
+ */
+int dlb_update_vf_dir_credit_pools(struct dlb_hw *hw,
+				   u32 vf_id,
+				   u32 num);
+
+/**
+ * dlb_update_vf_ldb_credits() - update the VF's assigned LDB credits
+ * @hw: dlb_hw handle for a particular device.
+ * @vf_id: VF ID
+ * @num: number of LDB credits to assign to this VF
+ *
+ * This function assigns num LDB credits to the specified VF. If the VF already
+ * has LDB credits assigned, this existing assignment is adjusted accordingly.
+ * VF's are assigned a contiguous chunk of credits, so this function may fail
+ * if a sufficiently large contiguous chunk is not available.
+ *
+ * Return:
+ * Returns 0 upon success, <0 otherwise.
+ *
+ * Errors:
+ * EINVAL - vf_id is invalid, or the requested number of resources are
+ *	    unavailable.
+ * EPERM  - The VF's resource assignment is locked and cannot be changed.
+ */
+int dlb_update_vf_ldb_credits(struct dlb_hw *hw, u32 vf_id, u32 num);
+
+/**
+ * dlb_update_vf_dir_credits() - update the VF's assigned DIR credits
+ * @hw: dlb_hw handle for a particular device.
+ * @vf_id: VF ID
+ * @num: number of DIR credits to assign to this VF
+ *
+ * This function assigns num DIR credits to the specified VF. If the VF already
+ * has DIR credits assigned, this existing assignment is adjusted accordingly.
+ * VF's are assigned a contiguous chunk of credits, so this function may fail
+ * if a sufficiently large contiguous chunk is not available.
+ *
+ * Return:
+ * Returns 0 upon success, <0 otherwise.
+ *
+ * Errors:
+ * EINVAL - vf_id is invalid, or the requested number of resources are
+ *	    unavailable.
+ * EPERM  - The VF's resource assignment is locked and cannot be changed.
+ */
+int dlb_update_vf_dir_credits(struct dlb_hw *hw, u32 vf_id, u32 num);
+
+/**
+ * dlb_update_vf_hist_list_entries() - update the VF's assigned HL entries
+ * @hw: dlb_hw handle for a particular device.
+ * @vf_id: VF ID
+ * @num: number of history list entries to assign to this VF
+ *
+ * This function assigns num history list entries to the specified VF. If the
+ * VF already has history list entries assigned, this existing assignment is
+ * adjusted accordingly. VF's are assigned a contiguous chunk of entries, so
+ * this function may fail if a sufficiently large contiguous chunk is not
+ * available.
+ *
+ * Return:
+ * Returns 0 upon success, <0 otherwise.
+ *
+ * Errors:
+ * EINVAL - vf_id is invalid, or the requested number of resources are
+ *	    unavailable.
+ * EPERM  - The VF's resource assignment is locked and cannot be changed.
+ */
+int dlb_update_vf_hist_list_entries(struct dlb_hw *hw,
+				    u32 vf_id,
+				    u32 num);
+
+/**
+ * dlb_update_vf_atomic_inflights() - update the VF's atomic inflights
+ * @hw: dlb_hw handle for a particular device.
+ * @vf_id: VF ID
+ * @num: number of atomic inflights to assign to this VF
+ *
+ * This function assigns num atomic inflights to the specified VF. If the VF
+ * already has atomic inflights assigned, this existing assignment is adjusted
+ * accordingly. VF's are assigned a contiguous chunk of entries, so this
+ * function may fail if a sufficiently large contiguous chunk is not available.
+ *
+ * Return:
+ * Returns 0 upon success, <0 otherwise.
+ *
+ * Errors:
+ * EINVAL - vf_id is invalid, or the requested number of resources are
+ *	    unavailable.
+ * EPERM  - The VF's resource assignment is locked and cannot be changed.
+ */
+int dlb_update_vf_atomic_inflights(struct dlb_hw *hw,
+				   u32 vf_id,
+				   u32 num);
+
+/**
+ * dlb_reset_vf_resources() - reassign the VF's resources to the PF
+ * @hw: dlb_hw handle for a particular device.
+ * @vf_id: VF ID
+ *
+ * This function takes any resources currently assigned to the VF and reassigns
+ * them to the PF.
+ *
+ * Return:
+ * Returns 0 upon success, <0 otherwise.
+ *
+ * Errors:
+ * EINVAL - vf_id is invalid
+ * EPERM  - The VF's resource assignment is locked and cannot be changed.
+ */
+int dlb_reset_vf_resources(struct dlb_hw *hw, unsigned int vf_id);
 
 /**
  * dlb_disable_dp_vasr_feature() - disable directed pipe VAS reset hardware

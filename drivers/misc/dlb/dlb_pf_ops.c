@@ -721,7 +721,14 @@ static bool dlb_sparse_cq_mode_enabled;
 
 static void dlb_pf_init_hardware(struct dlb_dev *dlb_dev)
 {
+	int i;
+
 	dlb_disable_dp_vasr_feature(&dlb_dev->hw);
+
+	if (dlb_dev->revision < DLB_REV_B0) {
+		for (i = 0; i < pci_num_vf(dlb_dev->pdev); i++)
+			dlb_set_vf_reset_in_progress(&dlb_dev->hw, i);
+	}
 
 	dlb_sparse_cq_mode_enabled = dlb_dev->revision >= DLB_REV_B0;
 
@@ -757,6 +764,504 @@ static void dlb_pf_init_hardware(struct dlb_dev *dlb_dev)
 /*****************************/
 /****** Sysfs callbacks ******/
 /*****************************/
+
+static ssize_t dlb_sysfs_aux_vf_ids_read(struct device *dev,
+					 struct device_attribute *attr,
+					 char *buf,
+					 int vf_id)
+{
+	struct dlb_dev *dlb_dev = dev_get_drvdata(dev);
+	int i, size;
+
+	mutex_lock(&dlb_dev->resource_mutex);
+
+	size = 0;
+
+	for (i = 0; i < DLB_MAX_NUM_VFS; i++) {
+		if (!dlb_dev->child_id_state[i].is_auxiliary_vf)
+			continue;
+
+		if (dlb_dev->child_id_state[i].primary_vf_id != vf_id)
+			continue;
+
+		size += scnprintf(&buf[size], PAGE_SIZE - size, "%d,", i);
+	}
+
+	if (size == 0)
+		size = 1;
+
+	/* Replace the last comma with a newline */
+	size += scnprintf(&buf[size - 1], PAGE_SIZE - size, "\n");
+
+	mutex_unlock(&dlb_dev->resource_mutex);
+
+	return size;
+}
+
+static ssize_t dlb_sysfs_aux_vf_ids_write(struct device *dev,
+					  struct device_attribute *attr,
+					  const char *buf,
+					  size_t count,
+					  int primary_vf_id)
+{
+	struct dlb_dev *dlb_dev = dev_get_drvdata(dev);
+	char *user_buf = (char *)buf;
+	unsigned int vf_id;
+	char *vf_id_str;
+
+	mutex_lock(&dlb_dev->resource_mutex);
+
+	/* If the primary VF is locked, no auxiliary VFs can be added to or
+	 * removed from it.
+	 */
+	if (dlb_vf_is_locked(&dlb_dev->hw, primary_vf_id)) {
+		mutex_unlock(&dlb_dev->resource_mutex);
+		return -EINVAL;
+	}
+
+	vf_id_str = strsep(&user_buf, ",");
+	while (vf_id_str) {
+		struct vf_id_state *child_id_state;
+		int ret;
+
+		ret = kstrtouint(vf_id_str, 0, &vf_id);
+		if (ret) {
+			mutex_unlock(&dlb_dev->resource_mutex);
+			return -EINVAL;
+		}
+
+		if (vf_id >= DLB_MAX_NUM_VFS) {
+			mutex_unlock(&dlb_dev->resource_mutex);
+			return -EINVAL;
+		}
+
+		child_id_state = &dlb_dev->child_id_state[vf_id];
+
+		if (vf_id == primary_vf_id) {
+			mutex_unlock(&dlb_dev->resource_mutex);
+			return -EINVAL;
+		}
+
+		/* Check if the aux-primary VF relationship already exists */
+		if (child_id_state->is_auxiliary_vf &&
+		    child_id_state->primary_vf_id == primary_vf_id) {
+			vf_id_str = strsep(&user_buf, ",");
+			continue;
+		}
+
+		/* If the desired VF is locked, it can't be made auxiliary */
+		if (dlb_vf_is_locked(&dlb_dev->hw, vf_id)) {
+			mutex_unlock(&dlb_dev->resource_mutex);
+			return -EINVAL;
+		}
+
+		/* Attempt to reassign the VF */
+		child_id_state->is_auxiliary_vf = true;
+		child_id_state->primary_vf_id = primary_vf_id;
+
+		/* Reassign any of the desired VF's resources back to the PF */
+		if (dlb_reset_vf_resources(&dlb_dev->hw, vf_id)) {
+			mutex_unlock(&dlb_dev->resource_mutex);
+			return -EINVAL;
+		}
+
+		vf_id_str = strsep(&user_buf, ",");
+	}
+
+	mutex_unlock(&dlb_dev->resource_mutex);
+
+	return count;
+}
+
+static ssize_t dlb_sysfs_vf_read(struct device *dev,
+				 struct device_attribute *attr,
+				 char *buf,
+				 int vf_id)
+{
+	struct dlb_dev *dlb_dev = dev_get_drvdata(dev);
+	struct dlb_get_num_resources_args num_avail_rsrcs;
+	struct dlb_get_num_resources_args num_used_rsrcs;
+	struct dlb_get_num_resources_args num_rsrcs;
+	struct dlb_hw *hw = &dlb_dev->hw;
+	int val;
+
+	mutex_lock(&dlb_dev->resource_mutex);
+
+	val = dlb_hw_get_num_resources(hw, &num_avail_rsrcs, true, vf_id);
+	if (val) {
+		mutex_unlock(&dlb_dev->resource_mutex);
+		return -1;
+	}
+
+	val = dlb_hw_get_num_used_resources(hw, &num_used_rsrcs, true, vf_id);
+	if (val) {
+		mutex_unlock(&dlb_dev->resource_mutex);
+		return -1;
+	}
+
+	mutex_unlock(&dlb_dev->resource_mutex);
+
+	num_rsrcs.num_sched_domains = num_avail_rsrcs.num_sched_domains +
+		num_used_rsrcs.num_sched_domains;
+	num_rsrcs.num_ldb_queues = num_avail_rsrcs.num_ldb_queues +
+		num_used_rsrcs.num_ldb_queues;
+	num_rsrcs.num_ldb_ports = num_avail_rsrcs.num_ldb_ports +
+		num_used_rsrcs.num_ldb_ports;
+	num_rsrcs.num_dir_ports = num_avail_rsrcs.num_dir_ports +
+		num_used_rsrcs.num_dir_ports;
+	num_rsrcs.num_ldb_credits = num_avail_rsrcs.num_ldb_credits +
+		num_used_rsrcs.num_ldb_credits;
+	num_rsrcs.num_dir_credits = num_avail_rsrcs.num_dir_credits +
+		num_used_rsrcs.num_dir_credits;
+	num_rsrcs.num_ldb_credit_pools = num_avail_rsrcs.num_ldb_credit_pools +
+		num_used_rsrcs.num_ldb_credit_pools;
+	num_rsrcs.num_dir_credit_pools = num_avail_rsrcs.num_dir_credit_pools +
+		num_used_rsrcs.num_dir_credit_pools;
+	num_rsrcs.num_hist_list_entries =
+		num_avail_rsrcs.num_hist_list_entries +
+		num_used_rsrcs.num_hist_list_entries;
+	num_rsrcs.num_atomic_inflights = num_avail_rsrcs.num_atomic_inflights +
+		num_used_rsrcs.num_atomic_inflights;
+
+	if (strncmp(attr->attr.name, "num_sched_domains",
+		    sizeof("num_sched_domains")) == 0)
+		val = num_rsrcs.num_sched_domains;
+	else if (strncmp(attr->attr.name, "num_ldb_queues",
+			 sizeof("num_ldb_queues")) == 0)
+		val = num_rsrcs.num_ldb_queues;
+	else if (strncmp(attr->attr.name, "num_ldb_ports",
+			 sizeof("num_ldb_ports")) == 0)
+		val = num_rsrcs.num_ldb_ports;
+	else if (strncmp(attr->attr.name, "num_dir_ports",
+			 sizeof("num_dir_ports")) == 0)
+		val = num_rsrcs.num_dir_ports;
+	else if (strncmp(attr->attr.name, "num_ldb_credit_pools",
+			 sizeof("num_ldb_credit_pools")) == 0)
+		val = num_rsrcs.num_ldb_credit_pools;
+	else if (strncmp(attr->attr.name, "num_dir_credit_pools",
+			 sizeof("num_dir_credit_pools")) == 0)
+		val = num_rsrcs.num_dir_credit_pools;
+	else if (strncmp(attr->attr.name, "num_ldb_credits",
+			 sizeof("num_ldb_credits")) == 0)
+		val = num_rsrcs.num_ldb_credits;
+	else if (strncmp(attr->attr.name, "num_dir_credits",
+			 sizeof("num_dir_credits")) == 0)
+		val = num_rsrcs.num_dir_credits;
+	else if (strncmp(attr->attr.name, "num_hist_list_entries",
+			 sizeof("num_hist_list_entries")) == 0)
+		val = num_rsrcs.num_hist_list_entries;
+	else if (strncmp(attr->attr.name, "num_atomic_inflights",
+			 sizeof("num_atomic_inflights")) == 0)
+		val = num_rsrcs.num_atomic_inflights;
+	else if (strncmp(attr->attr.name, "locked",
+			 sizeof("locked")) == 0)
+		val = (int)dlb_vf_is_locked(hw, vf_id);
+	else
+		return -1;
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n", val);
+}
+
+static ssize_t dlb_sysfs_vf_write(struct device *dev,
+				  struct device_attribute *attr,
+				  const char *buf,
+				  size_t count,
+				  int vf_id)
+{
+	struct dlb_dev *dlb_dev = dev_get_drvdata(dev);
+	unsigned long num;
+	const char *name;
+	int ret;
+
+	ret = kstrtoul(buf, 0, &num);
+	if (ret)
+		return -1;
+
+	name = attr->attr.name;
+
+	mutex_lock(&dlb_dev->resource_mutex);
+
+	if (strncmp(name, "num_sched_domains",
+		    sizeof("num_sched_domains")) == 0) {
+		ret = dlb_update_vf_sched_domains(&dlb_dev->hw, vf_id, num);
+	} else if (strncmp(name, "num_ldb_queues",
+			   sizeof("num_ldb_queues")) == 0) {
+		ret = dlb_update_vf_ldb_queues(&dlb_dev->hw, vf_id, num);
+	} else if (strncmp(name, "num_ldb_ports",
+			   sizeof("num_ldb_ports")) == 0) {
+		ret = dlb_update_vf_ldb_ports(&dlb_dev->hw, vf_id, num);
+	} else if (strncmp(name, "num_dir_ports",
+			   sizeof("num_dir_ports")) == 0) {
+		ret = dlb_update_vf_dir_ports(&dlb_dev->hw, vf_id, num);
+	} else if (strncmp(name, "num_ldb_credit_pools",
+			   sizeof("num_ldb_credit_pools")) == 0) {
+		ret = dlb_update_vf_ldb_credit_pools(&dlb_dev->hw, vf_id, num);
+	} else if (strncmp(name, "num_dir_credit_pools",
+			   sizeof("num_dir_credit_pools")) == 0) {
+		ret = dlb_update_vf_dir_credit_pools(&dlb_dev->hw, vf_id, num);
+	} else if (strncmp(name, "num_ldb_credits",
+			   sizeof("num_ldb_credits")) == 0) {
+		ret = dlb_update_vf_ldb_credits(&dlb_dev->hw, vf_id, num);
+	} else if (strncmp(name, "num_dir_credits",
+			   sizeof("num_dir_credits")) == 0) {
+		ret = dlb_update_vf_dir_credits(&dlb_dev->hw, vf_id, num);
+	} else if (strncmp(attr->attr.name, "num_hist_list_entries",
+			   sizeof("num_hist_list_entries")) == 0) {
+		ret = dlb_update_vf_hist_list_entries(&dlb_dev->hw, vf_id, num);
+	} else if (strncmp(attr->attr.name, "num_atomic_inflights",
+			   sizeof("num_atomic_inflights")) == 0) {
+		ret = dlb_update_vf_atomic_inflights(&dlb_dev->hw, vf_id, num);
+	} else {
+		mutex_unlock(&dlb_dev->resource_mutex);
+		return -1;
+	}
+
+	mutex_unlock(&dlb_dev->resource_mutex);
+
+	return (ret == 0) ? count : ret;
+}
+
+#define DLB_VF_SYSFS_RD_FUNC(id) \
+static ssize_t dlb_sysfs_vf ## id ## _read(		      \
+	struct device *dev,				      \
+	struct device_attribute *attr,			      \
+	char *buf)					      \
+{							      \
+	return dlb_sysfs_vf_read(dev, attr, buf, id);	      \
+}							      \
+
+#define DLB_VF_SYSFS_WR_FUNC(id) \
+static ssize_t dlb_sysfs_vf ## id ## _write(		      \
+	struct device *dev,				      \
+	struct device_attribute *attr,			      \
+	const char *buf,				      \
+	size_t count)					      \
+{							      \
+	return dlb_sysfs_vf_write(dev, attr, buf, count, id); \
+}
+
+#define DLB_AUX_VF_ID_RD_FUNC(id) \
+static ssize_t dlb_sysfs_vf ## id ## _vf_ids_read(		      \
+	struct device *dev,					      \
+	struct device_attribute *attr,				      \
+	char *buf)						      \
+{								      \
+	return dlb_sysfs_aux_vf_ids_read(dev, attr, buf, id);	      \
+}								      \
+
+#define DLB_AUX_VF_ID_WR_FUNC(id) \
+static ssize_t dlb_sysfs_vf ## id ## _vf_ids_write(		      \
+	struct device *dev,					      \
+	struct device_attribute *attr,				      \
+	const char *buf,					      \
+	size_t count)						      \
+{								      \
+	return dlb_sysfs_aux_vf_ids_write(dev, attr, buf, count, id); \
+}
+
+/* Read-write per-resource-group sysfs files */
+#define DLB_VF_DEVICE_ATTRS(id) \
+static struct device_attribute			    \
+dev_attr_vf ## id ## _sched_domains =		    \
+	__ATTR(num_sched_domains,		    \
+	       0644,				    \
+	       dlb_sysfs_vf ## id ## _read,	    \
+	       dlb_sysfs_vf ## id ## _write);	    \
+static struct device_attribute			    \
+dev_attr_vf ## id ## _ldb_queues =		    \
+	__ATTR(num_ldb_queues,			    \
+	       0644,				    \
+	       dlb_sysfs_vf ## id ## _read,	    \
+	       dlb_sysfs_vf ## id ## _write);	    \
+static struct device_attribute			    \
+dev_attr_vf ## id ## _ldb_ports =		    \
+	__ATTR(num_ldb_ports,			    \
+	       0644,				    \
+	       dlb_sysfs_vf ## id ## _read,	    \
+	       dlb_sysfs_vf ## id ## _write);	    \
+static struct device_attribute			    \
+dev_attr_vf ## id ## _dir_ports =		    \
+	__ATTR(num_dir_ports,			    \
+	       0644,				    \
+	       dlb_sysfs_vf ## id ## _read,	    \
+	       dlb_sysfs_vf ## id ## _write);	    \
+static struct device_attribute			    \
+dev_attr_vf ## id ## _ldb_credit_pools =	    \
+	__ATTR(num_ldb_credit_pools,		    \
+	       0644,				    \
+	       dlb_sysfs_vf ## id ## _read,	    \
+	       dlb_sysfs_vf ## id ## _write);	    \
+static struct device_attribute			    \
+dev_attr_vf ## id ## _dir_credit_pools =	    \
+	__ATTR(num_dir_credit_pools,		    \
+	       0644,				    \
+	       dlb_sysfs_vf ## id ## _read,	    \
+	       dlb_sysfs_vf ## id ## _write);	    \
+static struct device_attribute			    \
+dev_attr_vf ## id ## _ldb_credits =		    \
+	__ATTR(num_ldb_credits,			    \
+	       0644,				    \
+	       dlb_sysfs_vf ## id ## _read,	    \
+	       dlb_sysfs_vf ## id ## _write);	    \
+static struct device_attribute			    \
+dev_attr_vf ## id ## _dir_credits =		    \
+	__ATTR(num_dir_credits,			    \
+	       0644,				    \
+	       dlb_sysfs_vf ## id ## _read,	    \
+	       dlb_sysfs_vf ## id ## _write);	    \
+static struct device_attribute			    \
+dev_attr_vf ## id ## _hist_list_entries =	    \
+	__ATTR(num_hist_list_entries,		    \
+	       0644,				    \
+	       dlb_sysfs_vf ## id ## _read,	    \
+	       dlb_sysfs_vf ## id ## _write);	    \
+static struct device_attribute			    \
+dev_attr_vf ## id ## _atomic_inflights =	    \
+	__ATTR(num_atomic_inflights,		    \
+	       0644,				    \
+	       dlb_sysfs_vf ## id ## _read,	    \
+	       dlb_sysfs_vf ## id ## _write);	    \
+static struct device_attribute			    \
+dev_attr_vf ## id ## _locked =			    \
+	__ATTR(locked,				    \
+	       0444,				    \
+	       dlb_sysfs_vf ## id ## _read,	    \
+	       NULL);				    \
+static struct device_attribute			    \
+dev_attr_vf ## id ## _aux_vf_ids =		    \
+	__ATTR(aux_vf_ids,			    \
+	       0644,				    \
+	       dlb_sysfs_vf ## id ## _vf_ids_read,  \
+	       dlb_sysfs_vf ## id ## _vf_ids_write) \
+
+#define DLB_VF_SYSFS_ATTRS(id) \
+DLB_VF_DEVICE_ATTRS(id);				\
+static struct attribute *dlb_vf ## id ## _attrs[] = {	\
+	&dev_attr_vf ## id ## _sched_domains.attr,	\
+	&dev_attr_vf ## id ## _ldb_queues.attr,		\
+	&dev_attr_vf ## id ## _ldb_ports.attr,		\
+	&dev_attr_vf ## id ## _dir_ports.attr,		\
+	&dev_attr_vf ## id ## _ldb_credit_pools.attr,	\
+	&dev_attr_vf ## id ## _dir_credit_pools.attr,	\
+	&dev_attr_vf ## id ## _ldb_credits.attr,	\
+	&dev_attr_vf ## id ## _dir_credits.attr,	\
+	&dev_attr_vf ## id ## _hist_list_entries.attr,	\
+	&dev_attr_vf ## id ## _atomic_inflights.attr,	\
+	&dev_attr_vf ## id ## _locked.attr,		\
+	&dev_attr_vf ## id ## _aux_vf_ids.attr,		\
+	NULL						\
+}
+
+#define DLB_VF_SYSFS_ATTR_GROUP(id) \
+DLB_VF_SYSFS_ATTRS(id);						\
+static struct attribute_group dlb_vf ## id ## _attr_group = {	\
+	.attrs = dlb_vf ## id ## _attrs,			\
+	.name = "vf" #id "_resources"				\
+}
+
+DLB_VF_SYSFS_RD_FUNC(0);
+DLB_VF_SYSFS_RD_FUNC(1);
+DLB_VF_SYSFS_RD_FUNC(2);
+DLB_VF_SYSFS_RD_FUNC(3);
+DLB_VF_SYSFS_RD_FUNC(4);
+DLB_VF_SYSFS_RD_FUNC(5);
+DLB_VF_SYSFS_RD_FUNC(6);
+DLB_VF_SYSFS_RD_FUNC(7);
+DLB_VF_SYSFS_RD_FUNC(8);
+DLB_VF_SYSFS_RD_FUNC(9);
+DLB_VF_SYSFS_RD_FUNC(10);
+DLB_VF_SYSFS_RD_FUNC(11);
+DLB_VF_SYSFS_RD_FUNC(12);
+DLB_VF_SYSFS_RD_FUNC(13);
+DLB_VF_SYSFS_RD_FUNC(14);
+DLB_VF_SYSFS_RD_FUNC(15);
+
+DLB_VF_SYSFS_WR_FUNC(0);
+DLB_VF_SYSFS_WR_FUNC(1);
+DLB_VF_SYSFS_WR_FUNC(2);
+DLB_VF_SYSFS_WR_FUNC(3);
+DLB_VF_SYSFS_WR_FUNC(4);
+DLB_VF_SYSFS_WR_FUNC(5);
+DLB_VF_SYSFS_WR_FUNC(6);
+DLB_VF_SYSFS_WR_FUNC(7);
+DLB_VF_SYSFS_WR_FUNC(8);
+DLB_VF_SYSFS_WR_FUNC(9);
+DLB_VF_SYSFS_WR_FUNC(10);
+DLB_VF_SYSFS_WR_FUNC(11);
+DLB_VF_SYSFS_WR_FUNC(12);
+DLB_VF_SYSFS_WR_FUNC(13);
+DLB_VF_SYSFS_WR_FUNC(14);
+DLB_VF_SYSFS_WR_FUNC(15);
+
+DLB_AUX_VF_ID_RD_FUNC(0);
+DLB_AUX_VF_ID_RD_FUNC(1);
+DLB_AUX_VF_ID_RD_FUNC(2);
+DLB_AUX_VF_ID_RD_FUNC(3);
+DLB_AUX_VF_ID_RD_FUNC(4);
+DLB_AUX_VF_ID_RD_FUNC(5);
+DLB_AUX_VF_ID_RD_FUNC(6);
+DLB_AUX_VF_ID_RD_FUNC(7);
+DLB_AUX_VF_ID_RD_FUNC(8);
+DLB_AUX_VF_ID_RD_FUNC(9);
+DLB_AUX_VF_ID_RD_FUNC(10);
+DLB_AUX_VF_ID_RD_FUNC(11);
+DLB_AUX_VF_ID_RD_FUNC(12);
+DLB_AUX_VF_ID_RD_FUNC(13);
+DLB_AUX_VF_ID_RD_FUNC(14);
+DLB_AUX_VF_ID_RD_FUNC(15);
+
+DLB_AUX_VF_ID_WR_FUNC(0);
+DLB_AUX_VF_ID_WR_FUNC(1);
+DLB_AUX_VF_ID_WR_FUNC(2);
+DLB_AUX_VF_ID_WR_FUNC(3);
+DLB_AUX_VF_ID_WR_FUNC(4);
+DLB_AUX_VF_ID_WR_FUNC(5);
+DLB_AUX_VF_ID_WR_FUNC(6);
+DLB_AUX_VF_ID_WR_FUNC(7);
+DLB_AUX_VF_ID_WR_FUNC(8);
+DLB_AUX_VF_ID_WR_FUNC(9);
+DLB_AUX_VF_ID_WR_FUNC(10);
+DLB_AUX_VF_ID_WR_FUNC(11);
+DLB_AUX_VF_ID_WR_FUNC(12);
+DLB_AUX_VF_ID_WR_FUNC(13);
+DLB_AUX_VF_ID_WR_FUNC(14);
+DLB_AUX_VF_ID_WR_FUNC(15);
+
+DLB_VF_SYSFS_ATTR_GROUP(0);
+DLB_VF_SYSFS_ATTR_GROUP(1);
+DLB_VF_SYSFS_ATTR_GROUP(2);
+DLB_VF_SYSFS_ATTR_GROUP(3);
+DLB_VF_SYSFS_ATTR_GROUP(4);
+DLB_VF_SYSFS_ATTR_GROUP(5);
+DLB_VF_SYSFS_ATTR_GROUP(6);
+DLB_VF_SYSFS_ATTR_GROUP(7);
+DLB_VF_SYSFS_ATTR_GROUP(8);
+DLB_VF_SYSFS_ATTR_GROUP(9);
+DLB_VF_SYSFS_ATTR_GROUP(10);
+DLB_VF_SYSFS_ATTR_GROUP(11);
+DLB_VF_SYSFS_ATTR_GROUP(12);
+DLB_VF_SYSFS_ATTR_GROUP(13);
+DLB_VF_SYSFS_ATTR_GROUP(14);
+DLB_VF_SYSFS_ATTR_GROUP(15);
+
+const struct attribute_group *dlb_vf_attrs[] = {
+	&dlb_vf0_attr_group,
+	&dlb_vf1_attr_group,
+	&dlb_vf2_attr_group,
+	&dlb_vf3_attr_group,
+	&dlb_vf4_attr_group,
+	&dlb_vf5_attr_group,
+	&dlb_vf6_attr_group,
+	&dlb_vf7_attr_group,
+	&dlb_vf8_attr_group,
+	&dlb_vf9_attr_group,
+	&dlb_vf10_attr_group,
+	&dlb_vf11_attr_group,
+	&dlb_vf12_attr_group,
+	&dlb_vf13_attr_group,
+	&dlb_vf14_attr_group,
+	&dlb_vf15_attr_group,
+};
 
 #define DLB_TOTAL_SYSFS_SHOW(name, macro)		\
 static ssize_t total_##name##_show(			\
@@ -1082,6 +1587,7 @@ static int dlb_pf_sysfs_create(struct dlb_dev *dlb_dev)
 {
 	struct kobject *kobj;
 	int ret;
+	int i;
 
 	kobj = &dlb_dev->pdev->dev.kobj;
 
@@ -1105,8 +1611,19 @@ static int dlb_pf_sysfs_create(struct dlb_dev *dlb_dev)
 	if (ret)
 		goto dlb_sn_attr_group_fail;
 
+	for (i = 0; i < pci_num_vf(dlb_dev->pdev); i++) {
+		ret = sysfs_create_group(kobj, dlb_vf_attrs[i]);
+		if (ret)
+			goto dlb_vf_attr_group_fail;
+	}
+
 	return 0;
 
+dlb_vf_attr_group_fail:
+	for (i--; i >= 0; i--)
+		sysfs_remove_group(kobj, dlb_vf_attrs[i]);
+
+	sysfs_remove_group(kobj, &dlb_sequence_number_attr_group);
 dlb_sn_attr_group_fail:
 	sysfs_remove_group(kobj, &dlb_avail_attr_group);
 dlb_avail_attr_group_fail:
@@ -1122,8 +1639,12 @@ dlb_ingress_err_en_attr_group_fail:
 static void dlb_pf_sysfs_destroy(struct dlb_dev *dlb_dev)
 {
 	struct kobject *kobj;
+	int i;
 
 	kobj = &dlb_dev->pdev->dev.kobj;
+
+	for (i = 0; i < pci_num_vf(dlb_dev->pdev); i++)
+		sysfs_remove_group(kobj, dlb_vf_attrs[i]);
 
 	sysfs_remove_group(kobj, &dlb_sequence_number_attr_group);
 	sysfs_remove_group(kobj, &dlb_avail_attr_group);

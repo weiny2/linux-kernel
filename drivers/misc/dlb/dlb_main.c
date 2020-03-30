@@ -17,6 +17,7 @@
 #include "dlb_main.h"
 #include "dlb_mem.h"
 #include "dlb_resource.h"
+#include "dlb_sriov.h"
 
 #define TO_STR2(s) #s
 #define TO_STR(s) TO_STR2(s)
@@ -703,6 +704,9 @@ static void dlb_assign_ops(struct dlb_dev *dlb_dev,
 	case DLB_PF:
 		dlb_dev->ops = &dlb_pf_ops;
 		break;
+	case DLB_VF:
+		dlb_dev->ops = &dlb_vf_ops;
+		break;
 	}
 }
 
@@ -918,6 +922,15 @@ static void dlb_remove(struct pci_dev *pdev)
 	dev_dbg(&pdev->dev, "Cleaning up the DLB driver for removal\n");
 	dlb_dev = pci_get_drvdata(pdev);
 
+	/* Attempt to remove VFs before taking down the PF, since VFs cannot
+	 * operate without a PF driver (in part because hardware doesn't
+	 * support (CMD.MEM == 0 && IOV_CTRL.MSE == 1)).
+	 */
+	if (!pdev->is_virtfn && pci_num_vf(pdev) &&
+	    dlb_pci_sriov_configure(pdev, 0))
+		dev_err(&pdev->dev,
+			"Warning: DLB VFs will become unusable when the PF driver is removed\n");
+
 	dlb_set_id_in_use(dlb_dev->id, false);
 
 	/* Undo the PM operations in dlb_probe(). */
@@ -1005,6 +1018,7 @@ static int dlb_runtime_resume(struct device *dev)
 
 static struct pci_device_id dlb_id_table[] = {
 	{ PCI_DEVICE_DATA(INTEL, DLB_PF, DLB_PF) },
+	{ PCI_DEVICE_DATA(INTEL, DLB_VF, DLB_VF) },
 	{ 0 }
 };
 MODULE_DEVICE_TABLE(pci, dlb_id_table);
@@ -1023,7 +1037,7 @@ static int dlb_total_device_file_refcnt(struct dlb_dev *dev)
 	return cnt;
 }
 
-static bool dlb_in_use(struct dlb_dev *dev)
+bool dlb_in_use(struct dlb_dev *dev)
 {
 	return (dlb_total_device_file_refcnt(dev) != 0 ||
 		(dev->active_users > 0) ||
@@ -1072,6 +1086,99 @@ void dlb_zap_vma_entries(struct dlb_dev *dlb_dev)
 		size = vma_node->vma->vm_end - vma_node->vma->vm_start;
 
 		zap_vma_ptes(vma_node->vma, vma_node->vma->vm_start, size);
+	}
+}
+
+static unsigned int dlb_get_vf_dev_id_from_pf(struct pci_dev *pdev)
+{
+	switch (pdev->device) {
+	case PCI_DEVICE_ID_INTEL_DLB_PF:
+		return PCI_DEVICE_ID_INTEL_DLB_VF;
+	default:
+		return -1;
+	}
+}
+
+#ifdef CONFIG_PCI_ATS
+static void dlb_save_pfs_vf_config_state(struct pci_dev *pdev)
+{
+	struct pci_dev *vfdev = NULL;
+	unsigned int device_id;
+
+	device_id = dlb_get_vf_dev_id_from_pf(pdev);
+	if (device_id == -1)
+		return;
+
+	/* Find all this PF's VFs */
+	vfdev = pci_get_device(pdev->vendor, device_id, NULL);
+
+	while (vfdev) {
+		int ret = 0;
+
+		if (vfdev->is_virtfn && vfdev->physfn == pdev)
+			ret = pci_save_state(vfdev);
+		if (ret)
+			dev_err(&pdev->dev,
+				"[%s()] Internal error: PCI save state failed\n",
+				__func__);
+
+		vfdev = pci_get_device(pdev->vendor, device_id, vfdev);
+	}
+}
+
+static void dlb_restore_pfs_vf_config_state(struct pci_dev *pdev)
+{
+	unsigned int device_id;
+	struct pci_dev *vfdev;
+
+	device_id = dlb_get_vf_dev_id_from_pf(pdev);
+	if (device_id == -1)
+		return;
+
+	/* Find all this PF's VFs */
+	vfdev = pci_get_device(pdev->vendor, device_id, NULL);
+
+	while (vfdev) {
+		if (vfdev->is_virtfn && vfdev->physfn == pdev)
+			pci_restore_state(vfdev);
+
+		vfdev = pci_get_device(pdev->vendor, device_id, vfdev);
+	}
+}
+#else
+static void dlb_save_pfs_vf_config_state(struct pci_dev *pdev)
+{
+}
+
+static void dlb_restore_pfs_vf_config_state(struct pci_dev *pdev)
+{
+}
+#endif
+
+static void dlb_clr_aer_vf_hdr_log(struct pci_dev *pdev)
+{
+	struct pci_dev *vfdev = NULL;
+	unsigned int device_id;
+
+	device_id = dlb_get_vf_dev_id_from_pf(pdev);
+	if (device_id == -1)
+		return;
+
+	/* Find all this PF's VFs */
+	vfdev = pci_get_device(pdev->vendor, device_id, NULL);
+
+	/* For each VF, clear its 16B AER header log. This workaround is needed
+	 * for A-stepping devices only.
+	 */
+	while (vfdev) {
+		int pos = pci_find_ext_capability(vfdev, PCI_EXT_CAP_ID_ERR);
+
+		pci_write_config_dword(vfdev, pos + PCI_ERR_HEADER_LOG, 0);
+		pci_write_config_dword(vfdev, pos + PCI_ERR_HEADER_LOG + 4, 0);
+		pci_write_config_dword(vfdev, pos + PCI_ERR_HEADER_LOG + 8, 0);
+		pci_write_config_dword(vfdev, pos + PCI_ERR_HEADER_LOG + 12, 0);
+
+		vfdev = pci_get_device(pdev->vendor, device_id, vfdev);
 	}
 }
 
@@ -1212,6 +1319,14 @@ static void dlb_reset_prepare(struct pci_dev *pdev)
 	 */
 	dlb_dev->ops->inc_pm_refcnt(pdev, true);
 
+	/* PF FLR resets the VF config space as well, so save it here. We need
+	 * to restore their config spaces after the FLR in order to send the
+	 * post-reset mailbox message (since a reset VF config space loses its
+	 * MSI configuration).
+	 */
+	if (dlb_dev->type == DLB_PF)
+		dlb_save_pfs_vf_config_state(pdev);
+
 	/* Stop existing applications from continuing to use the device by
 	 * blocking kernel driver interfaces and waking any threads on wait
 	 * queues, but don't zap VMA entries yet. If this is a PF FLR, notify
@@ -1283,6 +1398,15 @@ static void dlb_reset_done(struct pci_dev *pdev)
 	/* Reset the hardware state, but don't issue an additional FLR */
 	dlb_reset_hardware_state(dlb_dev, false);
 
+	if (dlb_dev->type == DLB_PF && dlb_dev->revision < DLB_REV_B0)
+		dlb_clr_aer_vf_hdr_log(pdev);
+
+	/* Restore the PF's VF config spaces in order to send the post-reset
+	 * mailbox message.
+	 */
+	if (dlb_dev->type == DLB_PF)
+		dlb_restore_pfs_vf_config_state(pdev);
+
 	dev_dbg(dlb_dev->dlb_device, "DLB driver reset done\n");
 
 	dlb_dev->domain_reset_failed = false;
@@ -1314,6 +1438,7 @@ static struct pci_driver dlb_pci_driver = {
 #ifdef CONFIG_PM
 	.driver.pm	 = &dlb_pm_ops,
 #endif
+	.sriov_configure = dlb_pci_sriov_configure,
 	.err_handler     = &dlb_err_handler,
 };
 

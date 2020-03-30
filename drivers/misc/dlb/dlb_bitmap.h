@@ -294,4 +294,40 @@ static inline int dlb_bitmap_longest_set_range(struct dlb_bitmap *bitmap)
 	return max_len;
 }
 
+/**
+ * dlb_bitmap_or() - store the logical 'or' of two bitmaps into a third
+ * @dest: pointer to dlb_bitmap structure, which will contain the results of
+ *	  the 'or' of src1 and src2.
+ * @src1: pointer to dlb_bitmap structure, will be 'or'ed with src2.
+ * @src2: pointer to dlb_bitmap structure, will be 'or'ed with src1.
+ *
+ * This function 'or's two bitmaps together and stores the result in a third
+ * bitmap. The source and destination bitmaps can be the same.
+ *
+ * Return:
+ * Returns the number of set bits upon success, <0 otherwise.
+ *
+ * Errors:
+ * EINVAL - One of the bitmaps is NULL or is uninitialized.
+ */
+static inline int dlb_bitmap_or(struct dlb_bitmap *dest,
+				struct dlb_bitmap *src1,
+				struct dlb_bitmap *src2)
+{
+	unsigned int min;
+
+	if (!dest || !dest->map ||
+	    !src1 || !src1->map ||
+	    !src2 || !src2->map)
+		return -EINVAL;
+
+	min = dest->len;
+	min = (min > src1->len) ? src1->len : min;
+	min = (min > src2->len) ? src2->len : min;
+
+	bitmap_or(dest->map, src1->map, src2->map, min);
+
+	return 0;
+}
+
 #endif /*  __DLB_BITMAP_H */
