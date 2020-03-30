@@ -90,6 +90,7 @@ struct dev_pagemap_ops {
 };
 
 #define PGMAP_ALTMAP_VALID	(1 << 0)
+#define PGMAP_PROT_ENABLED	(1 << 1)
 
 /**
  * struct dev_pagemap - metadata for ZONE_DEVICE mappings
@@ -135,6 +136,10 @@ struct dev_pagemap *get_dev_pagemap(unsigned long pfn,
 unsigned long vmem_altmap_offset(struct vmem_altmap *altmap);
 void vmem_altmap_free(struct vmem_altmap *altmap, unsigned long nr_pfns);
 unsigned long memremap_compat_align(void);
+
+void dev_page_protection_init(struct dev_pagemap *pgmap);
+void dev_page_protection_enable(void);
+void dev_page_protection_disable(void);
 #else
 static inline void *devm_memremap_pages(struct device *dev,
 		struct dev_pagemap *pgmap)
@@ -174,6 +179,10 @@ static inline unsigned long memremap_compat_align(void)
 {
 	return PAGE_SIZE;
 }
+
+static inline void dev_page_protection_init(struct dev_pagemap *pgmap) { }
+static inline void dev_page_protection_enable(void) { }
+static inline void dev_page_protection_disable(void) { }
 #endif /* CONFIG_ZONE_DEVICE */
 
 static inline void put_dev_pagemap(struct dev_pagemap *pgmap)

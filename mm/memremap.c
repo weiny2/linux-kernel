@@ -6,14 +6,19 @@
 #include <linux/memory_hotplug.h>
 #include <linux/mm.h>
 #include <linux/pfn_t.h>
+#include <linux/pkeys.h>
 #include <linux/swap.h>
 #include <linux/mmzone.h>
 #include <linux/swapops.h>
 #include <linux/types.h>
 #include <linux/wait_bit.h>
 #include <linux/xarray.h>
+#include <uapi/asm-generic/mman-common.h>
+
+#define PKEY_INVALID (INT_MIN)
 
 static DEFINE_XARRAY(pgmap_array);
+int dev_page_pkey = PKEY_INVALID;
 
 /*
  * The memremap() and memremap_pages() interfaces are alternately used
@@ -193,6 +198,12 @@ void *memremap_pages(struct dev_pagemap *pgmap, int nid)
 	};
 	int error, is_ram;
 	bool need_devmap_managed = true;
+
+	if (pgmap->flags & PGMAP_PROT_ENABLED) {
+		pgprotval_t val = pgprot_val(params.pgprot);
+
+		params.pgprot = __pgprot(val | _PAGE_PKEY(dev_page_pkey));
+	}
 
 	switch (pgmap->type) {
 	case MEMORY_DEVICE_PRIVATE:
@@ -481,4 +492,70 @@ void free_devmap_managed_page(struct page *page)
 	page->mapping = NULL;
 	page->pgmap->ops->page_free(page);
 }
+
+/**
+ * dev_page_protection_enable: enable the extra protection on device memory areas
+ * using Supervisor Protection Keys
+ */
+void dev_page_protection_enable(void)
+{
+	if (!pks_supported())
+		return;
+
+	if (atomic_dec_and_test(&current->dev_page_pkey_ref))
+		WARN_ON_ONCE(update_local_sup_key(dev_page_pkey,
+						  PKEY_DISABLE_ACCESS | PKEY_DISABLE_WRITE));
+}
+EXPORT_SYMBOL_GPL(dev_page_protection_enable);
+
+/**
+ * dev_page_protection_disable: disable the extra protection on device memory areas
+ * using Supervisor Protection Keys
+ */
+void dev_page_protection_disable(void)
+{
+	if (!pks_supported())
+		return;
+
+	if (!atomic_fetch_inc(&current->dev_page_pkey_ref))
+		WARN_ON_ONCE(update_local_sup_key(dev_page_pkey, 0));
+}
+EXPORT_SYMBOL_GPL(dev_page_protection_disable);
+
+/**
+ * dev_page_protection_init: Configure the pgmap to protect the memory covered
+ * to be protected from stray pointers.
+ *
+ * The memory defaults to the protected state.  Kernel callers wanting to use a
+ * virtual address into the memory need to call dev_page_protection_disable()
+ * to disable that protection.
+ *
+ * @pgmap: The pagemap object representing the device memory to be protected
+ */
+void dev_page_protection_init(struct dev_pagemap *pgmap)
+{
+	/* It is not an error to not have pks support just continue without
+	 * protection */
+	if (!pks_supported())
+		return;
+
+	if (dev_page_pkey == PKEY_INVALID) {
+		int key;
+
+		/* Use a temp value for key to avoid any races in using
+		 * dev_page_pkey */
+		key = pks_key_alloc("Device Memory");
+		if (key < 0)
+			return;
+
+		dev_page_pkey = key;
+		/* start out protected */
+		update_local_sup_key(dev_page_pkey, PKEY_DISABLE_ACCESS | PKEY_DISABLE_WRITE);
+	}
+
+	pgmap->flags |= PGMAP_PROT_ENABLED;
+	return;
+}
+EXPORT_SYMBOL_GPL(dev_page_protection_init);
+
 #endif /* CONFIG_DEV_PAGEMAP_OPS */
