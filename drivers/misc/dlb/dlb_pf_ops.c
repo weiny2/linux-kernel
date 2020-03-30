@@ -1941,6 +1941,17 @@ static void dlb_pf_device_destroy(struct dlb_dev *dlb_dev,
 				DLB_MAX_NUM_DOMAINS));
 }
 
+static int dlb_pf_register_driver(struct dlb_dev *dlb_dev)
+{
+	/* Function intentionally left blank */
+	return 0;
+}
+
+static void dlb_pf_unregister_driver(struct dlb_dev *dlb_dev)
+{
+	/* Function intentionally left blank */
+}
+
 static void dlb_pf_calc_arbiter_weights(struct dlb_hw *hw,
 					u8 *weight,
 					unsigned int pct)
@@ -3331,6 +3342,8 @@ struct dlb_device_ops dlb_pf_ops = {
 	.reinit_interrupts = dlb_pf_reinit_interrupts,
 	.free_interrupts = dlb_pf_free_interrupts,
 	.init_hardware = dlb_pf_init_hardware,
+	.register_driver = dlb_pf_register_driver,
+	.unregister_driver = dlb_pf_unregister_driver,
 	.create_sched_domain = dlb_pf_create_sched_domain,
 	.create_ldb_pool = dlb_pf_create_ldb_pool,
 	.create_dir_pool = dlb_pf_create_dir_pool,
