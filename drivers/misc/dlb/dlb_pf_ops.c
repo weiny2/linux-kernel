@@ -252,6 +252,126 @@ static int dlb_pf_mmap(struct file *f,
 /****** Interrupt management ******/
 /**********************************/
 
+static void dlb_enable_alarms(struct dlb_dev *dev)
+{
+	dlb_hw_enable_pp_sw_alarms(&dev->hw);
+
+	dlb_enable_excess_tokens_alarm(&dev->hw);
+
+	dlb_enable_alarm_interrupts(&dev->hw);
+}
+
+static void dlb_disable_alarms(struct dlb_dev *dev)
+{
+	dlb_hw_disable_pp_sw_alarms(&dev->hw);
+
+	dlb_disable_excess_tokens_alarm(&dev->hw);
+
+	dlb_disable_alarm_interrupts(&dev->hw);
+}
+
+static void dlb_detect_ingress_err_overload(struct dlb_dev *dev)
+{
+	s64 delta_us;
+
+	if (dev->ingress_err.count == 0)
+		dev->ingress_err.ts = ktime_get();
+
+	dev->ingress_err.count++;
+
+	/* Don't check for overload until OVERLOAD_THRESH ISRs have run */
+	if (dev->ingress_err.count < DLB_ISR_OVERLOAD_THRESH)
+		return;
+
+	delta_us = ktime_us_delta(ktime_get(), dev->ingress_err.ts);
+
+	/* Reset stats for next measurement period */
+	dev->ingress_err.count = 0;
+	dev->ingress_err.ts = ktime_get();
+
+	/* Check for overload during this measurement period */
+	if (delta_us > DLB_ISR_OVERLOAD_PERIOD_S * USEC_PER_SEC)
+		return;
+
+	/* Alarm interrupt overload: disable software-generated alarms,
+	 * so only hardware problems (e.g. ECC errors) interrupt the PF.
+	 */
+	dlb_disable_alarms(dev);
+
+	dev->ingress_err.enabled = false;
+
+	dev_err(dev->dlb_device,
+		"[%s()] Overloaded detected: disabling ingress error interrupts",
+		__func__);
+}
+
+/* The alarm handler logs the alarm syndrome and, for user-caused errors,
+ * reports the alarm to user-space through the per-domain device file interface.
+ *
+ * This function runs as a bottom-half handler because it can call printk
+ * and/or acquire a mutex. These alarms don't need to be handled immediately --
+ * they represent a serious, unexpected error (either in hardware or software)
+ * that can't be recovered without restarting the application or resetting the
+ * device. The VF->PF operations are also non-trivial and require running in a
+ * bottom-half handler.
+ */
+static irqreturn_t dlb_alarm_handler(int irq, void *hdlr_ptr)
+{
+	struct dlb_dev *dev = (struct dlb_dev *)hdlr_ptr;
+	int id;
+
+	id = irq - dev->intr.base_vector;
+
+	dev_dbg(dev->dlb_device, "DLB alarm %d fired\n", id);
+
+	mutex_lock(&dev->resource_mutex);
+
+	switch (id) {
+	case DLB_INT_ALARM:
+		dlb_process_alarm_interrupt(&dev->hw);
+		break;
+	case DLB_INT_INGRESS_ERROR:
+		dlb_process_ingress_error_interrupt(&dev->hw);
+		dlb_detect_ingress_err_overload(dev);
+		break;
+	default:
+		dev_err(dev->dlb_device,
+			"[%s()] Internal error: unexpected IRQ", __func__);
+	}
+
+	mutex_unlock(&dev->resource_mutex);
+
+	return IRQ_HANDLED;
+}
+
+static const char *alarm_hdlr_names[DLB_PF_NUM_ALARM_INTERRUPT_VECTORS] = {
+	[DLB_INT_ALARM]		= "dlb_alarm",
+	[DLB_INT_INGRESS_ERROR]	= "dlb_ingress_err",
+};
+
+static int dlb_init_alarm_interrupts(struct dlb_dev *dev, struct pci_dev *pdev)
+{
+	int i, ret;
+
+	for (i = 0; i < DLB_PF_NUM_ALARM_INTERRUPT_VECTORS; i++) {
+		ret = devm_request_threaded_irq(&pdev->dev,
+						pci_irq_vector(pdev, i),
+						NULL,
+						dlb_alarm_handler,
+						IRQF_ONESHOT,
+						alarm_hdlr_names[i],
+						dev);
+		if (ret)
+			return ret;
+
+		dev->intr.isr_registered[i] = true;
+	}
+
+	dlb_enable_alarms(dev);
+
+	return 0;
+}
+
 static irqreturn_t dlb_compressed_cq_intr_handler(int irq, void *hdlr_ptr)
 {
 	struct dlb_dev *dev = (struct dlb_dev *)hdlr_ptr;
@@ -354,6 +474,12 @@ static int dlb_pf_init_interrupts(struct dlb_dev *dev, struct pci_dev *pdev)
 	dev->intr.num_vectors = ret;
 	dev->intr.base_vector = pci_irq_vector(pdev, 0);
 
+	ret = dlb_init_alarm_interrupts(dev, pdev);
+	if (ret) {
+		dlb_pf_free_interrupts(dev, pdev);
+		return ret;
+	}
+
 	ret = dlb_init_compressed_mode_interrupts(dev, pdev);
 	if (ret) {
 		dlb_pf_free_interrupts(dev, pdev);
@@ -381,6 +507,16 @@ static int dlb_pf_init_interrupts(struct dlb_dev *dev, struct pci_dev *pdev)
  */
 static void dlb_pf_reinit_interrupts(struct dlb_dev *dev)
 {
+	/* Re-enable alarms after device reset */
+	dlb_enable_alarms(dev);
+
+	if (!dev->ingress_err.enabled)
+		dev_err(dev->dlb_device,
+			"[%s()] Re-enabling ingress error interrupts",
+			__func__);
+
+	dev->ingress_err.enabled = true;
+
 	dlb_set_msix_mode(&dev->hw, dev->intr.mode);
 }
 
@@ -476,6 +612,9 @@ static int dlb_pf_init_driver_state(struct dlb_dev *dlb_dev)
 
 	mutex_init(&dlb_dev->resource_mutex);
 	mutex_init(&dlb_dev->measurement_mutex);
+
+	dlb_dev->ingress_err.count = 0;
+	dlb_dev->ingress_err.enabled = true;
 
 	return 0;
 }
@@ -847,12 +986,64 @@ static ssize_t dev_id_show(struct device *dev,
 
 static DEVICE_ATTR_RO(dev_id);
 
+static ssize_t ingress_err_en_show(struct device *dev,
+				   struct device_attribute *attr,
+				   char *buf)
+{
+	struct dlb_dev *dlb_dev = dev_get_drvdata(dev);
+	ssize_t ret;
+
+	mutex_lock(&dlb_dev->resource_mutex);
+
+	ret = scnprintf(buf, PAGE_SIZE, "%d\n", dlb_dev->ingress_err.enabled);
+
+	mutex_unlock(&dlb_dev->resource_mutex);
+
+	return ret;
+}
+
+static ssize_t ingress_err_en_store(struct device *dev,
+				    struct device_attribute *attr,
+				    const char *buf,
+				    size_t count)
+{
+	struct dlb_dev *dlb_dev = dev_get_drvdata(dev);
+	unsigned long num;
+	ssize_t ret;
+
+	ret = kstrtoul(buf, 0, &num);
+	if (ret)
+		return -1;
+
+	mutex_lock(&dlb_dev->resource_mutex);
+
+	if (!dlb_dev->ingress_err.enabled && num) {
+		dlb_enable_alarms(dlb_dev);
+
+		dev_err(dlb_dev->dlb_device,
+			"[%s()] Re-enabling ingress error interrupts",
+			__func__);
+
+		dlb_dev->ingress_err.enabled = true;
+	}
+
+	mutex_unlock(&dlb_dev->resource_mutex);
+
+	return (ret == 0) ? count : ret;
+}
+
+static DEVICE_ATTR_RW(ingress_err_en);
+
 static int dlb_pf_sysfs_create(struct dlb_dev *dlb_dev)
 {
 	struct kobject *kobj;
 	int ret;
 
 	kobj = &dlb_dev->pdev->dev.kobj;
+
+	ret = sysfs_create_file(kobj, &dev_attr_ingress_err_en.attr);
+	if (ret)
+		goto dlb_ingress_err_en_attr_group_fail;
 
 	ret = sysfs_create_file(kobj, &dev_attr_dev_id.attr);
 	if (ret)
@@ -879,6 +1070,8 @@ dlb_avail_attr_group_fail:
 dlb_total_attr_group_fail:
 	sysfs_remove_file(kobj, &dev_attr_dev_id.attr);
 dlb_dev_id_attr_group_fail:
+	sysfs_remove_file(kobj, &dev_attr_ingress_err_en.attr);
+dlb_ingress_err_en_attr_group_fail:
 	return ret;
 }
 
@@ -892,6 +1085,7 @@ static void dlb_pf_sysfs_destroy(struct dlb_dev *dlb_dev)
 	sysfs_remove_group(kobj, &dlb_avail_attr_group);
 	sysfs_remove_group(kobj, &dlb_total_attr_group);
 	sysfs_remove_file(kobj, &dev_attr_dev_id.attr);
+	sysfs_remove_file(kobj, &dev_attr_ingress_err_en.attr);
 }
 
 static void dlb_pf_sysfs_reapply_configuration(struct dlb_dev *dev)

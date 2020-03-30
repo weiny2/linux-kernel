@@ -313,6 +313,51 @@ end:
 	return ret;
 }
 
+int dlb_write_domain_alert(struct dlb_dev *dev,
+			   u32 domain_id,
+			   u64 alert_id,
+			   u64 aux_alert_data)
+{
+	struct dlb_domain_dev *domain;
+	struct dlb_domain_alert alert;
+	int idx;
+
+	if (domain_id >= DLB_MAX_NUM_DOMAINS) {
+		dev_err(dev->dlb_device,
+			"[%s()] Internal error\n", __func__);
+		return -EINVAL;
+	}
+
+	domain = &dev->sched_domains[domain_id];
+
+	/* Grab the alert mutex to access the read and write indexes */
+	if (mutex_lock_interruptible(&domain->alert_mutex))
+		return -ERESTARTSYS;
+
+	/* If there's no space for this notification, return */
+	if ((domain->alert_wr_idx - domain->alert_rd_idx) ==
+	    (DLB_DOMAIN_ALERT_RING_SIZE - 1)) {
+		mutex_unlock(&domain->alert_mutex);
+		return 0;
+	}
+
+	alert.alert_id = alert_id;
+	alert.aux_alert_data = aux_alert_data;
+
+	idx = domain->alert_wr_idx % DLB_DOMAIN_ALERT_RING_SIZE;
+
+	domain->alerts[idx] = alert;
+
+	domain->alert_wr_idx++;
+
+	mutex_unlock(&domain->alert_mutex);
+
+	/* Wake any blocked readers */
+	wake_up_interruptible(&domain->wq_head);
+
+	return 0;
+}
+
 static bool dlb_domain_valid(struct dlb_dev *dev, struct dlb_status *status)
 {
 	bool ret;
