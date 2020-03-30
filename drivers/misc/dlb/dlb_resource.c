@@ -8634,6 +8634,132 @@ void dlb_hw_enable_sparse_dir_cq_mode(struct dlb_hw *hw)
 
 }
 
+void dlb_hw_set_qe_arbiter_weights(struct dlb_hw *hw, u8 weight[8])
+{
+	union dlb_atm_pipe_ctrl_arb_weights_rdy_bin r0 = { {0} };
+	union dlb_nalb_pipe_ctrl_arb_weights_tqpri_nalb_0 r1 = { {0} };
+	union dlb_nalb_pipe_ctrl_arb_weights_tqpri_nalb_1 r2 = { {0} };
+	union dlb_nalb_pipe_cfg_ctrl_arb_weights_tqpri_replay_0 r3 = { {0} };
+	union dlb_nalb_pipe_cfg_ctrl_arb_weights_tqpri_replay_1 r4 = { {0} };
+	union dlb_dp_cfg_ctrl_arb_weights_tqpri_replay_0 r5 = { {0} };
+	union dlb_dp_cfg_ctrl_arb_weights_tqpri_replay_1 r6 = { {0} };
+	union dlb_dp_cfg_ctrl_arb_weights_tqpri_dir_0 r7 =  { {0} };
+	union dlb_dp_cfg_ctrl_arb_weights_tqpri_dir_1 r8 =  { {0} };
+	union dlb_nalb_pipe_cfg_ctrl_arb_weights_tqpri_atq_0 r9 = { {0} };
+	union dlb_nalb_pipe_cfg_ctrl_arb_weights_tqpri_atq_1 r10 = { {0} };
+	union dlb_atm_pipe_cfg_ctrl_arb_weights_sched_bin r11 = { {0} };
+	union dlb_aqed_pipe_cfg_ctrl_arb_weights_tqpri_atm_0 r12 = { {0} };
+
+	r0.field.bin0 = weight[1];
+	r0.field.bin1 = weight[3];
+	r0.field.bin2 = weight[5];
+	r0.field.bin3 = weight[7];
+
+	r1.field.pri0 = weight[0];
+	r1.field.pri1 = weight[1];
+	r1.field.pri2 = weight[2];
+	r1.field.pri3 = weight[3];
+	r2.field.pri4 = weight[4];
+	r2.field.pri5 = weight[5];
+	r2.field.pri6 = weight[6];
+	r2.field.pri7 = weight[7];
+
+	r3.field.pri0 = weight[0];
+	r3.field.pri1 = weight[1];
+	r3.field.pri2 = weight[2];
+	r3.field.pri3 = weight[3];
+	r4.field.pri4 = weight[4];
+	r4.field.pri5 = weight[5];
+	r4.field.pri6 = weight[6];
+	r4.field.pri7 = weight[7];
+
+	r5.field.pri0 = weight[0];
+	r5.field.pri1 = weight[1];
+	r5.field.pri2 = weight[2];
+	r5.field.pri3 = weight[3];
+	r6.field.pri4 = weight[4];
+	r6.field.pri5 = weight[5];
+	r6.field.pri6 = weight[6];
+	r6.field.pri7 = weight[7];
+
+	r7.field.pri0 = weight[0];
+	r7.field.pri1 = weight[1];
+	r7.field.pri2 = weight[2];
+	r7.field.pri3 = weight[3];
+	r8.field.pri4 = weight[4];
+	r8.field.pri5 = weight[5];
+	r8.field.pri6 = weight[6];
+	r8.field.pri7 = weight[7];
+
+	r9.field.pri0 = weight[0];
+	r9.field.pri1 = weight[1];
+	r9.field.pri2 = weight[2];
+	r9.field.pri3 = weight[3];
+	r10.field.pri4 = weight[4];
+	r10.field.pri5 = weight[5];
+	r10.field.pri6 = weight[6];
+	r10.field.pri7 = weight[7];
+
+	r11.field.bin0 = weight[1];
+	r11.field.bin1 = weight[3];
+	r11.field.bin2 = weight[5];
+	r11.field.bin3 = weight[7];
+
+	r12.field.pri0 = weight[1];
+	r12.field.pri1 = weight[3];
+	r12.field.pri2 = weight[5];
+	r12.field.pri3 = weight[7];
+
+	DLB_CSR_WR(hw, DLB_ATM_PIPE_CTRL_ARB_WEIGHTS_RDY_BIN, r0.val);
+	DLB_CSR_WR(hw, DLB_NALB_PIPE_CTRL_ARB_WEIGHTS_TQPRI_NALB_0, r1.val);
+	DLB_CSR_WR(hw, DLB_NALB_PIPE_CTRL_ARB_WEIGHTS_TQPRI_NALB_1, r2.val);
+	DLB_CSR_WR(hw,
+		   DLB_NALB_PIPE_CFG_CTRL_ARB_WEIGHTS_TQPRI_REPLAY_0,
+		   r3.val);
+	DLB_CSR_WR(hw,
+		   DLB_NALB_PIPE_CFG_CTRL_ARB_WEIGHTS_TQPRI_REPLAY_1,
+		   r4.val);
+	DLB_CSR_WR(hw, DLB_DP_CFG_CTRL_ARB_WEIGHTS_TQPRI_REPLAY_0, r5.val);
+	DLB_CSR_WR(hw, DLB_DP_CFG_CTRL_ARB_WEIGHTS_TQPRI_REPLAY_1, r6.val);
+	DLB_CSR_WR(hw, DLB_DP_CFG_CTRL_ARB_WEIGHTS_TQPRI_DIR_0, r7.val);
+	DLB_CSR_WR(hw, DLB_DP_CFG_CTRL_ARB_WEIGHTS_TQPRI_DIR_1, r8.val);
+	DLB_CSR_WR(hw, DLB_NALB_PIPE_CFG_CTRL_ARB_WEIGHTS_TQPRI_ATQ_0, r9.val);
+	DLB_CSR_WR(hw, DLB_NALB_PIPE_CFG_CTRL_ARB_WEIGHTS_TQPRI_ATQ_1, r10.val);
+	DLB_CSR_WR(hw, DLB_ATM_PIPE_CFG_CTRL_ARB_WEIGHTS_SCHED_BIN, r11.val);
+	DLB_CSR_WR(hw, DLB_AQED_PIPE_CFG_CTRL_ARB_WEIGHTS_TQPRI_ATM_0, r12.val);
+}
+
+void dlb_hw_set_qid_arbiter_weights(struct dlb_hw *hw, u8 weight[8])
+{
+	union dlb_lsp_cfg_arb_weight_ldb_qid_0 r0 = { {0} };
+	union dlb_lsp_cfg_arb_weight_ldb_qid_1 r1 = { {0} };
+	union dlb_lsp_cfg_arb_weight_atm_nalb_qid_0 r2 = { {0} };
+	union dlb_lsp_cfg_arb_weight_atm_nalb_qid_1 r3 = { {0} };
+
+	r0.field.slot0_weight = weight[0];
+	r0.field.slot1_weight = weight[1];
+	r0.field.slot2_weight = weight[2];
+	r0.field.slot3_weight = weight[3];
+	r1.field.slot4_weight = weight[4];
+	r1.field.slot5_weight = weight[5];
+	r1.field.slot6_weight = weight[6];
+	r1.field.slot7_weight = weight[7];
+
+	r2.field.slot0_weight = weight[0];
+	r2.field.slot1_weight = weight[1];
+	r2.field.slot2_weight = weight[2];
+	r2.field.slot3_weight = weight[3];
+	r3.field.slot4_weight = weight[4];
+	r3.field.slot5_weight = weight[5];
+	r3.field.slot6_weight = weight[6];
+	r3.field.slot7_weight = weight[7];
+
+	DLB_CSR_WR(hw, DLB_LSP_CFG_ARB_WEIGHT_LDB_QID_0, r0.val);
+	DLB_CSR_WR(hw, DLB_LSP_CFG_ARB_WEIGHT_LDB_QID_1, r1.val);
+	DLB_CSR_WR(hw, DLB_LSP_CFG_ARB_WEIGHT_ATM_NALB_QID_0, r2.val);
+	DLB_CSR_WR(hw, DLB_LSP_CFG_ARB_WEIGHT_ATM_NALB_QID_1, r3.val);
+}
+
 void dlb_hw_enable_pp_sw_alarms(struct dlb_hw *hw)
 {
 	union dlb_chp_cfg_ldb_pp_sw_alarm_en r0 = { {0} };

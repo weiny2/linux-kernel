@@ -945,6 +945,34 @@ void dlb_hw_enable_sparse_ldb_cq_mode(struct dlb_hw *hw);
 void dlb_hw_enable_sparse_dir_cq_mode(struct dlb_hw *hw);
 
 /**
+ * dlb_hw_set_qe_arbiter_weights() - program QE arbiter weights
+ * @hw: dlb_hw handle for a particular device.
+ * @weight: 8-entry array of arbiter weights.
+ *
+ * weight[N] programs priority N's weight. In cases where the 8 priorities are
+ * reduced to 4 bins, the mapping is:
+ * - weight[1] programs bin 0
+ * - weight[3] programs bin 1
+ * - weight[5] programs bin 2
+ * - weight[7] programs bin 3
+ */
+void dlb_hw_set_qe_arbiter_weights(struct dlb_hw *hw, u8 weight[8]);
+
+/**
+ * dlb_hw_set_qid_arbiter_weights() - program QID arbiter weights
+ * @hw: dlb_hw handle for a particular device.
+ * @weight: 8-entry array of arbiter weights.
+ *
+ * weight[N] programs priority N's weight. In cases where the 8 priorities are
+ * reduced to 4 bins, the mapping is:
+ * - weight[1] programs bin 0
+ * - weight[3] programs bin 1
+ * - weight[5] programs bin 2
+ * - weight[7] programs bin 3
+ */
+void dlb_hw_set_qid_arbiter_weights(struct dlb_hw *hw, u8 weight[8]);
+
+/**
  * dlb_hw_enable_pp_sw_alarms() - enable out-of-credit alarm for all producer
  * ports
  * @hw: dlb_hw handle for a particular device.
