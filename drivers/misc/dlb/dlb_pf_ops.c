@@ -572,6 +572,340 @@ static void dlb_pf_init_hardware(struct dlb_dev *dlb_dev)
 }
 
 /*****************************/
+/****** Sysfs callbacks ******/
+/*****************************/
+
+#define DLB_TOTAL_SYSFS_SHOW(name, macro)		\
+static ssize_t total_##name##_show(			\
+	struct device *dev,				\
+	struct device_attribute *attr,			\
+	char *buf)					\
+{							\
+	int val = DLB_MAX_NUM_##macro;			\
+							\
+	return scnprintf(buf, PAGE_SIZE, "%d\n", val);	\
+}
+
+DLB_TOTAL_SYSFS_SHOW(num_sched_domains, DOMAINS)
+DLB_TOTAL_SYSFS_SHOW(num_ldb_queues, LDB_QUEUES)
+DLB_TOTAL_SYSFS_SHOW(num_ldb_ports, LDB_PORTS)
+DLB_TOTAL_SYSFS_SHOW(num_ldb_credit_pools, LDB_CREDIT_POOLS)
+DLB_TOTAL_SYSFS_SHOW(num_dir_credit_pools, DIR_CREDIT_POOLS)
+DLB_TOTAL_SYSFS_SHOW(num_ldb_credits, LDB_CREDITS)
+DLB_TOTAL_SYSFS_SHOW(num_dir_credits, DIR_CREDITS)
+DLB_TOTAL_SYSFS_SHOW(num_atomic_inflights, AQOS_ENTRIES)
+DLB_TOTAL_SYSFS_SHOW(num_hist_list_entries, HIST_LIST_ENTRIES)
+
+static ssize_t total_num_dir_ports_show(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	int val = DLB_MAX_NUM_DIR_PORTS;
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n", val);
+}
+
+#define DLB_AVAIL_SYSFS_SHOW(name)			    \
+static ssize_t avail_##name##_show(			    \
+	struct device *dev,				    \
+	struct device_attribute *attr,			    \
+	char *buf)					    \
+{							    \
+	struct dlb_dev *dlb_dev = dev_get_drvdata(dev);     \
+	struct dlb_get_num_resources_args arg;		    \
+	struct dlb_hw *hw = &dlb_dev->hw;		    \
+	int val;					    \
+							    \
+	mutex_lock(&dlb_dev->resource_mutex);		    \
+							    \
+	val = dlb_hw_get_num_resources(hw, &arg, false, 0); \
+							    \
+	mutex_unlock(&dlb_dev->resource_mutex);		    \
+							    \
+	if (val)					    \
+		return -1;				    \
+							    \
+	val = arg.name;					    \
+							    \
+	return scnprintf(buf, PAGE_SIZE, "%d\n", val);	    \
+}
+
+DLB_AVAIL_SYSFS_SHOW(num_sched_domains)
+DLB_AVAIL_SYSFS_SHOW(num_ldb_queues)
+DLB_AVAIL_SYSFS_SHOW(num_ldb_ports)
+DLB_AVAIL_SYSFS_SHOW(num_dir_ports)
+DLB_AVAIL_SYSFS_SHOW(num_ldb_credit_pools)
+DLB_AVAIL_SYSFS_SHOW(num_dir_credit_pools)
+DLB_AVAIL_SYSFS_SHOW(num_ldb_credits)
+DLB_AVAIL_SYSFS_SHOW(num_dir_credits)
+DLB_AVAIL_SYSFS_SHOW(num_atomic_inflights)
+DLB_AVAIL_SYSFS_SHOW(num_hist_list_entries)
+
+static ssize_t max_ctg_atm_inflights_show(struct device *dev,
+					  struct device_attribute *attr,
+					  char *buf)
+{
+	struct dlb_dev *dlb_dev = dev_get_drvdata(dev);
+	struct dlb_get_num_resources_args arg;
+	struct dlb_hw *hw = &dlb_dev->hw;
+	int val;
+
+	mutex_lock(&dlb_dev->resource_mutex);
+
+	val = dlb_hw_get_num_resources(hw, &arg, false, 0);
+
+	mutex_unlock(&dlb_dev->resource_mutex);
+
+	if (val)
+		return -1;
+
+	val = arg.max_contiguous_atomic_inflights;
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n", val);
+}
+
+static ssize_t max_ctg_hl_entries_show(struct device *dev,
+				       struct device_attribute *attr,
+				       char *buf)
+{
+	struct dlb_dev *dlb_dev = dev_get_drvdata(dev);
+	struct dlb_get_num_resources_args arg;
+	struct dlb_hw *hw = &dlb_dev->hw;
+	int val;
+
+	mutex_lock(&dlb_dev->resource_mutex);
+
+	val = dlb_hw_get_num_resources(hw, &arg, false, 0);
+
+	mutex_unlock(&dlb_dev->resource_mutex);
+
+	if (val)
+		return -1;
+
+	val = arg.max_contiguous_hist_list_entries;
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n", val);
+}
+
+/* Device attribute name doesn't match the show function name, so we define our
+ * own DEVICE_ATTR macro.
+ */
+#define DLB_DEVICE_ATTR_RO(_prefix, _name) \
+struct device_attribute dev_attr_##_prefix##_##_name = {\
+	.attr = { .name = __stringify(_name), .mode = 0444 },\
+	.show = _prefix##_##_name##_show,\
+}
+
+static DLB_DEVICE_ATTR_RO(total, num_sched_domains);
+static DLB_DEVICE_ATTR_RO(total, num_ldb_queues);
+static DLB_DEVICE_ATTR_RO(total, num_ldb_ports);
+static DLB_DEVICE_ATTR_RO(total, num_dir_ports);
+static DLB_DEVICE_ATTR_RO(total, num_ldb_credit_pools);
+static DLB_DEVICE_ATTR_RO(total, num_dir_credit_pools);
+static DLB_DEVICE_ATTR_RO(total, num_ldb_credits);
+static DLB_DEVICE_ATTR_RO(total, num_dir_credits);
+static DLB_DEVICE_ATTR_RO(total, num_atomic_inflights);
+static DLB_DEVICE_ATTR_RO(total, num_hist_list_entries);
+
+static struct attribute *dlb_total_attrs[] = {
+	&dev_attr_total_num_sched_domains.attr,
+	&dev_attr_total_num_ldb_queues.attr,
+	&dev_attr_total_num_ldb_ports.attr,
+	&dev_attr_total_num_dir_ports.attr,
+	&dev_attr_total_num_ldb_credit_pools.attr,
+	&dev_attr_total_num_dir_credit_pools.attr,
+	&dev_attr_total_num_ldb_credits.attr,
+	&dev_attr_total_num_dir_credits.attr,
+	&dev_attr_total_num_atomic_inflights.attr,
+	&dev_attr_total_num_hist_list_entries.attr,
+	NULL
+};
+
+static const struct attribute_group dlb_total_attr_group = {
+	.attrs = dlb_total_attrs,
+	.name = "total_resources",
+};
+
+static DLB_DEVICE_ATTR_RO(avail, num_sched_domains);
+static DLB_DEVICE_ATTR_RO(avail, num_ldb_queues);
+static DLB_DEVICE_ATTR_RO(avail, num_ldb_ports);
+static DLB_DEVICE_ATTR_RO(avail, num_dir_ports);
+static DLB_DEVICE_ATTR_RO(avail, num_ldb_credit_pools);
+static DLB_DEVICE_ATTR_RO(avail, num_dir_credit_pools);
+static DLB_DEVICE_ATTR_RO(avail, num_ldb_credits);
+static DLB_DEVICE_ATTR_RO(avail, num_dir_credits);
+static DLB_DEVICE_ATTR_RO(avail, num_atomic_inflights);
+static DLB_DEVICE_ATTR_RO(avail, num_hist_list_entries);
+static DEVICE_ATTR_RO(max_ctg_atm_inflights);
+static DEVICE_ATTR_RO(max_ctg_hl_entries);
+
+static struct attribute *dlb_avail_attrs[] = {
+	&dev_attr_avail_num_sched_domains.attr,
+	&dev_attr_avail_num_ldb_queues.attr,
+	&dev_attr_avail_num_ldb_ports.attr,
+	&dev_attr_avail_num_dir_ports.attr,
+	&dev_attr_avail_num_ldb_credit_pools.attr,
+	&dev_attr_avail_num_dir_credit_pools.attr,
+	&dev_attr_avail_num_ldb_credits.attr,
+	&dev_attr_avail_num_dir_credits.attr,
+	&dev_attr_avail_num_atomic_inflights.attr,
+	&dev_attr_avail_num_hist_list_entries.attr,
+	&dev_attr_max_ctg_atm_inflights.attr,
+	&dev_attr_max_ctg_hl_entries.attr,
+	NULL
+};
+
+static const struct attribute_group dlb_avail_attr_group = {
+	.attrs = dlb_avail_attrs,
+	.name = "avail_resources",
+};
+
+#define DLB_GROUP_SNS_PER_QUEUE_SHOW(id)		\
+static ssize_t group##id##_sns_per_queue_show(		\
+	struct device *dev,				\
+	struct device_attribute *attr,			\
+	char *buf)					\
+{							\
+	struct dlb_dev *dlb_dev = dev_get_drvdata(dev);	\
+	struct dlb_hw *hw = &dlb_dev->hw;		\
+	int val;					\
+							\
+	mutex_lock(&dlb_dev->resource_mutex);		\
+							\
+	val = dlb_get_group_sequence_numbers(hw, id);	\
+							\
+	mutex_unlock(&dlb_dev->resource_mutex);		\
+							\
+	if (val < 0)					\
+		return val;				\
+							\
+	return scnprintf(buf, PAGE_SIZE, "%d\n", val);	\
+}
+
+DLB_GROUP_SNS_PER_QUEUE_SHOW(0)
+DLB_GROUP_SNS_PER_QUEUE_SHOW(1)
+DLB_GROUP_SNS_PER_QUEUE_SHOW(2)
+DLB_GROUP_SNS_PER_QUEUE_SHOW(3)
+
+#define DLB_GROUP_SNS_PER_QUEUE_STORE(id)		\
+static ssize_t group##id##_sns_per_queue_store(		\
+	struct device *dev,				\
+	struct device_attribute *attr,			\
+	const char *buf,				\
+	size_t count)					\
+{							\
+	struct dlb_dev *dlb_dev = dev_get_drvdata(dev);	\
+	struct dlb_hw *hw = &dlb_dev->hw;		\
+	unsigned long val;				\
+	int err;					\
+							\
+	err = kstrtoul(buf, 0, &val);			\
+	if (err)					\
+		return -1;				\
+							\
+	mutex_lock(&dlb_dev->resource_mutex);		\
+							\
+	dlb_set_group_sequence_numbers(hw, id, val);	\
+							\
+	mutex_unlock(&dlb_dev->resource_mutex);		\
+							\
+	return count;					\
+}
+
+DLB_GROUP_SNS_PER_QUEUE_STORE(0)
+DLB_GROUP_SNS_PER_QUEUE_STORE(1)
+DLB_GROUP_SNS_PER_QUEUE_STORE(2)
+DLB_GROUP_SNS_PER_QUEUE_STORE(3)
+
+/* RW sysfs files in the sequence_numbers/ subdirectory */
+static DEVICE_ATTR_RW(group0_sns_per_queue);
+static DEVICE_ATTR_RW(group1_sns_per_queue);
+static DEVICE_ATTR_RW(group2_sns_per_queue);
+static DEVICE_ATTR_RW(group3_sns_per_queue);
+
+static struct attribute *dlb_sequence_number_attrs[] = {
+	&dev_attr_group0_sns_per_queue.attr,
+	&dev_attr_group1_sns_per_queue.attr,
+	&dev_attr_group2_sns_per_queue.attr,
+	&dev_attr_group3_sns_per_queue.attr,
+	NULL
+};
+
+static const struct attribute_group dlb_sequence_number_attr_group = {
+	.attrs = dlb_sequence_number_attrs,
+	.name = "sequence_numbers"
+};
+
+static ssize_t dev_id_show(struct device *dev,
+			   struct device_attribute *attr,
+			   char *buf)
+{
+	struct dlb_dev *dlb_dev = dev_get_drvdata(dev);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n", dlb_dev->id);
+}
+
+static DEVICE_ATTR_RO(dev_id);
+
+static int dlb_pf_sysfs_create(struct dlb_dev *dlb_dev)
+{
+	struct kobject *kobj;
+	int ret;
+
+	kobj = &dlb_dev->pdev->dev.kobj;
+
+	ret = sysfs_create_file(kobj, &dev_attr_dev_id.attr);
+	if (ret)
+		goto dlb_dev_id_attr_group_fail;
+
+	ret = sysfs_create_group(kobj, &dlb_total_attr_group);
+	if (ret)
+		goto dlb_total_attr_group_fail;
+
+	ret = sysfs_create_group(kobj, &dlb_avail_attr_group);
+	if (ret)
+		goto dlb_avail_attr_group_fail;
+
+	ret = sysfs_create_group(kobj, &dlb_sequence_number_attr_group);
+	if (ret)
+		goto dlb_sn_attr_group_fail;
+
+	return 0;
+
+dlb_sn_attr_group_fail:
+	sysfs_remove_group(kobj, &dlb_avail_attr_group);
+dlb_avail_attr_group_fail:
+	sysfs_remove_group(kobj, &dlb_total_attr_group);
+dlb_total_attr_group_fail:
+	sysfs_remove_file(kobj, &dev_attr_dev_id.attr);
+dlb_dev_id_attr_group_fail:
+	return ret;
+}
+
+static void dlb_pf_sysfs_destroy(struct dlb_dev *dlb_dev)
+{
+	struct kobject *kobj;
+
+	kobj = &dlb_dev->pdev->dev.kobj;
+
+	sysfs_remove_group(kobj, &dlb_sequence_number_attr_group);
+	sysfs_remove_group(kobj, &dlb_avail_attr_group);
+	sysfs_remove_group(kobj, &dlb_total_attr_group);
+	sysfs_remove_file(kobj, &dev_attr_dev_id.attr);
+}
+
+static void dlb_pf_sysfs_reapply_configuration(struct dlb_dev *dev)
+{
+	int i;
+
+	for (i = 0; i < DLB_MAX_NUM_SEQUENCE_NUMBER_GROUPS; i++) {
+		int num_sns = dlb_get_group_sequence_numbers(&dev->hw, i);
+
+		dlb_set_group_sequence_numbers(&dev->hw, i, num_sns);
+	}
+}
+
+/*****************************/
 /****** IOCTL callbacks ******/
 /*****************************/
 
@@ -956,6 +1290,9 @@ struct dlb_device_ops dlb_pf_ops = {
 	.device_destroy = dlb_pf_device_destroy,
 	.cdev_add = dlb_pf_cdev_add,
 	.cdev_del = dlb_pf_cdev_del,
+	.sysfs_create = dlb_pf_sysfs_create,
+	.sysfs_destroy = dlb_pf_sysfs_destroy,
+	.sysfs_reapply = dlb_pf_sysfs_reapply_configuration,
 	.init_interrupts = dlb_pf_init_interrupts,
 	.enable_ldb_cq_interrupts = dlb_pf_enable_ldb_cq_interrupts,
 	.enable_dir_cq_interrupts = dlb_pf_enable_dir_cq_interrupts,
