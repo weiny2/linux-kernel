@@ -228,11 +228,26 @@ SYSCALL_DEFINE0(ni_syscall)
  *
  * NOTE That the thread saved PKRS must be preserved separately to ensure
  * global overrides do not 'stick' on a thread.
+ *
+ * Furthermore, Zone Device Access Protection maintains access in a re-entrant
+ * manner through a reference count which also needs to be maintained should
+ * exception handlers use those interfaces for memory access.  Here we start
+ * off the exception handler ref count to 0 and ensure it is 0 when the
+ * exception is done.  Then restore it for the interrupted task.
  */
 noinstr void irq_save_set_pkrs(irqentry_state_t *irq_state, u32 val)
 {
 	if (!cpu_feature_enabled(X86_FEATURE_PKS))
 		return;
+
+#ifdef CONFIG_ZONE_DEVICE_ACCESS_PROTECTION
+	/*
+	 * Save the ref count of the current running process and set it to 0
+	 * for any irq users to properly track re-entrance
+	 */
+	irq_state->pkrs_ref = current->dev_page_access_ref;
+	current->dev_page_access_ref = 0;
+#endif
 
 	/*
 	 * The thread_pkrs must be maintained separately to prevent global
@@ -250,6 +265,13 @@ noinstr void irq_restore_pkrs(irqentry_state_t *irq_state)
 
 	write_pkrs(irq_state->pkrs);
 	current->thread.saved_pkrs = irq_state->thread_pkrs;
+
+#ifdef CONFIG_ZONE_DEVICE_ACCESS_PROTECTION
+	if (current->dev_page_access_ref != 0)
+		pr_err("Imbalanced kmap/kunmap in exception handling\n");
+	/* Restore the interrupted process reference */
+	current->dev_page_access_ref = irq_state->pkrs_ref;
+#endif
 }
 #endif /* CONFIG_ARCH_HAS_SUPERVISOR_PKEYS */
 
