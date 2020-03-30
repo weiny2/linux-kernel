@@ -308,7 +308,10 @@ struct dlb_dev {
 	struct workqueue_struct *wq;
 	struct work_struct work;
 	u8 worker_launched;
+	/* (PF only) */
+	u8 vf_registered[DLB_MAX_NUM_VFS];
 	struct dlb_alarm ingress_err;
+	struct dlb_alarm mbox[DLB_MAX_NUM_VFS];
 };
 
 int dlb_add_domain_device_file(struct dlb_dev *dlb_dev, u32 domain_id);
