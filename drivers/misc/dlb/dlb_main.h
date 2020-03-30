@@ -35,6 +35,9 @@ static const char dlb_driver_name[] = KBUILD_MODNAME;
 
 #define DLB_DEFAULT_RESET_TIMEOUT_S 5
 
+extern unsigned int dlb_qe_sa_pct;
+extern unsigned int dlb_qid_sa_pct;
+
 enum dlb_device_type {
 	DLB_PF,
 	DLB_VF,
