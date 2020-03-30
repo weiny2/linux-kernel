@@ -6,12 +6,16 @@
 #include <linux/memory_hotplug.h>
 #include <linux/mm.h>
 #include <linux/pfn_t.h>
+#include <linux/pkeys.h>
 #include <linux/swap.h>
 #include <linux/mmzone.h>
 #include <linux/swapops.h>
 #include <linux/types.h>
 #include <linux/wait_bit.h>
 #include <linux/xarray.h>
+#include <uapi/asm-generic/mman-common.h>
+
+#define PKEY_INVALID (INT_MIN)
 
 static DEFINE_XARRAY(pgmap_array);
 
@@ -62,6 +66,100 @@ static void devmap_managed_enable_put(struct dev_pagemap *pgmap)
 {
 }
 #endif /* CONFIG_DEV_PAGEMAP_OPS */
+
+#ifdef CONFIG_ZONE_DEVICE_ACCESS_PROTECTION
+/*
+ * Note; all devices which have asked for protections share the same key.  The
+ * key may, or may not, have been provided by the core.  If not, protection
+ * will remain disabled.  The key acquisition is attempted at init time and
+ * never again.  So we don't have to worry about pgmap_pkey changing.
+ */
+static int pgmap_pkey = PKEY_INVALID;
+DEFINE_STATIC_KEY_FALSE(dev_protection_static_key);
+EXPORT_SYMBOL(dev_protection_static_key);
+
+static pgprot_t dev_pgprot_get(struct dev_pagemap *pgmap, pgprot_t prot)
+{
+	if (pgmap->flags & PGMAP_PKEY_PROTECT && pgmap_pkey != PKEY_INVALID) {
+		pgprotval_t val = pgprot_val(prot);
+
+		static_branch_inc(&dev_protection_static_key);
+		prot = __pgprot(val | _PAGE_PKEY(pgmap_pkey));
+	}
+	return prot;
+}
+
+static void dev_pgprot_put(struct dev_pagemap *pgmap)
+{
+	if (pgmap->flags & PGMAP_PKEY_PROTECT && pgmap_pkey != PKEY_INVALID)
+		static_branch_dec(&dev_protection_static_key);
+}
+
+void pgmap_mk_readwrite(struct page *page)
+{
+	/*
+	 * There is no known use case to change permissions in an irq for pgmap
+	 * pages
+	 */
+	lockdep_assert_in_irq();
+
+	if (!page_is_access_protected(page))
+		return;
+
+	if (!current->dev_page_access_ref++)
+		pks_mk_readwrite(pgmap_pkey);
+}
+
+EXPORT_SYMBOL_GPL(pgmap_mk_readwrite);
+
+void pgmap_mk_noaccess(struct page *page)
+{
+	/*
+	 * There is no known use case to change permissions in an irq for pgmap
+	 * pages
+	 */
+	lockdep_assert_in_irq();
+
+	if (!page_is_access_protected(page))
+		return;
+
+	if (!--current->dev_page_access_ref)
+		pks_mk_noaccess(pgmap_pkey);
+}
+EXPORT_SYMBOL_GPL(pgmap_mk_noaccess);
+
+/**
+ * dev_access_protection_init: Configure a PKS key domain for device pages
+ *
+ * The domain defaults to the protected state.  Device page mappings should set
+ * the PGMAP_PKEY_PROTECT flag when mapping pages.
+ *
+ * Note the pkey is never free'ed.  This is run at init time and we either get
+ * the key or we do not.  We need to do this to maintian a constant key (or
+ * not) as device memory is added or removed.
+ */
+static int __init __dev_access_protection_init(void)
+{
+	int pkey = pks_key_alloc("Device Memory");
+
+	if (pkey < 0)
+		return 0;
+
+	pgmap_pkey = pkey;
+
+	return 0;
+}
+subsys_initcall(__dev_access_protection_init);
+#else
+static pgprot_t dev_pgprot_get(struct dev_pagemap *pgmap, pgprot_t prot)
+{
+	return prot;
+}
+
+static void dev_pgprot_put(struct dev_pagemap *pgmap)
+{
+}
+#endif /* CONFIG_ZONE_DEVICE_ACCESS_PROTECTION */
 
 static void pgmap_array_delete(struct range *range)
 {
@@ -181,6 +279,7 @@ void memunmap_pages(struct dev_pagemap *pgmap)
 
 	WARN_ONCE(pgmap->altmap.alloc, "failed to free all reserved pages\n");
 	devmap_managed_enable_put(pgmap);
+	dev_pgprot_put(pgmap);
 }
 EXPORT_SYMBOL_GPL(memunmap_pages);
 
@@ -328,6 +427,8 @@ void *memremap_pages(struct dev_pagemap *pgmap, int nid)
 
 	if (WARN_ONCE(!nr_range, "nr_range must be specified\n"))
 		return ERR_PTR(-EINVAL);
+
+	params.pgprot = dev_pgprot_get(pgmap, params.pgprot);
 
 	switch (pgmap->type) {
 	case MEMORY_DEVICE_PRIVATE:
