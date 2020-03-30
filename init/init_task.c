@@ -204,6 +204,9 @@ struct task_struct init_task
 #ifdef CONFIG_SECURITY
 	.security	= NULL,
 #endif
+#ifdef CONFIG_ZONE_DEVICE_ACCESS_PROTECTION
+	.dev_page_access_ref = ATOMIC_INIT(0),
+#endif
 };
 EXPORT_SYMBOL(init_task);
 

@@ -1105,6 +1105,7 @@ static inline bool page_is_devmap_managed(struct page *page)
 static inline void put_devmap_managed_page(struct page *page)
 {
 }
+
 #endif /* CONFIG_DEV_PAGEMAP_OPS */
 
 static inline bool is_device_private_page(const struct page *page)
@@ -1122,6 +1123,30 @@ static inline bool is_pci_p2pdma_page(const struct page *page)
 		is_zone_device_page(page) &&
 		page->pgmap->type == MEMORY_DEVICE_PCI_P2PDMA;
 }
+
+#ifdef CONFIG_ZONE_DEVICE_ACCESS_PROTECTION
+DECLARE_STATIC_KEY_FALSE(dev_protection_static_key);
+static inline bool page_is_access_protected(struct page *page)
+{
+	if (!static_branch_unlikely(&dev_protection_static_key))
+		return false;
+	if (!is_zone_device_page(page))
+		return false;
+	if (page->pgmap->flags & PGMAP_PROT_ENABLED)
+		return true;
+	return false;
+}
+
+void dev_access_protection_enable(void);
+void dev_access_protection_disable(void);
+#else
+static inline bool page_is_access_protected(struct page *page)
+{
+	return false;
+}
+static inline void dev_access_protection_enable(void) { }
+static inline void dev_access_protection_disable(void) { }
+#endif /* CONFIG_ZONE_DEVICE_ACCESS_PROTECTION */
 
 /* 127: arbitrary random number, small enough to assemble well */
 #define page_ref_zero_or_close_to_overflow(page) \

@@ -6,12 +6,16 @@
 #include <linux/memory_hotplug.h>
 #include <linux/mm.h>
 #include <linux/pfn_t.h>
+#include <linux/pkeys.h>
 #include <linux/swap.h>
 #include <linux/mmzone.h>
 #include <linux/swapops.h>
 #include <linux/types.h>
 #include <linux/wait_bit.h>
 #include <linux/xarray.h>
+#include <uapi/asm-generic/mman-common.h>
+
+#define PKEY_INVALID (INT_MIN)
 
 static DEFINE_XARRAY(pgmap_array);
 
@@ -60,6 +64,7 @@ static int devmap_managed_enable_get(struct dev_pagemap *pgmap)
 		static_branch_enable(&devmap_managed_key);
 	return 0;
 }
+
 #else
 static int devmap_managed_enable_get(struct dev_pagemap *pgmap)
 {
@@ -69,6 +74,90 @@ static void devmap_managed_enable_put(void)
 {
 }
 #endif /* CONFIG_DEV_PAGEMAP_OPS */
+
+#ifdef CONFIG_ZONE_DEVICE_ACCESS_PROTECTION
+static int dev_page_pkey = PKEY_INVALID;
+DEFINE_STATIC_KEY_FALSE(dev_protection_static_key);
+EXPORT_SYMBOL(dev_protection_static_key);
+static atomic_t dev_protection_enable;
+
+static pgprot_t dev_protection_enable_get(struct dev_pagemap *pgmap, pgprot_t prot)
+{
+	if (pgmap->flags & PGMAP_PROT_ENABLED && dev_page_pkey != PKEY_INVALID) {
+		pgprotval_t val = pgprot_val(prot);
+
+		if (atomic_inc_return(&dev_protection_enable) == 1)
+			static_branch_enable(&dev_protection_static_key);
+
+		prot = __pgprot(val | _PAGE_PKEY(dev_page_pkey));
+	}
+	return prot;
+}
+
+static void dev_protection_enable_put(struct dev_pagemap *pgmap)
+{
+	if (pgmap->flags & PGMAP_PROT_ENABLED && dev_page_pkey != PKEY_INVALID) {
+		if (atomic_dec_and_test(&dev_protection_enable))
+			static_branch_disable(&dev_protection_static_key);
+	}
+}
+
+/**
+ * dev_access_protection_enable: enable the extra protection on device memory
+ * areas using Supervisor Protection Keys
+ */
+void dev_access_protection_enable(void)
+{
+	if (dev_page_pkey == PKEY_INVALID)
+		return;
+	if (atomic_dec_and_test(&current->dev_page_access_ref))
+		WARN_ON_ONCE(pks_update_protection(dev_page_pkey,
+						   PKEY_DISABLE_ACCESS | PKEY_DISABLE_WRITE));
+}
+EXPORT_SYMBOL_GPL(dev_access_protection_enable);
+
+/**
+ * dev_access_protection_disable: disable the extra protection on device memory
+ * areas using Supervisor Protection Keys
+ */
+void dev_access_protection_disable(void)
+{
+	if (dev_page_pkey == PKEY_INVALID)
+		return;
+	if (!atomic_fetch_inc(&current->dev_page_access_ref))
+		WARN_ON_ONCE(pks_update_protection(dev_page_pkey, 0));
+}
+EXPORT_SYMBOL_GPL(dev_access_protection_disable);
+
+/**
+ * dev_access_protection_init: Configure a PKS key domain for device pages
+ *
+ * The domain defaults to the protected state.  Device page mappings should set
+ * the PGMAP_PROT_ENABLED flag when mapping pages.
+ */
+static int __init __dev_access_protection_init(void)
+{
+	int pkey = pks_key_alloc("Device Memory");
+
+	if (pkey < 0)
+		return 0;
+
+	/* start out protected */
+	pks_update_protection(pkey, PKEY_DISABLE_ACCESS | PKEY_DISABLE_WRITE);
+	dev_page_pkey = pkey;
+
+	return 0;
+}
+subsys_initcall(__dev_access_protection_init);
+#else
+static pgprot_t dev_protection_enable_get(struct dev_pagemap *pgmap, pgprot_t prot)
+{
+	return prot;
+}
+static void dev_protection_enable_put(struct dev_pagemap *pgmap)
+{
+}
+#endif /* CONFIG_ZONE_DEVICE_ACCESS_PROTECTION */
 
 static void pgmap_array_delete(struct resource *res)
 {
@@ -193,6 +282,8 @@ void *memremap_pages(struct dev_pagemap *pgmap, int nid)
 	};
 	int error, is_ram;
 	bool need_devmap_managed = true;
+
+	params.pgprot = dev_protection_enable_get(pgmap, params.pgprot);
 
 	switch (pgmap->type) {
 	case MEMORY_DEVICE_PRIVATE:
@@ -392,6 +483,7 @@ EXPORT_SYMBOL_GPL(devm_memremap_pages);
 
 void devm_memunmap_pages(struct device *dev, struct dev_pagemap *pgmap)
 {
+	dev_protection_enable_put(pgmap);
 	devm_release_action(dev, devm_memremap_pages_release, pgmap);
 }
 EXPORT_SYMBOL_GPL(devm_memunmap_pages);
