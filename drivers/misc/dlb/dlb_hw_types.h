@@ -68,6 +68,8 @@
 #define DLB_PF_NUM_ALARM_INTERRUPT_VECTORS 4
 /* DLB ALARM interrupts */
 #define DLB_INT_ALARM 0
+/* VF to PF Mailbox Service Request */
+#define DLB_INT_VF_TO_PF_MBOX 1
 /* HCW Ingress Errors */
 #define DLB_INT_INGRESS_ERROR 3
 

@@ -9,6 +9,7 @@
 #include "dlb_bitmap.h"
 #include "dlb_hw_types.h"
 #include "dlb_main.h"
+#include "dlb_mbox.h"
 #include "dlb_regs.h"
 #include "dlb_resource.h"
 #include "dlb_smon.h"
@@ -6413,6 +6414,54 @@ void dlb_ack_compressed_cq_intr(struct dlb_hw *hw,
 	dlb_ack_msix_interrupt(hw, DLB_PF_COMPRESSED_MODE_CQ_VECTOR_ID);
 }
 
+u32 dlb_read_vf_intr_status(struct dlb_hw *hw)
+{
+	return DLB_FUNC_RD(hw, DLB_FUNC_VF_VF_MSI_ISR);
+}
+
+void dlb_ack_vf_intr_status(struct dlb_hw *hw, u32 interrupts)
+{
+	DLB_FUNC_WR(hw, DLB_FUNC_VF_VF_MSI_ISR, interrupts);
+}
+
+void dlb_ack_vf_msi_intr(struct dlb_hw *hw, u32 interrupts)
+{
+	DLB_FUNC_WR(hw, DLB_FUNC_VF_VF_MSI_ISR_PEND, interrupts);
+}
+
+void dlb_ack_pf_mbox_int(struct dlb_hw *hw)
+{
+	union dlb_func_vf_pf2vf_mailbox_isr r0;
+
+	r0.field.pf_isr = 1;
+
+	DLB_FUNC_WR(hw, DLB_FUNC_VF_PF2VF_MAILBOX_ISR, r0.val);
+}
+
+u32 dlb_read_vf_to_pf_int_bitvec(struct dlb_hw *hw)
+{
+	/* The PF has one VF->PF MBOX ISR register per VF space, but they all
+	 * alias to the same physical register.
+	 */
+	return DLB_FUNC_RD(hw, DLB_FUNC_PF_VF2PF_MAILBOX_ISR(0));
+}
+
+void dlb_ack_vf_mbox_int(struct dlb_hw *hw, u32 bitvec)
+{
+	/* The PF has one VF->PF MBOX ISR register per VF space, but they all
+	 * alias to the same physical register.
+	 */
+	DLB_FUNC_WR(hw, DLB_FUNC_PF_VF2PF_MAILBOX_ISR(0), bitvec);
+}
+
+u32 dlb_read_vf_flr_int_bitvec(struct dlb_hw *hw)
+{
+	/* The PF has one VF->PF FLR ISR register per VF space, but they all
+	 * alias to the same physical register.
+	 */
+	return DLB_FUNC_RD(hw, DLB_FUNC_PF_VF2PF_FLR_ISR(0));
+}
+
 void dlb_set_vf_reset_in_progress(struct dlb_hw *hw, int vf)
 {
 	u32 bitvec = DLB_FUNC_RD(hw, DLB_FUNC_PF_VF_RESET_IN_PROGRESS(0));
@@ -6429,6 +6478,60 @@ void dlb_clr_vf_reset_in_progress(struct dlb_hw *hw, int vf)
 	bitvec &= ~(1 << vf);
 
 	DLB_FUNC_WR(hw, DLB_FUNC_PF_VF_RESET_IN_PROGRESS(0), bitvec);
+}
+
+void dlb_ack_vf_flr_int(struct dlb_hw *hw, u32 bitvec, bool a_stepping)
+{
+	union dlb_sys_func_vf_bar_dsbl r0 = { {0} };
+	u32 clear;
+	int i;
+
+	if (!bitvec)
+		return;
+
+	/* Re-enable access to the VF BAR */
+	r0.field.func_vf_bar_dis = 0;
+	for (i = 0; i < DLB_MAX_NUM_VFS; i++) {
+		if (!(bitvec & (1 << i)))
+			continue;
+
+		DLB_CSR_WR(hw, DLB_SYS_FUNC_VF_BAR_DSBL(i), r0.val);
+	}
+
+	/* Notify the VF driver that the reset has completed. This register is
+	 * RW in A-stepping devices, WOCLR otherwise.
+	 */
+	if (a_stepping) {
+		clear = DLB_FUNC_RD(hw, DLB_FUNC_PF_VF_RESET_IN_PROGRESS(0));
+		clear &= ~bitvec;
+	} else {
+		clear = bitvec;
+	}
+
+	DLB_FUNC_WR(hw, DLB_FUNC_PF_VF_RESET_IN_PROGRESS(0), clear);
+
+	/* Mark the FLR ISR as complete */
+	DLB_FUNC_WR(hw, DLB_FUNC_PF_VF2PF_FLR_ISR(0), bitvec);
+}
+
+void dlb_ack_vf_to_pf_int(struct dlb_hw *hw,
+			  u32 mbox_bitvec,
+			  u32 flr_bitvec)
+{
+	int i;
+
+	dlb_ack_msix_interrupt(hw, DLB_INT_VF_TO_PF_MBOX);
+
+	for (i = 0; i < DLB_MAX_NUM_VFS; i++) {
+		union dlb_func_pf_vf2pf_isr_pend r0 = { {0} };
+
+		if (!((mbox_bitvec & (1 << i)) || (flr_bitvec & (1 << i))))
+			continue;
+
+		/* Unset the VF's ISR pending bit */
+		r0.field.isr_pend = 1;
+		DLB_FUNC_WR(hw, DLB_FUNC_PF_VF2PF_ISR_PEND(i), r0.val);
+	}
 }
 
 void dlb_enable_alarm_interrupts(struct dlb_hw *hw)
@@ -8703,6 +8806,31 @@ int dlb_reset_domain(struct dlb_hw *hw,
 	return 0;
 }
 
+int dlb_reset_vf(struct dlb_hw *hw, unsigned int vf_id)
+{
+	struct dlb_domain *domain, *next __attribute__((unused));
+	struct dlb_function_resources *rsrcs;
+
+	if (vf_id >= DLB_MAX_NUM_VFS) {
+		DLB_HW_ERR(hw, "[%s()] Internal error: invalid VF ID %d\n",
+			   __func__, vf_id);
+		return -EFAULT;
+	}
+
+	rsrcs = &hw->vf[vf_id];
+
+	DLB_FUNC_LIST_FOR_SAFE(rsrcs->used_domains, domain, next) {
+		int ret = dlb_reset_domain(hw,
+					   domain->id.virt_id,
+					   true,
+					   vf_id);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+
 int dlb_ldb_port_owned_by_domain(struct dlb_hw *hw,
 				 u32 domain_id,
 				 u32 port_id,
@@ -9089,6 +9217,312 @@ void dlb_collect_perf_metric_data(struct dlb_hw *hw,
 	DLB_CSR_WR(hw, DLB_CHP_CTRL_DIAG_02, r0.val);
 
 	dlb_flush_csr(hw);
+}
+
+void dlb_send_async_pf_to_vf_msg(struct dlb_hw *hw, unsigned int vf_id)
+{
+	union dlb_func_pf_pf2vf_mailbox_isr r0 = { {0} };
+
+	r0.field.isr = 1 << vf_id;
+
+	DLB_FUNC_WR(hw, DLB_FUNC_PF_PF2VF_MAILBOX_ISR(0), r0.val);
+}
+
+bool dlb_pf_to_vf_complete(struct dlb_hw *hw, unsigned int vf_id)
+{
+	union dlb_func_pf_pf2vf_mailbox_isr r0;
+
+	r0.val = DLB_FUNC_RD(hw, DLB_FUNC_PF_PF2VF_MAILBOX_ISR(vf_id));
+
+	return (r0.val & (1 << vf_id)) == 0;
+}
+
+void dlb_send_async_vf_to_pf_msg(struct dlb_hw *hw)
+{
+	union dlb_func_vf_vf2pf_mailbox_isr r0 = { {0} };
+
+	r0.field.isr = 1;
+	DLB_FUNC_WR(hw, DLB_FUNC_VF_VF2PF_MAILBOX_ISR, r0.val);
+}
+
+bool dlb_vf_to_pf_complete(struct dlb_hw *hw)
+{
+	union dlb_func_vf_vf2pf_mailbox_isr r0;
+
+	r0.val = DLB_FUNC_RD(hw, DLB_FUNC_VF_VF2PF_MAILBOX_ISR);
+
+	return (r0.field.isr == 0);
+}
+
+bool dlb_vf_flr_complete(struct dlb_hw *hw)
+{
+	union dlb_func_vf_vf_reset_in_progress r0;
+
+	r0.val = DLB_FUNC_RD(hw, DLB_FUNC_VF_VF_RESET_IN_PROGRESS);
+
+	return (r0.field.reset_in_progress == 0);
+}
+
+int dlb_pf_read_vf_mbox_req(struct dlb_hw *hw,
+			    unsigned int vf_id,
+			    void *data,
+			    int len)
+{
+	u32 buf[DLB_VF2PF_REQ_BYTES / 4];
+	int num_words;
+	int i;
+
+	if (len > DLB_VF2PF_REQ_BYTES) {
+		DLB_HW_ERR(hw, "[%s()] len (%d) > VF->PF mailbox req size\n",
+			   __func__, len);
+		return -EINVAL;
+	}
+
+	if (len == 0) {
+		DLB_HW_ERR(hw, "[%s()] invalid len (0)\n", __func__);
+		return -EINVAL;
+	}
+
+	/* Round up len to the nearest 4B boundary, since the mailbox registers
+	 * are 32b wide.
+	 */
+	num_words = len / 4;
+	if (len % 4 != 0)
+		num_words++;
+
+	for (i = 0; i < num_words; i++) {
+		u32 idx = i + DLB_VF2PF_REQ_BASE_WORD;
+
+		buf[i] = DLB_FUNC_RD(hw, DLB_FUNC_PF_VF2PF_MAILBOX(vf_id, idx));
+	}
+
+	memcpy(data, buf, len);
+
+	return 0;
+}
+
+int dlb_pf_read_vf_mbox_resp(struct dlb_hw *hw,
+			     unsigned int vf_id,
+			     void *data,
+			     int len)
+{
+	u32 buf[DLB_VF2PF_RESP_BYTES / 4];
+	int num_words;
+	int i;
+
+	if (len > DLB_VF2PF_RESP_BYTES) {
+		DLB_HW_ERR(hw, "[%s()] len (%d) > VF->PF mailbox resp size\n",
+			   __func__, len);
+		return -EINVAL;
+	}
+
+	/* Round up len to the nearest 4B boundary, since the mailbox registers
+	 * are 32b wide.
+	 */
+	num_words = len / 4;
+	if (len % 4 != 0)
+		num_words++;
+
+	for (i = 0; i < num_words; i++) {
+		u32 idx = i + DLB_VF2PF_RESP_BASE_WORD;
+
+		buf[i] = DLB_FUNC_RD(hw, DLB_FUNC_PF_VF2PF_MAILBOX(vf_id, idx));
+	}
+
+	memcpy(data, buf, len);
+
+	return 0;
+}
+
+int dlb_pf_write_vf_mbox_resp(struct dlb_hw *hw,
+			      unsigned int vf_id,
+			      void *data,
+			      int len)
+{
+	u32 buf[DLB_PF2VF_RESP_BYTES / 4];
+	int num_words;
+	int i;
+
+	if (len > DLB_PF2VF_RESP_BYTES) {
+		DLB_HW_ERR(hw, "[%s()] len (%d) > PF->VF mailbox resp size\n",
+			   __func__, len);
+		return -EINVAL;
+	}
+
+	memcpy(buf, data, len);
+
+	/* Round up len to the nearest 4B boundary, since the mailbox registers
+	 * are 32b wide.
+	 */
+	num_words = len / 4;
+	if (len % 4 != 0)
+		num_words++;
+
+	for (i = 0; i < num_words; i++) {
+		u32 idx = i + DLB_PF2VF_RESP_BASE_WORD;
+
+		DLB_FUNC_WR(hw, DLB_FUNC_PF_PF2VF_MAILBOX(vf_id, idx), buf[i]);
+	}
+
+	return 0;
+}
+
+int dlb_pf_write_vf_mbox_req(struct dlb_hw *hw,
+			     unsigned int vf_id,
+			     void *data,
+			     int len)
+{
+	u32 buf[DLB_PF2VF_REQ_BYTES / 4];
+	int num_words;
+	int i;
+
+	if (len > DLB_PF2VF_REQ_BYTES) {
+		DLB_HW_ERR(hw, "[%s()] len (%d) > PF->VF mailbox req size\n",
+			   __func__, len);
+		return -EINVAL;
+	}
+
+	memcpy(buf, data, len);
+
+	/* Round up len to the nearest 4B boundary, since the mailbox registers
+	 * are 32b wide.
+	 */
+	num_words = len / 4;
+	if (len % 4 != 0)
+		num_words++;
+
+	for (i = 0; i < num_words; i++) {
+		u32 idx = i + DLB_PF2VF_REQ_BASE_WORD;
+
+		DLB_FUNC_WR(hw, DLB_FUNC_PF_PF2VF_MAILBOX(vf_id, idx), buf[i]);
+	}
+
+	return 0;
+}
+
+int dlb_vf_read_pf_mbox_resp(struct dlb_hw *hw, void *data, int len)
+{
+	u32 buf[DLB_PF2VF_RESP_BYTES / 4];
+	int num_words;
+	int i;
+
+	if (len > DLB_PF2VF_RESP_BYTES) {
+		DLB_HW_ERR(hw, "[%s()] len (%d) > PF->VF mailbox resp size\n",
+			   __func__, len);
+		return -EINVAL;
+	}
+
+	if (len == 0) {
+		DLB_HW_ERR(hw, "[%s()] invalid len (0)\n", __func__);
+		return -EINVAL;
+	}
+
+	/* Round up len to the nearest 4B boundary, since the mailbox registers
+	 * are 32b wide.
+	 */
+	num_words = len / 4;
+	if (len % 4 != 0)
+		num_words++;
+
+	for (i = 0; i < num_words; i++) {
+		u32 idx = i + DLB_PF2VF_RESP_BASE_WORD;
+
+		buf[i] = DLB_FUNC_RD(hw, DLB_FUNC_VF_PF2VF_MAILBOX(idx));
+	}
+
+	memcpy(data, buf, len);
+
+	return 0;
+}
+
+int dlb_vf_read_pf_mbox_req(struct dlb_hw *hw, void *data, int len)
+{
+	u32 buf[DLB_PF2VF_REQ_BYTES / 4];
+	int num_words;
+	int i;
+
+	if (len > DLB_PF2VF_REQ_BYTES) {
+		DLB_HW_ERR(hw, "[%s()] len (%d) > PF->VF mailbox req size\n",
+			   __func__, len);
+		return -EINVAL;
+	}
+
+	/* Round up len to the nearest 4B boundary, since the mailbox registers
+	 * are 32b wide.
+	 */
+	num_words = len / 4;
+	if ((len % 4) != 0)
+		num_words++;
+
+	for (i = 0; i < num_words; i++) {
+		u32 idx = i + DLB_PF2VF_REQ_BASE_WORD;
+
+		buf[i] = DLB_FUNC_RD(hw, DLB_FUNC_VF_PF2VF_MAILBOX(idx));
+	}
+
+	memcpy(data, buf, len);
+
+	return 0;
+}
+
+int dlb_vf_write_pf_mbox_req(struct dlb_hw *hw, void *data, int len)
+{
+	u32 buf[DLB_VF2PF_REQ_BYTES / 4];
+	int num_words;
+	int i;
+
+	if (len > DLB_VF2PF_REQ_BYTES) {
+		DLB_HW_ERR(hw, "[%s()] len (%d) > VF->PF mailbox req size\n",
+			   __func__, len);
+		return -EINVAL;
+	}
+
+	memcpy(buf, data, len);
+
+	/* Round up len to the nearest 4B boundary, since the mailbox registers
+	 * are 32b wide.
+	 */
+	num_words = len / 4;
+	if (len % 4 != 0)
+		num_words++;
+
+	for (i = 0; i < num_words; i++) {
+		u32 idx = i + DLB_VF2PF_REQ_BASE_WORD;
+
+		DLB_FUNC_WR(hw, DLB_FUNC_VF_VF2PF_MAILBOX(idx), buf[i]);
+	}
+
+	return 0;
+}
+
+int dlb_vf_write_pf_mbox_resp(struct dlb_hw *hw, void *data, int len)
+{
+	u32 buf[DLB_VF2PF_RESP_BYTES / 4];
+	int num_words;
+	int i;
+
+	if (len > DLB_VF2PF_RESP_BYTES) {
+		DLB_HW_ERR(hw, "[%s()] len (%d) > VF->PF mailbox resp size\n",
+			   __func__, len);
+		return -EINVAL;
+	}
+
+	memcpy(buf, data, len);
+
+	/* Round up len to the nearest 4B boundary, since the mailbox registers
+	 * are 32b wide.
+	 */
+	num_words = len / 4;
+	if (len % 4 != 0)
+		num_words++;
+
+	for (i = 0; i < num_words; i++) {
+		u32 idx = i + DLB_VF2PF_RESP_BASE_WORD;
+
+		DLB_FUNC_WR(hw, DLB_FUNC_VF_VF2PF_MAILBOX(idx), buf[i]);
+	}
+
+	return 0;
 }
 
 bool dlb_vf_is_locked(struct dlb_hw *hw, unsigned int vf_id)

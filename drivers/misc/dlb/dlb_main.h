@@ -260,6 +260,14 @@ struct dlb_domain_dev {
 	wait_queue_head_t wq_head;
 };
 
+struct dlb_vf_sched_measurement {
+	struct timespec64 start;
+	u32 measurement_duration_us;
+	struct dlb_sched_counts data;
+	u32 elapsed;
+	u8 valid;
+};
+
 struct dlb_vma_node {
 	struct list_head list;
 	struct vm_area_struct *vma;
@@ -316,13 +324,18 @@ struct dlb_dev {
 	 * hardware.
 	 */
 	struct mutex measurement_mutex;
+	/* Cached results from VF measurement requests */
+	struct dlb_vf_sched_measurement vf_sched[DLB_MAX_NUM_VFS];
 	/* This workqueue thread is responsible for processing all CQ->QID unmap
 	 * requests.
 	 */
 	struct workqueue_struct *wq;
 	struct work_struct work;
 	u8 worker_launched;
+	/* (PF only) */
+	u8 vf_registered[DLB_MAX_NUM_VFS];
 	struct dlb_alarm ingress_err;
+	struct dlb_alarm mbox[DLB_MAX_NUM_VFS];
 };
 
 int dlb_add_domain_device_file(struct dlb_dev *dlb_dev, u32 domain_id);
