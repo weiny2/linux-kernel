@@ -20,3 +20,154 @@ Description:	Interface for setting the driver's reset timeout.
 		their device mappings can interfere with processes that use the
 		device after the reset completes. To ensure that user processes
 		have enough time to clean up, reset_timeout_s can be increased.
+
+What:		/sys/bus/pci/devices/.../sequence_numbers/group<N>_sns_per_queue
+Date:		February 27, 2020
+KernelVersion:	5.7
+Contact:	gage.eads@intel.com
+Description:	Interface for configuring DLB load-balanced sequence numbers.
+
+		The DLB has a fixed number of sequence numbers used for ordered
+		scheduling. They are divided among four sequence number groups.
+		A group can be configured to contain one queue with 1,024
+		sequence numbers, or two queues with 512 sequence numbers each,
+		and so on, down to 32 queues with 32 sequence numbers each.
+
+		When a load-balanced queue is configured with non-zero sequence
+		numbers, the driver finds a group configured for the same
+		number of sequence numbers and an available slot. If no such
+		groups are found, the queue cannot be configured.
+
+		Once the first ordered queue is configured, the sequence number
+		configurations are locked. The driver returns an error on writes
+		to locked sequence number configurations. When all ordered
+		queues are unconfigured, the sequence number configurations can
+		be changed again.
+
+		This file is only accessible for physical function DLB devices.
+
+What:		/sys/bus/pci/devices/.../total_resources/num_atomic_inflights
+What:		/sys/bus/pci/devices/.../total_resources/num_dir_credit_pools
+What:		/sys/bus/pci/devices/.../total_resources/num_dir_credits
+What:		/sys/bus/pci/devices/.../total_resources/num_dir_ports
+What:		/sys/bus/pci/devices/.../total_resources/num_hist_list_entries
+What:		/sys/bus/pci/devices/.../total_resources/num_ldb_credit_pools
+What:		/sys/bus/pci/devices/.../total_resources/num_ldb_credits
+What:		/sys/bus/pci/devices/.../total_resources/num_ldb_ports
+What:		/sys/bus/pci/devices/.../total_resources/num_ldb_queues
+What:		/sys/bus/pci/devices/.../total_resources/num_sched_domains
+Date:		February 27, 2020
+KernelVersion:	5.7
+Contact:	gage.eads@intel.com
+Description:
+		The total_resources subdirectory contains read-only files that
+		indicate the total number of resources in the device.
+
+		num_atomic_inflights:  Total number of atomic inflights in the
+				       device. Atomic inflights refers to the
+				       on-device storage used by the atomic
+				       scheduler.
+
+		num_dir_credit_pools:  Total number of directed credit pools in
+				       the device.
+
+		num_dir_credits:       Total number of directed credits in the
+				       device.
+
+		num_dir_ports:	       Total number of directed ports (and
+				       queues) in the device.
+
+		num_hist_list_entries: Total number of history list entries in
+				       the device.
+
+		num_ldb_credit_pools:  Total number of load-balanced credit
+				       pools in the device.
+
+		num_ldb_credits:       Total number of load-balanced credits in
+				       the device.
+
+		num_ldb_ports:	       Total number of load-balanced ports in
+				       the device.
+
+		num_ldb_queues:	       Total number of load-balanced queues in
+				       the device.
+
+		num_sched_domains:     Total number of scheduling domains in the
+				       device.
+
+What:		/sys/bus/pci/devices/.../avail_resources/num_atomic_inflights
+What:		/sys/bus/pci/devices/.../avail_resources/num_dir_credit_pools
+What:		/sys/bus/pci/devices/.../avail_resources/num_dir_credits
+What:		/sys/bus/pci/devices/.../avail_resources/num_dir_ports
+What:		/sys/bus/pci/devices/.../avail_resources/num_hist_list_entries
+What:		/sys/bus/pci/devices/.../avail_resources/num_ldb_credit_pools
+What:		/sys/bus/pci/devices/.../avail_resources/num_ldb_credits
+What:		/sys/bus/pci/devices/.../avail_resources/num_ldb_ports
+What:		/sys/bus/pci/devices/.../avail_resources/num_ldb_queues
+What:		/sys/bus/pci/devices/.../avail_resources/num_sched_domains
+What:		/sys/bus/pci/devices/.../avail_resources/max_ctg_atm_inflights
+What:		/sys/bus/pci/devices/.../avail_resources/max_ctg_hl_entries
+Date:		February 27, 2020
+KernelVersion:	5.7
+Contact:	gage.eads@intel.com
+Description:
+		The avail_resources subdirectory contains read-only files that
+		indicate the available number of resources in the device.
+		"Available" here means resources that are not currently in use
+		by an application or, in the case of a physical function
+		device, assigned to a virtual function.
+
+		num_atomic_inflights:  Available number of atomic inflights in
+				       the device.
+
+		num_dir_credit_pools:  Available number of directed credits in
+				       the device.
+
+		num_dir_ports:	       Available number of directed ports (and
+				       queues) in the device.
+
+		num_hist_list_entries: Available number of history list entries
+				       in the device.
+
+		num_ldb_credit_pools:  Available number of load-balanced credit
+				       pools in the device.
+
+		num_ldb_credits:       Available number of load-balanced credits
+				       in the device.
+
+		num_ldb_ports:	       Available number of load-balanced ports
+				       in the device.
+
+		num_ldb_queues:	       Available number of load-balanced queues
+				       in the device.
+
+		num_sched_domains:     Available number of scheduling domains
+				       in the device.
+
+		max_ctg_atm_inflights: Maximum contiguous atomic inflights
+				       available in the device.
+
+				       Each scheduling domain is created with
+				       an allocation of atomic inflights, and
+				       each domain's allocation of inflights
+				       must be contiguous.
+
+		max_ctg_hl_entries:    Maximum contiguous history list entries
+				       available in the device.
+
+				       Each scheduling domain is created with
+				       an allocation of history list entries,
+				       and each domain's allocation of entries
+				       must be contiguous.
+
+What:		/sys/bus/pci/devices/.../dev_id
+Date:		February 27, 2020
+KernelVersion:	5.7
+Contact:	gage.eads@intel.com
+Description:	Device ID used in /dev, i.e. /dev/dlb<device ID>
+
+		Each DLB PF and VF device is granted a unique ID by the kernel
+		driver, and this ID is used to construct the device's /dev
+		directory: /dev/dlb<device ID>. This sysfs file can be read to
+		determine a device's ID, which allows the user to map a device
+		file to a PCI BDF.

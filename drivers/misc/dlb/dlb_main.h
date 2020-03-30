@@ -59,6 +59,9 @@ struct dlb_device_ops {
 			dev_t base,
 			const struct file_operations *fops);
 	void (*cdev_del)(struct dlb_dev *dlb_dev);
+	int (*sysfs_create)(struct dlb_dev *dlb_dev);
+	void (*sysfs_destroy)(struct dlb_dev *dlb_dev);
+	void (*sysfs_reapply)(struct dlb_dev *dev);
 	int (*init_interrupts)(struct dlb_dev *dev, struct pci_dev *pdev);
 	int (*enable_ldb_cq_interrupts)(struct dlb_dev *dev,
 					int port_id,

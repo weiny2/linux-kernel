@@ -212,6 +212,9 @@ static void dlb_reset_hardware_state(struct dlb_dev *dev, bool issue_flr)
 	/* Reinitialize interrupt configuration */
 	dev->ops->reinit_interrupts(dev);
 
+	/* Reset configuration done through the sysfs */
+	dev->ops->sysfs_reapply(dev);
+
 	/* Reinitialize any other hardware state */
 	dev->ops->init_hardware(dev);
 }
@@ -787,6 +790,10 @@ static int dlb_probe(struct pci_dev *pdev,
 	if (ret)
 		goto dma_set_mask_fail;
 
+	ret = dlb_dev->ops->sysfs_create(dlb_dev);
+	if (ret)
+		goto sysfs_create_fail;
+
 	ret = dlb_reset_device(pdev);
 	if (ret)
 		goto dlb_reset_fail;
@@ -823,6 +830,8 @@ init_driver_state_fail:
 	dlb_dev->ops->free_interrupts(dlb_dev, pdev);
 init_interrupts_fail:
 dlb_reset_fail:
+	dlb_dev->ops->sysfs_destroy(dlb_dev);
+sysfs_create_fail:
 dma_set_mask_fail:
 	dlb_dev->ops->device_destroy(dlb_dev, dlb_class);
 device_add_fail:
@@ -867,6 +876,8 @@ static void dlb_remove(struct pci_dev *pdev)
 	dlb_resource_free(&dlb_dev->hw);
 
 	dlb_release_device_memory(dlb_dev);
+
+	dlb_dev->ops->sysfs_destroy(dlb_dev);
 
 	/* If a domain is created without its device file ever being opened, it
 	 * needs to be destroyed here.
