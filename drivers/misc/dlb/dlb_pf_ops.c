@@ -747,6 +747,7 @@ static int dlb_pf_reset_domain(struct dlb_dev *dev, u32 id)
 	return dlb_reset_domain(&dev->hw, id, false, 0);
 }
 
+
 static int dlb_pf_get_ldb_queue_depth(struct dlb_hw *hw,
 				      u32 id,
 				      struct dlb_get_ldb_queue_depth_args *args,
