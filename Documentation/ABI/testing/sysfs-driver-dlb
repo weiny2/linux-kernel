@@ -171,3 +171,18 @@ Description:	Device ID used in /dev, i.e. /dev/dlb<device ID>
 		directory: /dev/dlb<device ID>. This sysfs file can be read to
 		determine a device's ID, which allows the user to map a device
 		file to a PCI BDF.
+
+What:		/sys/bus/pci/devices/.../ingress_err_en
+Date:		February 27, 2020
+KernelVersion:	5.7
+Contact:	gage.eads@intel.com
+Description:	Interface for re-enabling ingress error interrupts
+
+		If the PF driver detects an overload of ingress error
+		interrupts, it will -- to prevent a possible denial-of-service
+		attack -- disable them.
+
+		If the ingress error interrupt is disabled, they will be
+		re-enabled when the device is reset or the driver is reloaded.
+		This interface can be used to re-enable the interrupt as well,
+		and can be read to determine whether the interrupt is enabled.
