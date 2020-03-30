@@ -6,14 +6,19 @@
 #include <linux/memory_hotplug.h>
 #include <linux/mm.h>
 #include <linux/pfn_t.h>
+#include <linux/pkeys.h>
 #include <linux/swap.h>
 #include <linux/mmzone.h>
 #include <linux/swapops.h>
 #include <linux/types.h>
 #include <linux/wait_bit.h>
 #include <linux/xarray.h>
+#include <uapi/asm-generic/mman-common.h>
+
+#define PKEY_INVALID (INT_MIN)
 
 static DEFINE_XARRAY(pgmap_array);
+static int dev_page_pkey = PKEY_INVALID;
 
 /*
  * The memremap() and memremap_pages() interfaces are alternately used
@@ -193,6 +198,12 @@ void *memremap_pages(struct dev_pagemap *pgmap, int nid)
 	};
 	int error, is_ram;
 	bool need_devmap_managed = true;
+
+	if (pgmap->flags & PGMAP_PROT_ENABLED && dev_page_pkey != PKEY_INVALID) {
+		pgprotval_t val = pgprot_val(params.pgprot);
+
+		params.pgprot = __pgprot(val | _PAGE_PKEY(dev_page_pkey));
+	}
 
 	switch (pgmap->type) {
 	case MEMORY_DEVICE_PRIVATE:
@@ -481,4 +492,55 @@ void free_devmap_managed_page(struct page *page)
 	page->mapping = NULL;
 	page->pgmap->ops->page_free(page);
 }
+
 #endif /* CONFIG_DEV_PAGEMAP_OPS */
+
+#if defined(CONFIG_ZONE_DEVICE) && defined(CONFIG_ARCH_HAS_PKEYS)
+/**
+ * dev_access_protection_enable: enable the extra protection on device memory
+ * areas using Supervisor Protection Keys
+ */
+void dev_access_protection_enable(void)
+{
+	if (dev_page_pkey == PKEY_INVALID)
+		return;
+	if (atomic_dec_and_test(&current->dev_page_pkey_ref))
+		WARN_ON_ONCE(pks_update_protection(dev_page_pkey,
+						   PKEY_DISABLE_ACCESS | PKEY_DISABLE_WRITE));
+}
+EXPORT_SYMBOL_GPL(dev_access_protection_enable);
+
+/**
+ * dev_access_protection_disable: disable the extra protection on device memory
+ * areas using Supervisor Protection Keys
+ */
+void dev_access_protection_disable(void)
+{
+	if (dev_page_pkey == PKEY_INVALID)
+		return;
+	if (!atomic_fetch_inc(&current->dev_page_pkey_ref))
+		WARN_ON_ONCE(pks_update_protection(dev_page_pkey, 0));
+}
+EXPORT_SYMBOL_GPL(dev_access_protection_disable);
+
+/**
+ * dev_access_protection_init: Configure a PKS key domain for device pages
+ *
+ * The domain defaults to the protected state.  Device page mappings should set
+ * the PGMAP_PROT_ENABLED flag when mapping pages.
+ */
+static int __init __dev_access_protection_init(void)
+{
+	int pkey = pks_key_alloc("Device Memory");
+
+	if (pkey < 0)
+		return 0;
+
+	/* start out protected */
+	pks_update_protection(pkey, PKEY_DISABLE_ACCESS | PKEY_DISABLE_WRITE);
+	dev_page_pkey = pkey;
+
+	return 0;
+}
+subsys_initcall(__dev_access_protection_init);
+#endif /* CONFIG_ZONE_DEVICE */

@@ -1094,6 +1094,17 @@ static inline bool page_is_devmap_managed(struct page *page)
 	return false;
 }
 
+static inline bool page_is_access_protected(struct page *page)
+{
+	if (!IS_ENABLED(CONFIG_ARCH_HAS_PKEYS))
+		return false;
+	if (!is_zone_device_page(page))
+		return false;
+	if (page->pgmap->flags & PGMAP_PROT_ENABLED)
+		return true;
+	return false;
+}
+
 void put_devmap_managed_page(struct page *page);
 
 #else /* CONFIG_DEV_PAGEMAP_OPS */
@@ -1104,6 +1115,11 @@ static inline bool page_is_devmap_managed(struct page *page)
 
 static inline void put_devmap_managed_page(struct page *page)
 {
+}
+
+static inline bool page_is_access_protected(struct page *page)
+{
+	return false;
 }
 #endif /* CONFIG_DEV_PAGEMAP_OPS */
 
