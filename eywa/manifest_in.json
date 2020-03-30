@@ -1329,7 +1329,7 @@
                 }
             ],
             "status": "public",
-            "stuck_at_ref": "c6e1c6156904c26ea463c2af7321d76932a7b2f3"
+            "stuck_at_ref": ""
         },
         {
             "branch": "for-intel-next",
