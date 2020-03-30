@@ -31,6 +31,7 @@ static inline bool wake_condition(struct dlb_cq_intr *intr,
 				  struct dlb_status *status)
 {
 	return (READ_ONCE(intr->wake) ||
+		READ_ONCE(dev->reset_active) ||
 		!READ_ONCE(status->valid) ||
 		READ_ONCE(intr->disabled));
 }
@@ -129,7 +130,8 @@ int dlb_block_on_cq_interrupt(struct dlb_dev *dev,
 				       wake_condition(intr, dev, status));
 
 	if (ret == 0) {
-		if (!READ_ONCE(status->valid))
+		if (READ_ONCE(dev->reset_active) ||
+		    !READ_ONCE(status->valid))
 			ret = -EINTR;
 		else if (READ_ONCE(intr->disabled))
 			ret = -EACCES;

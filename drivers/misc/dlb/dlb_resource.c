@@ -28,6 +28,9 @@
 #define DLB_DOM_LIST_FOR_SAFE(head, ptr, ptr_tmp) \
 	list_for_each_entry_safe(ptr, ptr_tmp, &(head), domain_list)
 
+#define DLB_FUNC_LIST_FOR_SAFE(head, ptr, ptr_tmp) \
+	list_for_each_entry_safe(ptr, ptr_tmp, &(head), func_list)
+
 /* The PF driver cannot assume that a register write will affect subsequent HCW
  * writes. To ensure a write completes, the driver must read back a CSR. This
  * function only need be called for configuration that can occur after the
@@ -6538,6 +6541,20 @@ static int dlb_domain_reset_software_state(struct dlb_hw *hw,
 	rsrcs->num_avail_domains++;
 
 	return 0;
+}
+
+void dlb_resource_reset(struct dlb_hw *hw)
+{
+	struct dlb_domain *domain, *next __attribute__((unused));
+	int i;
+
+	for (i = 0; i < DLB_MAX_NUM_VFS; i++) {
+		DLB_FUNC_LIST_FOR_SAFE(hw->vf[i].used_domains, domain, next)
+			dlb_domain_reset_software_state(hw, domain);
+	}
+
+	DLB_FUNC_LIST_FOR_SAFE(hw->pf.used_domains, domain, next)
+		dlb_domain_reset_software_state(hw, domain);
 }
 
 static u32 dlb_dir_queue_depth(struct dlb_hw *hw,

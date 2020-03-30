@@ -37,6 +37,15 @@ int dlb_resource_init(struct dlb_hw *hw);
 void dlb_resource_free(struct dlb_hw *hw);
 
 /**
+ * dlb_resource_reset() - reset in-use resources to their initial state
+ * @hw: dlb_hw handle for a particular device.
+ *
+ * This function resets in-use resources, and makes them available for use.
+ * All resources go back to their owning function, whether a PF or a VF.
+ */
+void dlb_resource_reset(struct dlb_hw *hw);
+
+/**
  * dlb_hw_create_sched_domain() - create a scheduling domain
  * @hw: dlb_hw handle for a particular device.
  * @args: scheduling domain creation arguments.

@@ -12,6 +12,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/uaccess.h>
 
+#include "dlb_intr.h"
 #include "dlb_ioctl.h"
 #include "dlb_main.h"
 #include "dlb_mem.h"
@@ -32,6 +33,11 @@ MODULE_VERSION(DRV_VERSION);
 
 static const char
 dlb_driver_copyright[] = "Copyright(c) 2017-2020 Intel Corporation";
+
+static unsigned int dlb_reset_timeout_s = DLB_DEFAULT_RESET_TIMEOUT_S;
+module_param_named(reset_timeout_s, dlb_reset_timeout_s, uint, 0644);
+MODULE_PARM_DESC(reset_timeout_s,
+		 "Wait time (in seconds) after reset is requested given for app shutdown until driver zaps VMAs");
 
 /* The driver lock protects driver data structures that may be used by multiple
  * devices.
@@ -95,6 +101,34 @@ static int dlb_open_domain_device_file(struct dlb_dev *dev, struct file *f)
 	return 0;
 }
 
+static int dlb_open_device_file(struct dlb_dev *dev, struct file *f)
+{
+	struct dlb_status *status;
+
+	dev_dbg(dev->dlb_device, "Opening DLB device file\n");
+
+	status = dev->status;
+
+	if (!status) {
+		status = devm_kzalloc(dev->dlb_device,
+				      sizeof(*status),
+				      GFP_KERNEL);
+		if (!status)
+			return -ENOMEM;
+
+		status->valid = true;
+		status->refcnt = 0;
+
+		dev->status = status;
+	}
+
+	f->private_data = status;
+
+	status->refcnt++;
+
+	return 0;
+}
+
 static int dlb_open(struct inode *i, struct file *f)
 {
 	struct dlb_dev *dev;
@@ -104,8 +138,19 @@ static int dlb_open(struct inode *i, struct file *f)
 
 	mutex_lock(&dev->resource_mutex);
 
+	/* See dlb_reset_prepare() for more details */
+	if (dev->reset_active) {
+		dev_err(dev->dlb_device,
+			"[%s()] The DLB is being reset; applications cannot use it during this time.\n",
+			__func__);
+		ret = -EINVAL;
+		goto end;
+	}
+
 	if (!IS_DLB_DEV_FILE(dlb_dev_number_base, f->f_inode->i_rdev))
 		ret = dlb_open_domain_device_file(dev, f);
+	else
+		ret = dlb_open_device_file(dev, f);
 	if (ret)
 		goto end;
 
@@ -159,9 +204,10 @@ int dlb_add_domain_device_file(struct dlb_dev *dlb_dev, u32 domain_id)
 	return 0;
 }
 
-static void dlb_reset_hardware_state(struct dlb_dev *dev)
+static void dlb_reset_hardware_state(struct dlb_dev *dev, bool issue_flr)
 {
-	dlb_reset_device(dev->pdev);
+	if (issue_flr)
+		dlb_reset_device(dev->pdev);
 
 	/* Reinitialize interrupt configuration */
 	dev->ops->reinit_interrupts(dev);
@@ -244,6 +290,16 @@ static int dlb_close(struct inode *i, struct file *f)
 			ret = dlb_close_domain_device_file(dev,
 							   status,
 							   domain_id);
+	} else {
+		dev_dbg(dev->dlb_device, "Closing DLB device file\n");
+
+		status->refcnt--;
+
+		if (status->refcnt == 0) {
+			devm_kfree(dev->dlb_device, status);
+			dev->status = NULL;
+		}
+
 	}
 
 	dev->ops->dec_pm_refcnt(dev->pdev);
@@ -332,6 +388,32 @@ static int dlb_read_domain_alert(struct dlb_dev *dev,
 	return 0;
 }
 
+static int dlb_check_and_inc_active_users(struct dlb_dev *dev,
+					  struct dlb_status *status)
+{
+	mutex_lock(&dev->resource_mutex);
+
+	if (!status->valid) {
+		mutex_unlock(&dev->resource_mutex);
+		return -EINVAL;
+	}
+
+	dev->active_users++;
+
+	mutex_unlock(&dev->resource_mutex);
+
+	return 0;
+}
+
+static void dlb_dec_active_users(struct dlb_dev *dev)
+{
+	mutex_lock(&dev->resource_mutex);
+
+	dev->active_users--;
+
+	mutex_unlock(&dev->resource_mutex);
+}
+
 static ssize_t dlb_read(struct file *f,
 			char __user *buf,
 			size_t len,
@@ -360,6 +442,11 @@ static ssize_t dlb_read(struct file *f,
 		return -EINVAL;
 	}
 
+	if (dlb_check_and_inc_active_users(dev, status)) {
+		alert.alert_id = DLB_DOMAIN_ALERT_DEVICE_RESET;
+		goto copy;
+	}
+
 	/* See dlb_user.h for details on domain alert notifications */
 
 	ret = dlb_read_domain_alert(dev,
@@ -367,9 +454,13 @@ static ssize_t dlb_read(struct file *f,
 				    domain_id,
 				    &alert,
 				    f->f_flags & O_NONBLOCK);
+
+	dlb_dec_active_users(dev);
+
 	if (ret)
 		return ret;
 
+copy:
 	if (copy_to_user(buf, &alert, sizeof(alert)))
 		return -EFAULT;
 
@@ -465,6 +556,10 @@ static int dlb_mmap(struct file *f, struct vm_area_struct *vma)
 	if (IS_DLB_DEV_FILE(dlb_dev_number_base, f->f_inode->i_rdev))
 		return -EINVAL;
 
+	ret = dlb_check_and_inc_active_users(dev, f->private_data);
+	if (ret)
+		return ret;
+
 	domain_id = DLB_FILE_ID_FROM_DEV_T(dlb_dev_number_base,
 					   f->f_inode->i_rdev);
 
@@ -492,6 +587,8 @@ static int dlb_mmap(struct file *f, struct vm_area_struct *vma)
 	vma->vm_private_data = dev;
 
 end:
+	dlb_dec_active_users(dev);
+
 	return ret;
 }
 
@@ -513,11 +610,17 @@ static long dlb_ioctl(struct file *f, unsigned int cmd, unsigned long arg)
 		return -EINVAL;
 	}
 
+	ret = dlb_check_and_inc_active_users(dev, f->private_data);
+	if (ret)
+		return ret;
+
 	if (IS_DLB_DEV_FILE(dlb_dev_number_base, f->f_inode->i_rdev))
 		ret = dlb_ioctl_dispatcher(dev, cmd, arg);
 	else
 		ret = dlb_domain_ioctl_dispatcher(dev, f->private_data,
 						  cmd, arg, domain_id);
+
+	dlb_dec_active_users(dev);
 
 	return ret;
 }
@@ -828,7 +931,7 @@ static int dlb_runtime_resume(struct device *dev)
 
 	dev_dbg(dlb_dev->dlb_device, "Resuming device operation\n");
 
-	dlb_reset_hardware_state(dlb_dev);
+	dlb_reset_hardware_state(dlb_dev, true);
 
 	return 0;
 }
@@ -839,6 +942,297 @@ static struct pci_device_id dlb_id_table[] = {
 	{ 0 }
 };
 MODULE_DEVICE_TABLE(pci, dlb_id_table);
+
+static int dlb_total_device_file_refcnt(struct dlb_dev *dev)
+{
+	int cnt = 0, i;
+
+	for (i = 0; i < DLB_MAX_NUM_DOMAINS; i++)
+		if (dev->sched_domains[i].status)
+			cnt += dev->sched_domains[i].status->refcnt;
+
+	if (dev->status)
+		cnt += dev->status->refcnt;
+
+	return cnt;
+}
+
+static bool dlb_in_use(struct dlb_dev *dev)
+{
+	return (dlb_total_device_file_refcnt(dev) != 0 ||
+		(dev->active_users > 0) ||
+		!list_empty(&dev->vma_list));
+}
+
+static void dlb_wait_for_idle(struct dlb_dev *dlb_dev)
+{
+	int i;
+
+	for (i = 0; i < dlb_reset_timeout_s * 10; i++) {
+		bool idle;
+
+		mutex_lock(&dlb_dev->resource_mutex);
+
+		/* Check for any application threads in the driver, extant
+		 * mmaps, or open device files.
+		 */
+		idle = !dlb_in_use(dlb_dev);
+
+		mutex_unlock(&dlb_dev->resource_mutex);
+
+		if (idle)
+			return;
+
+		cond_resched();
+		msleep(100);
+	}
+
+	dev_err(dlb_dev->dlb_device,
+		"PF driver timed out waiting for applications to idle\n");
+}
+
+void dlb_zap_vma_entries(struct dlb_dev *dlb_dev)
+{
+	struct dlb_vma_node *vma_node;
+	struct list_head *node;
+
+	dev_dbg(dlb_dev->dlb_device, "Zapping memory mappings\n");
+
+	list_for_each(node, &dlb_dev->vma_list) {
+		unsigned long size;
+
+		vma_node = list_entry(node, struct dlb_vma_node, list);
+
+		size = vma_node->vma->vm_end - vma_node->vma->vm_start;
+
+		zap_vma_ptes(vma_node->vma, vma_node->vma->vm_start, size);
+	}
+}
+
+static void dlb_disable_device_files(struct dlb_dev *dlb_dev)
+{
+	int i;
+
+	/* Set all status->valid flags to false to prevent existing device
+	 * files from being used to enter the device driver.
+	 */
+	for (i = 0; i < DLB_MAX_NUM_DOMAINS; i++) {
+		struct dlb_status *status;
+
+		status = dlb_dev->sched_domains[i].status;
+
+		if (!status)
+			continue;
+
+		status->valid = false;
+
+		device_destroy(dlb_class,
+			       MKDEV(MAJOR(dlb_dev->dev_number),
+				     MINOR(dlb_dev->dev_number) + i));
+
+		/* If the domain device file was created but never opened, free
+		 * the file private memory here. Otherwise, it will be freed
+		 * in the file close callback when refcnt reaches 0.
+		 */
+		if (status->refcnt == 0)
+			devm_kfree(dlb_dev->dlb_device, status);
+	}
+
+	if (dlb_dev->status)
+		dlb_dev->status->valid = false;
+}
+
+static void dlb_wake_threads(struct dlb_dev *dlb_dev)
+{
+	int i;
+
+	/* Wake any blocked device file readers. These threads will return the
+	 * DLB_DOMAIN_ALERT_DEVICE_RESET alert, and well-behaved applications
+	 * will close their fds and unmap DLB memory as a result.
+	 */
+	for (i = 0; i < DLB_MAX_NUM_DOMAINS; i++)
+		wake_up_interruptible(&dlb_dev->sched_domains[i].wq_head);
+
+	wake_up_interruptible(&dlb_dev->measurement_wq);
+
+	/* Wake threads blocked on a CQ interrupt */
+	for (i = 0; i < DLB_MAX_NUM_LDB_PORTS; i++)
+		dlb_wake_thread(dlb_dev,
+				&dlb_dev->intr.ldb_cq_intr[i],
+				WAKE_DEV_RESET);
+
+	for (i = 0; i < DLB_MAX_NUM_DIR_PORTS; i++)
+		dlb_wake_thread(dlb_dev,
+				&dlb_dev->intr.dir_cq_intr[i],
+				WAKE_DEV_RESET);
+}
+
+void dlb_stop_users(struct dlb_dev *dlb_dev)
+{
+	/* Disable existing device files to prevent applications from enter the
+	 * device driver through file operations. (New files can't be opened
+	 * while the resource mutex is held.)
+	 */
+	dlb_disable_device_files(dlb_dev);
+
+	/* Wake any threads blocked in the kernel */
+	dlb_wake_threads(dlb_dev);
+}
+
+static void dlb_reset_prepare(struct pci_dev *pdev)
+{
+	/* A device FLR can be triggered while applications are actively using
+	 * the device, which poses two problems:
+	 * - If applications continue to enqueue to the hardware they will
+	 *   cause hardware errors, because the FLR will have reset the
+	 *   scheduling domains, ports, and queues.
+	 * - When the applications end, they must not trigger the driver's
+	 *   domain reset logic, which would fail because the device's
+	 *   registers will have been reset by the FLR.
+	 *
+	 * The driver needs to stop applications from using the device before
+	 * the FLR begins, and detect when these applications exit (so they
+	 * don't trigger the domain reset that occurs when their last file
+	 * reference (or memory mapping) closes). The driver must also disallow
+	 * applications from configuring the device while the reset is in
+	 * progress.
+	 *
+	 * To avoid these problems, the driver handles unexpected resets as
+	 * follows:
+	 * 1. Set the reset_active flag. This flag blocks new device files from
+	 *    being opened and is used as a wakeup condition in the driver's
+	 *    wait queues.
+	 * 2. If this is a PF FLR and there are active VFs, send them a
+	 *    pre-reset notification, so they can stop any VF applications.
+	 * 3. Disable all device files (set the per-file valid flag to false,
+	 *    which prevents the file from being used after FLR completes) and
+	 *    wake any threads blocked on a wait queue.
+	 * 4. If the DLB is not in use -- i.e. no open device files or memory
+	 *    mappings, and no VFs in use (PF FLR only) -- the FLR can begin.
+	 * 5. Else, the driver waits (up to a user-specified timeout, default
+	 *    5s) for software to stop using the driver and the device. If the
+	 *    timeout elapses, the driver zaps any remaining MMIO mappings so
+	 *    the extant applications can no longer use the device.
+	 * 6. Do not unlock the resource mutex at the end of the reset prepare
+	 *    function, to prevent device access during the reset.
+	 *
+	 * After the FLR:
+	 * 1. Clear the device and domain status pointers (the memory is freed
+	 *    elsewhere).
+	 * 2. Release any remaining allocated port or CQ memory, now that it's
+	 *    guaranteed the device is unconfigured and won't write to memory.
+	 * 3. Reset software and hardware state.
+	 * 4. Notify VFs that the FLR is complete.
+	 * 5. Set reset_active to false.
+	 * 6. Unlock the resource mutex.
+	 */
+
+	struct dlb_dev *dlb_dev;
+
+	dlb_dev = pci_get_drvdata(pdev);
+
+	dev_dbg(dlb_dev->dlb_device, "DLB driver reset prepare\n");
+
+	mutex_lock(&dlb_dev->resource_mutex);
+
+	/* Block any new device files from being opened */
+	dlb_dev->reset_active = true;
+
+	/* If the device has 1+ VFs, even if they're not in use, it will not be
+	 * suspended. To avoid having to handle two cases (reset while device
+	 * suspended and reset while device active), increment the device's PM
+	 * refcnt here, to guarantee that the device is in D0 for the duration
+	 * of the reset.
+	 */
+	dlb_dev->ops->inc_pm_refcnt(pdev, true);
+
+	/* Stop existing applications from continuing to use the device by
+	 * blocking kernel driver interfaces and waking any threads on wait
+	 * queues, but don't zap VMA entries yet. If this is a PF FLR, notify
+	 * any VFs of the impending FLR so they can stop their users as well.
+	 */
+	dlb_stop_users(dlb_dev);
+
+	/* If no software is using the device, there's nothing to clean up. */
+	if (!dlb_in_use(dlb_dev))
+		return;
+
+	dev_dbg(dlb_dev->dlb_device, "Waiting for users to stop\n");
+
+	/* Release the resource mutex so threads can complete their work and
+	 * exit the driver
+	 */
+	mutex_unlock(&dlb_dev->resource_mutex);
+
+	/* Wait until the device is idle or dlb_reset_timeout_s seconds elapse.
+	 * If the timeout occurs, zap any remaining VMA entries to guarantee
+	 * applications can't reach the device.
+	 */
+	dlb_wait_for_idle(dlb_dev);
+
+	mutex_lock(&dlb_dev->resource_mutex);
+
+	if (!dlb_in_use(dlb_dev))
+		return;
+
+	dlb_zap_vma_entries(dlb_dev);
+
+	if (dlb_dev->active_users > 0)
+		dev_err(dlb_dev->dlb_device,
+			"Internal error: %lu active_users in the driver during FLR\n",
+			dlb_dev->active_users);
+
+	/* Don't release resource_mutex until after the FLR occurs. This
+	 * prevents applications from accessing the device during reset.
+	 */
+}
+
+static void dlb_reset_done(struct pci_dev *pdev)
+{
+	struct dlb_dev *dlb_dev;
+	int i;
+
+	dlb_dev = pci_get_drvdata(pdev);
+
+	/* Clear all status pointers, to be filled in by post-FLR applications
+	 * using the device driver.
+	 *
+	 * Note that status memory isn't leaked -- it is either freed during
+	 * dlb_stop_users() or in the file close callback.
+	 */
+	for (i = 0; i < DLB_MAX_NUM_DOMAINS; i++)
+		dlb_dev->sched_domains[i].status = NULL;
+
+	dlb_dev->status = NULL;
+
+	/* Free allocated CQ and PC memory. These are no longer accessible to
+	 * user-space: either the applications closed, or their mappings were
+	 * zapped in dlb_reset_prepare().
+	 */
+	dlb_release_device_memory(dlb_dev);
+
+	/* Reset resource allocation state */
+	dlb_resource_reset(&dlb_dev->hw);
+
+	/* Reset the hardware state, but don't issue an additional FLR */
+	dlb_reset_hardware_state(dlb_dev, false);
+
+	dev_dbg(dlb_dev->dlb_device, "DLB driver reset done\n");
+
+	dlb_dev->domain_reset_failed = false;
+
+	dlb_dev->reset_active = false;
+
+	/* Undo the PM refcnt increment in dlb_reset_prepare(). */
+	dlb_dev->ops->dec_pm_refcnt(dlb_dev->pdev);
+
+	mutex_unlock(&dlb_dev->resource_mutex);
+}
+
+static const struct pci_error_handlers dlb_err_handler = {
+	.reset_prepare = dlb_reset_prepare,
+	.reset_done    = dlb_reset_done,
+};
 
 #ifdef CONFIG_PM
 static const struct dev_pm_ops dlb_pm_ops = {
@@ -854,6 +1248,7 @@ static struct pci_driver dlb_pci_driver = {
 #ifdef CONFIG_PM
 	.driver.pm	 = &dlb_pm_ops,
 #endif
+	.err_handler     = &dlb_err_handler,
 };
 
 static int __init dlb_init_module(void)
