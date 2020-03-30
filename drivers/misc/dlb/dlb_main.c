@@ -39,6 +39,16 @@ module_param_named(reset_timeout_s, dlb_reset_timeout_s, uint, 0644);
 MODULE_PARM_DESC(reset_timeout_s,
 		 "Wait time (in seconds) after reset is requested given for app shutdown until driver zaps VMAs");
 
+unsigned int dlb_qe_sa_pct = 1;
+module_param_named(qe_sa_pct, dlb_qe_sa_pct, uint, 0444);
+MODULE_PARM_DESC(qe_sa_pct,
+		 "Percentage of QE selections that use starvation avoidance (SA) instead of strict priority. SA boosts one priority level for that selection; if there are no schedulable QEs of the boosted priority, the device selects according to normal priorities. Priorities 1-7 have an equal chance of being boosted when SA is used for QE selection. If SA is 0%, the device will use strict priority whenever possible. (Valid range: 0-100, default: 1)");
+
+unsigned int dlb_qid_sa_pct;
+module_param_named(qid_sa_pct, dlb_qid_sa_pct, uint, 0444);
+MODULE_PARM_DESC(qid_sa_pct,
+		 "Percentage of QID selections that use starvation avoidance (SA) instead of strict priority. SA boosts one priority level for that selection; if there are no schedulable QIDs of the boosted priority, the device selects according to normal priorities. Priorities 1-7 have an equal chance of being boosted when SA is used for QID selection. If SA is 0%, the device will use strict priority whenever possible. (Valid range: 0-100, default: 0)");
+
 /* The driver lock protects driver data structures that may be used by multiple
  * devices.
  */

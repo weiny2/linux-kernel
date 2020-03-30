@@ -696,6 +696,27 @@ static void dlb_pf_device_destroy(struct dlb_dev *dlb_dev,
 				DLB_MAX_NUM_DOMAINS));
 }
 
+static void dlb_pf_calc_arbiter_weights(struct dlb_hw *hw,
+					u8 *weight,
+					unsigned int pct)
+{
+	int val, i;
+
+	/* Largest possible weight (100% SA case): 32 */
+	val = (DLB_MAX_WEIGHT + 1) / DLB_NUM_ARB_WEIGHTS;
+
+	/* Scale val according to the starvation avoidance percentage */
+	val = (val * pct) / 100;
+	if (val == 0 && pct != 0)
+		val = 1;
+
+	/* Prio 7 always has weight 0xff */
+	weight[DLB_NUM_ARB_WEIGHTS - 1] = DLB_MAX_WEIGHT;
+
+	for (i = DLB_NUM_ARB_WEIGHTS - 2; i >= 0; i--)
+		weight[i] = weight[i + 1] - val;
+}
+
 static bool dlb_sparse_cq_mode_enabled;
 
 static void dlb_pf_init_hardware(struct dlb_dev *dlb_dev)
@@ -708,6 +729,29 @@ static void dlb_pf_init_hardware(struct dlb_dev *dlb_dev)
 		dlb_hw_enable_sparse_ldb_cq_mode(&dlb_dev->hw);
 		dlb_hw_enable_sparse_dir_cq_mode(&dlb_dev->hw);
 	}
+
+	/* Configure arbitration weights for QE selection */
+	if (dlb_qe_sa_pct <= 100) {
+		u8 weight[DLB_NUM_ARB_WEIGHTS];
+
+		dlb_pf_calc_arbiter_weights(&dlb_dev->hw,
+					    weight,
+					    dlb_qe_sa_pct);
+
+		dlb_hw_set_qe_arbiter_weights(&dlb_dev->hw, weight);
+	}
+
+	/* Configure arbitration weights for QID selection */
+	if (dlb_qid_sa_pct <= 100) {
+		u8 weight[DLB_NUM_ARB_WEIGHTS];
+
+		dlb_pf_calc_arbiter_weights(&dlb_dev->hw,
+					    weight,
+					    dlb_qid_sa_pct);
+
+		dlb_hw_set_qid_arbiter_weights(&dlb_dev->hw, weight);
+	}
+
 }
 
 /*****************************/
