@@ -4226,7 +4226,7 @@
                 }
             ],
             "description": "Configuration and use of the DLB (1.0) device",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Niall McDonnell",
