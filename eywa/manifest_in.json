@@ -4244,6 +4244,36 @@
             ],
             "status": "intel confidential",
             "stuck_at_ref": ""
+        },
+        {
+            "branch": "kvm-pks",
+            "branch_type": "expiring",
+            "config_options": [],
+            "contributor": [
+                {
+                    "name": "Chenyi Qiang",
+                    "email": "chenyi.qiang@intel.com"
+                }
+            ],
+            "description": "Protection Keys for Supervisor Pages KVM support",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "David Koufaty",
+                    "email": "david.a.koufaty@intel.com"
+                }
+            ],
+            "jira": "NEXT-1875",
+            "name": "kvm-pks",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/cqiang/spr-po-kvm.git",
+            "sdl_contact": [
+                {
+                    "name": "Chenyi Qiang",
+                    "email": "chenyi.qiang@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": ""
         }
     ]
 }
