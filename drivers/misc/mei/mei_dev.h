@@ -382,6 +382,7 @@ struct mei_fw_version {
  * struct mei_device -  MEI private device struct
  *
  * @dev         : device on a bus
+ * @clsdev      : device node (a class device)
  * @cdev        : character device
  * @minor       : minor number allocated for device
  *
@@ -452,6 +453,7 @@ struct mei_fw_version {
  */
 struct mei_device {
 	struct device *dev;
+	struct device *clsdev;
 	struct cdev cdev;
 	int minor;
 

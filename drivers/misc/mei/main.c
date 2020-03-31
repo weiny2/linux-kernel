@@ -871,18 +871,13 @@ static DEVICE_ATTR_RO(dev_state);
  */
 void mei_set_devstate(struct mei_device *dev, enum mei_dev_state state)
 {
-	struct device *clsdev;
-
 	if (dev->dev_state == state)
 		return;
 
 	dev->dev_state = state;
 
-	clsdev = class_find_device_by_devt(mei_class, dev->cdev.dev);
-	if (clsdev) {
-		sysfs_notify(&clsdev->kobj, NULL, "dev_state");
-		put_device(clsdev);
-	}
+	if (dev->clsdev)
+		sysfs_notify(&dev->clsdev->kobj, NULL, "dev_state");
 }
 
 static struct attribute *mei_attrs[] = {
@@ -981,6 +976,8 @@ int mei_register(struct mei_device *dev, struct device *parent)
 		goto err_dev_create;
 	}
 
+	dev->clsdev = clsdev;
+
 	mei_dbgfs_register(dev, dev_name(clsdev));
 
 	return 0;
@@ -995,14 +992,13 @@ EXPORT_SYMBOL_GPL(mei_register);
 
 void mei_deregister(struct mei_device *dev)
 {
-	int devno;
-
-	devno = dev->cdev.dev;
 	cdev_del(&dev->cdev);
 
 	mei_dbgfs_deregister(dev);
 
-	device_destroy(mei_class, devno);
+	put_device(dev->clsdev);
+	device_unregister(dev->clsdev);
+	dev->clsdev = NULL;
 
 	mei_minor_free(dev);
 }
