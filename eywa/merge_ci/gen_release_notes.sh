@@ -14,7 +14,7 @@ nth_release=$(git tag | grep intel-$major_version  |wc -l)
 email_subject="Intel Next $latest_tag release notes"
 from_email="intel-next-maintainers@eclists.intel.com"
 freindly_name="Intel Next Project"
-to_email="kyle.d.pelton@intel.com"
+to_email="intel-next-announce@eclists.intel.com"
 rule="------------------------------------------------------------------------"
 
 echo "Intel Next $latest_tag release notes " >$release_notes_file
@@ -41,9 +41,9 @@ if [ $nth_release -ne 1 ]; then
         git checkout $previous_tag -- eywa/manifest.json
         mv eywa/manifest.json eywa/manifest_previous.json
         mv eywa/manifest_new.json eywa/manifest.json
-        echo "Summary of changes:"  >>$release_notes_file     
+	echo "Summary of changes:"  >>$release_notes_file
 	echo  >>$release_notes_file
-        eywa/merge_ci/diff_manifest.py eywa/manifest.json eywa/manifest_previous.json >> $release_notes_file
+	eywa/merge_ci/diff_manifest.py eywa/manifest.json eywa/manifest_previous.json >> $release_notes_file
 	echo >>$release_notes_file
         echo "Patches added since previous tag $previous_tag:" >>$release_notes_file
 	echo >>$release_notes_file
