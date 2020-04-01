@@ -14,7 +14,7 @@ nth_release=$(git tag | grep intel-$major_version  |wc -l)
 email_subject="Intel Next $latest_tag release notes"
 from_email="intel-next-maintainers@eclists.intel.com"
 freindly_name="Intel Next Project"
-to_email="intel-next-announce@eclists.intel.com"
+to_email="kyle.d.pelton@intel.com"
 rule="------------------------------------------------------------------------"
 
 echo "Intel Next $latest_tag release notes " >$release_notes_file
@@ -27,17 +27,25 @@ echo  >>$release_notes_file
 echo "branch: master"  >>$release_notes_file
 echo "tag: $latest_tag"  >>$release_notes_file
 echo >>$release_notes_file
-echo "For more information about intel next visit: http://goto.intel.com/intelnext"  >>$release_notes_file
-echo  >>$release_notes_file
-echo "Intel Next validation results: http://mozart.sh.intel.com:8080/dashboard/quick_entrance/LTP-DDT/Lab/intel-next_clr"  >>$release_notes_file
-echo $rule >>$release_notes_file
-echo  >>$release_notes_file
+cat >> $release_notes_file << EOF
+For more information about intel next visit: http://goto.intel.com/intelnext
 
-
+Links to Intel Next binaries are avaliable on gitlab: https://gitlab.devtools.intel.com/intel-next/intel-next-kernel/-/releases
+Intel Next validation results: http://mozart.sh.intel.com:8080/dashboard/quick_entrance/LTP-DDT/Lab/intel-next_clr
+$rule
+EOF
 #We want to skip the patch list on the first release because it will contain 
 #all upstream code and will be too big
 if [ $nth_release -ne 1 ]; then
-	echo "Patches added since previous tag $previous_tag:" >>$release_notes_file
+        cp eywa/manifest.json eywa/manifest_new.json
+        git checkout $previous_tag -- eywa/manifest.json
+        mv eywa/manifest.json eywa/manifest_previous.json
+        mv eywa/manifest_new.json eywa/manifest.json
+        echo "Summary of changes:"  >>$release_notes_file     
+	echo  >>$release_notes_file
+        eywa/merge_ci/diff_manifest.py eywa/manifest.json eywa/manifest_previous.json >> $release_notes_file
+	echo >>$release_notes_file
+        echo "Patches added since previous tag $previous_tag:" >>$release_notes_file
 	echo >>$release_notes_file
 	git shortlog $previous_tag..$latest_tag  --no-merges -e >>$release_notes_file
 fi
