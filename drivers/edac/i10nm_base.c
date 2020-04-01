@@ -12,7 +12,7 @@
 #include "edac_module.h"
 #include "skx_common.h"
 
-#define I10NM_REVISION	"v0.0.3"
+#define I10NM_REVISION	"v0.0.4"
 #define EDAC_MOD_STR	"i10nm_edac"
 
 /* Debug macros */
@@ -24,9 +24,12 @@
 #define I10NM_GET_IMC_BAR(d, i, reg)	\
 	pci_read_config_dword((d)->uracu, 0xd8 + (i) * 4, &(reg))
 #define I10NM_GET_DIMMMTR(m, i, j)	\
-	(*(u32 *)((m)->mbase + 0x2080c + (i) * 0x4000 + (j) * 4))
+	(*(u32 *)((m)->mbase + 0x2080c + (i) * (m)->chan_mmio_sz + (j) * 4))
 #define I10NM_GET_MCDDRTCFG(m, i, j)	\
-	(*(u32 *)((m)->mbase + 0x20970 + (i) * 0x4000 + (j) * 4))
+	(*(u32 *)((m)->mbase + 0x20970 + (i) * (m)->chan_mmio_sz + (j) * 4))
+#define I10NM_GET_AMAP(m, i)		\
+	(*(u32 *)((m)->mbase + 0x20814 + (i) * (m)->chan_mmio_sz))
+
 
 #define I10NM_GET_SCK_MMIO_BASE(reg)	(GET_BITFIELD(reg, 0, 28) << 23)
 #define I10NM_GET_IMC_MMIO_OFFSET(reg)	(GET_BITFIELD(reg, 0, 10) << 12)
@@ -126,18 +129,29 @@ static struct res_config i10nm_cfg0 = {
 	.type			= I10NM,
 	.decs_did		= 0x3452,
 	.busno_cfg_offset	= 0xcc,
+	.chan_mmio_sz		= 0x4000,
 };
 
 static struct res_config i10nm_cfg1 = {
 	.type			= I10NM,
 	.decs_did		= 0x3452,
 	.busno_cfg_offset	= 0xd0,
+	.chan_mmio_sz		= 0x4000,
+};
+
+static struct res_config spr_cfg = {
+	.type			= SPR,
+	.decs_did		= 0x3252,
+	.busno_cfg_offset	= 0xd0,
+	.chan_mmio_sz		= 0x8000,
+	.support_ddr5		= true,
 };
 
 static const struct x86_cpu_id i10nm_cpuids[] = {
 	X86_MATCH_INTEL_FAM6_MODEL(ATOM_TREMONT_D,	&i10nm_cfg0),
 	X86_MATCH_INTEL_FAM6_MODEL(ICELAKE_X,		&i10nm_cfg0),
 	X86_MATCH_INTEL_FAM6_MODEL(ICELAKE_D,		&i10nm_cfg1),
+	X86_MATCH_INTEL_FAM6_MODEL(SAPPHIRERAPIDS,	&spr_cfg),
 	{}
 };
 MODULE_DEVICE_TABLE(x86cpu, i10nm_cpuids);
@@ -146,18 +160,19 @@ static bool i10nm_check_ecc(struct skx_imc *imc, int chan)
 {
 	u32 mcmtr;
 
-	mcmtr = *(u32 *)(imc->mbase + 0x20ef8 + chan * 0x4000);
+	mcmtr = *(u32 *)(imc->mbase + 0x20ef8 + imc->chan_mmio_sz * chan);
 	edac_dbg(1, "ch%d mcmtr reg %x\n", chan, mcmtr);
 
 	return !!GET_BITFIELD(mcmtr, 2, 2);
 }
 
-static int i10nm_get_dimm_config(struct mem_ctl_info *mci)
+static int i10nm_get_dimm_config(struct mem_ctl_info *mci,
+				 struct res_config *cfg)
 {
 	struct skx_pvt *pvt = mci->pvt_info;
 	struct skx_imc *imc = pvt->imc;
+	u32 mtr, amap, mcddrtcfg;
 	struct dimm_info *dimm;
-	u32 mtr, mcddrtcfg;
 	int i, j, ndimms;
 
 	for (i = 0; i < I10NM_NUM_CHANNELS; i++) {
@@ -165,6 +180,7 @@ static int i10nm_get_dimm_config(struct mem_ctl_info *mci)
 			continue;
 
 		ndimms = 0;
+		amap = I10NM_GET_AMAP(imc, i);
 		for (j = 0; j < I10NM_NUM_DIMMS; j++) {
 			dimm = edac_get_dimm(mci, i, j, 0);
 			mtr = I10NM_GET_DIMMMTR(imc, i, j);
@@ -173,8 +189,8 @@ static int i10nm_get_dimm_config(struct mem_ctl_info *mci)
 				 mtr, mcddrtcfg, imc->mc, i, j);
 
 			if (IS_DIMM_PRESENT(mtr))
-				ndimms += skx_get_dimm_info(mtr, 0, dimm,
-							    imc, i, j);
+				ndimms += skx_get_dimm_info(mtr, amap, dimm,
+							    imc, i, j, cfg);
 			else if (IS_NVDIMM_PRESENT(mcddrtcfg, j))
 				ndimms += skx_get_nvdimm_info(dimm, imc, i, j,
 							      EDAC_MOD_STR);
@@ -302,10 +318,11 @@ static int __init i10nm_init(void)
 			d->imc[i].lmc = i;
 			d->imc[i].src_id  = src_id;
 			d->imc[i].node_id = node_id;
+			d->imc[i].chan_mmio_sz = cfg->chan_mmio_sz;
 
 			rc = skx_register_mci(&d->imc[i], d->imc[i].mdev,
 					      "Intel_10nm Socket", EDAC_MOD_STR,
-					      i10nm_get_dimm_config);
+					      i10nm_get_dimm_config, cfg);
 			if (rc < 0)
 				goto fail;
 		}
