@@ -53,6 +53,9 @@ int pci_bus_error_reset(struct pci_dev *dev);
  *
  * @bridge_d3: Does the bridge allow entering into D3
  *
+ * @storage_d3: 'true' if the bridge contains a storage device that must use D3
+ *		to support platform s2idle
+ *
  * @is_manageable: returns 'true' if given device is power manageable by the
  *		   platform firmware
  *
@@ -77,6 +80,7 @@ int pci_bus_error_reset(struct pci_dev *dev);
  */
 struct pci_platform_pm_ops {
 	bool (*bridge_d3)(struct pci_dev *dev);
+	bool (*storage_d3)(struct pci_dev *dev);
 	bool (*is_manageable)(struct pci_dev *dev);
 	int (*set_state)(struct pci_dev *dev, pci_power_t state);
 	pci_power_t (*get_state)(struct pci_dev *dev);

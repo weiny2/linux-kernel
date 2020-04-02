@@ -871,6 +871,11 @@ static inline bool platform_pci_bridge_d3(struct pci_dev *dev)
 	return pci_platform_pm ? pci_platform_pm->bridge_d3(dev) : false;
 }
 
+static inline bool platform_pci_storage_d3(struct pci_dev *dev)
+{
+	return pci_platform_pm->storage_d3(dev);
+}
+
 /**
  * pci_raw_set_power_state - Use PCI PM registers to set the power state of
  *			     given PCI device
@@ -2903,6 +2908,7 @@ void pci_pm_init(struct pci_dev *dev)
 	dev->d3_delay = PCI_PM_D3_WAIT;
 	dev->d3cold_delay = PCI_PM_D3COLD_WAIT;
 	dev->bridge_d3 = pci_bridge_d3_possible(dev);
+	dev->storage_d3 = platform_pci_storage_d3(dev);
 	dev->d3cold_allowed = true;
 
 	dev->d1_support = false;
