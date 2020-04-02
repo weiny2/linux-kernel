@@ -590,6 +590,8 @@ static void tb_scan_port(struct tb_port *port)
 
 	/* Enable lane bonding if supported */
 	tb_switch_lane_bonding_enable(sw);
+	/* Set the link configured */
+	tb_switch_configure_link(sw);
 
 	if (tb_enable_tmu(sw))
 		tb_sw_warn(sw, "failed to enable TMU\n");
@@ -674,6 +676,7 @@ static void tb_free_unplugged_children(struct tb_switch *sw)
 
 		if (port->remote->sw->is_unplugged) {
 			tb_remove_dp_resources(port->remote->sw);
+			tb_switch_unconfigure_link(port->remote->sw);
 			tb_switch_lane_bonding_disable(port->remote->sw);
 			tb_switch_remove(port->remote->sw);
 			port->remote = NULL;
@@ -1067,6 +1070,7 @@ static void tb_handle_hotplug(struct work_struct *work)
 			tb_free_invalid_tunnels(tb);
 			tb_remove_dp_resources(port->remote->sw);
 			tb_switch_tmu_disable(port->remote->sw);
+			tb_switch_unconfigure_link(port->remote->sw);
 			tb_switch_lane_bonding_disable(port->remote->sw);
 			tb_switch_remove(port->remote->sw);
 			port->remote = NULL;
@@ -1260,6 +1264,7 @@ static void tb_restore_children(struct tb_switch *sw)
 			continue;
 
 		tb_switch_lane_bonding_enable(port->remote->sw);
+		tb_switch_configure_link(port->remote->sw);
 
 		tb_restore_children(port->remote->sw);
 	}
