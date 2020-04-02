@@ -86,6 +86,12 @@
 #define INTEL_FAM6_COMETLAKE		0xA5
 #define INTEL_FAM6_COMETLAKE_L		0xA6
 
+#define INTEL_FAM6_ALDERLAKE		0x97 /* Sapphire Rapids */
+#define INTEL_FAM6_ALDERLAKE_X		0x8F /* Sapphire Rapids */
+
+#define INTEL_FAM6_ROCKETLAKE		0xA7
+#define INTEL_FAM6_ROCKETLAKE_L		0xA8
+
 /* "Small Core" Processors (Atom) */
 
 #define INTEL_FAM6_ATOM_BONNELL		0x1C /* Diamondville, Pineview */
