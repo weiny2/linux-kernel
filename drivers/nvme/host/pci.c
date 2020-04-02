@@ -78,6 +78,10 @@ static unsigned int poll_queues;
 module_param(poll_queues, uint, 0644);
 MODULE_PARM_DESC(poll_queues, "Number of queues to use for polled IO.");
 
+static bool noacpi;
+module_param(noacpi, bool, 0444);
+MODULE_PARM_DESC(noacpi, "disable all acpi bios quirks");
+
 struct nvme_dev;
 struct nvme_queue;
 
@@ -2776,6 +2780,16 @@ static int nvme_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		goto unmap;
 
 	quirks |= check_vendor_combination_bug(pdev);
+
+	if (!noacpi && nvme_acpi_wants_d3(pdev)) {
+		/*
+		 * Some systems use a bios work around to ask for D3 on
+		 * platforms that support kernel managed suspend.
+		 */
+		dev_info(&pdev->dev,
+			 "platform quirk: setting simple suspend\n");
+		quirks |= NVME_QUIRK_SIMPLE_SUSPEND;
+	}
 
 	/*
 	 * Double check that our mempool alloc size will cover the biggest
