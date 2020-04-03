@@ -757,6 +757,21 @@ struct x86_pmu {
 	/* Arch LBR Capabilities */
 	union {
 		struct {
+			/* Supported LBR depth values */
+			unsigned int	arch_lbr_depth_mask	:8;
+
+			unsigned int	reserved	:22;
+
+			/* Deep C-state Reset */
+			unsigned int	arch_lbr_deep_c_reset	:1;
+
+			/* IP values contain LIP */
+			unsigned int	arch_lbr_lip	:1;
+		};
+		unsigned int		arch_lbr_cap;
+	};
+	union {
+		struct {
 			/* CPL Filtering Supported */
 			unsigned int	arch_lbr_cpl:1;
 

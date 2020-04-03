@@ -4616,6 +4616,8 @@ static bool check_msr(unsigned long msr, u64 mask)
 
 	if (is_lbr_from(msr))
 		val_tmp = lbr_from_signext_quirk_wr(val_tmp);
+	else if (msr == MSR_ARCH_LBR_DEPTH)
+		val_tmp = (find_last_bit((unsigned long *)&mask, 64) + 1) * 8;
 
 	if (wrmsrl_safe(msr, val_tmp) ||
 	    rdmsrl_safe(msr, &val_new))
@@ -5827,7 +5829,8 @@ __init int intel_pmu_init(void)
 				mask |= ARCH_LBR_CTL_STACK;
 			if (!check_msr(MSR_ARCH_LBR_CTL, mask))
 				x86_pmu.lbr_nr = 0;
-			if (!check_msr(MSR_ARCH_LBR_DEPTH, MSR_ARCH_LBR_DEPTH_MASK))
+			if (!check_msr(MSR_ARCH_LBR_DEPTH,
+				(u64)x86_pmu.arch_lbr_depth_mask))
 				x86_pmu.lbr_nr = 0;
 		} else if (!check_msr(x86_pmu.lbr_tos, 0x3UL))
 			x86_pmu.lbr_nr = 0;

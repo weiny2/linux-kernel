@@ -1647,7 +1647,7 @@ static int arch_lbr_ctl_map[PERF_SAMPLE_BRANCH_MAX_SHIFT] = {
 
 void __init intel_pmu_arch_lbr_init(void)
 {
-	unsigned int unused_eax, unused_edx;
+	unsigned int unused_edx;
 	u64 lbr_nr = 0;
 
 	if (rdmsrl_safe(MSR_ARCH_LBR_DEPTH, &lbr_nr))
@@ -1657,7 +1657,7 @@ void __init intel_pmu_arch_lbr_init(void)
 	x86_pmu.arch_lbr = true;
 
 	/* Arch LBR Capabilities */
-	cpuid(28, &unused_eax, &x86_pmu.arch_lbr_ctl_cap,
+	cpuid(28, &x86_pmu.arch_lbr_cap, &x86_pmu.arch_lbr_ctl_cap,
 		  &x86_pmu.arch_lbr_info_cap, &unused_edx);
 
 	x86_pmu.lbr_from = MSR_ARCH_LBR_FROM_0;
