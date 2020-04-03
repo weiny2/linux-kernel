@@ -671,7 +671,7 @@ static void pmc_core_lpm_display(struct pmc_dev *pmcdev, struct device *dev,
 	if (!lpm_regs)
 		return;
 
-	for (index = 0; index < arr_size; index++) {`
+	for (index = 0; index < arr_size; index++) {
 		lpm_regs[index] = pmc_core_reg_read(pmcdev, offset);
 		offset += 4;
 	}
