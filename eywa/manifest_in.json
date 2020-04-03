@@ -1116,7 +1116,7 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "389aa6d1b7144ae0b8f81cb14fa19ace0106a452"
         },
         {
             "branch": "dev/master",
