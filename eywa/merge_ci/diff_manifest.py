@@ -99,8 +99,10 @@ def main():
     print ("Total branches merged: {}".format(len(m_new["topic_branches"])))
     print("Branches added/enabled since previous release:")
     print_branches(added, REV_LENGTH)
+    print("")
     print("Branches deleted/disabled since previous release:")
     print_branches(deleted, REV_LENGTH)
+    print("")
     print("Branches updated since previous release:")
     print_branches(changed)
 
