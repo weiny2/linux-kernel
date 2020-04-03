@@ -31,6 +31,10 @@
 
 #include "intel_pmc_core.h"
 
+#define PMC_CORE_IPC_READ_PMC_CMD 0xA0
+#define PMC_CORE_IPC_SUB_CMD 0x02
+
+u32 lpm_req_regs[8][6];
 static struct pmc_dev pmc;
 
 /* PKGC MSRs are common across Intel Core SoCs */
@@ -692,6 +696,74 @@ static void pmc_core_lpm_display(struct pmc_dev *pmcdev, struct device *dev,
 	kfree(lpm_regs);
 }
 
+static int pmc_core_read_lpm_req(u16 offset, u32 *value) {
+	struct acpi_buffer buffer = { ACPI_ALLOCATE_BUFFER, NULL };
+	union acpi_object params[7] = {
+		{.type = ACPI_TYPE_INTEGER,},
+		{.type = ACPI_TYPE_INTEGER,},
+		{.type = ACPI_TYPE_INTEGER,},
+		{.type = ACPI_TYPE_INTEGER,},
+		{.type = ACPI_TYPE_INTEGER,},
+		{.type = ACPI_TYPE_INTEGER,},
+		{.type = ACPI_TYPE_INTEGER,},
+	};
+	struct acpi_object_list arg_list = {7, params};
+	union acpi_object *obj;
+	int status;
+
+	/*
+	 * 0: IPC Command
+	 * 1: IPC Sub Command
+	 * 2: Size
+	 * 3-8: Write Buffer for offset
+	 */
+	params[0].integer.value = PMC_CORE_IPC_READ_PMC_CMD;
+	params[1].integer.value = PMC_CORE_IPC_SUB_CMD;
+	params[2].integer.value = 0;
+	params[3].integer.value = offset;
+	params[4].integer.value = 0;
+	params[5].integer.value = 0;
+	params[6].integer.value = 0;
+
+	status = acpi_evaluate_object(NULL, "\\IPCS", &arg_list, &buffer);
+	if (ACPI_FAILURE(status))
+		return -ENODEV;
+
+	obj = buffer.pointer;
+
+	if (obj && obj->type == ACPI_TYPE_PACKAGE && obj->package.count == 5) {
+		const union acpi_object *objs = obj->package.elements;
+
+		if ((u8)objs[0].integer.value != 0)
+			return -EINVAL;
+
+		*value = (u32)objs[1].integer.value;
+	} else
+		return -EINVAL;
+
+	return 0;
+}
+
+static void get_pmc_core_read_lpm_req(struct pmc_dev *pmcdev)
+{
+	u16 idx, index, offset, i, j;
+	u32 value;
+	int err;
+
+	for (idx = 0x1000, i=0; idx < (0x1000 + (8 * 0x30)); idx += 0x30, i++) {
+		for (index = 0, j=0; index < (6 * 4); index += 4, j++) {
+			offset = index + idx;
+			err = pmc_core_read_lpm_req(offset, &value);
+			if (err != 0) {
+				pr_info("IPCS could not be read, error %d\n",
+					err);
+				break;
+			}
+			lpm_req_regs[i][j] = value;
+		}
+	}
+}
+
 #if IS_ENABLED(CONFIG_DEBUG_FS)
 static bool slps0_dbg_latch;
 
@@ -1052,6 +1124,47 @@ static int pmc_core_substate_l_sts_regs_show(struct seq_file *s, void *unused)
 }
 DEFINE_SHOW_ATTRIBUTE(pmc_core_substate_l_sts_regs);
 
+static int pmc_core_lpm_req_display(struct pmc_dev *pmcdev, struct seq_file *s,
+				    const struct pmc_bit_map **maps,
+				    int ar_size)
+{
+	int idx, index, lpm_idx, arr_size, len = 32, bit_mask;
+
+	arr_size = pmc_core_lpm_get_arr_size(maps);
+	for (idx = 0; idx < ar_size; idx++) {
+		seq_printf(s, "\n===LPM_%d===\n", idx);
+		for (index = 0; index < arr_size; index++) {
+			seq_printf(s, "\nLPM_REQ_%d:\t0x%x\n", index,
+				   lpm_req_regs[idx][index]);
+			for (lpm_idx = 0; maps[index][lpm_idx].name &&
+			     lpm_idx < len; lpm_idx++) {
+				bit_mask = maps[index][lpm_idx].bit_mask;
+				seq_printf(s, "%-30s %-30d\n",
+                                           maps[index][lpm_idx].name,
+                                           lpm_req_regs[idx][index] & bit_mask ? 1 : 0);
+			}
+		}
+	}
+
+	return 0;
+}
+
+static int pmc_core_substate_req_regs_show(struct seq_file *s, void *unused)
+{
+	struct pmc_dev *pmcdev = s->private;
+	const struct pmc_bit_map **maps = pmcdev->map->lpm_sts;
+	const char **lpm_modes = pmcdev->map->lpm_modes;
+	int ar_size;
+
+	for (ar_size = 0; lpm_modes[ar_size]; ar_size++)
+		;/* Nothing */
+
+	pmc_core_lpm_req_display(pmcdev, s, maps, ar_size);
+
+	return 0;
+}
+DEFINE_SHOW_ATTRIBUTE(pmc_core_substate_req_regs);
+
 static int pmc_core_pkgc_show(struct seq_file *s, void *unused)
 {
 	struct pmc_dev *pmcdev = s->private;
@@ -1131,6 +1244,9 @@ static void pmc_core_dbgfs_register(struct pmc_dev *pmcdev)
 		debugfs_create_file("substate_live_status_registers", 0444,
 				    pmcdev->dbgfs_dir, pmcdev,
 				    &pmc_core_substate_l_sts_regs_fops);
+		debugfs_create_file("substate_requirement_registers", 0444,
+				    pmcdev->dbgfs_dir, pmcdev,
+				    &pmc_core_substate_req_regs_fops);
 	}
 }
 #else
@@ -1223,6 +1339,9 @@ static int pmc_core_probe(struct platform_device *pdev)
 	 */
 	if (pmcdev->map == &spt_reg_map && !pci_dev_present(pmc_pci_ids))
 		pmcdev->map = &cnp_reg_map;
+
+	if (pmcdev->map == &tgl_reg_map)
+		get_pmc_core_read_lpm_req(pmcdev);
 
 	if (lpit_read_residency_count_address(&slp_s0_addr)) {
 		pmcdev->base_addr = PMC_BASE_ADDR_DEFAULT;
