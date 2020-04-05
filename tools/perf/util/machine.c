@@ -809,7 +809,7 @@ int machine__process_text_poke(struct machine *machine, union perf_event *event,
 	u8 cpumode = event->header.misc & PERF_RECORD_MISC_CPUMODE_MASK;
 
 	if (dump_trace)
-		perf_event__fprintf_text_poke(event, stdout);
+		perf_event__fprintf_text_poke(machine, event, stdout);
 
 	if (!event->text_poke.new_len)
 		return 0;
