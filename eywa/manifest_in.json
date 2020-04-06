@@ -2646,7 +2646,7 @@
                 }
             ],
             "description": "VPU/IPC support for Keem Bay and TBH",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Farrell, David T",
@@ -3661,7 +3661,7 @@
                 }
             ],
             "description": "THB crypto AES driver warning fix",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Kumaresan Sarveswaran",
