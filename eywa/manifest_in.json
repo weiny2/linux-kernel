@@ -2646,7 +2646,7 @@
                 }
             ],
             "description": "VPU/IPC support for Keem Bay and TBH",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Farrell, David T",
