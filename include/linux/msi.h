@@ -135,6 +135,12 @@ enum platform_msi_type {
 	GEN_PLAT_MSI = 1,
 };
 
+struct platform_msi_group_entry {
+	unsigned int group_id;
+	struct list_head group_list;
+	struct list_head entry_list;
+};
+
 /* Helpers to hide struct msi_desc implementation details */
 #define msi_desc_to_dev(desc)		((desc)->dev)
 #define dev_to_msi_list(dev)		(&(dev)->msi_list)
@@ -145,21 +151,31 @@ enum platform_msi_type {
 #define for_each_msi_entry_safe(desc, tmp, dev)	\
 	list_for_each_entry_safe((desc), (tmp), dev_to_msi_list((dev)), list)
 
-#define dev_to_platform_msi_list(dev)	(&(dev)->platform_msi_list)
-#define first_platform_msi_entry(dev)		\
-	list_first_entry(dev_to_platform_msi_list((dev)), struct msi_desc, list)
-#define for_each_platform_msi_entry(desc, dev)	\
-	list_for_each_entry((desc), dev_to_platform_msi_list((dev)), list)
-#define for_each_platform_msi_entry_safe(desc, tmp, dev)	\
-	list_for_each_entry_safe((desc), (tmp), dev_to_platform_msi_list((dev)), list)
+#define dev_to_platform_msi_group_list(dev)    (&(dev)->platform_msi_list)
 
-#define first_msi_entry_common(dev)	\
-	list_first_entry_select((dev)->platform_msi_type, dev_to_platform_msi_list((dev)),	\
+#define first_platform_msi_group_entry(dev)				\
+	list_first_entry(dev_to_platform_msi_group_list((dev)),		\
+			 struct platform_msi_group_entry, group_list)
+
+#define platform_msi_current_group_entry_list(dev)			\
+	(&((list_last_entry(dev_to_platform_msi_group_list((dev)),	\
+			    struct platform_msi_group_entry,		\
+			    group_list))->entry_list))
+
+#define first_msi_entry_current_group(dev)				\
+	list_first_entry_select((dev)->platform_msi_type,		\
+				platform_msi_current_group_entry_list((dev)),	\
 				dev_to_msi_list((dev)), struct msi_desc, list)
 
-#define for_each_msi_entry_common(desc, dev)	\
-	list_for_each_entry_select((dev)->platform_msi_type, desc, dev_to_platform_msi_list((dev)), \
-				   dev_to_msi_list((dev)), list)	\
+#define for_each_msi_entry_current_group(desc, dev)			\
+	list_for_each_entry_select((dev)->platform_msi_type, desc,	\
+				   platform_msi_current_group_entry_list((dev)),\
+				   dev_to_msi_list((dev)), list)
+
+#define for_each_platform_msi_entry_in_group(desc, platform_msi_group, group, dev)	\
+	list_for_each_entry((platform_msi_group), dev_to_platform_msi_group_list((dev)), group_list)	\
+		if (((platform_msi_group)->group_id) == (group))			\
+			list_for_each_entry((desc), (&(platform_msi_group)->entry_list), list)
 
 #ifdef CONFIG_IRQ_MSI_IOMMU
 static inline const void *msi_desc_get_iommu_cookie(struct msi_desc *desc)
@@ -363,6 +379,8 @@ struct irq_domain *msi_create_irq_domain(struct fwnode_handle *fwnode,
 int msi_domain_alloc_irqs(struct irq_domain *domain, struct device *dev,
 			  int nvec);
 void msi_domain_free_irqs(struct irq_domain *domain, struct device *dev);
+void msi_domain_free_irqs_group(struct irq_domain *domain,
+				struct device *dev, unsigned int group);
 struct msi_domain_info *msi_get_domain_info(struct irq_domain *domain);
 
 struct irq_domain *platform_msi_create_irq_domain(struct fwnode_handle *fwnode,
@@ -371,6 +389,11 @@ struct irq_domain *platform_msi_create_irq_domain(struct fwnode_handle *fwnode,
 int platform_msi_domain_alloc_irqs(struct device *dev, unsigned int nvec,
 				   const struct platform_msi_ops *platform_ops);
 void platform_msi_domain_free_irqs(struct device *dev);
+int platform_msi_domain_alloc_irqs_group(struct device *dev, unsigned int nvec,
+					 const struct platform_msi_ops *platform_ops,
+					 unsigned int *group_id);
+void platform_msi_domain_free_irqs_group(struct device *dev,
+					 unsigned int group_id);
 
 /* When an MSI domain is used as an intermediate domain */
 int msi_domain_prepare_irqs(struct irq_domain *domain, struct device *dev,

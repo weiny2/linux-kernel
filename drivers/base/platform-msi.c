@@ -106,16 +106,28 @@ static void platform_msi_update_chip_ops(struct msi_domain_info *info)
 		info->flags &= ~MSI_FLAG_LEVEL_CAPABLE;
 }
 
-static void platform_msi_free_descs(struct device *dev, int base, int nvec)
+static void platform_msi_free_descs(struct device *dev, int base, int nvec,
+				    unsigned int group)
 {
 	struct msi_desc *desc, *tmp;
+	struct platform_msi_group_entry *platform_msi_group,
+					*tmp_platform_msi_group;
 
-	list_for_each_entry_safe(desc, tmp, dev_to_platform_msi_list(dev),
-				 list) {
-		if (desc->platform.msi_index >= base &&
-		    desc->platform.msi_index < (base + nvec)) {
-			list_del(&desc->list);
-			free_msi_entry(desc);
+	list_for_each_entry_safe(platform_msi_group, tmp_platform_msi_group,
+				 dev_to_platform_msi_group_list(dev),
+				 group_list) {
+		if (platform_msi_group->group_id == group) {
+			list_for_each_entry_safe(desc, tmp,
+						&platform_msi_group->entry_list,
+						list) {
+				if (desc->platform.msi_index >= base &&
+				    desc->platform.msi_index < (base + nvec)) {
+					list_del(&desc->list);
+					free_msi_entry(desc);
+				}
+			}
+			list_del(&platform_msi_group->group_list);
+			kfree(platform_msi_group);
 		}
 	}
 }
@@ -128,8 +140,8 @@ static int platform_msi_alloc_descs_with_irq(struct device *dev, int virq,
 	struct msi_desc *desc;
 	int i, base = 0;
 
-	if (!list_empty(dev_to_platform_msi_list(dev))) {
-		desc = list_last_entry(dev_to_platform_msi_list(dev),
+	if (!list_empty(platform_msi_current_group_entry_list(dev))) {
+		desc = list_last_entry(platform_msi_current_group_entry_list(dev),
 				       struct msi_desc, list);
 		base = desc->platform.msi_index + 1;
 	}
@@ -143,12 +155,13 @@ static int platform_msi_alloc_descs_with_irq(struct device *dev, int virq,
 		desc->platform.msi_index = base + i;
 		desc->irq = virq ? virq + i : 0;
 
-		list_add_tail(&desc->list, dev_to_platform_msi_list(dev));
+		list_add_tail(&desc->list,
+			      platform_msi_current_group_entry_list(dev));
 	}
 
 	if (i != nvec) {
 		/* Clean up the mess */
-		platform_msi_free_descs(dev, base, nvec);
+		platform_msi_free_descs(dev, base, nvec, dev->group_id);
 
 		return -ENOMEM;
 	}
@@ -214,7 +227,7 @@ platform_msi_alloc_priv_data(struct device *dev, unsigned int nvec,
 	}
 
 	/* Already had a helping of MSI? Greed... */
-	if (!list_empty(dev_to_platform_msi_list(dev)))
+	if (!list_empty(platform_msi_current_group_entry_list(dev)))
 		return ERR_PTR(-EBUSY);
 
 	datap = kzalloc(sizeof(*datap), GFP_KERNEL);
@@ -253,10 +266,35 @@ static void platform_msi_free_priv_data(struct platform_msi_priv_data *data)
 int platform_msi_domain_alloc_irqs(struct device *dev, unsigned int nvec,
 				   const struct platform_msi_ops *platform_ops)
 {
+	return platform_msi_domain_alloc_irqs_group(dev, nvec, platform_ops,
+									NULL);
+}
+EXPORT_SYMBOL_GPL(platform_msi_domain_alloc_irqs);
+
+int platform_msi_domain_alloc_irqs_group(struct device *dev, unsigned int nvec,
+					 const struct platform_msi_ops *platform_ops,
+					 unsigned int *group_id)
+{
+	struct platform_msi_group_entry *platform_msi_group;
 	struct platform_msi_priv_data *priv_data;
 	int err;
 
 	dev->platform_msi_type = GEN_PLAT_MSI;
+
+	if (group_id)
+		*group_id = ++dev->group_id;
+
+	platform_msi_group = kzalloc(sizeof(*platform_msi_group), GFP_KERNEL);
+	if (!platform_msi_group) {
+		err = -ENOMEM;
+		goto out_platform_msi_group;
+	}
+
+	INIT_LIST_HEAD(&platform_msi_group->group_list);
+	INIT_LIST_HEAD(&platform_msi_group->entry_list);
+	platform_msi_group->group_id = dev->group_id;
+	list_add_tail(&platform_msi_group->group_list,
+		      dev_to_platform_msi_group_list(dev));
 
 	priv_data = platform_msi_alloc_priv_data(dev, nvec, platform_ops);
 	if (IS_ERR(priv_data))
@@ -273,13 +311,14 @@ int platform_msi_domain_alloc_irqs(struct device *dev, unsigned int nvec,
 	return 0;
 
 out_free_desc:
-	platform_msi_free_descs(dev, 0, nvec);
+	platform_msi_free_descs(dev, 0, nvec, dev->group_id);
 out_free_priv_data:
 	platform_msi_free_priv_data(priv_data);
-
+out_platform_msi_group:
+	kfree(platform_msi_group);
 	return err;
 }
-EXPORT_SYMBOL_GPL(platform_msi_domain_alloc_irqs);
+EXPORT_SYMBOL_GPL(platform_msi_domain_alloc_irqs_group);
 
 /**
  * platform_msi_domain_free_irqs - Free MSI interrupts for @dev
@@ -287,17 +326,30 @@ EXPORT_SYMBOL_GPL(platform_msi_domain_alloc_irqs);
  */
 void platform_msi_domain_free_irqs(struct device *dev)
 {
-	if (!list_empty(dev_to_platform_msi_list(dev))) {
-		struct msi_desc *desc;
-
-		desc = first_platform_msi_entry(dev);
-		platform_msi_free_priv_data(desc->platform.msi_priv_data);
-	}
-
-	msi_domain_free_irqs(dev->msi_domain, dev);
-	platform_msi_free_descs(dev, 0, MAX_DEV_MSIS);
+	platform_msi_domain_free_irqs_group(dev, 0);
 }
 EXPORT_SYMBOL_GPL(platform_msi_domain_free_irqs);
+
+void platform_msi_domain_free_irqs_group(struct device *dev, unsigned int group)
+{
+	struct platform_msi_group_entry *platform_msi_group;
+
+	list_for_each_entry(platform_msi_group,
+			    dev_to_platform_msi_group_list((dev)), group_list) {
+		if (platform_msi_group->group_id == group) {
+			if (!list_empty(&platform_msi_group->entry_list)) {
+				struct msi_desc *desc;
+
+				desc = list_first_entry(&(platform_msi_group)->entry_list,
+							struct msi_desc, list);
+				platform_msi_free_priv_data(desc->platform.msi_priv_data);
+			}
+		}
+	}
+	msi_domain_free_irqs_group(dev->msi_domain, dev, group);
+	platform_msi_free_descs(dev, 0, MAX_DEV_MSIS, group);
+}
+EXPORT_SYMBOL_GPL(platform_msi_domain_free_irqs_group);
 
 /**
  * platform_msi_get_host_data - Query the private data associated with
@@ -373,15 +425,28 @@ void platform_msi_domain_free(struct irq_domain *domain, unsigned int virq,
 {
 	struct platform_msi_priv_data *data = domain->host_data;
 	struct msi_desc *desc, *tmp;
-	for_each_platform_msi_entry_safe(desc, tmp, data->dev) {
-		if (WARN_ON(!desc->irq || desc->nvec_used != 1))
-			return;
-		if (!(desc->irq >= virq && desc->irq < (virq + nvec)))
-			continue;
+	struct platform_msi_group_entry *platform_msi_group,
+					*tmp_platform_msi_group;
 
-		irq_domain_free_irqs_common(domain, desc->irq, 1);
-		list_del(&desc->list);
-		free_msi_entry(desc);
+	list_for_each_entry_safe(platform_msi_group, tmp_platform_msi_group,
+				 dev_to_platform_msi_group_list(data->dev),
+				 group_list) {
+		if (platform_msi_group->group_id == data->dev->group_id) {
+			list_for_each_entry_safe(desc, tmp,
+						&platform_msi_group->entry_list,
+						list) {
+				if (WARN_ON(!desc->irq || desc->nvec_used != 1))
+					return;
+				if (!(desc->irq >= virq && desc->irq < (virq + nvec)))
+					continue;
+
+				irq_domain_free_irqs_common(domain, desc->irq, 1);
+				list_del(&desc->list);
+				free_msi_entry(desc);
+			}
+			list_del(&platform_msi_group->group_list);
+			kfree(platform_msi_group);
+		}
 	}
 }
 
