@@ -3018,8 +3018,8 @@
                     "email": "christopher.s.hall@intel.com"
                 }
             ],
-            "description": "TGL/EHL TGPIO branch",
-            "enabled": false,
+            "description": "PMC/PSE TGPIO branch",
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Christopher S Hall",
@@ -3038,7 +3038,7 @@
                     "email": "alok.anand@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1880",
             "name": "Time-aware GPIO Support Code",
             "repourl": "ssh://git@gitlab.devtools.intel.com:29418/chall/christopher-hall-kernel-contribution.git",
             "sdl_contact": [
