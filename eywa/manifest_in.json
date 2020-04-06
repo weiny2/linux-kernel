@@ -2985,7 +2985,7 @@
             ],
             "jira": "NEXT-1782",
             "name": "Thunderbay IO",
-            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/hspe_csw/bsp/linux.git",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/hspe_csw/sbs/linux.git",
             "sdl_contact": [
                 {
                     "name": "Ajit Tapkir",
