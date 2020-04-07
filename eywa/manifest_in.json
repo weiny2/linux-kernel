@@ -202,7 +202,7 @@
                 }
             ],
             "description": "Drm embargo branch",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Rodrigio Vivi",
@@ -3986,7 +3986,7 @@
                 }
             ],
             "description": "add the media codecdriver module for TBH ARM Media",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Arshad Mehmood",
