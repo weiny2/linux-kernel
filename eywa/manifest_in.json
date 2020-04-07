@@ -2238,6 +2238,10 @@
                 {
                     "name": "CONFIG_INTEL_IDXD",
                     "value": "m"
+                },
+                {
+                    "name": "CONFIG_INTEL_IDXD_KTEST",
+                    "value": "m"
                 }
             ],
             "contributor": [
