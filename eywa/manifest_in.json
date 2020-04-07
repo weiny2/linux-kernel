@@ -2970,7 +2970,7 @@
             "stuck_at_ref": ""
         },
         {
-            "branch": "thb/dev",
+            "branch": "tbh/dev",
             "branch_type": "expiring",
             "config_options": [],
             "contributor": [
@@ -2989,7 +2989,7 @@
             ],
             "jira": "NEXT-1782",
             "name": "Thunderbay IO",
-            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/hspe_csw/sbs/linux.git",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/hspe_csw/bsp/linux.git",
             "sdl_contact": [
                 {
                     "name": "Ajit Tapkir",
@@ -2997,7 +2997,7 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": "1f7eb791785cd88876534d76d70523d7d2d8db55"
+            "stuck_at_ref": ""
         },
         {
             "branch": "chall_linus_tgpio",
