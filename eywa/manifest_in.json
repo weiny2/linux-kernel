@@ -1119,7 +1119,7 @@
             "stuck_at_ref": ""
         },
         {
-            "branch": "dev/rebase/v5.6",
+            "branch": "dev/rebase-v5.6",
             "branch_type": "expiring",
             "config_options": [
                 {
