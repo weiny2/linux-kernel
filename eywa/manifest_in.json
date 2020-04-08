@@ -4278,6 +4278,31 @@
             ],
             "status": "intel confidential",
             "stuck_at_ref": ""
+        },
+        {
+            "branch": "pm-support-for-intel-next",
+            "branch_type": "expiring",
+            "config_options": [],
+            "contributor": [
+                {
+                    "name": "David Box",
+                    "email": "david.e.box@intel.com"
+                }
+            ],
+            "description": "Add support for StorageD3Enable_DSD",
+            "enabled": true,
+            "ip_owner": [],
+            "jira": "NEXT-1883",
+            "name": "storage_d3",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/debox1/linux-kernel-dev.git",
+            "sdl_contact": [
+                {
+                    "name": "Charles Prestopine",
+                    "email": "charles.d.prestopine@intel.com"
+                }
+            ],
+            "status": "public",
+            "stuck_at_ref": ""
         }
     ]
 }
