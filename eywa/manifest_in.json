@@ -3651,7 +3651,7 @@
             "stuck_at_ref": ""
         },
         {
-            "branch": "dev/sbhusare/THB_HCU_crypto_driver_with_fix",
+            "branch": "sec_kernel_dev",
             "branch_type": "expiring",
             "config_options": [],
             "contributor": [
@@ -3664,7 +3664,7 @@
                     "email": "Hemanthkumar.Sm@intel.com"
                 }
             ],
-            "description": "THB crypto AES driver warning fix",
+            "description": "THB security kernel changes",
             "enabled": true,
             "ip_owner": [
                 {
@@ -3673,7 +3673,7 @@
                 }
             ],
             "jira": "NEXT-1799",
-            "name": "AES warning fix",
+            "name": "iotg_sec_kernel",
             "repourl": "ssh://git@gitlab.devtools.intel.com:29418/hspe_csw/sbs/linux.git",
             "sdl_contact": [
                 {
@@ -3939,7 +3939,7 @@
                 }
             ],
             "description": "Secure Xlink driver",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Sarveswaran, Kumaresan",
