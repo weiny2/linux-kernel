@@ -135,6 +135,7 @@ struct msi_desc {
 enum platform_msi_type {
 	NOT_PLAT_MSI = 0,
 	GEN_PLAT_MSI = 1,
+	IMS =	2,
 };
 
 struct platform_msi_group_entry {
@@ -454,4 +455,12 @@ static inline struct irq_domain *pci_msi_get_device_domain(struct pci_dev *pdev)
 }
 #endif /* CONFIG_PCI_MSI_IRQ_DOMAIN */
 
+#ifdef CONFIG_MSI_IMS
+struct irq_domain *dev_get_ims_domain(struct device *dev);
+#else
+static inline struct irq_domain *dev_get_ims_domain(struct device *dev)
+{
+	return NULL;
+}
+#endif
 #endif /* LINUX_MSI_H */

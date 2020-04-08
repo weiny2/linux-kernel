@@ -14,6 +14,7 @@
 #include <linux/mdev.h>
 #include <linux/msi.h>
 #include <linux/pci.h>
+#include <asm/irq_remapping.h>
 
 static u32 __dev_ims_desc_mask_irq(struct msi_desc *desc, u32 flag)
 {
@@ -99,6 +100,20 @@ static int dev_ims_prepare(struct irq_domain *domain, struct device *dev,
 static void dev_ims_set_desc(msi_alloc_info_t *arg, struct msi_desc *desc)
 {
 	arg->ims_hwirq = platform_msi_calc_hwirq(desc);
+}
+
+struct irq_domain *dev_get_ims_domain(struct device *dev)
+{
+	struct irq_alloc_info info;
+
+	if (dev_is_mdev(dev))
+		dev = mdev_to_parent(dev);
+
+	init_irq_alloc_info(&info, NULL);
+	info.type = X86_IRQ_ALLOC_TYPE_IMS;
+	info.dev = dev;
+
+	return irq_remapping_get_irq_domain(&info);
 }
 
 static struct msi_domain_ops dev_ims_domain_ops = {

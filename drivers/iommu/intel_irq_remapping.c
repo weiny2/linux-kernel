@@ -234,6 +234,18 @@ static struct intel_iommu *map_dev_to_ir(struct pci_dev *dev)
 	return drhd->iommu;
 }
 
+static struct intel_iommu *map_gen_dev_to_ir(struct device *dev)
+{
+	struct intel_iommu *iommu;
+	u8 bus, devfn;
+
+	iommu = device_to_iommu(dev, &bus, &devfn);
+	if (!iommu)
+		return NULL;
+
+	return iommu;
+}
+
 static int clear_entries(struct irq_2_iommu *irq_iommu)
 {
 	struct irte *start, *entry, *end;
@@ -572,6 +584,10 @@ static int intel_setup_irq_remapping(struct intel_iommu *iommu)
 		arch_create_remap_msi_irq_domain(iommu->ir_domain,
 						 "INTEL-IR-MSI",
 						 iommu->seq_id);
+#if IS_ENABLED(CONFIG_MSI_IMS)
+	iommu->ir_ims_domain = arch_create_ims_irq_domain(iommu->ir_domain,
+							  "INTEL-IR-IMS");
+#endif
 
 	ir_table->base = page_address(pages);
 	ir_table->bitmap = bitmap;
@@ -636,6 +652,10 @@ static void intel_teardown_irq_remapping(struct intel_iommu *iommu)
 		if (iommu->ir_domain) {
 			irq_domain_remove(iommu->ir_domain);
 			iommu->ir_domain = NULL;
+		}
+		if (iommu->ir_ims_domain) {
+			irq_domain_remove(iommu->ir_ims_domain);
+			iommu->ir_ims_domain = NULL;
 		}
 		free_pages((unsigned long)iommu->ir_table->base,
 			   INTR_REMAP_PAGE_ORDER);
@@ -1132,6 +1152,11 @@ static struct irq_domain *intel_get_irq_domain(struct irq_alloc_info *info)
 		if (iommu)
 			return iommu->ir_msi_domain;
 		break;
+	case X86_IRQ_ALLOC_TYPE_IMS:
+		iommu = map_gen_dev_to_ir(info->dev);
+		if (iommu)
+			return iommu->ir_ims_domain;
+		break;
 	default:
 		break;
 	}
@@ -1299,9 +1324,10 @@ static void intel_irq_remapping_prepare_irte(struct intel_ir_data *data,
 	case X86_IRQ_ALLOC_TYPE_HPET:
 	case X86_IRQ_ALLOC_TYPE_MSI:
 	case X86_IRQ_ALLOC_TYPE_MSIX:
+	case X86_IRQ_ALLOC_TYPE_IMS:
 		if (info->type == X86_IRQ_ALLOC_TYPE_HPET)
 			set_hpet_sid(irte, info->hpet_id);
-		else
+		else if (info->type != X86_IRQ_ALLOC_TYPE_IMS)
 			set_msi_sid(irte, info->msi_dev);
 
 		msg->address_hi = MSI_ADDR_BASE_HI;
@@ -1354,7 +1380,8 @@ static int intel_irq_remapping_alloc(struct irq_domain *domain,
 	if (!info || !iommu)
 		return -EINVAL;
 	if (nr_irqs > 1 && info->type != X86_IRQ_ALLOC_TYPE_MSI &&
-	    info->type != X86_IRQ_ALLOC_TYPE_MSIX)
+	    info->type != X86_IRQ_ALLOC_TYPE_MSIX &&
+	    info->type != X86_IRQ_ALLOC_TYPE_IMS)
 		return -EINVAL;
 
 	/*
