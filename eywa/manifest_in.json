@@ -1119,7 +1119,7 @@
             "stuck_at_ref": ""
         },
         {
-            "branch": "dev/master",
+            "branch": "dev/rebase/v5.6",
             "branch_type": "expiring",
             "config_options": [
                 {
@@ -1150,14 +1150,14 @@
                 }
             ],
             "description": "Enable Ethernet TSN driver for SNPS QOS",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Kasichainula, Kishore",
                     "email": "kishore.kasichainula@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1882",
             "name": "TSN ethernet driver",
             "repourl": "ssh://git@gitlab.devtools.intel.com:29418/OWR/IoTG/ESE/Connectivity/Linux-Ethernet/ese_linux_net_next.git",
             "sdl_contact": [
