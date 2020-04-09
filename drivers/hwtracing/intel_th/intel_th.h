@@ -55,6 +55,7 @@ struct intel_th_output {
 struct intel_th_drvdata {
 	unsigned int	tscu_enable        : 1,
 			multi_is_broken    : 1,
+			reset_on_probe     : 1,
 			has_mintctl        : 1,
 			host_mode_only     : 1,
 			does_d3            : 1;
