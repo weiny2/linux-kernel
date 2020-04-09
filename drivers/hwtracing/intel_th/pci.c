@@ -27,6 +27,24 @@ enum {
 
 #define PCI_REG_NPKDSC	0x80
 #define NPKDSC_TSACT	BIT(5)
+#define NPKDSC_FSR	BIT(1)
+
+static int intel_th_pci_reset(struct pci_dev *pdev)
+{
+	u32 npkdsc;
+	int err;
+
+	err = pci_read_config_dword(pdev, PCI_REG_NPKDSC, &npkdsc);
+	if (!err) {
+		npkdsc |= NPKDSC_FSR;
+		err = pci_write_config_dword(pdev, PCI_REG_NPKDSC, npkdsc);
+	}
+
+	if (err)
+		dev_err(&pdev->dev, "failed to read/write NPKDSC register\n");
+
+	return err;
+}
 
 static int intel_th_pci_activate(struct intel_th *th)
 {
@@ -86,6 +104,9 @@ static int intel_th_pci_probe(struct pci_dev *pdev,
 	err = pcim_iomap_regions_request_all(pdev, BAR_MASK, DRIVER_NAME);
 	if (err)
 		return err;
+
+	if (drvdata->reset_on_probe)
+		intel_th_pci_reset(pdev);
 
 	if (pdev->resource[TH_PCI_RTIT_BAR].start) {
 		resource[TH_MMIO_RTIT] = pdev->resource[TH_PCI_RTIT_BAR];
