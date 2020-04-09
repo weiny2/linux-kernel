@@ -5421,13 +5421,14 @@ static void port_event(struct usb_hub *hub, int port1)
 			port_dev->over_current_count);
 		usb_clear_port_feature(hdev, port1,
 				USB_PORT_FEAT_C_OVER_CURRENT);
-		msleep(100);	/* Cool down */
-		hub_power_on(hub, true);
-		hub_port_status(hub, port1, &status, &unused);
-		if (status & USB_PORT_STAT_OVERCURRENT)
-			dev_err(&port_dev->dev, "over-current condition\n");
-	}
 
+		hub_port_status(hub, port1, &status, &unused);
+		if (!(status & USB_PORT_STAT_OVERCURRENT))
+			hub_power_on(hub, true);
+		dev_err(&port_dev->dev, "over-current condition %s\n",
+			status & USB_PORT_STAT_OVERCURRENT ?
+			"active" : "clear");
+	}
 	if (portchange & USB_PORT_STAT_C_RESET) {
 		dev_dbg(&port_dev->dev, "reset change\n");
 		usb_clear_port_feature(hdev, port1, USB_PORT_FEAT_C_RESET);
