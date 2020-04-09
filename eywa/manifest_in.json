@@ -304,11 +304,11 @@
                 },
                 {
                     "name": "CONFIG_MMC_SDHCI",
-                    "value": "m"
+                    "value": "y"
                 },
                 {
                     "name": "CONFIG_MMC_SDHCI_PCI",
-                    "value": "m"
+                    "value": "y"
                 },
                 {
                     "name": "CONFIG_MMC_SDHCI_ACPI",
