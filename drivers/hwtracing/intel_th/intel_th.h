@@ -56,6 +56,7 @@ struct intel_th_drvdata {
 	unsigned int	tscu_enable        : 1,
 			multi_is_broken    : 1,
 			reset_on_probe     : 1,
+			sw_suspend         : 1,
 			has_mintctl        : 1,
 			host_mode_only     : 1,
 			does_d3            : 1;
@@ -280,6 +281,7 @@ struct intel_th {
 	struct resource		resource[TH_MMIO_END];
 	int			(*activate)(struct intel_th *);
 	void			(*deactivate)(struct intel_th *);
+	unsigned long		suspended;
 	unsigned int		num_thdevs;
 	unsigned int		num_resources;
 	int			irq;
@@ -294,6 +296,9 @@ struct intel_th {
 	struct dentry		*dbg;
 #endif
 };
+
+void intel_th_suspend(struct intel_th *th);
+void intel_th_resume(struct intel_th *th);
 
 static inline struct intel_th_device *
 to_intel_th_hub(struct intel_th_device *thdev)

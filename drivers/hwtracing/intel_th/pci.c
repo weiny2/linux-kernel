@@ -295,6 +295,49 @@ static const struct pci_device_id intel_th_pci_id_table[] = {
 MODULE_DEVICE_TABLE(pci, intel_th_pci_id_table);
 
 #ifdef CONFIG_PM
+static int intel_th_system_suspend(struct device *dev)
+{
+	struct intel_th *th = dev_get_drvdata(dev);
+	struct pci_dev *pdev = to_pci_dev(dev);
+
+	if (!INTEL_TH_CAP(th, sw_suspend))
+		return 0;
+
+	intel_th_suspend(th);
+	pci_save_state(pdev);
+	pci_disable_device(pdev);
+	pci_set_power_state(pdev, PCI_D3hot);
+
+	return 0;
+}
+
+static int intel_th_system_resume(struct device *dev)
+{
+	struct intel_th *th = dev_get_drvdata(dev);
+	struct pci_dev *pdev = to_pci_dev(dev);
+	int ret;
+
+	if (!INTEL_TH_CAP(th, sw_suspend))
+		return 0;
+
+	pci_set_power_state(pdev, PCI_D0);
+
+	if (INTEL_TH_CAP(th, reset_on_probe))
+		intel_th_pci_reset(pdev);
+
+	pci_restore_state(pdev);
+	ret = pcim_enable_device(pdev);
+	if (ret) {
+		dev_err(dev, "failed to enable after resume (%d)\n", ret);
+		return ret;
+	}
+
+	pci_set_master(pdev);
+	intel_th_resume(th);
+
+	return 0;
+}
+
 static int intel_th_runtime_suspend(struct device *dev)
 {
 	struct intel_th *th = dev_get_drvdata(dev);
@@ -333,6 +376,8 @@ static int intel_th_runtime_resume(struct device *dev)
 }
 
 static struct dev_pm_ops intel_th_pm = {
+	SET_SYSTEM_SLEEP_PM_OPS(intel_th_system_suspend,
+				intel_th_system_resume)
 	SET_RUNTIME_PM_OPS(intel_th_runtime_suspend,
 			   intel_th_runtime_resume,
 			   NULL)
