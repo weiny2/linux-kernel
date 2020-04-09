@@ -1119,7 +1119,7 @@
             "stuck_at_ref": ""
         },
         {
-            "branch": "dev/rebase-v5.6",
+            "branch": "dev/mainline-v5.6",
             "branch_type": "expiring",
             "config_options": [
                 {
@@ -1150,7 +1150,7 @@
                 }
             ],
             "description": "Enable Ethernet TSN driver for SNPS QOS",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Kasichainula, Kishore",
