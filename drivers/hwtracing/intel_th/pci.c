@@ -105,7 +105,7 @@ static int intel_th_pci_probe(struct pci_dev *pdev,
 	if (err)
 		return err;
 
-	if (drvdata->reset_on_probe)
+	if (drvdata && drvdata->reset_on_probe)
 		intel_th_pci_reset(pdev);
 
 	if (pdev->resource[TH_PCI_RTIT_BAR].start) {
@@ -148,6 +148,13 @@ static const struct intel_th_drvdata intel_th_1x_multi_is_broken = {
 static const struct intel_th_drvdata intel_th_2x = {
 	.tscu_enable	= 1,
 	.has_mintctl	= 1,
+};
+
+static const struct intel_th_drvdata intel_th_2x_tgl = {
+	.tscu_enable	= 1,
+	.has_mintctl	= 1,
+	.reset_on_probe	= 1,
+	.sw_suspend	= 1,
 };
 
 static const struct pci_device_id intel_th_pci_id_table[] = {
@@ -252,7 +259,7 @@ static const struct pci_device_id intel_th_pci_id_table[] = {
 	{
 		/* Tiger Lake PCH */
 		PCI_DEVICE(PCI_VENDOR_ID_INTEL, 0xa0a6),
-		.driver_data = (kernel_ulong_t)&intel_th_2x,
+		.driver_data = (kernel_ulong_t)&intel_th_2x_tgl,
 	},
 	{
 		/* Tiger Lake PCH-H */
