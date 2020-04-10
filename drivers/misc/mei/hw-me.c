@@ -1366,32 +1366,41 @@ static bool mei_me_fw_type_nm(struct pci_dev *pdev)
 #define MEI_CFG_FW_NM                           \
 	.quirk_probe = mei_me_fw_type_nm
 
+#define MEI_FS_OPMODE_MSK    0xf0000 /* OP MODE Mask */
+#define MEI_FS_OPMODE_SPS    0xf0000 /* SPS SKU */
+
+/**
+ * mei_me_fw_sku_sps() - check for sps sku
+ *
+ * Read ME FW Status register to check for SPS Firmware.
+ * The SPS FW is only signaled in pci function 0.
+ * __Note__: Deprecated by CNL and newer.
+ *
+ * @pdev: pci device
+ *
+ * Return: true in case of SPS firmware
+ */
 static bool mei_me_fw_type_sps(struct pci_dev *pdev)
 {
 	u32 reg;
 	unsigned int devfn;
 
-	/*
-	 * Read ME FW Status register to check for SPS Firmware
-	 * The SPS FW is only signaled in pci function 0
-	 */
 	devfn = PCI_DEVFN(PCI_SLOT(pdev->devfn), 0);
 	pci_bus_read_config_dword(pdev->bus, devfn, PCI_CFG_HFS_1, &reg);
 	trace_mei_pci_cfg_read(&pdev->dev, "PCI_CFG_HFS_1", PCI_CFG_HFS_1, reg);
-	/* if bits [19:16] = 15, running SPS Firmware */
-	return (reg & 0xf0000) == 0xf0000;
+	return (reg & MEI_FS_OPMODE_MSK) == MEI_FS_OPMODE_SPS;
 }
 
-#define MEI_CFG_FW_SPS                           \
+#define MEI_CFG_FW_SPS                          \
 	.quirk_probe = mei_me_fw_type_sps
 
 #define MEI_CFG_FW_VER_SUPP                     \
 	.fw_ver_supported = 1
 
-#define MEI_CFG_ICH_HFS                      \
+#define MEI_CFG_ICH_HFS                         \
 	.fw_status.count = 0
 
-#define MEI_CFG_ICH10_HFS                        \
+#define MEI_CFG_ICH10_HFS                       \
 	.fw_status.count = 1,                   \
 	.fw_status.status[0] = PCI_CFG_HFS_1
 
