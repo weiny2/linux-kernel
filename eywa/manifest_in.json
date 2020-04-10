@@ -72,7 +72,7 @@
             "description": "Len Brown's patches",
             "enabled": false,
             "ip_owner": [],
-            "jira": "",
+            "jira": "NEXT-1892",
             "name": "len-x86",
             "repourl": "git://linux-os.sc.intel.com/~lenb/linux",
             "sdl_contact": [
@@ -160,7 +160,7 @@
                     "email": "rodrigo.vivi@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1890",
             "name": "drm",
             "repourl": "ssh://git-amr-1.devtools.intel.com:29418/otc_gen_graphics-drm-intel.git",
             "sdl_contact": [
@@ -190,7 +190,7 @@
                     "email": "ravi.v.shankar@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1891",
             "name": "split_lock",
             "repourl": "ssh://git-amr-4.devtools.intel.com:29418/enabling_cldemote_in_linux_kerne-linux_git",
             "sdl_contact": [
@@ -229,7 +229,7 @@
                     "email": "revanth.rajashekar@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1889",
             "name": "nvme",
             "repourl": "ssh://git-gar-1.devtools.intel.com:29418/otc_nvme_linux-kernel",
             "sdl_contact": [
