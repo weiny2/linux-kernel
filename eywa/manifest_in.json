@@ -24,7 +24,7 @@
             "ip_owner": [],
             "jira": "",
             "name": "eywa",
-            "repourl": "ssh://git-amr-1.devtools.intel.com:29418/otc_intel_next-linux.git",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/intel-next/intel-next-kernel.git",
             "sdl_contact": [],
             "status": "intel confidential",
             "stuck_at_ref": ""
@@ -39,7 +39,7 @@
             "ip_owner": [],
             "jira": "",
             "name": "configs",
-            "repourl": "ssh://git-amr-1.devtools.intel.com:29418/otc_intel_next-linux.git",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/intel-next/intel-next-kernel.git",
             "sdl_contact": [],
             "status": "intel confidential",
             "stuck_at_ref": ""
@@ -54,7 +54,7 @@
             "ip_owner": [],
             "jira": "",
             "name": "packaging",
-            "repourl": "ssh://git-amr-1.devtools.intel.com:29418/otc_intel_next-linux.git",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/intel-next/intel-next-kernel.git",
             "sdl_contact": [],
             "status": "intel confidential",
             "stuck_at_ref": ""
