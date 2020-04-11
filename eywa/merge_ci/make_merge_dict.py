@@ -17,7 +17,7 @@ def get_branches(manifest_str):
     branches = [] 
     project_base_name="topic_intel_next"
     #skip linux next kernel repo because that is tracked elsewhere
-    eywa_branch = r"ssh://git-amr-1.devtools.intel.com:29418/otc_intel_next-linux.git"
+    eywa_branch = r"ssh://git@gitlab.devtools.intel.com:29418/intel-next/intel-next-kernel.git"
     upstream_repo=r"git://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git"
     blacklist =[eywa_branch,upstream_repo]
     for line in manifest_str.split("\n"):

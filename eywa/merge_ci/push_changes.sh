@@ -22,12 +22,6 @@ fi
 LOGNAME=$(echo eywa/intel-next-merge-$DATE.log | sed "s/.log//g")
 baseversion=$(grep "Resetting master to" $LOGNAME.log | uniq  | sed "s/Resetting master to //gi")
 baseversion=$(echo $baseversion | sed "s/v//g")
-#Add gitlab remote this will eventually become origin after v5.6
-git remote | grep intel_next_gitlab
-if [ $? -ne 0 ]; then
-	git remote add intel_next_gitlab ssh://git@gitlab.devtools.intel.com:29418/intel-next/intel-next-kernel.git
-fi
-git fetch intel_next_gitlab
 
 #intel next tag
 git ls-remote --tags | grep  -q "refs/tags/intel-$baseversion-$DATE"
@@ -38,8 +32,6 @@ if [ $? -ne 0 ]; then
         echo "Pushing master branch upstream ..."
         git push origin -f master:master intel-$baseversion-$DATE || \
         die "Unable to push kernel master branch upstream"
-        git push intel_next_gitlab -f master:master intel-$baseversion-$DATE || \
-        die "Unable to push kernel master branch to gitlab"
 else
         echo "Intel next tag: intel-$baseversion-$DATE already pushed" 
 fi
@@ -52,12 +44,4 @@ git merge --ff-only v$baseversion
 echo "Pushing linus branch upstream ..."
 git push origin linus:linus
 git push origin linus:linus v$baseversion
-#push remaining branches to gitlab
-
-git push intel_next_gitlab linus:linus
-git push intel_next_gitlab linus:linus v$baseversion
-#mirror branches to gitlab
-git push intel_next_gitlab -f ssh_git_amr_1_devtools_intel_com_29418_otc_intel_next_linux_git/configs:configs
-git push intel_next_gitlab -f ssh_git_amr_1_devtools_intel_com_29418_otc_intel_next_linux_git/eywa:eywa
-git push intel_next_gitlab -f ssh_git_amr_1_devtools_intel_com_29418_otc_intel_next_linux_git/packaging:packaging
 git checkout master
