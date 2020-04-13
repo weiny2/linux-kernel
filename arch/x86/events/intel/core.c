@@ -3993,7 +3993,7 @@ int intel_cpuc_prepare(struct cpu_hw_events *cpuc, int cpu)
 {
 	cpuc->pebs_record_size = x86_pmu.pebs_record_size;
 
-	if (x86_pmu.extra_regs || x86_pmu.lbr_sel_map) {
+	if (x86_pmu.extra_regs || x86_pmu.lbr_sel_map || x86_pmu.lbr_ctl_map) {
 		cpuc->shared_regs = allocate_shared_regs(cpu);
 		if (!cpuc->shared_regs)
 			goto err;
@@ -4091,7 +4091,7 @@ static void intel_pmu_cpu_starting(int cpu)
 		cpuc->shared_regs->refcnt++;
 	}
 
-	if (x86_pmu.lbr_sel_map)
+	if (x86_pmu.lbr_sel_map || x86_pmu.lbr_ctl_map)
 		cpuc->lbr_sel = &cpuc->shared_regs->regs[EXTRA_REG_LBR];
 
 	if (x86_pmu.flags & PMU_FL_EXCL_CNTRS) {
@@ -4999,6 +4999,9 @@ __init int intel_pmu_init(void)
 		x86_pmu.lbr_read = intel_pmu_lbr_read_32;
 	}
 
+	if (boot_cpu_has(X86_FEATURE_ARCH_LBR))
+		intel_pmu_arch_lbr_init();
+
 	intel_ds_init();
 
 	x86_add_quirk(intel_arch_events_quirk); /* Install first, so it runs last */
@@ -5632,8 +5635,23 @@ __init int intel_pmu_init(void)
 	 * Check all LBT MSR here.
 	 * Disable LBR access if any LBR MSRs can not be accessed.
 	 */
-	if (x86_pmu.lbr_nr && !check_msr(x86_pmu.lbr_tos, 0x3UL))
-		x86_pmu.lbr_nr = 0;
+	if (x86_pmu.lbr_nr) {
+		if (x86_pmu.arch_lbr) {
+			u64 mask = 1;
+
+			if (x86_pmu.arch_lbr_cpl)
+				mask |= ARCH_LBR_CTL_CPL;
+			if (x86_pmu.arch_lbr_filter)
+				mask |= ARCH_LBR_CTL_FILTER;
+			if (x86_pmu.arch_lbr_call_stack)
+				mask |= ARCH_LBR_CTL_STACK;
+			if (!check_msr(MSR_ARCH_LBR_CTL, mask))
+				x86_pmu.lbr_nr = 0;
+			if (!check_msr(MSR_ARCH_LBR_DEPTH, MSR_ARCH_LBR_DEPTH_MASK))
+				x86_pmu.lbr_nr = 0;
+		} else if (!check_msr(x86_pmu.lbr_tos, 0x3UL))
+			x86_pmu.lbr_nr = 0;
+	}
 	for (i = 0; i < x86_pmu.lbr_nr; i++) {
 		if (!(check_msr(x86_pmu.lbr_from + i, 0xffffUL) &&
 		      check_msr(x86_pmu.lbr_to + i, 0xffffUL)))
@@ -5650,6 +5668,9 @@ __init int intel_pmu_init(void)
 	 */
 	if (x86_pmu.extra_regs) {
 		for (er = x86_pmu.extra_regs; er->msr; er++) {
+			/* Skip Arch LBR which is already verified */
+			if (x86_pmu.arch_lbr && (er->idx == EXTRA_REG_LBR))
+				continue;
 			er->extra_msr_access = check_msr(er->msr, 0x11UL);
 			/* Disable LBR select mapping */
 			if ((er->idx == EXTRA_REG_LBR) && !er->extra_msr_access)
