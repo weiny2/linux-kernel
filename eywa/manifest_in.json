@@ -153,7 +153,7 @@
                 }
             ],
             "description": "Drm embargo branch",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Rodrigio Vivi",
