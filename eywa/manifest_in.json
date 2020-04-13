@@ -70,7 +70,7 @@
                 }
             ],
             "description": "Len Brown's patches",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [],
             "jira": "NEXT-1892",
             "name": "len-x86",
