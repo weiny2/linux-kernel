@@ -3122,7 +3122,7 @@
             "stuck_at_ref": ""
         },
         {
-            "branch": "cxl-next",
+            "branch": "tags/cxl-5.7.0-rc1",
             "branch_type": "expiring",
             "config_options": [],
             "contributor": [
@@ -3132,14 +3132,14 @@
                 }
             ],
             "description": "CXL Preliminary Enumeration / PCIe for A0",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Prajwal Mohan",
                     "email": "prajwal.karur.mohan@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1898",
             "name": "CXL",
             "repourl": "ssh://git@gitlab.devtools.intel.com:29418/svkelley/cxl-dev.git",
             "sdl_contact": [
