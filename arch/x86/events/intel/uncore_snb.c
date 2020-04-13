@@ -52,6 +52,7 @@
 #define PCI_DEVICE_ID_INTEL_CNL_U_IMC		0x5a04
 #define PCI_DEVICE_ID_INTEL_ICL_U_IMC		0x8a02
 #define PCI_DEVICE_ID_INTEL_ICL_U2_IMC		0x8a12
+#define PCI_DEVICE_ID_INTEL_JSL_IMC		0x4e22
 #define PCI_DEVICE_ID_INTEL_TGL_U1_IMC		0x9a02
 #define PCI_DEVICE_ID_INTEL_TGL_U2_IMC		0x9a04
 #define PCI_DEVICE_ID_INTEL_TGL_U3_IMC		0x9a12
@@ -830,6 +831,10 @@ static const struct pci_device_id icl_uncore_pci_ids[] = {
 		PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_ICL_U2_IMC),
 		.driver_data = UNCORE_PCI_DEV_DATA(SNB_PCI_UNCORE_IMC, 0),
 	},
+	{ /* IMC */
+		PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_JSL_IMC),
+		.driver_data = UNCORE_PCI_DEV_DATA(SNB_PCI_UNCORE_IMC, 0),
+	},
 	{ /* end: all zeroes */ },
 };
 
@@ -925,6 +930,7 @@ static const struct imc_uncore_pci_dev desktop_imc_pci_ids[] = {
 	IMC_DEV(CNL_U_IMC, &cnl_uncore_pci_driver),
 	IMC_DEV(ICL_U_IMC, &icl_uncore_pci_driver),	/* 10th Gen Core Mobile */
 	IMC_DEV(ICL_U2_IMC, &icl_uncore_pci_driver),	/* 10th Gen Core Mobile */
+	IMC_DEV(JSL_IMC, &icl_uncore_pci_driver),
 	{  /* end marker */ }
 };
 
