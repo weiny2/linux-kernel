@@ -1123,7 +1123,8 @@ void snbep_uncore_cpu_init(void)
 {
 	if (snbep_uncore_cbox.num_boxes > boot_cpu_data.x86_max_cores)
 		snbep_uncore_cbox.num_boxes = boot_cpu_data.x86_max_cores;
-	uncore_msr_uncores = snbep_msr_uncores;
+	uncore_generate_types_rb_tree(&uncore_msr_uncores,
+				      snbep_msr_uncores);
 }
 
 enum {
@@ -1391,7 +1392,8 @@ int snbep_uncore_pci_init(void)
 	int ret = snbep_pci2phy_map_init(0x3ce0, SNBEP_CPUNODEID, SNBEP_GIDNIDMAP, true);
 	if (ret)
 		return ret;
-	uncore_pci_uncores = snbep_pci_uncores;
+	uncore_generate_types_rb_tree(&uncore_pci_uncores,
+				      snbep_pci_uncores);
 	uncore_pci_driver = &snbep_uncore_pci_driver;
 	return 0;
 }
@@ -1720,7 +1722,8 @@ void ivbep_uncore_cpu_init(void)
 {
 	if (ivbep_uncore_cbox.num_boxes > boot_cpu_data.x86_max_cores)
 		ivbep_uncore_cbox.num_boxes = boot_cpu_data.x86_max_cores;
-	uncore_msr_uncores = ivbep_msr_uncores;
+	uncore_generate_types_rb_tree(&uncore_msr_uncores,
+				      ivbep_msr_uncores);
 }
 
 static struct intel_uncore_type ivbep_uncore_ha = {
@@ -1955,7 +1958,8 @@ int ivbep_uncore_pci_init(void)
 	int ret = snbep_pci2phy_map_init(0x0e1e, SNBEP_CPUNODEID, SNBEP_GIDNIDMAP, true);
 	if (ret)
 		return ret;
-	uncore_pci_uncores = ivbep_pci_uncores;
+	uncore_generate_types_rb_tree(&uncore_pci_uncores,
+				      ivbep_pci_uncores);
 	uncore_pci_driver = &ivbep_uncore_pci_driver;
 	return 0;
 }
@@ -2149,7 +2153,8 @@ static struct intel_uncore_type *knl_msr_uncores[] = {
 
 void knl_uncore_cpu_init(void)
 {
-	uncore_msr_uncores = knl_msr_uncores;
+	uncore_generate_types_rb_tree(&uncore_msr_uncores,
+				      knl_msr_uncores);
 }
 
 static void knl_uncore_imc_enable_box(struct intel_uncore_box *box)
@@ -2451,7 +2456,9 @@ int knl_uncore_pci_init(void)
 	ret = snb_pci2phy_map_init(0x7817); /* M2PCIe */
 	if (ret)
 		return ret;
-	uncore_pci_uncores = knl_pci_uncores;
+
+	uncore_generate_types_rb_tree(&uncore_pci_uncores,
+				      knl_pci_uncores);
 	uncore_pci_driver = &knl_uncore_pci_driver;
 	return 0;
 }
@@ -2785,7 +2792,8 @@ void hswep_uncore_cpu_init(void)
 			hswep_uncore_sbox.num_boxes = 2;
 	}
 
-	uncore_msr_uncores = hswep_msr_uncores;
+	uncore_generate_types_rb_tree(&uncore_msr_uncores,
+				      hswep_msr_uncores);
 }
 
 static struct intel_uncore_type hswep_uncore_ha = {
@@ -3064,7 +3072,8 @@ int hswep_uncore_pci_init(void)
 	int ret = snbep_pci2phy_map_init(0x2f1e, SNBEP_CPUNODEID, SNBEP_GIDNIDMAP, true);
 	if (ret)
 		return ret;
-	uncore_pci_uncores = hswep_pci_uncores;
+	uncore_generate_types_rb_tree(&uncore_pci_uncores,
+				      hswep_pci_uncores);
 	uncore_pci_driver = &hswep_uncore_pci_driver;
 	return 0;
 }
@@ -3148,11 +3157,10 @@ void bdx_uncore_cpu_init(void)
 
 	if (bdx_uncore_cbox.num_boxes > boot_cpu_data.x86_max_cores)
 		bdx_uncore_cbox.num_boxes = boot_cpu_data.x86_max_cores;
-	uncore_msr_uncores = bdx_msr_uncores;
 
 	/* BDX-DE doesn't have SBOX */
 	if (boot_cpu_data.x86_model == 86) {
-		uncore_msr_uncores[BDX_MSR_UNCORE_SBOX] = NULL;
+		bdx_msr_uncores[BDX_MSR_UNCORE_SBOX] = NULL;
 	/* Detect systems with no SBOXes */
 	} else if (uncore_extra_pci_dev[pkg].dev[HSWEP_PCI_PCU_3]) {
 		struct pci_dev *pdev;
@@ -3164,6 +3172,9 @@ void bdx_uncore_cpu_init(void)
 			bdx_msr_uncores[BDX_MSR_UNCORE_SBOX] = NULL;
 	}
 	hswep_uncore_pcu.constraints = bdx_uncore_pcu_constraints;
+
+	uncore_generate_types_rb_tree(&uncore_msr_uncores,
+				      bdx_msr_uncores);
 }
 
 static struct intel_uncore_type bdx_uncore_ha = {
@@ -3402,7 +3413,8 @@ int bdx_uncore_pci_init(void)
 
 	if (ret)
 		return ret;
-	uncore_pci_uncores = bdx_pci_uncores;
+	uncore_generate_types_rb_tree(&uncore_pci_uncores,
+				      bdx_pci_uncores);
 	uncore_pci_driver = &bdx_uncore_pci_driver;
 	return 0;
 }
@@ -3796,7 +3808,8 @@ out:
 void skx_uncore_cpu_init(void)
 {
 	skx_uncore_chabox.num_boxes = skx_count_chabox();
-	uncore_msr_uncores = skx_msr_uncores;
+	uncore_generate_types_rb_tree(&uncore_msr_uncores,
+				      skx_msr_uncores);
 }
 
 static struct intel_uncore_type skx_uncore_imc = {
@@ -4043,7 +4056,8 @@ int skx_uncore_pci_init(void)
 	if (ret)
 		return ret;
 
-	uncore_pci_uncores = skx_pci_uncores;
+	uncore_generate_types_rb_tree(&uncore_pci_uncores,
+				      skx_pci_uncores);
 	uncore_pci_driver = &skx_uncore_pci_driver;
 	return 0;
 }
@@ -4292,7 +4306,8 @@ static struct intel_uncore_type *snr_msr_uncores[] = {
 
 void snr_uncore_cpu_init(void)
 {
-	uncore_msr_uncores = snr_msr_uncores;
+	uncore_generate_types_rb_tree(&uncore_msr_uncores,
+				      snr_msr_uncores);
 }
 
 static void snr_m2m_uncore_pci_init_box(struct intel_uncore_box *box)
@@ -4372,7 +4387,8 @@ int snr_uncore_pci_init(void)
 	if (ret)
 		return ret;
 
-	uncore_pci_uncores = snr_pci_uncores;
+	uncore_generate_types_rb_tree(&uncore_pci_uncores,
+				      snr_pci_uncores);
 	uncore_pci_driver = &snr_uncore_pci_driver;
 	return 0;
 }
@@ -4565,7 +4581,8 @@ static struct intel_uncore_type *snr_mmio_uncores[] = {
 
 void snr_uncore_mmio_init(void)
 {
-	uncore_mmio_uncores = snr_mmio_uncores;
+	uncore_generate_types_rb_tree(&uncore_mmio_uncores,
+				      snr_mmio_uncores);
 }
 
 /* end of SNR uncore support */
@@ -4788,7 +4805,8 @@ void icx_uncore_cpu_init(void)
 	if (WARN_ON(num_boxes > ARRAY_SIZE(icx_cha_msr_offsets)))
 		return;
 	icx_uncore_chabox.num_boxes = num_boxes;
-	uncore_msr_uncores = icx_msr_uncores;
+	uncore_generate_types_rb_tree(&uncore_msr_uncores,
+				      icx_msr_uncores);
 }
 
 static struct intel_uncore_type icx_uncore_m2m = {
@@ -4929,7 +4947,8 @@ int icx_uncore_pci_init(void)
 	if (ret)
 		return ret;
 
-	uncore_pci_uncores = icx_pci_uncores;
+	uncore_generate_types_rb_tree(&uncore_pci_uncores,
+				      icx_pci_uncores);
 	uncore_pci_driver = &icx_uncore_pci_driver;
 	return 0;
 }
@@ -5039,7 +5058,8 @@ static struct intel_uncore_type *icx_mmio_uncores[] = {
 
 void icx_uncore_mmio_init(void)
 {
-	uncore_mmio_uncores = icx_mmio_uncores;
+	uncore_generate_types_rb_tree(&uncore_mmio_uncores,
+				      icx_mmio_uncores);
 }
 
 /* end of ICX uncore support */

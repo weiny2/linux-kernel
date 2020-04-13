@@ -238,9 +238,10 @@ static struct intel_uncore_type *snb_msr_uncores[] = {
 
 void snb_uncore_cpu_init(void)
 {
-	uncore_msr_uncores = snb_msr_uncores;
 	if (snb_uncore_cbox.num_boxes > boot_cpu_data.x86_max_cores)
 		snb_uncore_cbox.num_boxes = boot_cpu_data.x86_max_cores;
+	uncore_generate_types_rb_tree(&uncore_msr_uncores,
+				      snb_msr_uncores);
 }
 
 static void skl_uncore_msr_init_box(struct intel_uncore_box *box)
@@ -302,10 +303,11 @@ static struct intel_uncore_type *skl_msr_uncores[] = {
 
 void skl_uncore_cpu_init(void)
 {
-	uncore_msr_uncores = skl_msr_uncores;
 	if (skl_uncore_cbox.num_boxes > boot_cpu_data.x86_max_cores)
 		skl_uncore_cbox.num_boxes = boot_cpu_data.x86_max_cores;
 	snb_uncore_arb.ops = &skl_uncore_msr_ops;
+	uncore_generate_types_rb_tree(&uncore_msr_uncores,
+				      skl_msr_uncores);
 }
 
 static struct intel_uncore_type icl_uncore_cbox = {
@@ -367,9 +369,10 @@ static int icl_get_cbox_num(void)
 
 void icl_uncore_cpu_init(void)
 {
-	uncore_msr_uncores = icl_msr_uncores;
 	icl_uncore_cbox.num_boxes = icl_get_cbox_num();
 	snb_uncore_arb.ops = &skl_uncore_msr_ops;
+	uncore_generate_types_rb_tree(&uncore_msr_uncores,
+				      icl_msr_uncores);
 }
 
 enum {
@@ -937,7 +940,8 @@ static int imc_uncore_pci_init(void)
 	if (!imc_drv)
 		return -ENODEV;
 
-	uncore_pci_uncores = snb_pci_uncores;
+	uncore_generate_types_rb_tree(&uncore_pci_uncores,
+				      snb_pci_uncores);
 	uncore_pci_driver = imc_drv;
 
 	return 0;
@@ -1048,7 +1052,8 @@ static struct intel_uncore_type *nhm_msr_uncores[] = {
 
 void nhm_uncore_cpu_init(void)
 {
-	uncore_msr_uncores = nhm_msr_uncores;
+	uncore_generate_types_rb_tree(&uncore_msr_uncores,
+				      nhm_msr_uncores);
 }
 
 /* end of Nehalem uncore support */
@@ -1197,12 +1202,14 @@ static struct intel_uncore_type *tgl_mmio_uncores[] = {
 void tgl_l_uncore_mmio_init(void)
 {
 	tgl_uncore_imc_free_running.freerunning = tgl_l_uncore_imc_freerunning;
-	uncore_mmio_uncores = tgl_mmio_uncores;
+	uncore_generate_types_rb_tree(&uncore_mmio_uncores,
+				      tgl_mmio_uncores);
 }
 
 void tgl_uncore_mmio_init(void)
 {
-	uncore_mmio_uncores = tgl_mmio_uncores;
+	uncore_generate_types_rb_tree(&uncore_mmio_uncores,
+				      tgl_mmio_uncores);
 }
 
 /* end of Tiger Lake MMIO uncore support */

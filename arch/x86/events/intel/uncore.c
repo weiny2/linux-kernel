@@ -5,10 +5,9 @@
 #include <asm/intel-family.h>
 #include "uncore.h"
 
-static struct intel_uncore_type *empty_uncore[] = { NULL, };
-struct intel_uncore_type **uncore_msr_uncores = empty_uncore;
-struct intel_uncore_type **uncore_pci_uncores = empty_uncore;
-struct intel_uncore_type **uncore_mmio_uncores = empty_uncore;
+struct rb_root uncore_msr_uncores = RB_ROOT;
+struct rb_root uncore_pci_uncores = RB_ROOT;
+struct rb_root uncore_mmio_uncores = RB_ROOT;
 
 static bool pcidrv_registered;
 struct pci_driver *uncore_pci_driver;
@@ -998,10 +997,12 @@ static void uncore_type_exit(struct intel_uncore_type *type)
 	type->events_group = NULL;
 }
 
-static void uncore_types_exit(struct intel_uncore_type **types)
+static void uncore_types_exit(struct rb_root *types)
 {
-	for (; *types; types++)
-		uncore_type_exit(*types);
+	struct intel_uncore_type *type, *next;
+
+	rbtree_postorder_for_each_entry_safe(type, next, types, type_node)
+		uncore_type_exit(type);
 }
 
 static int __init uncore_type_init(struct intel_uncore_type *type, bool setid)
@@ -1064,12 +1065,13 @@ err:
 }
 
 static int __init
-uncore_types_init(struct intel_uncore_type **types, bool setid)
+uncore_types_init(struct rb_root *types, bool setid)
 {
+	struct intel_uncore_type *type, *next;
 	int ret;
 
-	for (; *types; types++) {
-		ret = uncore_type_init(*types, setid);
+	rbtree_postorder_for_each_entry_safe(type, next, types, type_node) {
+		ret = uncore_type_init(type, setid);
 		if (ret)
 			return ret;
 	}
@@ -1103,7 +1105,8 @@ static int uncore_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id
 		return 0;
 	}
 
-	type = uncore_pci_uncores[UNCORE_PCI_DEV_TYPE(id->driver_data)];
+	type = uncore_type_search(&uncore_pci_uncores,
+				  UNCORE_PCI_DEV_TYPE(id->driver_data));
 
 	/*
 	 * Some platforms, e.g.  Knights Landing, use a common PCI device ID
@@ -1218,7 +1221,7 @@ static int __init uncore_pci_init(void)
 		goto err;
 	}
 
-	ret = uncore_types_init(uncore_pci_uncores, false);
+	ret = uncore_types_init(&uncore_pci_uncores, false);
 	if (ret)
 		goto errtype;
 
@@ -1233,12 +1236,13 @@ static int __init uncore_pci_init(void)
 	return 0;
 
 errtype:
-	uncore_types_exit(uncore_pci_uncores);
+	uncore_types_exit(&uncore_pci_uncores);
 	kfree(uncore_extra_pci_dev);
 	uncore_extra_pci_dev = NULL;
 	uncore_free_pcibus_map();
 err:
-	uncore_pci_uncores = empty_uncore;
+	uncore_type_delete_all(&uncore_pci_uncores);
+
 	return ret;
 }
 
@@ -1247,7 +1251,7 @@ static void uncore_pci_exit(void)
 	if (pcidrv_registered) {
 		pcidrv_registered = false;
 		pci_unregister_driver(uncore_pci_driver);
-		uncore_types_exit(uncore_pci_uncores);
+		uncore_types_exit(&uncore_pci_uncores);
 		kfree(uncore_extra_pci_dev);
 		uncore_free_pcibus_map();
 	}
@@ -1283,22 +1287,23 @@ static void uncore_change_type_ctx(struct intel_uncore_type *type, int old_cpu,
 	}
 }
 
-static void uncore_change_context(struct intel_uncore_type **uncores,
+static void uncore_change_context(struct rb_root *types,
 				  int old_cpu, int new_cpu)
 {
-	for (; *uncores; uncores++)
-		uncore_change_type_ctx(*uncores, old_cpu, new_cpu);
+	struct intel_uncore_type *type, *next;
+
+	rbtree_postorder_for_each_entry_safe(type, next, types, type_node)
+		uncore_change_type_ctx(type, old_cpu, new_cpu);
 }
 
-static void uncore_box_unref(struct intel_uncore_type **types, int id)
+static void uncore_box_unref(struct rb_root *types, int id)
 {
-	struct intel_uncore_type *type;
+	struct intel_uncore_type *type, *next;
 	struct intel_uncore_pmu *pmu;
 	struct intel_uncore_box *box;
 	int i;
 
-	for (; *types; types++) {
-		type = *types;
+	rbtree_postorder_for_each_entry_safe(type, next, types, type_node) {
 		pmu = type->pmus;
 		for (i = 0; i < type->num_boxes; i++, pmu++) {
 			box = pmu->boxes[id];
@@ -1324,30 +1329,29 @@ static int uncore_event_cpu_offline(unsigned int cpu)
 	else
 		target = -1;
 
-	uncore_change_context(uncore_msr_uncores, cpu, target);
-	uncore_change_context(uncore_mmio_uncores, cpu, target);
-	uncore_change_context(uncore_pci_uncores, cpu, target);
+	uncore_change_context(&uncore_msr_uncores, cpu, target);
+	uncore_change_context(&uncore_mmio_uncores, cpu, target);
+	uncore_change_context(&uncore_pci_uncores, cpu, target);
 
 unref:
 	/* Clear the references */
 	die = topology_logical_die_id(cpu);
-	uncore_box_unref(uncore_msr_uncores, die);
-	uncore_box_unref(uncore_mmio_uncores, die);
+	uncore_box_unref(&uncore_msr_uncores, die);
+	uncore_box_unref(&uncore_mmio_uncores, die);
 	return 0;
 }
 
-static int allocate_boxes(struct intel_uncore_type **types,
-			 unsigned int die, unsigned int cpu)
+static int allocate_boxes(struct rb_root *types,
+			  unsigned int die, unsigned int cpu)
 {
+	struct intel_uncore_type *type, *next;
 	struct intel_uncore_box *box, *tmp;
-	struct intel_uncore_type *type;
 	struct intel_uncore_pmu *pmu;
 	LIST_HEAD(allocated);
 	int i;
 
 	/* Try to allocate all required boxes */
-	for (; *types; types++) {
-		type = *types;
+	rbtree_postorder_for_each_entry_safe(type, next, types, type_node) {
 		pmu = type->pmus;
 		for (i = 0; i < type->num_boxes; i++, pmu++) {
 			if (pmu->boxes[die])
@@ -1375,10 +1379,10 @@ cleanup:
 	return -ENOMEM;
 }
 
-static int uncore_box_ref(struct intel_uncore_type **types,
+static int uncore_box_ref(struct rb_root *types,
 			  int id, unsigned int cpu)
 {
-	struct intel_uncore_type *type;
+	struct intel_uncore_type *type, *next;
 	struct intel_uncore_pmu *pmu;
 	struct intel_uncore_box *box;
 	int i, ret;
@@ -1387,8 +1391,7 @@ static int uncore_box_ref(struct intel_uncore_type **types,
 	if (ret)
 		return ret;
 
-	for (; *types; types++) {
-		type = *types;
+	rbtree_postorder_for_each_entry_safe(type, next, types, type_node) {
 		pmu = type->pmus;
 		for (i = 0; i < type->num_boxes; i++, pmu++) {
 			box = pmu->boxes[id];
@@ -1404,8 +1407,8 @@ static int uncore_event_cpu_online(unsigned int cpu)
 	int die, target, msr_ret, mmio_ret;
 
 	die = topology_logical_die_id(cpu);
-	msr_ret = uncore_box_ref(uncore_msr_uncores, die, cpu);
-	mmio_ret = uncore_box_ref(uncore_mmio_uncores, die, cpu);
+	msr_ret = uncore_box_ref(&uncore_msr_uncores, die, cpu);
+	mmio_ret = uncore_box_ref(&uncore_mmio_uncores, die, cpu);
 	if (msr_ret && mmio_ret)
 		return -ENOMEM;
 
@@ -1420,10 +1423,10 @@ static int uncore_event_cpu_online(unsigned int cpu)
 	cpumask_set_cpu(cpu, &uncore_cpu_mask);
 
 	if (!msr_ret)
-		uncore_change_context(uncore_msr_uncores, -1, cpu);
+		uncore_change_context(&uncore_msr_uncores, -1, cpu);
 	if (!mmio_ret)
-		uncore_change_context(uncore_mmio_uncores, -1, cpu);
-	uncore_change_context(uncore_pci_uncores, -1, cpu);
+		uncore_change_context(&uncore_mmio_uncores, -1, cpu);
+	uncore_change_context(&uncore_pci_uncores, -1, cpu);
 	return 0;
 }
 
@@ -1441,11 +1444,12 @@ static int __init type_pmu_register(struct intel_uncore_type *type)
 
 static int __init uncore_msr_pmus_register(void)
 {
-	struct intel_uncore_type **types = uncore_msr_uncores;
+	struct rb_root *types = &uncore_msr_uncores;
+	struct intel_uncore_type *type, *next;
 	int ret;
 
-	for (; *types; types++) {
-		ret = type_pmu_register(*types);
+	rbtree_postorder_for_each_entry_safe(type, next, types, type_node) {
+		ret = type_pmu_register(type);
 		if (ret)
 			return ret;
 	}
@@ -1456,7 +1460,7 @@ static int __init uncore_cpu_init(void)
 {
 	int ret;
 
-	ret = uncore_types_init(uncore_msr_uncores, true);
+	ret = uncore_types_init(&uncore_msr_uncores, true);
 	if (ret)
 		goto err;
 
@@ -1465,29 +1469,30 @@ static int __init uncore_cpu_init(void)
 		goto err;
 	return 0;
 err:
-	uncore_types_exit(uncore_msr_uncores);
-	uncore_msr_uncores = empty_uncore;
+	uncore_types_exit(&uncore_msr_uncores);
+	uncore_type_delete_all(&uncore_msr_uncores);
 	return ret;
 }
 
 static int __init uncore_mmio_init(void)
 {
-	struct intel_uncore_type **types = uncore_mmio_uncores;
+	struct rb_root *types = &uncore_mmio_uncores;
+	struct intel_uncore_type *type, *next;
 	int ret;
 
 	ret = uncore_types_init(types, true);
 	if (ret)
 		goto err;
 
-	for (; *types; types++) {
-		ret = type_pmu_register(*types);
+	rbtree_postorder_for_each_entry_safe(type, next, types, type_node) {
+		ret = type_pmu_register(type);
 		if (ret)
 			goto err;
 	}
 	return 0;
 err:
-	uncore_types_exit(uncore_mmio_uncores);
-	uncore_mmio_uncores = empty_uncore;
+	uncore_types_exit(&uncore_mmio_uncores);
+	uncore_type_delete_all(&uncore_mmio_uncores);
 	return ret;
 }
 
@@ -1739,8 +1744,8 @@ static int __init intel_uncore_init(void)
 	return 0;
 
 err:
-	uncore_types_exit(uncore_msr_uncores);
-	uncore_types_exit(uncore_mmio_uncores);
+	uncore_types_exit(&uncore_msr_uncores);
+	uncore_types_exit(&uncore_mmio_uncores);
 	uncore_pci_exit();
 	uncore_free_pcibus_map();
 	return ret;
@@ -1750,8 +1755,8 @@ module_init(intel_uncore_init);
 static void __exit intel_uncore_exit(void)
 {
 	cpuhp_remove_state(CPUHP_AP_PERF_X86_UNCORE_ONLINE);
-	uncore_types_exit(uncore_msr_uncores);
-	uncore_types_exit(uncore_mmio_uncores);
+	uncore_types_exit(&uncore_msr_uncores);
+	uncore_types_exit(&uncore_mmio_uncores);
 	uncore_pci_exit();
 	uncore_free_pcibus_map();
 }
