@@ -2559,14 +2559,14 @@
                 }
             ],
             "description": "Collection of new Intel RDT features",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Tony Luck",
                     "email": "tony.luck@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1896",
             "name": "rdt",
             "repourl": "ssh://git-amr-2.devtools.intel.com:29418/rt_linux-linux.git",
             "sdl_contact": [
