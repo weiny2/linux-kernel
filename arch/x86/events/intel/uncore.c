@@ -27,6 +27,12 @@ static struct event_constraint uncore_constraint_fixed =
 struct event_constraint uncore_constraint_empty =
 	EVENT_CONSTRAINT(0, 0, 0);
 
+/*
+ * List of Discovery tables, which only be accessed in module initialization
+ * Lock is not required for now.
+ */
+LIST_HEAD(discovery_table);
+
 MODULE_LICENSE("GPL");
 
 int uncore_pcibus_to_physid(struct pci_bus *bus)
@@ -1556,6 +1562,72 @@ static const struct x86_cpu_id intel_uncore_match[] __initconst = {
 };
 MODULE_DEVICE_TABLE(x86cpu, intel_uncore_match);
 
+
+static int discovery_table_pci2phy_map_init(struct pci_dev *pdev, int dieid)
+{
+	struct pci2phy_map *map;
+	int bus, segment;
+	int ret = 0;
+
+	bus = pdev->bus->number;
+	segment = pci_domain_nr(pdev->bus);
+
+	raw_spin_lock(&pci2phy_map_lock);
+	map = __find_pci2phy_map(segment);
+	if (!map) {
+		ret = -ENOMEM;
+		goto unlock;
+	}
+	map->pbus_to_physid[bus] = dieid;
+unlock:
+	raw_spin_unlock(&pci2phy_map_lock);
+	return ret;
+}
+
+bool __init check_discovery_table(void)
+{
+	struct uncore_discovery_table *table;
+	struct pci_dev *dev = NULL;
+	int dvsec, logical_die = 0;
+	u32 val, entry_id, bir;
+	bool ret = false;
+
+	/*
+	 * Check the existence of discovery table by searching all PCI devices
+	 * for unique capability ID.
+	 */
+	while ((dev = pci_get_device(PCI_VENDOR_ID_INTEL, PCI_ANY_ID, dev)) != NULL) {
+		while ((dvsec = pci_find_next_ext_capability(dev, dvsec, UNCORE_EXT_CAP_ID_DISCOVERY))) {
+			pci_read_config_dword(dev, dvsec + UNCORE_DISCOVERY_DVSEC_OFFSET, &val);
+			entry_id = val & UNCORE_DISCOVERY_DVSEC_ID_MASK;
+			if (entry_id == UNCORE_DISCOVERY_DVSEC_ID_PMON) {
+				table = kmalloc(sizeof(struct uncore_discovery_table), GFP_KERNEL);
+				if (!table)
+					continue;
+				pci_read_config_dword(dev, dvsec + UNCORE_DISCOVERY_DVSEC2_OFFSET, &val);
+				bir = val & UNCORE_DISCOVERY_DVSEC2_BIR_MASK;
+				table->domain = pci_domain_nr(dev->bus);
+				table->bus = dev->bus->number;
+				table->devfn = dev->devfn;
+				table->bar_offset = 0x10 + (bir * 4);
+				table->die = logical_die++;
+				if (discovery_table_pci2phy_map_init(dev, table->die)) {
+					kfree(table);
+					continue;
+				}
+				list_add_tail(&table->list, &discovery_table);
+				ret = true;
+				continue;
+			}
+		}
+	}
+	pci_dev_put(dev);
+
+	fill_up_pbus_to_physid_mapping(true);
+
+	return ret;
+}
+
 static int __init intel_uncore_init(void)
 {
 	const struct x86_cpu_id *id;
@@ -1604,6 +1676,7 @@ err:
 	uncore_types_exit(uncore_msr_uncores);
 	uncore_types_exit(uncore_mmio_uncores);
 	uncore_pci_exit();
+	uncore_free_pcibus_map();
 	return ret;
 }
 module_init(intel_uncore_init);
@@ -1614,5 +1687,6 @@ static void __exit intel_uncore_exit(void)
 	uncore_types_exit(uncore_msr_uncores);
 	uncore_types_exit(uncore_mmio_uncores);
 	uncore_pci_exit();
+	uncore_free_pcibus_map();
 }
 module_exit(intel_uncore_exit);
