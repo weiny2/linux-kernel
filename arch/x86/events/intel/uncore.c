@@ -1692,6 +1692,7 @@ err:
 }
 
 struct intel_uncore_init_fun {
+	int	(*discovery)(void);
 	void	(*cpu_init)(void);
 	int	(*pci_init)(void);
 	void	(*mmio_init)(void);
@@ -1785,6 +1786,13 @@ static const struct intel_uncore_init_fun snr_uncore_init __initconst = {
 	.cpu_init = snr_uncore_cpu_init,
 	.pci_init = snr_uncore_pci_init,
 	.mmio_init = snr_uncore_mmio_init,
+};
+
+static const struct intel_uncore_init_fun basic_uncore_init __initconst = {
+	.discovery = basic_uncore_discovery,
+	.cpu_init = basic_uncore_cpu_init,
+	.pci_init = basic_uncore_pci_init,
+	.mmio_init = basic_uncore_mmio_init,
 };
 
 static const struct x86_cpu_id intel_uncore_match[] __initconst = {
@@ -1900,20 +1908,32 @@ static int __init intel_uncore_init(void)
 	struct intel_uncore_init_fun *uncore_init;
 	int pret = 0, cret = 0, mret = 0, ret;
 
-	id = x86_match_cpu(intel_uncore_match);
-	if (!id)
-		return -ENODEV;
-
 	if (boot_cpu_has(X86_FEATURE_HYPERVISOR))
 		return -ENODEV;
 
+	id = x86_match_cpu(intel_uncore_match);
+	if (id)
+		uncore_init = (struct intel_uncore_init_fun *)id->driver_data;
+	else {
+		if (check_discovery_table())
+			uncore_init = (struct intel_uncore_init_fun *)&basic_uncore_init;
+		else
+			return -ENODEV;
+	}
+
 	max_dies = topology_max_packages() * topology_max_die_per_package();
 
-	uncore_init = (struct intel_uncore_init_fun *)id->driver_data;
+	if (uncore_init->discovery && uncore_init->discovery())
+		return -ENODEV;
+
 	if (uncore_init->pci_init) {
 		pret = uncore_init->pci_init();
-		if (!pret)
-			pret = uncore_pci_init();
+		if (!pret) {
+			if (uncore_init->discovery)
+				pret = uncore_pci_init_discovery();
+			else
+				pret = uncore_pci_init();
+		}
 	}
 
 	if (uncore_init->cpu_init) {
