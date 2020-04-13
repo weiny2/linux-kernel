@@ -1605,6 +1605,8 @@ static void adaptive_pebs_save_regs(struct pt_regs *regs,
 #endif
 }
 
+#define PEBS_CACHE_LATENCY_OFFSET	32
+#define PEBS_INSTR_LATENCY_MASK		0xffff
 /*
  * With adaptive PEBS the layout depends on what fields are configured.
  */
@@ -1675,9 +1677,19 @@ static void setup_pebs_adaptive_sample_data(struct perf_event *event,
 	}
 
 	if (format_size & PEBS_DATACFG_MEMINFO) {
-		if (sample_type & PERF_SAMPLE_WEIGHT)
-			data->weight = meminfo->latency ?:
+		if (sample_type & PERF_SAMPLE_WEIGHT) {
+			u64 weight = meminfo->latency;
+
+			if (x86_pmu.flags & PMU_FL_INSTR_LATENCY)
+				weight >>= PEBS_CACHE_LATENCY_OFFSET;
+
+			data->weight = weight ?:
 				intel_get_tsx_weight(meminfo->tsx_tuning);
+		}
+
+		if ((sample_type & PERF_SAMPLE_LATENCY) &&
+		    (x86_pmu.flags & PMU_FL_INSTR_LATENCY))
+			data->latency = meminfo->latency & PEBS_INSTR_LATENCY_MASK;
 
 		if (sample_type & PERF_SAMPLE_DATA_SRC)
 			data->data_src.val = get_data_src(event, meminfo->aux);

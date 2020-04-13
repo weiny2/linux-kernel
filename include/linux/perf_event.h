@@ -1030,6 +1030,7 @@ struct perf_sample_data {
 
 	u64				phys_addr;
 	u64				cgroup;
+	u64				latency;
 } ____cacheline_aligned;
 
 /* default value for data source */
