@@ -1038,7 +1038,9 @@ astute users may notice some differences in behavior:
 - The ext4 filesystem does not support data journaling with encrypted
   regular files.  It will fall back to ordered data mode instead.
 
-- DAX (Direct Access) is not supported on encrypted files.
+- DAX (Direct Access) is not supported on encrypted files.  Attempts to enable
+  DAX on an encrypted file will fail.  Mount options will _not_ enable DAX on
+  encrypted files.
 
 - The st_size of an encrypted symlink will not necessarily give the
   length of the symlink target as required by POSIX.  It will actually
