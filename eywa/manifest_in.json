@@ -3122,7 +3122,7 @@
             "stuck_at_ref": ""
         },
         {
-            "branch": "tags/cxl-5.7.0-rc1",
+            "branch": "cxl-next",
             "branch_type": "expiring",
             "config_options": [],
             "contributor": [
