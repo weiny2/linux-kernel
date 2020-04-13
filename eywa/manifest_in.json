@@ -1704,7 +1704,7 @@
                 }
             ],
             "description": "Fixup patch for issue between camera/pm-testing",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Kyle Pelton",
