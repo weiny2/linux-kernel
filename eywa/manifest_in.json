@@ -222,7 +222,7 @@
                 }
             ],
             "description": "NVME driver enabling",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Revanth Rajashekar",
