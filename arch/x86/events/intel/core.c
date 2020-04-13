@@ -2761,7 +2761,7 @@ static int intel_pmu_handle_irq_v4(struct pt_regs *regs)
 	if (!status)
 		goto done;
 again:
-	intel_pmu_lbr_read();
+	intel_pmu_lbr_read_all();
 	if (++loops > 100) {
 		static bool warned;
 
@@ -2845,7 +2845,7 @@ static int intel_pmu_handle_irq(struct pt_regs *regs)
 
 	loops = 0;
 again:
-	intel_pmu_lbr_read();
+	intel_pmu_lbr_read_all();
 	intel_pmu_ack_status(status);
 	if (++loops > 100) {
 		static bool warned;
@@ -4268,6 +4268,7 @@ static __initconst const struct x86_pmu core_pmu = {
 	.lbr_enable		= intel_pmu_lbr_enable,
 	.lbr_disable		= intel_pmu_lbr_disable,
 	.lbr_reset		= intel_pmu_lbr_reset_64,
+	.lbr_read		= intel_pmu_lbr_read_64,
 };
 
 static __initconst const struct x86_pmu intel_pmu = {
@@ -4317,6 +4318,7 @@ static __initconst const struct x86_pmu intel_pmu = {
 	.lbr_enable		= intel_pmu_lbr_enable,
 	.lbr_disable		= intel_pmu_lbr_disable,
 	.lbr_reset		= intel_pmu_lbr_reset_64,
+	.lbr_read		= intel_pmu_lbr_read_64,
 };
 
 static __init void intel_clovertown_quirk(void)
@@ -4988,8 +4990,10 @@ __init int intel_pmu_init(void)
 		x86_pmu.intel_cap.capabilities = capabilities;
 	}
 
-	if (x86_pmu.intel_cap.lbr_format == LBR_FORMAT_32)
+	if (x86_pmu.intel_cap.lbr_format == LBR_FORMAT_32) {
 		x86_pmu.lbr_reset = intel_pmu_lbr_reset_32;
+		x86_pmu.lbr_read = intel_pmu_lbr_read_32;
+	}
 
 	intel_ds_init();
 
