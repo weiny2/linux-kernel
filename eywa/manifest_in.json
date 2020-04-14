@@ -650,6 +650,22 @@
                 {
                     "name": "CONFIG_SPI_INTEL_SPI_PLATFORM",
                     "value": "m"
+                },
+                {
+                    "name": "CONFIG_PINCTRL_JASPERLAKE",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_PINCTRL_WHITLEY",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_USB4",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_USB4_NET",
+                    "value": "m"
                 }
             ],
             "contributor": [
@@ -659,7 +675,7 @@
                 }
             ],
             "description": "LPSS/SMBus/GPIO/SPI-NOR/PCI/Thunderbolt driver enabling",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Rajesh Bhaskar",
@@ -682,7 +698,7 @@
                     "email": "reuven.rozic@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1904",
             "name": "lpss",
             "repourl": "ssh://git-amr-4.devtools.intel.com:29418/mwesterb-linux.git",
             "sdl_contact": [
