@@ -666,6 +666,10 @@
                 {
                     "name": "CONFIG_USB4_NET",
                     "value": "m"
+                },
+                {
+                    "name": "CONFIG_MFD_INTEL_PMC_BXT",
+                    "value": "m"
                 }
             ],
             "contributor": [
@@ -675,7 +679,7 @@
                 }
             ],
             "description": "LPSS/SMBus/GPIO/SPI-NOR/PCI/Thunderbolt driver enabling",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Rajesh Bhaskar",
