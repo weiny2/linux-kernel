@@ -1703,15 +1703,15 @@
                     "email": "kyle.d.pelton@intel.com"
                 }
             ],
-            "description": "Fixup patch for issue between camera/pm-testing",
-            "enabled": false,
+            "description": "Workaround for simics frequency smpboot.c issue",
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Kyle Pelton",
                     "email": "kyle.d.pelton@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1899",
             "name": "fixups",
             "repourl": "ssh://git@gitlab.devtools.intel.com:29418/otc-power-management-enabling-team/otc-power-kernel.git",
             "sdl_contact": [
