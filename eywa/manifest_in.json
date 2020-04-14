@@ -969,7 +969,7 @@
             ],
             "jira": "NEXT-1900",
             "name": "edac",
-            "repourl": "ssh://git@gitlab.devtools.intel.com/qzhuo/otc-edac.git",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/qzhuo/otc-edac.git",
             "sdl_contact": [
                 {
                     "name": "Tony Luck",
