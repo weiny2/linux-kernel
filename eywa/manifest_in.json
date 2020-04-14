@@ -2022,7 +2022,7 @@
             "stuck_at_ref": ""
         },
         {
-            "branch": "intel-pt-perf-tools-v5.6",
+            "branch": "intel-pt-perf-tools-v5.7",
             "branch_type": "expiring",
             "config_options": [],
             "contributor": [
@@ -2032,14 +2032,14 @@
                 }
             ],
             "description": "Updates to perf tools for Intel PT",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Beeman Strong",
                     "email": "beeman.strong@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1902",
             "name": "perf-tools",
             "repourl": "ssh://git-amr-3.devtools.intel.com:29418/otc_mmc-linux",
             "sdl_contact": [
