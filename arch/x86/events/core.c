@@ -1041,8 +1041,10 @@ static int add_nr_metric_event(struct cpu_hw_events *cpuc,
 			       int *max_count, bool sibling)
 {
 	/* There are 4 TopDown metrics events. */
-	if (is_metric_event(event) && (++cpuc->n_metric_event > 4))
+	if (is_metric_event(event) && (++cpuc->n_metric_event > 4)) {
+		cpuc->n_metric_event--;
 		return -EINVAL;
+	}
 
 	/*
 	 * Take the accepted metrics events into account for leader event.
@@ -1375,8 +1377,11 @@ static int x86_pmu_add(struct perf_event *event, int flags)
 
 	n0 = cpuc->n_events;
 	ret = n = collect_events(cpuc, event, false);
-	if (ret < 0)
+	if (ret < 0) {
+		pr_debug("event: 0x%llx failed to be added, n0 %d, ret %d, n_metric_event %d\n",
+			 event->attr.config, n0, ret, cpuc->n_metric_event);
 		goto out;
+	}
 
 	hwc->state = PERF_HES_UPTODATE | PERF_HES_STOPPED;
 	if (!(flags & PERF_EF_START))
