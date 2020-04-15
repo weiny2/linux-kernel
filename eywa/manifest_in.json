@@ -1023,7 +1023,7 @@
                 }
             ],
             "description": "TGL, JSL and RKL PMC core driver changes and new AVX512 cpuid support",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Mark Charney",
@@ -1034,7 +1034,7 @@
                     "email": "christopher.j.lake@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1911",
             "name": "pmc_core",
             "repourl": "ssh://git@gitlab.devtools.intel.com:29418/gkammela/pmc_core-intel-next.git",
             "sdl_contact": [
