@@ -2283,7 +2283,7 @@
                 }
             ],
             "description": "TGPIO branch",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Abdul Rahman Ismail",
@@ -2294,7 +2294,7 @@
                     "email": "raymond.tan@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1909",
             "name": "ADC/TGPIO/PWM/QEP/MCAN",
             "repourl": "git://git-amr-4.devtools.intel.com/jarkkoni-linux.git",
             "sdl_contact": [
