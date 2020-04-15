@@ -3168,7 +3168,7 @@
             "stuck_at_ref": ""
         },
         {
-            "branch": "for-5.7/firmware-activate",
+            "branch": "for-5.8/firmware-activate",
             "branch_type": "expiring",
             "config_options": [],
             "contributor": [
@@ -3178,14 +3178,14 @@
                 }
             ],
             "description": "Implementation for DCPMM Runtime Firmware Activation support",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Murugasamy Nachimuthu",
                     "email": "murugasamy.nachimuthu@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1912",
             "name": "libnvdimm",
             "repourl": "ssh://git@gitlab.devtools.intel.com:29418/otc-clk-server/linux-nvdimm/linux.git",
             "sdl_contact": [
