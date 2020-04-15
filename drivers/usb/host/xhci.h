@@ -1538,9 +1538,11 @@ struct xhci_td {
 	struct xhci_segment	*start_seg;
 	union xhci_trb		*first_trb;
 	union xhci_trb		*last_trb;
+	struct xhci_segment	*last_trb_seg;
 	struct xhci_segment	*bounce_seg;
 	/* actual_length of the URB has already been set */
 	bool			urb_length_set;
+	unsigned int		num_trbs;
 };
 
 /* xHCI command default timeout value */
@@ -2116,8 +2118,9 @@ void xhci_find_new_dequeue_state(struct xhci_hcd *xhci,
 void xhci_queue_new_dequeue_state(struct xhci_hcd *xhci,
 		unsigned int slot_id, unsigned int ep_index,
 		struct xhci_dequeue_state *deq_state);
-void xhci_cleanup_stalled_ring(struct xhci_hcd *xhci, unsigned int ep_index,
-		unsigned int stream_id, struct xhci_td *td);
+void xhci_cleanup_stalled_ring(struct xhci_hcd *xhci, unsigned int slot_id,
+			       unsigned int ep_index, unsigned int stream_id,
+			       struct xhci_td *td);
 void xhci_stop_endpoint_command_watchdog(struct timer_list *t);
 void xhci_handle_command_timeout(struct work_struct *work);
 
