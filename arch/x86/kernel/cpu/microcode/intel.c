@@ -92,12 +92,10 @@ static int find_matching_signature(void *mc, unsigned int csig, int cpf)
  */
 static int has_newer_microcode(void *mc, unsigned int csig, int cpf, int new_rev)
 {
-#ifndef CONFIG_SVOS
 	struct microcode_header_intel *mc_hdr = mc;
 
 	if (mc_hdr->rev <= new_rev)
 		return 0;
-#endif
 
 	return find_matching_signature(mc, csig, cpf);
 }
@@ -183,10 +181,8 @@ static void save_microcode_patch(void *data, unsigned int size)
 		if (find_matching_signature(data, sig, pf)) {
 			prev_found = true;
 
-#ifndef CONFIG_SVOS
 			if (mc_hdr->rev <= mc_saved_hdr->rev)
 				continue;
-#endif
 
 			p = memdup_patch(data, size);
 			if (!p)
@@ -597,12 +593,10 @@ static int apply_microcode_early(struct ucode_cpu_info *uci, bool early)
 	 * already.
 	 */
 	rev = intel_get_microcode_revision();
-#ifndef CONFIG_SVOS
 	if (rev >= mc->hdr.rev) {
 		uci->cpu_sig.rev = rev;
 		return UCODE_OK;
 	}
-#endif
 
 	/*
 	 * Writeback and invalidate caches before updating microcode to avoid
@@ -919,7 +913,12 @@ static enum ucode_state generic_load_microcode(int cpu, struct iov_iter *iter)
 
 		csig = uci->cpu_sig.sig;
 		cpf = uci->cpu_sig.pf;
+#ifdef CONFIG_SVOS
+		// SVOS supports user microcode load without enforcing version rules
+		if (find_matching_signature(mc, csig, cpf)) {
+#else
 		if (has_newer_microcode(mc, csig, cpf, new_rev)) {
+#endif
 			vfree(new_mc);
 			new_rev = mc_header.rev;
 			new_mc  = mc;
