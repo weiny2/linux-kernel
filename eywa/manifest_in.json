@@ -3286,6 +3286,36 @@
             ],
             "status": "public",
             "stuck_at_ref": ""
+        },
+        {
+            "branch": "lass-kernel",
+            "branch_type": "expiring",
+            "config_options": [],
+            "contributor": [
+                {
+                    "name": "Yian Chen",
+                    "email": "yian.chen@intel.com"
+                }
+            ],
+            "description": "Enable ISA extensionof LASS",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Vedvyas Shanbhogue",
+                    "email": "vedvyas.shanbhogue@intel.com"
+                }
+            ],
+            "jira": "NEXT-1914",
+            "name": "LASS",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/chenyian/lass-kernel-v5.6-rc2.git",
+            "sdl_contact": [
+                {
+                    "name": "vedvyas shanbhogue",
+                    "email": "vedvyas.shanbhogue@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": ""
         }
     ]
 }
