@@ -95,8 +95,9 @@ void sdhci_dumpregs(struct sdhci_host *host)
 	SDHCI_DUMP("Resp[2]:   0x%08x | Resp[3]:  0x%08x\n",
 		   sdhci_readl(host, SDHCI_RESPONSE + 8),
 		   sdhci_readl(host, SDHCI_RESPONSE + 12));
-	SDHCI_DUMP("Host ctl2: 0x%08x\n",
-		   sdhci_readw(host, SDHCI_HOST_CONTROL2));
+	SDHCI_DUMP("Host ctl2: 0x%08x | Reset:    0x%08x\n",
+		   sdhci_readw(host, SDHCI_HOST_CONTROL2),
+		   sdhci_readb(host, SDHCI_SOFTWARE_RESET));
 
 	if (host->flags & SDHCI_USE_ADMA) {
 		if (host->flags & SDHCI_USE_64_BIT_DMA) {
