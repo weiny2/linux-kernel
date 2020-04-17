@@ -2435,7 +2435,7 @@
             "stuck_at_ref": ""
         },
         {
-            "branch": "svos-next-pull-5.6",
+            "branch": "svos-next-pull-5.7",
             "branch_type": "expiring",
             "config_options": [
                 {
@@ -2458,14 +2458,14 @@
                 }
             ],
             "description": "SVOS Kernel/Driver Changes for v5.6",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Tom Stonecypher",
                     "email": "tom.stonecypher@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1915",
             "name": "SVOS Kernel",
             "repourl": "ssh://git-amr-1.devtools.intel.com:29418/svos_kernel-next.git",
             "sdl_contact": [
