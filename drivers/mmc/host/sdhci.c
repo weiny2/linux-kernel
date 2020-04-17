@@ -3787,6 +3787,7 @@ void sdhci_cqe_disable(struct mmc_host *mmc, bool recovery)
 {
 	struct sdhci_host *host = mmc_priv(mmc);
 	unsigned long flags;
+	u32 reg = 0;
 
 	spin_lock_irqsave(&host->lock, flags);
 
@@ -3797,6 +3798,7 @@ void sdhci_cqe_disable(struct mmc_host *mmc, bool recovery)
 	if (recovery) {
 		sdhci_do_reset(host, SDHCI_RESET_CMD);
 		sdhci_do_reset(host, SDHCI_RESET_DATA);
+		reg = sdhci_readl(host, SDHCI_PRESENT_STATE);
 	}
 
 	pr_debug("%s: sdhci: CQE off, IRQ mask %#x, IRQ status %#x\n",
@@ -3804,6 +3806,37 @@ void sdhci_cqe_disable(struct mmc_host *mmc, bool recovery)
 		 sdhci_readl(host, SDHCI_INT_STATUS));
 
 	spin_unlock_irqrestore(&host->lock, flags);
+
+	if (recovery && (reg & (SDHCI_CMD_INHIBIT | SDHCI_DATA_INHIBIT))) {
+		int again = 0;
+
+		pr_err("%s: %s: inhibit flags did not clear, present %#x , doing full reset\n",
+		       mmc_hostname(mmc), __func__, reg);
+reset_again:
+		sdhci_do_reset(host, SDHCI_RESET_ALL);
+		reg = sdhci_readl(host, SDHCI_PRESENT_STATE);
+		if (reg & (SDHCI_CMD_INHIBIT | SDHCI_DATA_INHIBIT)) {
+			if (again) {
+				pr_err("%s: %s: inhibit flags still did not clear, present %#x\n",
+				       mmc_hostname(mmc), __func__, reg);
+			} else {
+				pr_err("%s: %s: inhibit flags still did not clear, present %#x , disabling CQHCI and trying again\n",
+				       mmc_hostname(mmc), __func__, reg);
+				reg = sdhci_readl(host, 0x208);
+				reg &= ~0x1;
+				sdhci_writel(host, reg, 0x208);
+				again = 1;
+				goto reset_again;
+			}
+		} else {
+			pr_err("%s: %s: inhibit flags now clear, present %#x , setting io state\n",
+			       mmc_hostname(mmc), __func__, reg);
+			host->clock = 0;
+			mmc->ops->set_ios(mmc, &mmc->ios);
+			pr_err("%s: %s: done setting io state\n",
+			       mmc_hostname(mmc), __func__);
+		}
+	}
 }
 EXPORT_SYMBOL_GPL(sdhci_cqe_disable);
 
