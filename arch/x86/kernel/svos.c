@@ -23,6 +23,7 @@
 #include <asm/tlbflush.h>
 #include <linux/pfn.h>
 #include <linux/pci.h>
+#include <linux/kallsyms.h>
 
 struct mm_struct *svfs_init_mmP = &init_mm;
 EXPORT_SYMBOL(svfs_init_mmP);
@@ -354,3 +355,5 @@ extern void flush_tlb_all(void);
 EXPORT_SYMBOL(flush_tlb_all);
 extern void set_cpu_online(unsigned int cpu, bool online);
 EXPORT_SYMBOL(set_cpu_online);
+extern unsigned long kallsyms_lookup_name(const char *name);
+EXPORT_SYMBOL(kallsyms_lookup_name);
