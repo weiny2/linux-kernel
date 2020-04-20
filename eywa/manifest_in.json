@@ -725,7 +725,7 @@
                 }
             ],
             "description": "PMU support on Cannon Lake, Rocket Lake, Jasper Lake, and SPR",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Beeman Strong",
