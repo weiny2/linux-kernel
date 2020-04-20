@@ -1958,7 +1958,11 @@ static bool core_set_max_freq_ratio(u64 *base_freq, u64 *turbo_freq)
 	*base_freq = (*base_freq >> 8) & 0xFF;      /* max P state */
 	*turbo_freq = (*turbo_freq >> 24) & 0xFF;   /* 4C turbo    */
 
-	return true;
+	/*
+	 * We cannot use frequency invariance if we don't know the base and
+	 * turbo frequency ratios.
+	 */
+	return *base_freq && *turbo_freq;
 }
 
 static bool intel_set_max_freq_ratio(void)
