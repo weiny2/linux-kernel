@@ -964,7 +964,7 @@
             "contributor": [
                 {
                     "name": "Qiuxu Zhou",
-                    "email": "qiuxu.zhou@intel.com"
+                    "email": "qiuxu.zhuo@intel.com"
                 }
             ],
             "description": "Linux EDAC support for SPR, EHL, ICL NNPI and and IEH support for TGL.",
