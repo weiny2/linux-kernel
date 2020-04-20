@@ -1763,16 +1763,16 @@
                 }
             ],
             "description": "Control-flow Enforcement Technology (CET) provides protection againstreturn/jump-oriented programming (ROP) attacks.",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Vedvyas Shanbhogue",
                     "email": "vedvyas.shanbhogue@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1919",
             "name": "cet",
-            "repourl": "git://github.com/yyu168/linux_cet",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/yyu32/linux_cet.git",
             "sdl_contact": [
                 {
                     "name": "Yu-cheng Yu",
