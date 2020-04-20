@@ -2107,7 +2107,7 @@
             "stuck_at_ref": ""
         },
         {
-            "branch": "release-v5.6-rc1",
+            "branch": "release-v5.7-rc1",
             "branch_type": "expiring",
             "config_options": [
                 {
@@ -2134,14 +2134,14 @@
                 }
             ],
             "description": "VPU/IPC support for Keem Bay and TBH",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Farrell, David T",
                     "email": "david.t.farrell@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1916",
             "name": "ipc",
             "repourl": "ssh://git@gitlab.devtools.intel.com:29418/mvds-linux-dev/thunder-bay-linux/tbh-linux.git",
             "sdl_contact": [
