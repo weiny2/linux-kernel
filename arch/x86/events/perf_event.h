@@ -849,11 +849,6 @@ struct x86_pmu {
 	int (*check_period) (struct perf_event *event, u64 period);
 
 	int (*aux_output_match) (struct perf_event *event);
-
-	/*
-	 * Intel CET Shadow Stack
-	 */
-	int (*store_shadow_stack_user) (struct perf_callchain_entry_ctx *entry);
 };
 
 struct x86_perf_task_context {
