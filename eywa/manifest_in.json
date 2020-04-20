@@ -2493,7 +2493,7 @@
                 }
             ],
             "description": "Intel User interrupt support",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Jacob Pan",
@@ -2504,7 +2504,7 @@
                     "email": "ashok.raj@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1917",
             "name": "Intel User interrupt",
             "repourl": "ssh://git-ger-6.devtools.intel.com:29418/uli-linux-kernel.git",
             "sdl_contact": [
