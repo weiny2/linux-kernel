@@ -372,14 +372,14 @@
                 }
             ],
             "description": "ICX intel NTB enabling",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Rajesh Pamujula",
                     "email": "rajesh.s.pamujula@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1918",
             "name": "ntb",
             "repourl": "ssh://git-amr-1.devtools.intel.com:29418/csig_storage_group-linux-kernel.git",
             "sdl_contact": [
