@@ -36,6 +36,10 @@
 
 u32 lpm_req_regs[8][6];
 static struct pmc_dev pmc;
+static int test_state;
+static int latch_state;
+static int latch_mode;
+static bool clear_lpm_events;
 
 /* PKGC MSRs are common across Intel Core SoCs */
 static const struct pmc_bit_map msr_map[] = {
@@ -573,10 +577,12 @@ static const struct pmc_reg_map tgl_reg_map = {
 	.ltr_ignore_max = TGL_NUM_IP_IGN_ALLOWED,
 	.lpm_modes = tgl_lpm_modes,
 	.lpm_en_offset = TGL_LPM_EN_OFFSET,
+	.lpm_sts_latch_offset = TGL_LPM_STATUS_LATCH_OFFSET,
 	.lpm_residency_offset = TGL_LPM_RESIDENCY_OFFSET,
 	.lpm_sts = tgl_lpm_maps,
 	.lpm_status_offset = TGL_LPM_STATUS_OFFSET,
 	.lpm_live_status_offset = TGL_LPM_LIVE_STATUS_OFFSET,
+	.lpm_etr3_offset = TGL_LPM_ETR3_OFFSET,
 };
 
 static const struct pmc_reg_map adl_reg_map = {
@@ -674,10 +680,11 @@ static int pmc_core_lpm_get_arr_size(const struct pmc_bit_map **maps)
 static void pmc_core_lpm_display(struct pmc_dev *pmcdev, struct device *dev,
 				 struct seq_file *s, u32 offset,
 				 const char *str,
-				 const struct pmc_bit_map **maps)
+				 const struct pmc_bit_map **maps,
+				 bool check_req)
 {
 	int index, idx, len = 32, bit_mask, arr_size;
-	u32 *lpm_regs;
+	u32 *lpm_regs, state;
 
 	arr_size = pmc_core_lpm_get_arr_size(maps);
 	lpm_regs = kmalloc_array(arr_size, sizeof(*lpm_regs), GFP_KERNEL);
@@ -690,6 +697,8 @@ static void pmc_core_lpm_display(struct pmc_dev *pmcdev, struct device *dev,
 	}
 
 	for (idx = 0; idx < arr_size; idx++) {
+		if (check_req && (lpm_regs[idx] == 0))
+			continue;
 		if (dev)
 			dev_dbg(dev, "\nLPM_%s_%d:\t0x%x\n", str, idx,
 				lpm_regs[idx]);
@@ -697,15 +706,25 @@ static void pmc_core_lpm_display(struct pmc_dev *pmcdev, struct device *dev,
 			seq_printf(s, "\nLPM_%s_%d:\t0x%x\n", str, idx,
 				   lpm_regs[idx]);
 		for (index = 0; maps[idx][index].name && index < len; index++) {
+			/*
+			 * If we are checking requirements, we only care
+			 * about the ones that are set for the s0ix_y mode
+			 * being checked.
+			 */
+			if (check_req && (lpm_req_regs[test_state][index] == 0))
+				continue;
+
 			bit_mask = maps[idx][index].bit_mask;
-			if (dev)
+
+			state = lpm_regs[idx] & bit_mask;
+			if (dev && (!check_req || state == 0))
 				dev_dbg(dev, "%-30s %-30d\n",
 					maps[idx][index].name,
-					lpm_regs[idx] & bit_mask ? 1 : 0);
-			if (s)
+					state ? 1 : 0);
+			if (s && (!check_req || state == 0 ))
 				seq_printf(s, "%-30s %-30d\n",
 					   maps[idx][index].name,
-					   lpm_regs[idx] & bit_mask ? 1 : 0);
+					   state ? 1 : 0);
 		}
 	}
 
@@ -1122,7 +1141,7 @@ static int pmc_core_substate_sts_regs_show(struct seq_file *s, void *unused)
 	const struct pmc_bit_map **maps = pmcdev->map->lpm_sts;
 	u32 offset = pmcdev->map->lpm_status_offset;
 
-	pmc_core_lpm_display(pmcdev, NULL, s, offset, "STATUS", maps);
+	pmc_core_lpm_display(pmcdev, NULL, s, offset, "STATUS", maps, false);
 
 	return 0;
 }
@@ -1134,7 +1153,8 @@ static int pmc_core_substate_l_sts_regs_show(struct seq_file *s, void *unused)
 	const struct pmc_bit_map **maps = pmcdev->map->lpm_sts;
 	u32 offset = pmcdev->map->lpm_live_status_offset;
 
-	pmc_core_lpm_display(pmcdev, NULL, s, offset, "LIVE_STATUS", maps);
+	pmc_core_lpm_display(pmcdev, NULL, s, offset, "LIVE_STATUS", maps,
+			     false);
 
 	return 0;
 }
@@ -1400,9 +1420,212 @@ static int pmc_core_remove(struct platform_device *pdev)
 
 #ifdef CONFIG_PM_SLEEP
 
+static u32 pmc_core_etr3_read(void)
+{
+	struct pmc_dev *pmcdev = &pmc;
+
+	return pmc_core_reg_read(pmcdev, TGL_LPM_ETR3_OFFSET);
+}
+
+static void pmc_core_etr3_write(u32 value)
+{
+	struct pmc_dev *pmcdev = &pmc;
+
+	pmc_core_reg_write(pmcdev, TGL_LPM_ETR3_OFFSET, value);
+}
+
 static bool warn_on_s0ix_failures;
 module_param(warn_on_s0ix_failures, bool, 0644);
 MODULE_PARM_DESC(warn_on_s0ix_failures, "Check and warn for S0ix failures");
+
+static int latch_mode_set(const char *str, const struct kernel_param *kp) {
+	struct pmc_dev *pmcdev = &pmc;
+	int mode;
+	u32 reg;
+
+	mode = sysfs_match_string(latch_modes, str);
+	if (mode < 0)
+		return mode;
+
+	reg = pmc_core_reg_read(pmcdev, pmcdev->map->lpm_sts_latch_offset);
+
+	/*
+	 * If the latch mode is s0ix_y, than the C10 bit will be ignored, but
+	 * if the mode is C10 entry or exit, we need to clear the s0ix_y bit as
+	 * well.
+	 */
+	if (mode == LPM_LATCH_S0IX_Y) {
+		reg |= LPM_STS_LATCH_MODE_BIT;
+		pmc_core_reg_write(pmcdev, pmcdev->map->lpm_sts_latch_offset, reg);
+	} else {
+		reg &= ~LPM_STS_LATCH_MODE_BIT;
+		pmc_core_reg_write(pmcdev, pmcdev->map->lpm_sts_latch_offset, reg);
+
+		reg = pmc_core_etr3_read();
+
+		if (mode == LPM_LATCH_C10_EXIT)
+			reg |= ETR3_LATCH_EVENTS_C10_EXIT_BIT;
+		else
+			reg &= ~ETR3_LATCH_EVENTS_C10_EXIT_BIT;
+
+		pmc_core_etr3_write(reg);
+	}
+
+	return 0;
+}
+
+static int latch_mode_get(char *buf,  const struct kernel_param *kp) {
+	struct pmc_dev *pmcdev = &pmc;
+	int i, cnt = 0;
+	u32 reg, mode;
+
+	reg = pmc_core_reg_read(pmcdev, pmcdev->map->lpm_sts_latch_offset);
+	if (reg & LPM_STS_LATCH_MODE_BIT)
+		mode = LPM_LATCH_S0IX_Y;
+	else {
+		reg = pmc_core_etr3_read();
+		if (reg & ETR3_LATCH_EVENTS_C10_EXIT_BIT)
+			mode = LPM_LATCH_C10_EXIT;
+		else
+			mode = LPM_LATCH_C10_ENTRY;
+	}
+
+	for (i = 0; i < (ARRAY_SIZE(latch_modes) - 1); i++) {
+		if (i == mode) {
+			cnt += sprintf(buf + cnt, "[%s]", latch_modes[i]);
+		} else {
+			cnt += sprintf(buf + cnt, "%s", latch_modes[i]);
+		} if (i < (ARRAY_SIZE(latch_modes) - 1))
+			cnt += sprintf(buf + cnt, " ");
+	}
+
+	cnt += sprintf(buf + cnt, "\n");
+
+	return cnt;
+}
+
+static const struct kernel_param_ops latch_mode_ops = {
+	.set = latch_mode_set,
+	.get = latch_mode_get,
+};
+
+module_param_cb(latch_mode, &latch_mode_ops, &latch_mode, 0644);
+MODULE_PARM_DESC(latch_mode, "S0ix state to test when warn_on_s0ix_failures"
+		 " is set");
+
+static int latch_state_set(const char *str, const struct kernel_param *kp)
+{
+	struct pmc_dev *pmcdev = &pmc;
+	u32 reg;
+
+	latch_state = sysfs_match_string(tgl_lpm_modes, str);
+	if (latch_state < 0)
+		return latch_state;
+
+	reg = pmc_core_reg_read(pmcdev, pmcdev->map->lpm_sts_latch_offset);
+	reg &= ~LPM_STS_LATCH_EN_GROUP_MASK;
+	reg |= 1 << latch_state;
+	pmc_core_reg_write(pmcdev, pmcdev->map->lpm_sts_latch_offset, reg);
+
+	return 0;
+}
+
+static int latch_state_get(char *buf, const struct kernel_param *kp) {
+	struct pmc_dev *pmcdev = &pmc;
+	u32 reg, state;
+	int i, cnt = 0;
+
+	reg = pmc_core_reg_read(pmcdev, pmcdev->map->lpm_sts_latch_offset);
+	state = reg & LPM_STS_LATCH_EN_GROUP_MASK;
+
+	/*
+	 * We want to test only one state at a time, but nothing prevents there
+	 * from being multiple states latched. If this is the case, cycle
+	 * through the bits here to show all of the latched states.
+	 */
+	for (i = 0; i < (ARRAY_SIZE(tgl_lpm_modes) - 1); i++) {
+		if (BIT(i) & state)
+			cnt += sprintf(buf + cnt, "[%s]", tgl_lpm_modes[i]);
+		else
+			cnt += sprintf(buf + cnt, "%s", tgl_lpm_modes[i]);
+
+		if (i < (ARRAY_SIZE(tgl_lpm_modes) - 1)) {
+			cnt += sprintf(buf + cnt, " ");
+		}
+	}
+
+	cnt += sprintf(buf + cnt, "\n");
+
+	return cnt;
+}
+
+static const struct kernel_param_ops latch_state_ops = {
+	.set = latch_state_set,
+	.get = latch_state_get,
+};
+
+module_param_cb(latch_state, &latch_state_ops, &latch_state, 0644);
+MODULE_PARM_DESC(latch_state, "S0ix state to latch when warn_on_s0ix_failures"
+		 " is set");
+
+static int test_state_set(const char *str, const struct kernel_param *kp)
+{
+	int state = sysfs_match_string(tgl_lpm_modes, str);
+
+	if (state < 0)
+		return state;
+
+	test_state = state;
+
+	return 0;
+}
+
+static int test_state_get(char *buf, const struct kernel_param *kp)
+{
+	int i, cnt = 0;
+
+	for (i = 0; i < (ARRAY_SIZE(tgl_lpm_modes) - 1); i++) {
+		if (i == test_state)
+			cnt += sprintf(buf + cnt, "[%s]", tgl_lpm_modes[i]);
+		else
+			cnt += sprintf(buf + cnt, "%s", tgl_lpm_modes[i]);
+
+		if (i < (ARRAY_SIZE(tgl_lpm_modes) - 1)) {
+			cnt += sprintf(buf + cnt, " ");
+		}
+	}
+
+	cnt += sprintf(buf + cnt, "\n");
+
+	return cnt;
+}
+
+static const struct kernel_param_ops test_state_ops = {
+	.set = test_state_set,
+	.get = test_state_get,
+};
+
+module_param_cb(test_state, &test_state_ops, &test_state, 0644);
+MODULE_PARM_DESC(test_state, "S0ix state to test when warn_on_s0ix_failures"
+		 " is set");
+
+static int clear_lpm_events_set(const char *str, const struct kernel_param *kp)
+{
+	u32 value = pmc_core_etr3_read();
+
+	value |= ETR3_CLR_LPM_EVENTS_BIT;
+	pmc_core_etr3_write(value);
+
+	return 0;
+}
+
+static const struct kernel_param_ops clear_lpm_events_ops = {
+	.set = clear_lpm_events_set,
+};
+
+module_param_cb(clear_lpm_events, &clear_lpm_events_ops, &clear_lpm_events,
+		0644);
+MODULE_PARM_DESC(clear_lpm_events, "Clear the LPM Status Registers");
 
 static int pmc_core_suspend(struct device *dev)
 {
@@ -1422,11 +1645,18 @@ static int pmc_core_suspend(struct device *dev)
 	if (rdmsrl_safe(MSR_PKG_C10_RESIDENCY, &pmcdev->pc10_counter))
 		return -EIO;
 
-	/* Save S0ix residency for checking later */
+	/* Save SLP_S0 residency for checking later */
 	if (pmc_core_dev_state_get(pmcdev, &pmcdev->s0ix_counter))
 		return -EIO;
 
+	/* Save substate residency for checking later */
+	if (pmcdev->map->lpm_sts)
+		pmcdev->s0ix_y_counter = pmc_core_reg_read(pmcdev,
+					 pmcdev->map->lpm_residency_offset +
+					 (4 * test_state));
+
 	pmcdev->check_counters = true;
+
 	return 0;
 }
 
@@ -1456,6 +1686,16 @@ static inline bool pmc_core_is_s0ix_failed(struct pmc_dev *pmcdev)
 	return false;
 }
 
+static inline bool pmc_core_is_s0ix_y_failed(struct pmc_dev *pmcdev)
+{
+	u64 counter;
+
+	counter = pmc_core_reg_read(pmcdev,
+				    pmcdev->map->lpm_residency_offset +
+				    (4 * test_state));
+
+	return counter == pmcdev->s0ix_y_counter; }
+
 static int pmc_core_resume(struct device *dev)
 {
 	struct pmc_dev *pmcdev = dev_get_drvdata(dev);
@@ -1465,8 +1705,13 @@ static int pmc_core_resume(struct device *dev)
 	if (!pmcdev->check_counters)
 		return 0;
 
-	if (!pmc_core_is_s0ix_failed(pmcdev))
-		return 0;
+	if (!pmcdev->map->lpm_sts) {
+		if (!pmc_core_is_s0ix_failed(pmcdev))
+			return 0;
+	} else {
+		if (!pmc_core_is_s0ix_y_failed(pmcdev))
+			return 0;
+	}
 
 	if (pmc_core_is_pc10_failed(pmcdev)) {
 		/* S0ix failed because of PC10 entry failure */
@@ -1475,13 +1720,18 @@ static int pmc_core_resume(struct device *dev)
 		return 0;
 	}
 
-	/* The real interesting case - S0ix failed - lets ask PMC why. */
-	dev_warn(dev, "CPU did not enter SLP_S0!!! (S0ix cnt=%llu)\n",
-		 pmcdev->s0ix_counter);
-	if (pmcdev->map->slps0_dbg_maps)
+	if (pmcdev->map->slps0_dbg_maps) {
+		dev_warn(dev, "CPU did not enter SLP_S0!!! (S0ix cnt=%llu)\n",
+			 pmcdev->s0ix_counter);
 		pmc_core_slps0_display(pmcdev, dev, NULL);
-	if (pmcdev->map->lpm_sts)
-		pmc_core_lpm_display(pmcdev, dev, NULL, offset, "STATUS", maps);
+	}
+
+	if (pmcdev->map->lpm_sts) {
+		dev_warn(dev, "CPU did not enter %s!!! (S0ix cnt=%llu)\n",
+			 tgl_lpm_modes[test_state], pmcdev->s0ix_y_counter);
+		pmc_core_lpm_display(pmcdev, dev, NULL, offset, "STATUS", maps,
+				     true);
+	}
 
 	return 0;
 }
