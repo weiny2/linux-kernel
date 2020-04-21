@@ -2197,23 +2197,23 @@
             "stuck_at_ref": ""
         },
         {
-            "branch": "cta_arch",
+            "branch": "cta_arch_5.7",
             "branch_type": "expiring",
             "config_options": [
                 {
-                    "name": "CONFIG_MFD_INTEL_CTA",
+                    "name": "CONFIG_MFD_INTEL_PMT",
                     "value": "m"
                 },
                 {
-                    "name": "CONFIG_INTEL_CTA_TELEM",
+                    "name": "CONFIG_INTEL_PMT_TELEM",
                     "value": "m"
                 },
                 {
-                    "name": "CONFIG_INTEL_CTA_WATCHER",
+                    "name": "CONFIG_INTEL_PMT_WATCHER",
                     "value": "m"
                 },
                 {
-                    "name": "CONFIG_INTEL_CTA_CRASHLOG",
+                    "name": "CONFIG_INTEL_PMT_CRASHLOG",
                     "value": "m"
                 }
             ],
@@ -2223,8 +2223,8 @@
                     "email": "david.e.box@intel.com"
                 }
             ],
-            "description": "Intel Converged Telemetry Architecture support for TGL",
-            "enabled": false,
+            "description": "Intel Converged Telemetry Architecture",
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Van De Groenendaal, Johan",
@@ -2239,8 +2239,8 @@
                     "email": "ramamurthy.krithivas@intel.com"
                 }
             ],
-            "jira": "",
-            "name": "cta",
+            "jira": "NEXT-1925",
+            "name": "pmt",
             "repourl": "ssh://git@gitlab.devtools.intel.com:29418/debox1/linux-kernel-dev.git",
             "sdl_contact": [
                 {
