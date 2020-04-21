@@ -1728,7 +1728,7 @@
                 }
             ],
             "description": "Workaround for simics frequency smpboot.c issue",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Kyle Pelton",
@@ -3323,6 +3323,31 @@
                 }
             ],
             "status": "intel confidential",
+            "stuck_at_ref": ""
+        },
+        {
+            "branch": "rneri/fix_freq_invariance",
+            "branch_type": "expiring",
+            "config_options": [],
+            "contributor": [
+                {
+                    "name": "Ricardo Neri",
+                    "email": "ricardo.neri-calderon@linux.intel.com"
+                }
+            ],
+            "description": "Fix a kernel panic observed when MSR_TURBO_RATIO_LIMIT does not return a sane value.",
+            "enabled": true,
+            "ip_owner": [],
+            "jira": "NEXT-1923",
+            "name": "simics-fixup",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/ranerica/linux-dev.git",
+            "sdl_contact": [
+                {
+                    "name": "Ravi Shankar",
+                    "email": "ravi.v.shankar@intel.com"
+                }
+            ],
+            "status": "public",
             "stuck_at_ref": ""
         }
     ]
