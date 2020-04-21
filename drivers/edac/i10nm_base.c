@@ -147,6 +147,11 @@ static struct res_config spr_cfg = {
 	.support_ddr5		= true,
 };
 
+#ifndef INTEL_FAM6_SAPPHIRERAPIDS
+	/* TODO: This define should be moved to arch/x86/include/asm/intel-family.h */
+	#define INTEL_FAM6_SAPPHIRERAPIDS       0x8F
+#endif
+
 static const struct x86_cpu_id i10nm_cpuids[] = {
 	X86_MATCH_INTEL_FAM6_MODEL(ATOM_TREMONT_D,	&i10nm_cfg0),
 	X86_MATCH_INTEL_FAM6_MODEL(ICELAKE_X,		&i10nm_cfg0),
