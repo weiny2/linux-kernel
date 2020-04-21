@@ -942,8 +942,17 @@ static struct dma_pte *pfn_to_dma_pte(struct dmar_domain *domain,
 
 			domain_flush_cache(domain, tmp_page, VTD_PAGE_SIZE);
 			pteval = ((uint64_t)virt_to_dma_pfn(tmp_page) << VTD_PAGE_SHIFT) | DMA_PTE_READ | DMA_PTE_WRITE;
-			if (domain_use_first_level(domain))
+			if (domain_use_first_level(domain)) {
 				pteval |= DMA_FL_PTE_XD;
+				if(IS_ENABLED(CONFIG_INTEL_IOMMU_WORKAROUND) &&
+				   (boot_cpu_data.x86_vendor == X86_VENDOR_INTEL) &&
+				   (boot_cpu_data.x86_model == 0x8F) &&
+				   (boot_cpu_data.x86_stepping == 0x0)) {
+					pr_info_once("Detected Intel SPR A0\n");
+					pr_info_once("Silicon workaround: setting U/S bit in the FL PTE");
+					pteval |= DMA_FL_PTE_SUPERVISOR;
+				}
+			}
 			if (cmpxchg64(&pte->val, 0ULL, pteval))
 				/* Someone else set it while we were thinking; use theirs. */
 				free_pgtable_page(tmp_page);
@@ -2325,8 +2334,17 @@ static int __domain_mapping(struct dmar_domain *domain, unsigned long iov_pfn,
 		return -EINVAL;
 
 	attr = prot & (DMA_PTE_READ | DMA_PTE_WRITE | DMA_PTE_SNP);
-	if (domain_use_first_level(domain))
+	if (domain_use_first_level(domain)) {
 		attr |= DMA_FL_PTE_PRESENT | DMA_FL_PTE_XD;
+		if(IS_ENABLED(CONFIG_INTEL_IOMMU_WORKAROUND) &&
+		   (boot_cpu_data.x86_vendor == X86_VENDOR_INTEL) &&
+		   (boot_cpu_data.x86_model == 0x8F) &&
+		   (boot_cpu_data.x86_stepping == 0x0)) {
+			pr_info_once("Detected Intel SPR A0\n");
+			pr_info_once("Silicon workaround: setting U/S bit in the FL PTE");
+			attr |= DMA_FL_PTE_SUPERVISOR;
+		}
+	}
 
 	if (!sg) {
 		sg_res = nr_pages;
