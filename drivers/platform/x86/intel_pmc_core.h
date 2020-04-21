@@ -187,6 +187,7 @@ enum ppfear_regs {
 #define ICL_PMC_LTR_WIGIG			0x1BFC
 
 #define TGL_NUM_IP_IGN_ALLOWED			22
+#define ADL_NUM_IP_IGN_ALLOWED			23
 
 /*
  * Tigerlake Power Management Controller register offsets
