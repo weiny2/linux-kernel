@@ -563,6 +563,11 @@ static struct notifier_block ieh_mce_dec = {
 	.priority	= MCE_PRIO_EDAC,
 };
 
+#ifndef INTEL_FAM6_SAPPHIRERAPIDS
+       /* TODO: This define should be moved to arch/x86/include/asm/intel-family.h */
+       #define INTEL_FAM6_SAPPHIRERAPIDS       0x8F
+#endif
+
 static const struct x86_cpu_id ieh_cpuids[] = {
 	X86_MATCH_INTEL_FAM6_MODEL(TIGERLAKE_L,	&tgl_lp_cfg),
 	X86_MATCH_INTEL_FAM6_MODEL(TIGERLAKE_L,	&tgl_h_cfg),
