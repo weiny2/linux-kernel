@@ -1231,6 +1231,14 @@
                 {
                     "name": "CONFIG_TYPEC_CCG_HPI",
                     "value": "m"
+                },
+                {
+                    "name": "CONFIG_USB_DWC3",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_USB_DWC3_PCI",
+                    "value": "m"
                 }
             ],
             "contributor": [
@@ -1240,14 +1248,14 @@
                 }
             ],
             "description": "Type-C Support",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Vijay Kadgi",
                     "email": "vijaykumar.b.kadgi@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1922",
             "name": "usb-typec",
             "repourl": "ssh://git-amr-4.devtools.intel.com:29418/otc_usb-typec.git",
             "sdl_contact": [
