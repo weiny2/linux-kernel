@@ -1589,14 +1589,14 @@
                 }
             ],
             "description": "GFX patch to load DMC firmware",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Matthew Attwood",
                     "email": "matthew.s.atwood@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1928",
             "name": "chrome-dmc",
             "repourl": "ssh://git@gitlab.devtools.intel.com:29418/otc-power-management-enabling-team/otc-power-kernel",
             "sdl_contact": [
