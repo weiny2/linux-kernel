@@ -1803,6 +1803,12 @@
 			hardware advertises that it has support for the scalable
 			mode translation. With this option set, scalable mode
 			will be used on hardware which claims to support it.
+		sm_off
+			When hardware advertises the support for the scalable
+			mode and CONFIG_INTEL_IOMMU_SCALABLE_MODE_DEFAULT_ON
+			is set, the Scalable mode will be enabled by default.
+			This option overrides the configuration even though
+			the hardware is capable to work in scalable mode.
 		tboot_noforce [Default Off]
 			Do not force the Intel IOMMU enabled under tboot.
 			By default, tboot will force Intel IOMMU on, which
