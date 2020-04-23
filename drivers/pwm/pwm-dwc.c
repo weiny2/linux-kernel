@@ -143,6 +143,9 @@ static int dwc_pwm_apply(struct pwm_chip *chip, struct pwm_device *pwm,
 {
 	struct dwc_pwm *dwc = to_dwc_pwm(chip);
 
+	if (state->polarity != PWM_POLARITY_NORMAL)
+		return -EINVAL;
+
 	mutex_lock(&dwc->lock);
 
 	if (state->enabled) {
@@ -173,6 +176,7 @@ static void dwc_pwm_get_state(struct pwm_chip *chip, struct pwm_device *pwm,
 	state->duty_cycle = __dwc_pwm_duty_ns(dwc, pwm->hwpwm);
 	state->period = __dwc_pwm_period_ns(dwc, pwm->hwpwm,
 					    state->duty_cycle);
+	state->polarity = PWM_POLARITY_NORMAL;
 	mutex_unlock(&dwc->lock);
 
 	pm_runtime_put_sync(dwc->dev);
@@ -190,7 +194,6 @@ static int dwc_pwm_probe(struct pci_dev *pci, const struct pci_device_id *id)
 	struct dwc_pwm *dwc;
 	struct device *dev;
 	int ret;
-	int i;
 
 	data = (struct dwc_pwm_driver_data *) id->driver_data;
 	dev = &pci->dev;
@@ -222,13 +225,6 @@ static int dwc_pwm_probe(struct pci_dev *pci, const struct pci_device_id *id)
 		return -ENOMEM;
 	}
 
-	/* mask all interrupts and disable all timers */
-	for (i = 0; i < data->npwm; i++) {
-		dwc_pwm_writel(0, dwc->base, DWC_TIM_CTRL(i));
-		dwc_pwm_writel(0, dwc->base, DWC_TIM_LD_CNT(i));
-		dwc_pwm_writel(0, dwc->base, DWC_TIM_CUR_VAL(i));
-	}
-
 	mutex_init(&dwc->lock);
 	pci_set_drvdata(pci, dwc);
 
@@ -250,13 +246,9 @@ static int dwc_pwm_probe(struct pci_dev *pci, const struct pci_device_id *id)
 static void dwc_pwm_remove(struct pci_dev *pci)
 {
 	struct dwc_pwm *dwc = pci_get_drvdata(pci);
-	int i;
 
 	pm_runtime_forbid(&pci->dev);
 	pm_runtime_get_noresume(&pci->dev);
-
-	for (i = 0; i < dwc->chip.npwm; i++)
-		pwm_disable(&dwc->chip.pwms[i]);
 
 	pwmchip_remove(&dwc->chip);
 }
