@@ -789,6 +789,10 @@
                 {
                     "name": "CONFIG_CRYPTO_AES_KL_INTEL",
                     "value": "m"
+                },
+                {
+                    "name": "CONFIG_X86_INTEL_KEYLOCKER",
+                    "value": "y"
                 }
             ],
             "contributor": [
