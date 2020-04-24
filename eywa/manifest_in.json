@@ -3031,26 +3031,26 @@
             "stuck_at_ref": ""
         },
         {
-            "branch": "lxy/vm-dos-virt",
+            "branch": "vm-dos-virt-intel-next",
             "branch_type": "expiring",
             "config_options": [],
             "contributor": [
                 {
-                    "name": "Chenyi Qiang",
-                    "email": "chenyi.qiang@intel.com"
+                    "name": "Xiaoyao Li",
+                    "email": "xiaoyao.li@intel.com"
                 }
             ],
             "description": "Bus Lock VM exit & No-commit VM exit",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Shanbhogue, Vedvyas",
                     "email": "vedvyas.shanbhogue@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1936",
             "name": "kvm-vmdos",
-            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/cqiang/spr-po-kvm.git",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/xiaoyaol/linux.git",
             "sdl_contact": [
                 {
                     "name": "Xiaoyao Li",
