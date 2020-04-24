@@ -1895,10 +1895,12 @@ bool __init check_discovery_table(void)
 				table->devfn = dev->devfn;
 				table->bar_offset = 0x10 + (bir * 4);
 				table->die = logical_die++;
+				/*
 				if (discovery_table_pci2phy_map_init(dev, table->die)) {
 					kfree(table);
 					continue;
 				}
+				*/
 				list_add_tail(&table->list, &discovery_table);
 				ret = true;
 				continue;
@@ -1907,7 +1909,7 @@ bool __init check_discovery_table(void)
 	}
 	pci_dev_put(dev);
 
-	fill_up_pbus_to_physid_mapping(true);
+//	fill_up_pbus_to_physid_mapping(true);
 
 	return ret;
 }
@@ -1921,11 +1923,15 @@ static int __init intel_uncore_init(void)
 	if (boot_cpu_has(X86_FEATURE_HYPERVISOR))
 		return -ENODEV;
 
+	check_discovery_table();
+
+	basic_uncore_discovery();
+
 	id = x86_match_cpu(intel_uncore_match);
 	if (id)
 		uncore_init = (struct intel_uncore_init_fun *)id->driver_data;
 	else {
-		if (check_discovery_table())
+		if (0 && check_discovery_table())
 			uncore_init = (struct intel_uncore_init_fun *)&basic_uncore_init;
 		else
 			return -ENODEV;

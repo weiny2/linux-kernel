@@ -4242,6 +4242,7 @@ int __init basic_uncore_discovery(void)
 		discovery_dev = pci_get_domain_bus_and_slot(table->domain,
 							    table->bus,
 							    table->devfn);
+		pr_info("die %d OOBMSM device: 0x%x 0x%x 0x%x\n", die, table->domain, table->bus, table->devfn);
 		if (!discovery_dev)
 			continue;
 
@@ -4265,13 +4266,20 @@ int __init basic_uncore_discovery(void)
 			pci_dev_put(discovery_dev);
 			return -EINVAL;
 		}
+		pr_info("Global Discovery table:\n");
+		pr_info("0x%llx 0x%llx 0x%llx\n", global.table1, global.table2, global.table3);
 
+		pr_info("Unit Discovery tables (%d):\n", global.max_units);
 		/* Parsing Unit Discovery State */
 		for (i = 0; i < global.max_units; i++) {
 			memcpy_fromio(&unit,
 				      io_addr + (i + 1) * (global.stride * 8),
 				      sizeof(struct uncore_unit_discovery));
 
+			pr_info("[%d]: 0x%llx 0x%llx 0x%llx\n", i, unit.table1, unit.table2, unit.table3);
+
+			if (1)
+				continue;
 			/* ignore the invalid unit */
 			if (check_invalid_unit(&unit))
 				continue;
