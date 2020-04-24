@@ -468,7 +468,8 @@
 
 /* SPR IAL */
 #define SPR_IAL_MMIO_PMON_CTL0			0x10
-#define SPR_IAL_MMIO_PMON_CTR0			0x50
+#define SPR_IAL_U0_MMIO_PMON_CTR0		0x50
+#define SPR_IAL_U1_MMIO_PMON_CTR0		0x30
 #define SPR_IAL_U0_MMIO_PMON_BOX_CTL		0x1300
 #define SPR_IAL_U1_MMIO_PMON_BOX_CTL		0x1b00
 #define SPR_IAL_MMIO_SIZE			0x100
@@ -6209,18 +6210,26 @@ static struct intel_uncore_type spr_uncore_imc_free_running = {
 	.format_group		= &skx_uncore_iio_freerunning_format_group,
 };
 
-static struct pci_dev *spr_uncore_ial_get_mc_dev(int id)
+static struct pci_dev *spr_uncore_ial_get_mc_dev(struct intel_uncore_box *box)
 {
 	struct pci_dev *mc_dev = NULL;
-	int phys_id, pkg;
+	int phys_id, pkg, id = box->dieid;
+	unsigned int devfn = PCI_DEVFN(box->pmu->pmu_idx * 2 + 1, 0);
+
+	pr_info("UNCORE: IAL U%d: PMU %d DIE %d devfn 0x%x\n",
+		(box->pmu->type->num_counters == 8) ? 0 : 1, box->pmu->pmu_idx, id, devfn);
 
 	while (1) {
-		mc_dev = pci_get_device(PCI_VENDOR_ID_INTEL, 0x3251, mc_dev);
+		mc_dev = pci_get_device(PCI_VENDOR_ID_INTEL, 0x3c01, mc_dev);
 		if (!mc_dev)
 			break;
 		phys_id = uncore_pcibus_to_physid(mc_dev->bus);
 		if (phys_id < 0)
 			continue;
+
+		if (devfn != mc_dev->devfn)
+			continue;
+
 		pkg = topology_phys_to_logical_pkg(phys_id);
 		if (pkg < 0)
 			continue;
@@ -6233,21 +6242,60 @@ static struct pci_dev *spr_uncore_ial_get_mc_dev(int id)
 static void spr_uncore_ial_mmio_init_box(struct intel_uncore_box *box,
 					 int mem_offset, unsigned int box_ctl)
 {
-	struct pci_dev *pdev = spr_uncore_ial_get_mc_dev(box->dieid);
+	struct pci_dev *pdev = spr_uncore_ial_get_mc_dev(box);
 	resource_size_t addr;
-	u32 pci_dword;
+	u64 pci_dword;
+	void __iomem *io_addr;
 
 	if (!pdev)
 		return;
 
-	pci_read_config_dword(pdev, SPR_IAL_MEMBAR0_OFFSET, &pci_dword);
-	addr = (resource_size_t)pci_dword;
+	pr_info("UNCORE: Init IAL: PMU %d DIE %d\n", box->pmu->pmu_idx, box->dieid);
 
+	pci_read_config_dword(pdev, 0x4c8, (u32 *)&pci_dword);
+	pci_read_config_dword(pdev, 0x4c8 + 4, (u32 *)&pci_dword + 1);
+
+	pr_info("UNCORE: RCRBBAR:  0x%llx\n", pci_dword);
+
+	if (!(pci_dword & 1))
+		return;
+	pci_dword &= ~1ULL;
+
+	//read RCRB memory region for MEMBAR0
+	addr = (resource_size_t)pci_dword;
+	io_addr = ioremap(addr, 0x20);
+	if (!io_addr) {
+		pr_info("UNCORE: failed to map RCRB\n");
+		return;
+	}
+	pci_dword = readq(io_addr + SPR_IAL_MEMBAR0_OFFSET);
+
+	pr_info("UNCORE: MEMBAR0:  0x%llx\n", pci_dword);
+
+	//unmap RCRB memory region
+	iounmap(io_addr);
+
+	pci_dword &= ~0xffULL;
+	addr = (resource_size_t)pci_dword;
+	/*
+	 *TODO: Hardcode MEMBAR 0 for now.
+	 *
+	 * addr = (resource_size_t)pci_dword;
+	 * ioremap(addr, SPR_IAL_MMIO_SIZE)
+	 * membar0_addr = readq(io_addr + SPR_IAL_MEMBAR0_OFFSET)
+	 * membar0_addr += SPR_IAL_U0_MMIO_PMON_BOX_CTL
+	 * ioremap(membar0_addr, 0x900)
+	 * Hardcode MEMBAR 0 for now.
+	 */
 	addr += box_ctl;
 
-	box->io_addr = ioremap(addr, SPR_IAL_MMIO_SIZE);
-	if (!box->io_addr)
+	pr_info("UNCORE: MEMBAR0 + box_ctl:  0x%llx\n", addr);
+	box->io_addr = ioremap(addr, 0x100);
+	if (!box->io_addr) {
+		pr_info("UNCORE: failed to map membar 0\n");
 		return;
+	}
+
 	writel(SPR_PMON_BOX_CTL_INT, box->io_addr);
 }
 
@@ -6273,7 +6321,7 @@ static struct intel_uncore_type spr_uncore_ial_unit0 = {
 	.num_counters   = 8,
 	.num_boxes	= 6,
 	.perf_ctr_bits	= 48,
-	.perf_ctr	= SPR_IAL_MMIO_PMON_CTR0,
+	.perf_ctr	= SPR_IAL_U0_MMIO_PMON_CTR0,
 	.event_ctl	= SPR_IAL_MMIO_PMON_CTL0,
 	.event_mask	= SNBEP_PMON_RAW_EVENT_MASK,
 	.box_ctl	= SPR_IAL_U0_MMIO_PMON_BOX_CTL,
@@ -6287,7 +6335,7 @@ static struct intel_uncore_type spr_uncore_ial_unit1 = {
 	.num_counters   = 4,
 	.num_boxes	= 6,
 	.perf_ctr_bits	= 48,
-	.perf_ctr	= SPR_IAL_MMIO_PMON_CTR0,
+	.perf_ctr	= SPR_IAL_U1_MMIO_PMON_CTR0,
 	.event_ctl	= SPR_IAL_MMIO_PMON_CTL0,
 	.event_mask	= SNBEP_PMON_RAW_EVENT_MASK,
 	.box_ctl	= SPR_IAL_U1_MMIO_PMON_BOX_CTL,
@@ -6299,8 +6347,8 @@ static struct intel_uncore_type spr_uncore_ial_unit1 = {
 static struct intel_uncore_type *spr_mmio_uncores[] = {
 	&spr_uncore_imc,
 	&spr_uncore_imc_free_running,
-//	&spr_uncore_ial_unit0,
-//	&spr_uncore_ial_unit1,
+	&spr_uncore_ial_unit0,
+	&spr_uncore_ial_unit1,
 	NULL,
 };
 
