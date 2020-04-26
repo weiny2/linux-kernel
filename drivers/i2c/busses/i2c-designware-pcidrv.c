@@ -251,6 +251,15 @@ static int i2c_dw_pci_probe(struct pci_dev *pdev,
 		}
 	}
 
+	if (has_acpi_companion(&pdev->dev))
+		i2c_dw_acpi_configure(&pdev->dev);
+
+	r = i2c_dw_validate_speed(dev);
+	if (r) {
+		pci_free_irq_vectors(pdev);
+		return r;
+	}
+
 	i2c_dw_configure(dev);
 
 	if (controller->scl_sda_cfg) {
