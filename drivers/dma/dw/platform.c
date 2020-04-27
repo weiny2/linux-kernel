@@ -83,7 +83,7 @@ static int dw_probe(struct platform_device *pdev)
 
 	dw_dma_of_controller_register(chip->dw);
 
-	dw_dma_acpi_controller_register(chip->dw);
+	data->acpi_controller_register(chip->dw);
 
 	return 0;
 
@@ -99,7 +99,7 @@ static int dw_remove(struct platform_device *pdev)
 	struct dw_dma_chip *chip = data->chip;
 	int ret;
 
-	dw_dma_acpi_controller_free(chip->dw);
+	data->acpi_controller_free(chip->dw);
 
 	dw_dma_of_controller_free(chip->dw);
 
