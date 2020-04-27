@@ -2,6 +2,7 @@
 obj-$(CONFIG_DW_DMAC_CORE)	+= dw_dmac_core.o
 dw_dmac_core-objs	:= core.o dw.o idma32.o
 dw_dmac_core-$(CONFIG_ACPI)	+= acpi.o
+dw_dmac_core-$(CONFIG_ACPI)	+= xbar.o
 
 obj-$(CONFIG_DW_DMAC)		+= dw_dmac.o
 dw_dmac-y			:= platform.o
