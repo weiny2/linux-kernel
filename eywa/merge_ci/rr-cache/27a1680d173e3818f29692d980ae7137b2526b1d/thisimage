@@ -287,6 +287,7 @@
 #define X86_FEATURE_FENCE_SWAPGS_USER	(11*32+ 4) /* "" LFENCE in user entry SWAPGS path */
 #define X86_FEATURE_FENCE_SWAPGS_KERNEL	(11*32+ 5) /* "" LFENCE in kernel entry SWAPGS path */
 #define X86_FEATURE_SPLIT_LOCK_DETECT	(11*32+ 6) /* #AC for split lock */
+#define X86_FEATURE_PER_THREAD_MBA	(11*32+ 7) /* "" Per-thread Memory Bandwidth Allocation */
 #define X86_FEATURE_RAR			(11*32+ 31) /* Intel Remote Action Request */
 
 /* Intel-defined CPU features, CPUID level 0x00000007:1 (EAX), word 12 */
@@ -355,7 +356,11 @@
 #define X86_FEATURE_CLDEMOTE		(16*32+25) /* CLDEMOTE instruction */
 #define X86_FEATURE_MOVDIRI		(16*32+27) /* MOVDIRI instruction */
 #define X86_FEATURE_MOVDIR64B		(16*32+28) /* MOVDIR64B instruction */
+<<<<<<<
+#define X86_FEATURE_PKS			(16*32+31) /* Protection Keys for Supervisor pages */
+=======
 #define X86_FEATURE_SGX_LC		(16*32+30) /* Software Guard Extensions Launch Control */
+>>>>>>>
 
 /* AMD-defined CPU features, CPUID level 0x80000007 (EBX), word 17 */
 #define X86_FEATURE_OVERFLOW_RECOV	(17*32+ 0) /* MCA overflow recovery support */
@@ -366,12 +371,9 @@
 #define X86_FEATURE_AVX512_4VNNIW	(18*32+ 2) /* AVX-512 Neural Network Instructions */
 #define X86_FEATURE_AVX512_4FMAPS	(18*32+ 3) /* AVX-512 Multiply Accumulation Single precision */
 #define X86_FEATURE_FSRM		(18*32+ 4) /* Fast Short Rep Mov */
-<<<<<<<
+#define X86_FEATURE_UINTR               (18*32+ 5) /* User interrupt support */
 #define X86_FEATURE_AVX512_4VNNIB	(18*32+ 6) /* AVX-512 Vector Neural Network Instructions Byte version */
 #define X86_FEATURE_AVX512_BITALG2	(18*32+ 7) /* AVX-512 Bit Algebra 2 */
-=======
-#define X86_FEATURE_UINTR		(18*32+ 5) /* User interrupt support */
->>>>>>>
 #define X86_FEATURE_AVX512_VP2INTERSECT (18*32+ 8) /* AVX-512 Intersect for D/Q */
 #define X86_FEATURE_MD_CLEAR		(18*32+10) /* VERW clears CPU buffers */
 #define X86_FEATURE_TSX_FORCE_ABORT	(18*32+13) /* "" TSX_FORCE_ABORT */
