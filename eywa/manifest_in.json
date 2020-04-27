@@ -3210,7 +3210,7 @@
             "stuck_at_ref": ""
         },
         {
-            "branch": "dlb_for_intel_next-v5.7-rc3",
+            "branch": "dlb_for_intel_next_v5.7-rc3",
             "branch_type": "expiring",
             "config_options": [
                 {
