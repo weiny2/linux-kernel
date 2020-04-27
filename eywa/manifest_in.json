@@ -3210,7 +3210,7 @@
             "stuck_at_ref": ""
         },
         {
-            "branch": "dlb_for_intel_next-v5.6-rc7",
+            "branch": "dlb_for_intel_next-v5.7-rc3",
             "branch_type": "expiring",
             "config_options": [
                 {
@@ -3225,14 +3225,14 @@
                 }
             ],
             "description": "Configuration and use of the DLB (1.0) device",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Niall McDonnell",
                     "email": "niall.mcdonnell@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1944",
             "name": "dlb",
             "repourl": "ssh://git@gitlab.devtools.intel.com:29418/cwa/linux-kernel.git",
             "sdl_contact": [
