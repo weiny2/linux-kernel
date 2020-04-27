@@ -26,9 +26,15 @@ extern bool dw_dma_filter(struct dma_chan *chan, void *param);
 #ifdef CONFIG_ACPI
 void dw_dma_acpi_controller_register(struct dw_dma *dw);
 void dw_dma_acpi_controller_free(struct dw_dma *dw);
+
+void xbar_acpi_controller_register(struct dw_dma *dw);
+void xbar_acpi_controller_free(struct dw_dma *dw);
 #else /* !CONFIG_ACPI */
 static inline void dw_dma_acpi_controller_register(struct dw_dma *dw) {}
 static inline void dw_dma_acpi_controller_free(struct dw_dma *dw) {}
+
+static inline void xbar_acpi_controller_register(struct dw_dma *dw) {}
+static inline void xbar_acpi_controller_free(struct dw_dma *dw) {}
 #endif /* !CONFIG_ACPI */
 
 struct platform_device;
