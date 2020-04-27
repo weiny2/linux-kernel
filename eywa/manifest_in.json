@@ -120,9 +120,9 @@
                 }
             ],
             "description": "SGX code",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [],
-            "jira": "",
+            "jira": "NEXT-1939",
             "name": "SGX",
             "repourl": "git://github.com/jsakkine-intel/linux-sgx.git",
             "sdl_contact": [],
