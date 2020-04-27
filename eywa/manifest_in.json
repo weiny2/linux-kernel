@@ -1731,8 +1731,8 @@
                     "email": "kyle.d.pelton@intel.com"
                 }
             ],
-            "description": "Workaround for simics frequency smpboot.c issue",
-            "enabled": false,
+            "description": "Fixup between mei/pm-testing",
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Kyle Pelton",
