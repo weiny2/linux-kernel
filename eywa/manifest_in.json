@@ -488,7 +488,7 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": "736deaa79c5125dcc6053edb53ee33798d100cee"
+            "stuck_at_ref": ""
         },
         {
             "branch": "to_eywa_intel_ish",
