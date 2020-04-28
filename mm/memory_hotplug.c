@@ -64,7 +64,7 @@ void put_online_mems(void)
 	percpu_up_read(&mem_hotplug_lock);
 }
 
-bool movable_node_enabled = true;
+bool movable_node_enabled = false;
 
 #ifndef CONFIG_MEMORY_HOTPLUG_DEFAULT_ONLINE
 bool memhp_auto_online;
@@ -774,11 +774,8 @@ static inline struct zone *default_zone_for_pfn(int nid, unsigned long start_pfn
 struct zone * zone_for_pfn_range(int online_type, int nid, unsigned start_pfn,
 		unsigned long nr_pages)
 {
-	if (online_type == MMOP_ONLINE_KERNEL) {
-		WARN_ONCE(1, "%#x-%#lx attempted non-movable online, forced movable\n",
-				start_pfn, start_pfn+nr_pages-1);
+	if (online_type == MMOP_ONLINE_KERNEL)
 		return default_kernel_zone_for_pfn(nid, start_pfn, nr_pages);
-	}
 
 	if (online_type == MMOP_ONLINE_MOVABLE)
 		return &NODE_DATA(nid)->node_zones[ZONE_MOVABLE];
