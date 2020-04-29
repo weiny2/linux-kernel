@@ -256,5 +256,6 @@ extern int dw_spi_resume_host(struct dw_spi *dws);
 
 /* platform related setup */
 extern int dw_spi_mid_init_mfld(struct dw_spi *dws);
+extern int dw_spi_mid_init_generic(struct dw_spi *dws);
 
 #endif /* DW_SPI_HEADER_H */
