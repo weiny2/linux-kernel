@@ -212,6 +212,15 @@ enum ppfear_regs {
 #define ETR3_LATCH_EVENTS_C10_EXIT_BIT		BIT(30)
 #define ETR3_CLR_LPM_EVENTS_BIT			BIT(28)
 
+/* Alder Lake Power Management Controller register offsets */
+#define ADL_LPM_EN_OFFSET			0x179C
+#define ADL_LPM_RESIDENCY_OFFSET		0x17A4
+
+/* Alder Lake Low Power Mode debug registers */
+#define ADL_LPM_STATUS_OFFSET			0x170C
+#define ADL_LPM_STATUS_LATCH_OFFSET		0x1704
+#define ADL_LPM_LIVE_STATUS_OFFSET		0x1764
+
 const char *tgl_lpm_modes[] = {
 	"S0i2.0",
 	"S0i2.1",

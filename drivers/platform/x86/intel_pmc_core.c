@@ -585,6 +585,301 @@ static const struct pmc_reg_map tgl_reg_map = {
 	.lpm_etr3_offset = TGL_LPM_ETR3_OFFSET,
 };
 
+static const struct pmc_bit_map adl_lpm0_map[] = {
+	{"CS0_OFF_STS",				BIT(0)},
+	{"CS1_OFF_STS",				BIT(1)},
+	{"CS2_OFF_STS",				BIT(2)},
+	{"CS3_OFF_STS",				BIT(3)},
+	{"CS4_OFF_STS",				BIT(4)},
+	{"CS5_OFF_STS",				BIT(5)},
+	{"CS6_OFF_STS",				BIT(6)},
+	{"CS7_OFF_STS",				BIT(7)},
+	{"CS8_OFF_STS",				BIT(8)},
+	{"CS9_OFF_STS",				BIT(9)},
+	{"CS10_OFF_STS",			BIT(10)},
+	{"CS11_OFF_STS",			BIT(11)},
+	{"CS12_OFF_STS",			BIT(12)},
+	{"CS13_OFF_STS",			BIT(13)},
+	{"CS14_OFF_STS",			BIT(14)},
+	{"CS15_OFF_STS",			BIT(15)},
+	{"CS16_OFF_STS",			BIT(16)},
+	{"CS17_OFF_STS",			BIT(17)},
+	{"CS18_OFF_STS",			BIT(18)},
+	{"CS19_OFF_STS",			BIT(19)},
+	{"CS20_OFF_STS",			BIT(20)},
+	{"CS21_OFF_STS",			BIT(21)},
+	{"CS22_OFF_STS",			BIT(22)},
+	{"CS23_OFF_STS",			BIT(23)},
+	{"CS24_OFF_STS",			BIT(24)},
+	{"CS25_OFF_STS",			BIT(25)},
+	{"CS26_OFF_STS",			BIT(26)},
+	{"CS27_OFF_STS",			BIT(27)},
+	{"CS28_OFF_STS",			BIT(28)},
+	{"CS29_OFF_STS",			BIT(29)},
+	{"CS30_OFF_STS",			BIT(30)},
+	{"CS31_OFF_STS",			BIT(31)},
+	{}
+};
+
+static const struct pmc_bit_map adl_lpm1_0_map[] = {
+	{"PMC_PGD0_AGTPGATED_STS",		BIT(0)},
+	{"DMI_PGD0_AGTPGATED_STS",		BIT(1)},
+	{"ESPISPI_PGD0_AGTPGATED_STS",		BIT(2)},
+	{"XHCI_PGD0_AGTPGATED_STS",		BIT(3)},
+	{"SPA_PGD0_AGTPGATED_STS",		BIT(4)},
+	{"SPB_PGD0_AGTPGATED_STS",		BIT(5)},
+	{"SPC_PGD0_AGTPGATED_STS",		BIT(6)},
+	{"GBE_PGD0_AGTPGATED_STS",		BIT(7)},
+	{"SATA_PGD0_AGTPGATED_STS",		BIT(8)},
+	{"ACE_PGD7_AGTPGATED_STS",		BIT(9)},
+	{"SBR9_PGD0_AGTPGATED_STS",		BIT(10)},
+	{"ACE_PGD1_AGTPGATED_STS",		BIT(11)},
+	{"ACE_PGD8_AGTPGATED_STS",		BIT(12)},
+	{"SPD_PGD0_AGTPGATED_STS",		BIT(13)},
+	{"LPSS_PGD0_AGTPGATED_STS",		BIT(14)},
+	{"LPC_PGD0_AGTPGATED_STS",		BIT(15)},
+	{"SMB_PGD0_AGTPGATED_STS",		BIT(16)},
+	{"ACE_PGD4_AGTPGATED_STS",		BIT(17)},
+	{"P2S_PGD0_AGTPGATED_STS",		BIT(18)},
+	{"NPK_PGD0_AGTPGATED_STS",		BIT(19)},
+	{"SDX_PGD0_AGTPGATED_STS",		BIT(20)},
+	{"ACE_PGD3_AGTPGATED_STS",		BIT(21)},
+	{"FUSE_PGD0_AGTPGATED_STS",		BIT(22)},
+	{"SBR8_PGD0_AGTPGATED_STS",		BIT(23)},
+	{"ACE_PGD12_AGTPGATED_STS",		BIT(24)},
+	{"XDCI_PGD0_AGTPGATED_STS",		BIT(25)},
+	{"EXI_PGD0_AGTPGATED_STS",		BIT(26)},
+	{"CSE_PGD0_AGTPGATED_STS",		BIT(27)},
+	{"KVMCC_PGD0_AGTPGATED_STS",		BIT(28)},
+	{"PMT_PGD0_AGTPGATED_STS",		BIT(29)},
+	{"CLINK_PGD0_AGTPGATED_STS",		BIT(30)},
+	{"PTIO_PGD0_AGTPGATED_STS",		BIT(31)},
+	{}
+};
+
+static const struct pmc_bit_map adl_lpm1_1_map[] = {
+	{"USBR0_PGD0_AGTPGATED_STS",		BIT(0)},
+	{"SUSRAM_PGD0_AGTPGATED_STS",		BIT(1)},
+	{"SMT1_PGD0_AGTPGATED_STS",		BIT(2)},
+	{"DBC_PGD0_AGTPGATED_STS",		BIT(3)},
+	{"SMS2_PGD0_AGTPGATED_STS",		BIT(4)},
+	{"SMS1_PGD0_AGTPGATED_STS",		BIT(5)},
+	{"CSMERTC_PGD0_AGTPGATED_STS",		BIT(6)},
+	{"CSMEPSF_PGD0_AGTPGATED_STS",		BIT(7)},
+	{"SBR0_PGD0_AGTPGATED_STS",		BIT(8)},
+	{"SBR1_PGD0_AGTPGATED_STS",		BIT(9)},
+	{"SBR2_PGD0_AGTPGATED_STS",		BIT(10)},
+	{"SBR3_PGD0_AGTPGATED_STS",		BIT(11)},
+	{"SBR4_PGD0_AGTPGATED_STS",		BIT(12)},
+	{"SBR5_PGD0_AGTPGATED_STS",		BIT(13)},
+	{"ACE_PGD5_AGTPGATED_STS",		BIT(14)},
+	{"PSF1_PGD0_AGTPGATED_STS",		BIT(15)},
+	{"PSF2_PGD0_AGTPGATED_STS",		BIT(16)},
+	{"PSF3_PGD0_AGTPGATED_STS",		BIT(17)},
+	{"PSF4_PGD0_AGTPGATED_STS",		BIT(18)},
+	{"CNVI_PGD0_AGTPGATED_STS",		BIT(19)},
+	{"UFSX2_PGD0_AGTPGATED_STS",		BIT(20)},
+	{"ENDBG_PGD0_AGTPGATED_STS",		BIT(21)},
+	{"SBR6_PGD0_AGTPGATED_STS",		BIT(23)},
+	{"SBR7_PGD0_AGTPGATED_STS",		BIT(24)},
+	{"NPK_PGD1_AGTPGATED_STS",		BIT(25)},
+	{"ACE_PGD9_AGTPGATED_STS",		BIT(26)},
+	{"ACE_PGD10_AGTPGATED_STS",		BIT(27)},
+	{"ACE_PGD11_AGTPGATED_STS",		BIT(28)},
+	{"PSF6_PGD0_AGTPGATED_STS",		BIT(29)},
+	{"GBETSN1_PGD0_AGTPGATED_STS",		BIT(30)},
+	{"ACE_PGD2_AGTPGATED_STS",		BIT(31)},
+	{}
+};
+
+static const struct pmc_bit_map adl_lpm1_2_map[] = {
+	{"ACE_PGD6_AGTPGATED_STS",		BIT(0)},
+	{"FIA_PGD0_AGTPGATED_STS",		BIT(1)},
+	{"ACE_PGD13_AGTPGATED_STS",		BIT(2)},
+	{"ACE_PGD0_AGTPGATED_STS",		BIT(3)},
+	{"TAM_PGD0_AGTPGATED_STS",		BIT(4)},
+	{"GBETSN_PGD0_AGTPGATED_STS",		BIT(5)},
+	{"TBTLSX_PGD0_AGTPGATED_STS",		BIT(6)},
+	{"THC0_PGD0_AGTPGATED_STS",		BIT(7)},
+	{"THC1_PGD0_AGTPGATED_STS",		BIT(8)},
+	{"PMC_PGD1_AGTPGATED_STS",		BIT(9)},
+	{}
+};
+
+static const struct pmc_bit_map adl_lpm2_0_map[] = {
+	{"LPSS_D3_STS",				BIT(3)},
+	{"XDCI_D3_STS",				BIT(4)},
+	{"XHCI_D3_STS",				BIT(5)},
+	{"SPA_D3_STS",				BIT(12)},
+	{"SPB_D3_STS",				BIT(13)},
+	{"SPC_D3_STS",				BIT(14)},
+	{"SPD_D3_STS",				BIT(15)},
+	{"SATA_D3_STS",				BIT(20)},
+	{"DMI_D3_STS",				BIT(22)},
+	{}
+};
+
+static const struct pmc_bit_map adl_lpm2_1_map[] = {
+	{"GBETSN1_D3_STS",			BIT(14)},
+	{"GBE_D3_STS",				BIT(19)},
+	{"CNVI_D3_STS",				BIT(27)},
+	{"UFSX2_D3_STS",			BIT(28)},
+	{"SDX_D3_STS",				BIT(31)},
+	{}
+};
+
+static const struct pmc_bit_map adl_lpm2_2_map[] = {
+	{"CSMERTC_D3_STS",			BIT(1)},
+	{"SUSRAM_D3_STS",			BIT(2)},
+	{"CSE_D3_STS",				BIT(4)},
+	{"KVMCC_D3_STS",			BIT(5)},
+	{"USBR0_D3_STS",			BIT(6)},
+	{"SMT1_D3_STS",				BIT(8)},
+	{"CLINK_D3_STS",			BIT(14)},
+	{"PTIO_D3_STS",				BIT(16)},
+	{"PMT_D3_STS",				BIT(17)},
+	{"SMS1_D3_STS",				BIT(18)},
+	{"SMS2_D3_STS",				BIT(19)},
+	{}
+};
+
+static const struct pmc_bit_map adl_lpm2_3_map[] = {
+	{"GBETSN_D3_STS",			BIT(13)},
+	{"THC0_D3_STS",				BIT(14)},
+	{"THC1_D3_STS",				BIT(15)},
+	{"ACE_D3_STS",				BIT(23)},
+	{}
+};
+
+static const struct pmc_bit_map adl_lpm3_0_map[] = {
+	{"FIA_VNNREQOFF_STS",			BIT(17)},
+	{"ESPISPI_VNNREQOFF_STS",		BIT(18)},
+	{}
+};
+
+static const struct pmc_bit_map adl_lpm3_1_map[] = {
+	{"NPK_VNNREQOFF_STS",			BIT(4)},
+	{"DFXAGG_VNNREQOFF_STS",		BIT(8)},
+	{"EXI_VNNREQOFF_STS",			BIT(9)},
+	{"P2D_VNNREQOFF_STS",			BIT(18)},
+	{"GBE_VNNREQOFF_STS",			BIT(19)},
+	{"SMB_VNNREQOFF_STS",			BIT(25)},
+	{"LPC_VNNREQOFF_STS",			BIT(26)},
+	{"CNVI_VNNREQOFF_STS",			BIT(27)},
+	{}
+};
+
+static const struct pmc_bit_map adl_lpm3_2_map[] = {
+	{"CSMERTC_VNNREQOFF_STS",		BIT(1)},
+	{"CSE_VNNREQOFF_STS",			BIT(4)},
+	{"SMT1_VNNREQOFF_STS",			BIT(8)},
+	{"CLINK_VNNREQOFF_STS",			BIT(14)},
+	{"SMS1_VNNREQOFF_STS",			BIT(18)},
+	{"SMS2_VNNREQOFF_STS",			BIT(19)},
+	{"GPIOCOM4_VNNREQOFF_STS",		BIT(20)},
+	{"GPIOCOM3_VNNREQOFF_STS",		BIT(21)},
+	{"GPIOCOM2_VNNREQOFF_STS",		BIT(22)},
+	{"GPIOCOM1_VNNREQOFF_STS",		BIT(23)},
+	{"GPIOCOM0_VNNREQOFF_STS",		BIT(24)},
+	{}
+};
+
+static const struct pmc_bit_map adl_lpm3_3_map[] = {
+	{"DTS0_VNNREQOFF_STS",			BIT(7)},
+	{"GPIOCOM5_VNNREQOFF_STS",		BIT(11)},
+	{}
+};
+
+static const struct pmc_bit_map adl_lpm4_map[] = {
+	{"MISC_REQ_STS_0",			BIT(0)},
+	{"MISC_REQ_STS_1",			BIT(1)},
+	{"MISC_REQ_STS_2",			BIT(2)},
+	{"MISC_REQ_STS_3",			BIT(3)},
+	{"MISC_REQ_STS_4",			BIT(4)},
+	{"MISC_REQ_STS_5",			BIT(5)},
+	{"MISC_REQ_STS_6",			BIT(6)},
+	{"MISC_REQ_STS_7",			BIT(7)},
+	{"MISC_REQ_STS_8",			BIT(8)},
+	{"MISC_REQ_STS_9",			BIT(9)},
+	{"MISC_REQ_STS_10",			BIT(10)},
+	{"MISC_REQ_STS_11",			BIT(11)},
+	{"MISC_REQ_STS_12",			BIT(12)},
+	{"MISC_REQ_STS_13",			BIT(13)},
+	{"MISC_REQ_STS_14",			BIT(14)},
+	{"MISC_REQ_STS_15",			BIT(15)},
+	{"MISC_REQ_STS_16",			BIT(16)},
+	{"MISC_REQ_STS_17",			BIT(17)},
+	{"MISC_REQ_STS_18",			BIT(18)},
+	{"MISC_REQ_STS_19",			BIT(19)},
+	{"MISC_REQ_STS_20",			BIT(20)},
+	{"MISC_REQ_STS_21",			BIT(21)},
+	{"MISC_REQ_STS_22",			BIT(22)},
+	{"MISC_REQ_STS_23",			BIT(23)},
+	{"MISC_REQ_STS_24",			BIT(24)},
+	{"MISC_REQ_STS_25",			BIT(25)},
+	{"MISC_REQ_STS_26",			BIT(26)},
+	{"MISC_REQ_STS_27",			BIT(27)},
+	{"MISC_REQ_STS_28",			BIT(28)},
+	{"MISC_REQ_STS_29",			BIT(29)},
+	{"MISC_REQ_STS_30",			BIT(30)},
+	{"MISC_REQ_STS_31",			BIT(31)},
+	{}
+};
+
+static const struct pmc_bit_map adl_lpm5_map[] = {
+	{"SIG0_WAKE_STS",			BIT(0)},
+	{"SIG0_LIVE_STS",			BIT(1)},
+	{"SIG1_WAKE_STS",			BIT(2)},
+        {"SIG1_LIVE_STS",			BIT(3)},
+	{"SIG2_WAKE_STS",			BIT(4)},
+        {"SIG2_LIVE_STS",			BIT(5)},
+	{"SIG3_WAKE_STS",			BIT(6)},
+        {"SIG3_LIVE_STS",			BIT(7)},
+	{"SIG4_WAKE_STS",			BIT(8)},
+        {"SIG4_LIVE_STS",			BIT(9)},
+	{"SIG5_WAKE_STS",			BIT(10)},
+        {"SIG5_LIVE_STS",			BIT(11)},
+	{"SIG6_WAKE_STS",			BIT(12)},
+        {"SIG6_LIVE_STS",			BIT(13)},
+	{"SIG7_WAKE_STS",			BIT(14)},
+        {"SIG7_LIVE_STS",			BIT(15)},
+	{"SIG8_WAKE_STS",			BIT(16)},
+        {"SIG8_LIVE_STS",			BIT(17)},
+	{"SIG9_WAKE_STS",			BIT(18)},
+        {"SIG9_LIVE_STS",			BIT(19)},
+	{"SIG10_WAKE_STS",			BIT(20)},
+        {"SIG10_LIVE_STS",			BIT(21)},
+	{"SIG11_WAKE_STS",			BIT(22)},
+        {"SIG11_LIVE_STS",			BIT(23)},
+	{"SIG12_WAKE_STS",			BIT(24)},
+        {"SIG12_LIVE_STS",			BIT(25)},
+	{"SIG13_WAKE_STS",			BIT(26)},
+        {"SIG13_LIVE_STS",			BIT(27)},
+	{"SIG14_WAKE_STS",			BIT(28)},
+        {"SIG14_LIVE_STS",			BIT(29)},
+	{"SIG15_WAKE_STS",			BIT(30)},
+        {"SIG15_LIVE_STS",			BIT(31)},
+	{}
+};
+
+static const struct pmc_bit_map *adl_lpm_maps[] = {
+	adl_lpm0_map,
+	adl_lpm1_0_map,
+	adl_lpm1_1_map,
+	adl_lpm1_2_map,
+	adl_lpm2_0_map,
+	adl_lpm2_1_map,
+	adl_lpm2_2_map,
+	adl_lpm2_3_map,
+	adl_lpm3_0_map,
+	adl_lpm3_1_map,
+	adl_lpm3_2_map,
+	adl_lpm3_3_map,
+	adl_lpm4_map,
+	adl_lpm5_map,
+	NULL
+};
+
 static const struct pmc_reg_map adl_reg_map = {
 	.pfear_sts = ext_tgl_pfear_map,
 	.slp_s0_offset = CNP_PMC_SLP_S0_RES_COUNTER_OFFSET,
@@ -599,6 +894,13 @@ static const struct pmc_reg_map adl_reg_map = {
 	.pm_cfg_offset = CNP_PMC_PM_CFG_OFFSET,
 	.pm_read_disable_bit = CNP_PMC_READ_DISABLE_BIT,
 	.ltr_ignore_max = ADL_NUM_IP_IGN_ALLOWED,
+	.lpm_modes = tgl_lpm_modes,
+	.lpm_en_offset = ADL_LPM_EN_OFFSET,
+	.lpm_sts_latch_offset = ADL_LPM_STATUS_LATCH_OFFSET,
+	.lpm_residency_offset = ADL_LPM_RESIDENCY_OFFSET,
+	.lpm_sts = adl_lpm_maps,
+	.lpm_status_offset = ADL_LPM_STATUS_OFFSET,
+	.lpm_live_status_offset = ADL_LPM_LIVE_STATUS_OFFSET,
 };
 
 static inline u32 pmc_core_reg_read(struct pmc_dev *pmcdev, int reg_offset)
