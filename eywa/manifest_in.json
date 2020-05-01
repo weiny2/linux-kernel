@@ -750,7 +750,7 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "be048cbcb77cee35def588aa84a6af8095f2b1d9"
         },
         {
             "branch": "powertop",
