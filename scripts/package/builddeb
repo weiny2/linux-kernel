@@ -369,11 +369,6 @@ fi
 
 create_package "$packagename" "$tmpdir"
 
-if [ -n "$QUICKDEB_BUILD" ]; then
-	echo "Quickbuild detected exiting..."
-	exit
-fi
-
 cat <<EOF >> debian/control
 
 Package: $tools_packagename
@@ -397,6 +392,12 @@ install -m 755 -D tools/power/x86/turbostat/turbostat "$tools_dir/usr/bin"
 install -m 755 -D tools/power/x86/x86_energy_perf_policy/x86_energy_perf_policy "$tools_dir/usr/bin"
 
 create_package "$tools_packagename" "$tools_dir"
+
+if [ -n "$QUICKDEB_BUILD" ]; then
+	echo "Quickbuild detected exiting..."
+	exit
+fi
+
 
 if [ -n "$BUILD_DEBUG" ] ; then
 	# Build debug package
