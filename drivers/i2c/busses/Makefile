@@ -50,6 +50,9 @@ obj-$(CONFIG_I2C_CPM)		+= i2c-cpm.o
 obj-$(CONFIG_I2C_DAVINCI)	+= i2c-davinci.o
 obj-$(CONFIG_I2C_DESIGNWARE_CORE)	+= i2c-designware-core.o
 i2c-designware-core-objs := i2c-designware-common.o
+ifeq ($(CONFIG_ACPI),y)
+i2c-designware-core-objs += i2c-designware-acpi.o
+endif
 ifeq ($(CONFIG_OF),y)
 i2c-designware-core-objs += i2c-designware-of.o
 endif
