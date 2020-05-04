@@ -18,6 +18,8 @@
 #include "debug.h"
 #include "symbol.h"
 #include "comm.h"
+#include "map_symbol.h"
+#include "branch.h"
 #include "call-path.h"
 #include "thread-stack.h"
 

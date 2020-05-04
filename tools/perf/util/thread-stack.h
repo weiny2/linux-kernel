@@ -20,6 +20,7 @@ struct comm;
 struct perf_sample;
 struct addr_location;
 struct call_path;
+struct branch_entry;
 
 /*
  * Call/Return flags.
