@@ -382,3 +382,9 @@ static inline int i2c_dw_validate_speed(struct dw_i2c_dev *dev)
 
 	return 0;
 }
+
+#if IS_ENABLED(CONFIG_OF)
+int i2c_dw_of_configure(struct device *device);
+#else
+static inline int i2c_dw_of_configure(struct device *device) { return -ENODEV; }
+#endif
