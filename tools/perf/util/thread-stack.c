@@ -395,7 +395,8 @@ static void thread_stack__update_br_stack(struct thread_stack *ts, u32 flags,
 	be              = &bs->entries[ts->br_stack_pos];
 	be->from        = from_ip;
 	be->to          = to_ip;
-	be->flags.value = 0;
+	/* be->flags.value = 0; */
+	memset(&be->flags, 0, sizeof(be->flags));
 	be->flags.abort = !!(flags & PERF_IP_FLAG_TX_ABORT);
 	be->flags.in_tx = !!(flags & PERF_IP_FLAG_IN_TX);
 	/* No support for mispredict */
