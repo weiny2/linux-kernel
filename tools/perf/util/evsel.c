@@ -44,6 +44,7 @@
 #include "stat.h"
 #include "string2.h"
 #include "memswap.h"
+#include "pmu.h"
 #include "util.h"
 #include "../perf-sys.h"
 #include "util/parse-branch-options.h"
@@ -98,6 +99,25 @@ set_methods:
 		perf_evsel__object.fini = fini;
 
 	return 0;
+}
+
+struct perf_pmu *perf_evsel__find_pmu(struct evsel *evsel)
+{
+	struct perf_pmu *pmu = NULL;
+
+	while ((pmu = perf_pmu__scan(pmu)) != NULL) {
+		if (pmu->type == evsel->core.attr.type)
+			break;
+	}
+
+	return pmu;
+}
+
+bool perf_evsel__is_aux_event(struct evsel *evsel)
+{
+	struct perf_pmu *pmu = perf_evsel__find_pmu(evsel);
+
+	return pmu && pmu->auxtrace;
 }
 
 #define FD(e, x, y) (*(int *)xyarray__entry(e->core.fd, x, y))
@@ -1002,25 +1022,6 @@ void perf_evsel__config(struct evsel *evsel, struct record_opts *opts,
 		}
 	}
 
-	/*
-	 * Disable sampling for all group members other
-	 * than leader in case leader 'leads' the sampling.
-	 */
-	if ((leader != evsel) && leader->sample_read) {
-		attr->freq           = 0;
-		attr->sample_freq    = 0;
-		attr->sample_period  = 0;
-		attr->write_backward = 0;
-
-		/*
-		 * We don't get sample for slave events, we make them
-		 * when delivering group leader sample. Set the slave
-		 * event to follow the master sample_type to ease up
-		 * report.
-		 */
-		attr->sample_type = leader->core.attr.sample_type;
-	}
-
 	if (opts->no_samples)
 		attr->sample_freq = 0;
 
@@ -1100,7 +1101,12 @@ void perf_evsel__config(struct evsel *evsel, struct record_opts *opts,
 	attr->mmap  = track;
 	attr->mmap2 = track && !perf_missing_features.mmap2;
 	attr->comm  = track;
-	attr->ksymbol = track && !perf_missing_features.ksymbol;
+	/*
+	 * ksymbol is tracked separately with text poke because it needs to be
+	 * system wide and enabled immediately.
+	 */
+	if (!opts->text_poke)
+		attr->ksymbol = track && !perf_missing_features.ksymbol;
 	attr->bpf_event = track && !opts->no_bpf_event && !perf_missing_features.bpf;
 
 	if (opts->record_namespaces)
@@ -2138,7 +2144,7 @@ int perf_evsel__parse_sample(struct evsel *evsel, union perf_event *event,
 		}
 	}
 
-	if (evsel__has_callchain(evsel)) {
+	if (type & PERF_SAMPLE_CALLCHAIN) {
 		const u64 max_callchain_nr = UINT64_MAX / sizeof(u64);
 
 		OVERFLOW_CHECK_u64(array);
