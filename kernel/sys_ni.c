@@ -123,6 +123,10 @@ COND_SYSCALL(timerfd_settime32);
 COND_SYSCALL(timerfd_gettime);
 COND_SYSCALL(timerfd_gettime32);
 
+/* fs/uintr.c */
+COND_SYSCALL(uintr_receive);
+COND_SYSCALL(uipi_send);
+
 /* fs/utimes.c */
 
 /* kernel/acct.c */

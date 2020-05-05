@@ -24,6 +24,10 @@ BUILD_INTERRUPT(kvm_posted_intr_wakeup_ipi, POSTED_INTR_WAKEUP_VECTOR)
 BUILD_INTERRUPT(kvm_posted_intr_nested_ipi, POSTED_INTR_NESTED_VECTOR)
 #endif
 
+#ifdef CONFIG_X86_INTEL_USER_INTERRUPT
+BUILD_INTERRUPT(uintr_notification_interrupt, UINTR_NOTIFICATION_VECTOR)
+#endif
+
 /*
  * every pentium local APIC has two 'local interrupts', with a
  * soft-definable vector attached to both interrupts, one of
