@@ -118,6 +118,25 @@ Description:
 		- "reverse": CC2 orientation
 		- "unknown": Orientation cannot be determined.
 
+What:		/sys/class/typec/<port>/usb_mode
+Date:		May 2020
+Contact:	Heikki Krogerus <heikki.krogerus@linux.intel.com>
+Description:	The supported USB Modes with the active one, that is to be used
+		next time with the Enter_USB message, in brackets. The active
+		mode can be changed by writing to the file when the connector
+		interface supports it.
+
+		Note. This attribute file can not be used for resetting the mode
+		after the connection has been established. The mode can be reset
+		after connection by writing to the attribute file with the same
+		name ("usb_mode") of the partner device (this is the port device
+		that has the partner attached to).
+
+		Valid values:
+		- usb2 (USB 2.0)
+		- usb3 (USB 3.2)
+		- usb4 (USB4)
+
 USB Type-C partner devices (eg. /sys/class/typec/port0-partner/)
 
 What:		/sys/class/typec/<port>-partner/accessory_mode
@@ -169,6 +188,22 @@ Description:
 		Product VDO part of Discover Identity command result. The value
 		will show 0 until Discover Identity command result becomes
 		available. The value can be polled.
+
+What:		/sys/class/typec/<port>-partner/usb_mode
+Date:		February 2020
+Contact:	Heikki Krogerus <heikki.krogerus@linux.intel.com>
+Description:	The USB Modes that the partner device supports. This information
+		requires the response from Discover Identity command, and will
+		therefore not always be available (as some firmware interfaces
+		do not share the information with the operating system). The
+		currently used mode can be changed by writing to this file when
+		the port driver is able to send Data Reset message to the
+		partner.
+
+		Valid values:
+		- usb2 (USB 2.0)
+		- usb3 (USB 3.2)
+		- usb4 (USB4)
 
 
 USB Type-C cable devices (eg. /sys/class/typec/port0-cable/)
