@@ -5,6 +5,7 @@
  */
 #include <linux/err.h>
 #include <linux/module.h>
+#include <linux/slab.h>
 #include <linux/pm_runtime.h>
 #include <linux/scatterlist.h>
 #include <linux/spinlock.h>
