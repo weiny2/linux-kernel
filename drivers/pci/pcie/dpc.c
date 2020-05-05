@@ -13,6 +13,7 @@
 #include <linux/interrupt.h>
 #include <linux/init.h>
 #include <linux/pci.h>
+#include <linux/pci_hotplug.h>
 
 #include "portdrv.h"
 #include "../pci.h"
@@ -113,6 +114,13 @@ pci_ers_result_t dpc_reset_link(struct pci_dev *pdev)
 
 	if (!pcie_wait_for_link(pdev, true))
 		return PCI_ERS_RESULT_DISCONNECT;
+
+	/*
+	 * If hotplug is not supported/enabled then let the device
+	 * recover using slot reset.
+	 */
+	if (!hotplug_is_native(pdev))
+		return PCI_ERS_RESULT_NEED_RESET;
 
 	return PCI_ERS_RESULT_RECOVERED;
 }
