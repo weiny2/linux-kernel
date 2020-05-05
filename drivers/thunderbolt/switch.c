@@ -19,15 +19,7 @@
 
 /* Switch NVM support */
 
-#define NVM_DEVID		0x05
-#define NVM_VERSION		0x08
 #define NVM_CSS			0x10
-#define NVM_FLASH_SIZE		0x45
-
-#define NVM_MIN_SIZE		SZ_32K
-#define NVM_MAX_SIZE		SZ_512K
-
-static DEFINE_IDA(nvm_ida);
 
 struct nvm_auth_status {
 	struct list_head list;
@@ -328,7 +320,8 @@ static int nvm_authenticate(struct tb_switch *sw)
 static int tb_switch_nvm_read(void *priv, unsigned int offset, void *val,
 			      size_t bytes)
 {
-	struct tb_switch *sw = priv;
+	struct tb_nvm *nvm = priv;
+	struct tb_switch *sw = tb_to_switch(nvm->dev);
 	int ret;
 
 	pm_runtime_get_sync(&sw->dev);
@@ -348,17 +341,12 @@ out:
 	return ret;
 }
 
-static int tb_switch_nvm_no_read(void *priv, unsigned int offset, void *val,
-				 size_t bytes)
-{
-	return -EPERM;
-}
-
 static int tb_switch_nvm_write(void *priv, unsigned int offset, void *val,
 			       size_t bytes)
 {
-	struct tb_switch *sw = priv;
-	int ret = 0;
+	struct tb_nvm *nvm = priv;
+	struct tb_switch *sw = tb_to_switch(nvm->dev);
+	int ret;
 
 	if (!mutex_trylock(&sw->tb->lock))
 		return restart_syscall();
@@ -369,56 +357,15 @@ static int tb_switch_nvm_write(void *priv, unsigned int offset, void *val,
 	 * locally here and handle the special cases when the user asks
 	 * us to authenticate the image.
 	 */
-	if (!sw->nvm->buf) {
-		sw->nvm->buf = vmalloc(NVM_MAX_SIZE);
-		if (!sw->nvm->buf) {
-			ret = -ENOMEM;
-			goto unlock;
-		}
-	}
-
-	sw->nvm->buf_data_size = offset + bytes;
-	memcpy(sw->nvm->buf + offset, val, bytes);
-
-unlock:
+	ret = tb_nvm_write_buf(nvm, offset, val, bytes);
 	mutex_unlock(&sw->tb->lock);
 
 	return ret;
 }
 
-static struct nvmem_device *register_nvmem(struct tb_switch *sw, int id,
-					   size_t size, bool active)
-{
-	struct nvmem_config config;
-
-	memset(&config, 0, sizeof(config));
-
-	if (active) {
-		config.name = "nvm_active";
-		config.reg_read = tb_switch_nvm_read;
-		config.read_only = true;
-	} else {
-		config.name = "nvm_non_active";
-		config.reg_read = tb_switch_nvm_no_read;
-		config.reg_write = tb_switch_nvm_write;
-		config.root_only = true;
-	}
-
-	config.id = id;
-	config.stride = 4;
-	config.word_size = 4;
-	config.size = size;
-	config.dev = &sw->dev;
-	config.owner = THIS_MODULE;
-	config.priv = sw;
-
-	return nvmem_register(&config);
-}
-
 static int tb_switch_nvm_add(struct tb_switch *sw)
 {
-	struct nvmem_device *nvm_dev;
-	struct tb_switch_nvm *nvm;
+	struct tb_nvm *nvm;
 	u32 val;
 	int ret;
 
@@ -437,11 +384,9 @@ static int tb_switch_nvm_add(struct tb_switch *sw)
 		return 0;
 	}
 
-	nvm = kzalloc(sizeof(*nvm), GFP_KERNEL);
-	if (!nvm)
-		return -ENOMEM;
-
-	nvm->id = ida_simple_get(&nvm_ida, 0, 0, GFP_KERNEL);
+	nvm = tb_nvm_alloc(&sw->dev);
+	if (IS_ERR(nvm))
+		return PTR_ERR(nvm);
 
 	/*
 	 * If the switch is in safe-mode the only accessible portion of
@@ -453,7 +398,7 @@ static int tb_switch_nvm_add(struct tb_switch *sw)
 
 		ret = nvm_read(sw, NVM_FLASH_SIZE, &val, sizeof(val));
 		if (ret)
-			goto err_ida;
+			goto err_nvm;
 
 		hdr_size = sw->generation < 3 ? SZ_8K : SZ_16K;
 		nvm_size = (SZ_1M << (val & 7)) / 8;
@@ -461,44 +406,34 @@ static int tb_switch_nvm_add(struct tb_switch *sw)
 
 		ret = nvm_read(sw, NVM_VERSION, &val, sizeof(val));
 		if (ret)
-			goto err_ida;
+			goto err_nvm;
 
 		nvm->major = val >> 16;
 		nvm->minor = val >> 8;
 
-		nvm_dev = register_nvmem(sw, nvm->id, nvm_size, true);
-		if (IS_ERR(nvm_dev)) {
-			ret = PTR_ERR(nvm_dev);
-			goto err_ida;
-		}
-		nvm->active = nvm_dev;
+		ret = tb_nvm_add_active(nvm, nvm_size, tb_switch_nvm_read);
+		if (ret)
+			goto err_nvm;
 	}
 
 	if (!sw->no_nvm_upgrade) {
-		nvm_dev = register_nvmem(sw, nvm->id, NVM_MAX_SIZE, false);
-		if (IS_ERR(nvm_dev)) {
-			ret = PTR_ERR(nvm_dev);
-			goto err_nvm_active;
-		}
-		nvm->non_active = nvm_dev;
+		ret = tb_nvm_add_non_active(nvm, NVM_MAX_SIZE,
+					    tb_switch_nvm_write);
+		if (ret)
+			goto err_nvm;
 	}
 
 	sw->nvm = nvm;
 	return 0;
 
-err_nvm_active:
-	if (nvm->active)
-		nvmem_unregister(nvm->active);
-err_ida:
-	ida_simple_remove(&nvm_ida, nvm->id);
-	kfree(nvm);
-
+err_nvm:
+	tb_nvm_free(nvm);
 	return ret;
 }
 
 static void tb_switch_nvm_remove(struct tb_switch *sw)
 {
-	struct tb_switch_nvm *nvm;
+	struct tb_nvm *nvm;
 
 	nvm = sw->nvm;
 	sw->nvm = NULL;
@@ -510,13 +445,7 @@ static void tb_switch_nvm_remove(struct tb_switch *sw)
 	if (!nvm->authenticating)
 		nvm_clear_auth_status(sw);
 
-	if (nvm->non_active)
-		nvmem_unregister(nvm->non_active);
-	if (nvm->active)
-		nvmem_unregister(nvm->active);
-	ida_simple_remove(&nvm_ida, nvm->id);
-	vfree(nvm->buf);
-	kfree(nvm);
+	tb_nvm_free(nvm);
 }
 
 /* port utility functions */
@@ -728,6 +657,50 @@ int tb_port_unlock(struct tb_port *port)
 	return 0;
 }
 
+static int __tb_port_enable(struct tb_port *port, bool enable)
+{
+	int ret;
+	u32 phy;
+
+	if (!tb_port_is_null(port))
+		return -EINVAL;
+
+	ret = tb_port_read(port, &phy, TB_CFG_PORT,
+			   port->cap_phy + LANE_ADP_CS_1, 1);
+	if (ret)
+		return ret;
+
+	if (enable)
+		phy &= ~LANE_ADP_CS_1_LD;
+	else
+		phy |= LANE_ADP_CS_1_LD;
+
+	return tb_port_write(port, &phy, TB_CFG_PORT,
+			     port->cap_phy + LANE_ADP_CS_1, 1);
+}
+
+/**
+ * tb_port_enable() - Enable lane adapter
+ * @port: Port to enable (can be %NULL)
+ *
+ * This is used for lane 0 and 1 adapters to enable it.
+ */
+int tb_port_enable(struct tb_port *port)
+{
+	return __tb_port_enable(port, true);
+}
+
+/**
+ * tb_port_disable() - Disable lane adapter
+ * @port: Port to disable (can be %NULL)
+ *
+ * This is used for lane 0 and 1 adapters to disable it.
+ */
+int tb_port_disable(struct tb_port *port)
+{
+	return __tb_port_enable(port, false);
+}
+
 /**
  * tb_init_port() - initialize a port
  *
@@ -854,6 +827,13 @@ void tb_port_release_out_hopid(struct tb_port *port, int hopid)
 	ida_simple_remove(&port->out_hopids, hopid);
 }
 
+static inline bool tb_switch_is_reachable(const struct tb_switch *parent,
+					  const struct tb_switch *sw)
+{
+	u64 mask = (1ULL << parent->config.depth * 8) - 1;
+	return (tb_route(parent) & mask) == (tb_route(sw) & mask);
+}
+
 /**
  * tb_next_port_on_path() - Return next port for given port on a path
  * @start: Start port of the walk
@@ -883,12 +863,10 @@ struct tb_port *tb_next_port_on_path(struct tb_port *start, struct tb_port *end,
 		return end;
 	}
 
-	if (start->sw->config.depth < end->sw->config.depth) {
-		if (prev->remote &&
-		    prev->remote->sw->config.depth > prev->sw->config.depth)
+	if (tb_switch_is_reachable(prev->sw, end->sw)) {
+		next = tb_port_at(tb_route(end->sw), prev->sw);
+		if (prev->remote && next == prev)
 			next = prev->remote;
-		else
-			next = tb_port_at(tb_route(end->sw), prev->sw);
 	} else {
 		if (tb_is_upstream_port(prev)) {
 			next = prev->remote;
@@ -905,10 +883,16 @@ struct tb_port *tb_next_port_on_path(struct tb_port *start, struct tb_port *end,
 		}
 	}
 
-	return next;
+	return next != prev ? next : NULL;
 }
 
-static int tb_port_get_link_speed(struct tb_port *port)
+/**
+ * tb_port_get_link_speed() - Get current link speed
+ * @port: Port to check (USB4 or CIO).
+ *
+ * Returns link speed in Gb/s or negative errno in case of failure.
+ */
+int tb_port_get_link_speed(struct tb_port *port)
 {
 	u32 val, speed;
 	int ret;
@@ -1272,23 +1256,24 @@ static void tb_dump_switch(const struct tb *tb, const struct tb_switch *sw)
 
 /**
  * reset_switch() - reconfigure route, enable and send TB_CFG_PKG_RESET
+ * @sw: Switch to reset
  *
  * Return: Returns 0 on success or an error code on failure.
  */
-int tb_switch_reset(struct tb *tb, u64 route)
+int tb_switch_reset(struct tb_switch *sw)
 {
 	struct tb_cfg_result res;
-	struct tb_regs_switch_header header = {
-		header.route_hi = route >> 32,
-		header.route_lo = route,
-		header.enabled = true,
-	};
-	tb_dbg(tb, "resetting switch at %llx\n", route);
-	res.err = tb_cfg_write(tb->ctl, ((u32 *) &header) + 2, route,
-			0, 2, 2, 2);
+
+	if (sw->generation > 1)
+		return 0;
+
+	tb_sw_dbg(sw, "resetting switch\n");
+
+	res.err = tb_sw_write(sw, ((u32 *) &sw->config) + 2,
+			      TB_CFG_SWITCH, 2, 2);
 	if (res.err)
 		return res.err;
-	res = tb_cfg_reset(tb->ctl, route, TB_CFG_DEFAULT_TIMEOUT);
+	res = tb_cfg_reset(sw->tb->ctl, tb_route(sw), TB_CFG_DEFAULT_TIMEOUT);
 	if (res.err > 0)
 		return -EIO;
 	return res.err;
@@ -1306,17 +1291,13 @@ static int tb_plug_events_active(struct tb_switch *sw, bool active)
 	u32 data;
 	int res;
 
-	if (tb_switch_is_icm(sw))
+	if (tb_switch_is_icm(sw) || tb_switch_is_usb4(sw))
 		return 0;
 
 	sw->config.plug_events_delay = 0xff;
 	res = tb_sw_write(sw, ((u32 *) &sw->config) + 4, TB_CFG_SWITCH, 4, 1);
 	if (res)
 		return res;
-
-	/* Plug events are always enabled in USB4 */
-	if (tb_switch_is_usb4(sw))
-		return 0;
 
 	res = tb_sw_read(sw, &data, TB_CFG_SWITCH, sw->cap_plug_events + 1, 1);
 	if (res)
@@ -1991,6 +1972,7 @@ tb_switch_alloc_safe_mode(struct tb *tb, struct device *parent, u64 route)
  */
 int tb_switch_configure(struct tb_switch *sw)
 {
+	bool restore = sw->config.enabled;
 	struct tb *tb = sw->tb;
 	u64 route;
 	int ret;
@@ -1998,7 +1980,7 @@ int tb_switch_configure(struct tb_switch *sw)
 	route = tb_route(sw);
 
 	tb_dbg(tb, "%s Switch at %#llx (depth: %d, up port: %d)\n",
-	       sw->config.enabled ? "restoring " : "initializing", route,
+	       restore ? "restoring " : "initializing", route,
 	       tb_route_length(route), sw->config.upstream_port_number);
 
 	sw->config.enabled = 1;
@@ -2017,11 +1999,7 @@ int tb_switch_configure(struct tb_switch *sw)
 		if (ret)
 			return ret;
 
-		ret = usb4_switch_setup(sw);
-		if (ret)
-			return ret;
-
-		ret = usb4_switch_configure_link(sw);
+		ret = usb4_switch_setup(sw, restore);
 	} else {
 		if (sw->config.vendor_id != PCI_VENDOR_ID_INTEL)
 			tb_sw_warn(sw, "unknown switch vendor id %#x\n",
@@ -2035,10 +2013,6 @@ int tb_switch_configure(struct tb_switch *sw)
 		/* Enumerate the switch */
 		ret = tb_sw_write(sw, (u32 *)&sw->config + 1, TB_CFG_SWITCH,
 				  ROUTER_CS_1, 3);
-		if (ret)
-			return ret;
-
-		ret = tb_lc_configure_link(sw);
 	}
 	if (ret)
 		return ret;
@@ -2322,6 +2296,69 @@ void tb_switch_lane_bonding_disable(struct tb_switch *sw)
 }
 
 /**
+ * tb_switch_configure_link() - Set link configured
+ * @sw: Switch whose link is configured
+ *
+ * Sets the link upstream from @sw configured (from both ends) so that
+ * it will not be disconnected when the domain exits sleep. Can be
+ * called for any switch.
+ *
+ * It is recommended that this is called after lane bonding is enabled.
+ *
+ * Returns %0 on success and negative errno in case of error.
+ */
+int tb_switch_configure_link(struct tb_switch *sw)
+{
+	struct tb_port *up, *down;
+	int ret;
+
+	if (!tb_route(sw) || tb_switch_is_icm(sw))
+		return 0;
+
+	up = tb_upstream_port(sw);
+	if (tb_switch_is_usb4(up->sw))
+		ret = usb4_port_configure(up);
+	else
+		ret = tb_lc_configure_port(up);
+	if (ret)
+		return ret;
+
+	down = up->remote;
+	if (tb_switch_is_usb4(down->sw))
+		return usb4_port_configure(down);
+	return tb_lc_configure_port(down);
+}
+
+/**
+ * tb_switch_unconfigure_link() - Unconfigure link
+ * @sw: Switch whose link is unconfigured
+ *
+ * Sets the link unconfigured so the @sw will be disconnected if the
+ * domain exists sleep.
+ */
+void tb_switch_unconfigure_link(struct tb_switch *sw)
+{
+	struct tb_port *up, *down;
+
+	if (sw->is_unplugged)
+		return;
+	if (!tb_route(sw) || tb_switch_is_icm(sw))
+		return;
+
+	up = tb_upstream_port(sw);
+	if (tb_switch_is_usb4(up->sw))
+		usb4_port_unconfigure(up);
+	else
+		tb_lc_unconfigure_port(up);
+
+	down = up->remote;
+	if (tb_switch_is_usb4(down->sw))
+		usb4_port_unconfigure(down);
+	else
+		tb_lc_unconfigure_port(down);
+}
+
+/**
  * tb_switch_add() - Add a switch to the domain
  * @sw: Switch to add
  *
@@ -2447,15 +2484,13 @@ void tb_switch_remove(struct tb_switch *sw)
 			tb_xdomain_remove(port->xdomain);
 			port->xdomain = NULL;
 		}
+
+		/* Remove any downstream retimers */
+		tb_retimer_remove_all(port);
 	}
 
 	if (!sw->is_unplugged)
 		tb_plug_events_active(sw, false);
-
-	if (tb_switch_is_usb4(sw))
-		usb4_switch_unconfigure_link(sw);
-	else
-		tb_lc_unconfigure_link(sw);
 
 	tb_switch_nvm_remove(sw);
 
@@ -2530,6 +2565,10 @@ int tb_switch_resume(struct tb_switch *sw)
 	}
 
 	err = tb_switch_configure(sw);
+	if (err)
+		return err;
+
+	err = tb_switch_tmu_init(sw);
 	if (err)
 		return err;
 
@@ -2761,9 +2800,4 @@ struct tb_port *tb_switch_find_port(struct tb_switch *sw,
 	}
 
 	return NULL;
-}
-
-void tb_switch_exit(void)
-{
-	ida_destroy(&nvm_ida);
 }
