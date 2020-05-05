@@ -1,0 +1,41 @@
+drm drm-fixes e32b2484b3e00170b6cf57d99a18972e174e10ea
+	Merge tag 'drm-misc-fixes-2020-04-23' of git://anongit.freedesktop.org/drm/drm-misc into drm-fixes
+drm-misc drm-misc-fixes a65aa9c3676ffccb21361d52fcfedd5b5ff387d7
+	drm/qxl: qxl_release leak in qxl_hw_surface_alloc()
+drm-intel drm-intel-fixes 2abaad4eb59d1cdc903ea84c06acb406e2fbb263
+	drm/i915/gt: Check cacheline is valid before acquiring
+drm-amd drm-amd-fixes 2b702e72e33bbdec0764cfb6e1dd00fe1142ae55
+	Merge tag 'drm-misc-fixes-2017-09-28-1' of git://anongit.freedesktop.org/git/drm-misc into drm-fixes
+drm drm-next 1aa63ddf726ea049279989b93b69b57ce6efd75b
+	Merge tag 'drm-misc-next-2020-04-14' of git://anongit.freedesktop.org/drm/drm-misc into drm-next
+drm-misc drm-misc-next-fixes 152cce0006abf7e17dfb7dc94896b044bda4e588
+	drm/bridge: analogix_dp: Split bind() into probe() and real bind()
+drm-intel drm-intel-next-fixes 74bd4f0c921cc9cf5f99ba4129dafe35496de6f3
+	Merge tag 'amd-drm-fixes-5.7-2020-04-08' of git://people.freedesktop.org/~agd5f/linux into drm-next
+drm-amd drm-amd-next-fixes 2bd6bf03f4c1c59381d62c61d03f6cc3fe71f66e
+	Linux 4.14-rc1
+<<<<<<<
+drm-misc drm-misc-next 87189b78959c10c454477cce5cb9836c2ee5c730
+	drm: make drm_file use keyed wakeups
+drm-intel drm-intel-next-queued 869129ee0c624a78c74e50b51635e183196cd2c6
+	drm/i915: Use proper fault mask in interrupt postinstall too
+=======
+drm-misc drm-misc-next e304f8a0513b830be37b3f5059c3d8fcaacda4b7
+	drm/qxl: Don't use drm_device->dev_private
+drm-intel drm-intel-next-queued 96a4faf524fcfbb6c1f2ce91238e81062895ec09
+	drm/i915/selftests: Tweak the tolerance for clock ticks to 12.5%
+>>>>>>>
+drm-intel drm-intel-next b06ef327e26367b9286a2079b31cde8d2161c0d8
+	drm/i915: Update DRIVER_DATE to 20200417
+drm-amd drm-amd-next 754270c7c56292e97d0eff924a5d5d83f92add07
+	Merge branch 'drm-next-4.15' of git://people.freedesktop.org/~agd5f/linux into drm-next
+sound-upstream for-linus ca76282b6faffc83601c25bd2a95f635c03503ef
+	ALSA: hda/hdmi: fix race in monitor detection during probe
+sound-upstream for-next 5b6cc38f3f3f37109ce72b60bda215a5f6892c0b
+	ALSA: usb-audio: Fix racy list management in output queue
+drm-intel topic/core-for-CI 04060c8fe723f007e1ec82e7dfc3c485ac39d31c
+	pci/msi: Stop warning for MSI enabling failure
+drm drm-vmwgfx-coherent 0a6cad5df541108cfd3fbd79eef48eb824c89bdc
+	Merge branch 'vmwgfx-coherent' of git://people.freedesktop.org/~thomash/linux into drm-next
+drm-misc topic/phy-compliance 8cdf727119289db3a98835662eb28e1c5ad835f1
+	drm/i915/dp: Program vswing, pre-emphasis, test-pattern
