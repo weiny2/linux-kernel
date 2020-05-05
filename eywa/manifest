@@ -1,0 +1,632 @@
+#Linux upstream
+git://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git v5.7-rc4 master 0e698dfa282211e414076f9dc7e83c1c288314fd
+
+#Topic Branch: eywa
+#Classification: intel confidential
+#Description: intel-next scripts and patches
+#Jira: 
+#Contributor: 
+#Branch Type: internal nonexpiring
+#Ip Owner: 
+#SDL Contact: 
+#Config Options: N/A
+ssh://git@gitlab.devtools.intel.com:29418/intel-next/intel-next-kernel.git eywa 6d4c38b4fa6b60129d619f3a9eddad5fe1969977
+
+#Topic Branch: configs
+#Classification: intel confidential
+#Description: intel-next scripts and patches
+#Jira: 
+#Contributor: 
+#Branch Type: internal nonexpiring
+#Ip Owner: 
+#SDL Contact: 
+#Config Options: N/A
+ssh://git@gitlab.devtools.intel.com:29418/intel-next/intel-next-kernel.git configs 0cf5fe58d5adfd2514ddeb4099494f945f81ef86
+
+#Topic Branch: packaging
+#Classification: intel confidential
+#Description: intel-next scripts and patches
+#Jira: 
+#Contributor: 
+#Branch Type: internal nonexpiring
+#Ip Owner: 
+#SDL Contact: 
+#Config Options: N/A
+ssh://git@gitlab.devtools.intel.com:29418/intel-next/intel-next-kernel.git packaging 519aad4d536ea0f3c1a756cda8b8e498814d2347
+
+#Topic Branch: len-x86
+#Classification: intel confidential
+#Description: Len Brown's patches
+#Jira: NEXT-1892
+#Contributor: Len Brown <len.brown@intel.com>
+#Branch Type: internal nonexpiring
+#Ip Owner: 
+#SDL Contact: Len Brown <len.brown@intel.com>
+#Config Options: N/A
+git://linux-os.sc.intel.com/~lenb/linux intel-next c6b1bd49818af957ea0cab822cccf79eb87a3375
+
+#Topic Branch: pm-testing
+#Classification: public
+#Description: NEXT PM tree
+#Jira: NEXT-1937
+#Contributor: Rafael Wysocki <rafael.j.wysocki@intel.com>
+#Branch Type: public
+#Ip Owner: 
+#SDL Contact: 
+#Config Options: N/A
+git://git.kernel.org/pub/scm/linux/kernel/git/rafael/linux-pm.git testing 1985b45de01473658db9194e948eb151f9e076ae
+
+#Topic Branch: SGX
+#Classification: public
+#Description: SGX code
+#Jira: NEXT-1939
+#Contributor: Jarkko Sakkinen <jarkko.sakkinen@intel.com>
+#Branch Type: public
+#Ip Owner: 
+#SDL Contact: 
+#Config Options:
+#	CONFIG_INTEL_SGX=y
+git://github.com/jsakkine-intel/linux-sgx.git next 6366f0c67ce1d609da9cd8a482f60ebcc1506f5b
+
+#Topic Branch: drm
+#Classification: intel confidential
+#Description: Drm embargo branch
+#Jira: NEXT-1890
+#Contributor: Rodrigo Vivi <rodrigo.vivi@intel.com>
+#Branch Type: internal nonexpiring
+#Ip Owner: Rodrigio Vivi <rodrigo.vivi@intel.com>
+#SDL Contact: Rodrigo Vivi <rodrigo.vivi@intel.com>
+#Config Options:
+#	CONFIG_DRM_I915_ALPHA_SUPPORT=y
+#	CONFIG_DRM_I915=m
+#	CONFIG_FB_INTEL=n
+ssh://git-amr-1.devtools.intel.com:29418/otc_gen_graphics-drm-intel.git for-intel-next 5baa941f330c97e1fc4cf1b23c0691402bf77f2a
+
+#Topic Branch: nvme
+#Classification: intel confidential
+#Description: NVME driver enabling
+#Jira: NEXT-1889
+#Contributor: Shyjumon <shyjumon.n@intel.com>
+#Branch Type: internal nonexpiring
+#Ip Owner: Revanth Rajashekar <revanth.rajashekar@intel.com>
+#SDL Contact: Revanth Rajashekar <revanth.rajashekar@intel.com>
+#Config Options:
+#	CONFIG_NVME_CORE=y
+#	CONFIG_BLK_DEV_NVME=y
+ssh://git-gar-1.devtools.intel.com:29418/otc_nvme_linux-kernel for-intel-next 28a97c71950e9bd2dfb411f749c8af2015ccf8de
+
+#Topic Branch: mmc
+#Classification: intel confidential
+#Description: MMC Subsystem and SCS (eMMC/SD card/SDIO/UFS) driver enabling
+#Jira: NEXT-1901
+#Contributor: Adrian Hunter <adrian.hunter@intel.com>
+#Branch Type: expiring
+#Ip Owner: Rajesh Bhaskar <rajesh.bhaskar@intel.com>, Tomasz Pielaszkiewicz <tomasz.pielaszkiewicz@intel.com>
+#SDL Contact: Kai Svahn <kai.svahn@intel.com>
+#Config Options:
+#	CONFIG_MMC=y
+#	CONFIG_MMC_BLOCK=y
+#	CONFIG_MMC_SDHCI=y
+#	CONFIG_MMC_SDHCI_PCI=y
+#	CONFIG_MMC_SDHCI_ACPI=m
+#	CONFIG_SCSI_LOWLEVEL=y
+#	CONFIG_SCSI_UFSHCD=m
+#	CONFIG_SCSI_UFSHCD_PCI=m
+#	CONFIG_PINCTRL_CEDARFORK=m
+#	CONFIG_PINCTRL_DENVERTON=m
+#	CONFIG_PINCTRL_ELKHARTLAKE=m
+#	CONFIG_PINCTRL_EMMITSBURG=m
+#	CONFIG_PINCTRL_ICELAKE=m
+#	CONFIG_PINCTRL_TIGERLAKE=m
+ssh://git-amr-3.devtools.intel.com:29418/otc_mmc-linux for-eywa b8a0cf9bc76f505db0da0c3cd805bcc34292321a
+
+#Topic Branch: ntb
+#Classification: intel confidential
+#Description: ICX intel NTB enabling
+#Jira: NEXT-1918
+#Contributor: Dave Jiang <dave.jiang@intel.com>
+#Branch Type: expiring
+#Ip Owner: Rajesh Pamujula <rajesh.s.pamujula@intel.com>
+#SDL Contact: Dave Jiang <dave.jiang@intel.com>
+#Config Options:
+#	CONFIG_NTB=m
+#	CONFIG_NTB_INTEL=m
+#	CONFIG_NTB_PINGPONG=m
+#	CONFIG_NTB_TOOL=m
+#	CONFIG_NTB_PERF=m
+#	CONFIG_NTB_TRANSPORT=m
+#	CONFIG_NTB_NETDEV=m
+ssh://git-amr-1.devtools.intel.com:29418/csig_storage_group-linux-kernel.git ntb-next-upstream 4098ad73839dd02b0c6a849338012eeaaed5116d
+
+#Topic Branch: mei
+#Classification: intel confidential
+#Description: CSE/CSME MEI driver and MEI client drivers
+#Jira: NEXT-1905
+#Contributor: Tomas Winkler <tomas.winkler@intel.com>
+#Branch Type: expiring
+#Ip Owner: William A. Stevens <William.a.stevens@intel.com>
+#SDL Contact: Daniel Ohayon <daniel.ohayon@intel.com>, Alexander Usyskin <alexander.usyskin@intel.com>, Tomas Winkler <tomas.winkler@intel.com>
+#Config Options:
+#	CONFIG_PCI=y
+#	CONFIG_INTEL_MEI=m
+#	CONFIG_INTEL_MEI_ME=m
+#	CONFIG_INTEL_MEI_TXE=m
+#	CONFIG_INTEL_MEI_DAL=m
+#	CONFIG_INTEL_MEI_WDT=m
+#	CONFIG_WATCHDOG_CORE=y
+#	CONFIG_NFC=m
+#	CONFIG_NFC_HCI=m
+#	CONFIG_NFC_MEI_PHY=m
+#	CONFIG_NFC_PN544=m
+#	CONFIG_NFC_PN544_MEI=m
+#	CONFIG_NFC_MICROREAD=m
+#	CONFIG_NFC_MICROREAD_MEI=m
+#	CONFIG_INTEL_MEI_HDCP=m
+ssh://git-ger-8.devtools.intel.com:29418/sfip_linux-linux-mei.git cse-5.7 736deaa79c5125dcc6053edb53ee33798d100cee
+
+#Topic Branch: usb-xhci
+#Classification: intel confidential
+#Description: USB host support and fixes
+#Jira: NEXT-1910
+#Contributor: Mathias Nyman <mathias.nyman@intel.com>
+#Branch Type: expiring
+#Ip Owner: Abdul Rahman Ismail <abdul.r.ismail@intel.com>
+#SDL Contact: Kai Svahn <kai.svahn@intel.com>
+#Config Options:
+#	CONFIG_USB_SUPPORT=y
+#	CONFIG_USB=y
+#	CONFIG_USB_PCI=y
+#	CONFIG_USB_ANNOUNCE_NEW_DEVICES=y
+#	CONFIG_USB_XHCI_HCD=y
+#	CONFIG_USB_XHCI_PCI=y
+#	CONFIG_USB_XHCI_DBGCAP=y
+ssh://git-amr-4.devtools.intel.com:29418/otc_usb-xhci.git for-eywa 7f22e6fac99b1b808b4ec864322dbb367c0b8cc5
+
+#Topic Branch: lpss
+#Classification: intel confidential
+#Description: LPSS/SMBus/GPIO/SPI-NOR/PCI/Thunderbolt driver enabling
+#Jira: NEXT-1904
+#Contributor: Mika Westerberg <mika.westerberg@intel.com>
+#Branch Type: expiring
+#Ip Owner: Rajesh Bhaskar <rajesh.bhaskar@intel.com>, Ming Chew Lee <ming.chew.lee@intel.com>, Eric Thian Aun Tan <eric.thian.aun.tan@intel.com>, Kevin Zhenyu Zhu <kevin.zhenyu.zhu@intel.com>, Reuven Rozic <reuven.rozic@intel.com>
+#SDL Contact: Kai Svahn <kai.svahn@intel.com>
+#Config Options:
+#	CONFIG_MFD_INTEL_LPSS_ACPI=m
+#	CONFIG_MFD_INTEL_LPSS_PCI=m
+#	CONFIG_SERIAL_8250_DW=m
+#	CONFIG_SPI_PXA2XX=m
+#	CONFIG_SPI_PXA2XX_PCI=m
+#	CONFIG_I2C_DESIGNWARE_PLATFORM=m
+#	CONFIG_I2C_DESIGNWARE_PCI=m
+#	CONFIG_I2C_I801=m
+#	CONFIG_PINCTRL_CEDARFORK=m
+#	CONFIG_PINCTRL_DENVERTON=m
+#	CONFIG_PINCTRL_ELKHARTLAKE=m
+#	CONFIG_PINCTRL_EMMITSBURG=m
+#	CONFIG_PINCTRL_ICELAKE=m
+#	CONFIG_PINCTRL_TIGERLAKE=m
+#	CONFIG_SPI_INTEL_SPI_PCI=m
+#	CONFIG_SPI_INTEL_SPI_PLATFORM=m
+#	CONFIG_PINCTRL_JASPERLAKE=m
+#	CONFIG_PINCTRL_WHITLEY=m
+#	CONFIG_USB4=m
+#	CONFIG_USB4_NET=m
+#	CONFIG_MFD_INTEL_PMC_BXT=m
+ssh://git-amr-4.devtools.intel.com:29418/mwesterb-linux.git for-eywa 561adedef398abb68a417e5f742d95049aabe2c3
+
+#Topic Branch: perf
+#Classification: intel confidential
+#Description: PMU support on Cannon Lake, Rocket Lake, Jasper Lake, and SPR
+#Jira: NEXT-1897
+#Contributor: Kan Liang <kan.liang@intel.com>
+#Branch Type: expiring
+#Ip Owner: Beeman Strong <beeman.strong@intel.com>, Ahmad Yasin <ahmad.yasin@intel.com>, Jeremiah D. Williamson <jeremiah.d.williamson@intel.com>
+#SDL Contact: Andi Kleen <andi.kleen@intel.com>
+#Config Options: N/A
+ssh://git-amr-2.devtools.intel.com:29418/kan_lkp-perf-intel-next.git perf-intel-next be048cbcb77cee35def588aa84a6af8095f2b1d9
+
+#Topic Branch: powertop
+#Classification: intel confidential
+#Description: Enable out of tree powertop
+#Jira: NEXT-1927
+#Contributor: Nivedita Swaminathan <nivedita.swaminathan@intel.com>
+#Branch Type: expiring
+#Ip Owner: Nivedita Swaminathan <Nivedita.Swaminathan@intel.com>
+#SDL Contact: Charles D Prestopine <charles.d.prestopine@intel.com>
+#Config Options: N/A
+ssh://git@gitlab.devtools.intel.com:29418/otc-power-management-enabling-team/otc-power-kernel.git powertop d73c47ae055adbd364f9c251ebeae21fee2b7ba5
+
+#Topic Branch: keylocker
+#Classification: intel confidential
+#Description: Support for AES key hiding from memory during encryption and decryption process
+#Jira: NEXT-1935
+#Contributor: Chang S. Bae <chang.seok.bae@intel.com>
+#Branch Type: expiring
+#Ip Owner: Jason W Brandt <jason.w.brandt@intel.com>
+#SDL Contact: Chang S. Bae <chang.seok.bae@intel.com>
+#Config Options:
+#	CONFIG_CRYPTO_AES_KL_INTEL=m
+#	CONFIG_X86_INTEL_KEYLOCKER=y
+ssh://git-amr-4.devtools.intel.com:29418/linux_cbae1_share-kl.git kl 7468ece3da17e17db317c2b2ad5877e14182c435
+
+#Topic Branch: edac
+#Classification: intel confidential
+#Description: Linux EDAC support for SPR, EHL, ICL NNPI and and IEH support for TGL.
+#Jira: NEXT-1900
+#Contributor: Qiuxu Zhou <qiuxu.zhuo@intel.com>
+#Branch Type: expiring
+#Ip Owner: Puneet Wadhawan <puneet.wadhawan@intel.com>, Bezbroz, Henrietta <henrietta.bezbroz@intel.com>, Ahmad, Annie <quarat-ul-ann.ahmad@intel.com>, Revuelta, Julian J <julian.j.revuelta@intel.com>
+#SDL Contact: Tony Luck <tony.luck@intel.com>
+#Config Options:
+#	CONFIG_ACPI_ADXL=y
+#	CONFIG_EDAC_DEBUG=y
+#	CONFIG_EDAC_SKX=m
+#	CONFIG_EDAC_I10NM=m
+#	CONFIG_EDAC_IGEN6=m
+#	CONFIG_EDAC_IEH=m
+ssh://git@gitlab.devtools.intel.com:29418/qzhuo/otc-edac.git for-intel-next f4807af54be8d54b7e25df41763d9b32d15104f7
+
+#Topic Branch: pmc_core
+#Classification: intel confidential
+#Description: TGL, JSL and RKL PMC core driver changes and new AVX512 cpuid support
+#Jira: NEXT-1911
+#Contributor: Gayatri Kammela <gayatri.kammela@intel.com>
+#Branch Type: expiring
+#Ip Owner: Mark Charney <mark.charney@intel.com>, Christopher Lake <christopher.j.lake@intel.com>
+#SDL Contact: David Box <david.e.box@intel.com>
+#Config Options:
+#	CONFIG_INTEL_PMC_CORE=y
+#	CONFIG_PM_SLEEP=y
+#	CONFIG_DEBUG_FS=y
+ssh://git@gitlab.devtools.intel.com:29418/gkammela/pmc_core-intel-next.git pmc_core 3ec51a8e650e0a6ca0b7b6274f4d4088fbbf5381
+
+#Topic Branch: tracehub
+#Classification: intel confidential
+#Description: Contains support for Tiger Lake PCH-H, Emmitsburg
+#Jira: NEXT-1903
+#Contributor: Alexander Shishkin <alexander.shishkin@linux.intel.com>
+#Branch Type: expiring
+#Ip Owner: Marcus Winston <marcus.winston@intel.com>
+#SDL Contact: Kai Svahn <kai.svahn@intel.com>
+#Config Options:
+#	CONFIG_STM=m
+#	CONFIG_STM_DUMMY=m
+#	CONFIG_STM_SOURCE_CONSOLE=m
+#	CONFIG_STM_SOURCE_HEARTBEAT=m
+#	CONFIG_STM_SOURCE_FTRACE=m
+#	CONFIG_INTEL_TH=m
+#	CONFIG_INTEL_TH_PCI=m
+#	CONFIG_INTEL_TH_ACPI=m
+#	CONFIG_INTEL_TH_GTH=m
+#	CONFIG_INTEL_TH_STH=m
+#	CONFIG_INTEL_TH_MSU=m
+#	CONFIG_INTEL_TH_PTI=m
+ssh://git-amr-4.devtools.intel.com:29418/ash-pullme.git intel_th-for-intel-next 223848b1ed6422735550314534ab6391d133440c
+
+#Topic Branch: usb-typec
+#Classification: public
+#Description: Type-C Support
+#Jira: NEXT-1922
+#Contributor: Heikki Krogerus <heikki.krogerus@linux.intel.com>
+#Branch Type: expiring
+#Ip Owner: Vijay Kadgi <vijaykumar.b.kadgi@intel.com>
+#SDL Contact: Svahn Kai <kai.svahn@intel.com>
+#Config Options:
+#	CONFIG_TYPEC=m
+#	CONFIG_TYPEC_TCPM=m
+#	CONFIG_TYPEC_FUSB302=m
+#	CONFIG_TYPEC_WCOVE=m
+#	CONFIG_TYPEC_UCSI=m
+#	CONFIG_UCSI_ACPI=m
+#	CONFIG_TYPEC_DP_ALTMODE=m
+#	CONFIG_TYPEC_TPS6598X=m
+#	CONFIG_TYPEC_MUX_PI3USB30532=m
+#	CONFIG_USB_ROLE_SWITCH=m
+#	CONFIG_USB_ROLES_INTEL_XHCI=m
+#	CONFIG_INTEL_CHT_INT33FE=m
+#	CONFIG_TYPEC_CCG_HPI=m
+#	CONFIG_USB_DWC3=m
+#	CONFIG_USB_DWC3_PCI=m
+ssh://git-amr-4.devtools.intel.com:29418/otc_usb-typec.git for-eywa 050756ac329c02c7ab81231a6b6e8992e6cbdd68
+
+#Topic Branch: pci
+#Classification: public
+#Description: Intel PCI driver related fixes
+#Jira: NEXT-1893
+#Contributor: Sathyanarayanan <sathyanarayanan.kuppuswamy@intel.com>
+#Branch Type: expiring
+#Ip Owner: Ashok Raj <ashok.raj@intel.com>
+#SDL Contact: Ashok Raj <ashok.raj@intel.com>
+#Config Options:
+#	CONFIG_PCIE_DPC=y
+#	CONFIG_PCIE_EDR=y
+ssh://git@gitlab.devtools.intel.com:29418/skuppusw/linux.git pci-next 6a87bd88789e160526e779dfcfc21e8d8e11894e
+
+#Topic Branch: chrome-dmc
+#Classification: intel confidential
+#Description: GFX patch to load DMC firmware
+#Jira: NEXT-1928
+#Contributor: Nivedita Swaminathan <nivedita.swaminathan@intel.com>
+#Branch Type: expiring
+#Ip Owner: Matthew Attwood <matthew.s.atwood@intel.com>
+#SDL Contact: Charles Prestopine <charles.d.prestopine@intel.com>
+#Config Options: N/A
+ssh://git@gitlab.devtools.intel.com:29418/otc-power-management-enabling-team/otc-power-kernel chrome-dmc-patch d48a1266d8670d1fa257f21b864bc17880e8eca2
+
+#Topic Branch: branding
+#Classification: intel confidential
+#Description: Custom intel-next logo on bootup
+#Jira: NEXT-1894
+#Contributor: Kyle Pelton <kyle.d.pelton@intel.com>
+#Branch Type: expiring
+#Ip Owner: Kyle Pelton <kyle.d.pelton@intel.com>
+#SDL Contact: Charles Prestopine <charles.d.prestopine@intel.com>
+#Config Options:
+#	CONFIG_LOGO=y
+#	CONFIG_LOGO_LINUX_NEXT_CLUT224=y
+ssh://git@gitlab.devtools.intel.com:29418/otc-power-management-enabling-team/otc-power-kernel.git intel_next_branding 7a209c491b42dca1c84115748cb4c2a809c98d20
+
+#Topic Branch: fixups
+#Classification: intel confidential
+#Description: Fixup between mei/pm-testing
+#Jira: NEXT-1899
+#Contributor: Kyle Pelton <kyle.d.pelton@intel.com>
+#Branch Type: expiring
+#Ip Owner: Kyle Pelton <kyle.d.pelton@intel.com>
+#SDL Contact: Charles Prestopine <charles.d.prestopine@intel.com>
+#Config Options: N/A
+ssh://git@gitlab.devtools.intel.com:29418/otc-power-management-enabling-team/otc-power-kernel.git fixups f9727277f94f87641fb380b4fdfff081a6f16f93
+
+#Topic Branch: cet
+#Classification: public
+#Description: Control-flow Enforcement Technology (CET) provides protection againstreturn/jump-oriented programming (ROP) attacks.
+#Jira: NEXT-1919
+#Contributor: Yu-cheng Yu <yu-cheng.yu@intel.com>
+#Branch Type: expiring
+#Ip Owner: Vedvyas Shanbhogue <vedvyas.shanbhogue@intel.com>
+#SDL Contact: Yu-cheng Yu <yu-cheng.yu@intel.com>
+#Config Options:
+#	CONFIG_X86_INTEL_SHADOW_STACK_USER=y
+#	CONFIG_X86_INTEL_BRANCH_TRACKING_USER=y
+#	CONFIG_X86_INTEL_CET=y
+ssh://git@gitlab.devtools.intel.com:29418/yyu32/linux_cet.git cet f69d21493b5a7288035887130cf6d87433692012
+
+#Topic Branch: clear_patches
+#Classification: public
+#Description: Add Custom clear linux patches required to boot clear linux
+#Jira: NEXT-1895
+#Contributor: Kyle Pelton <kyle.d.pelton@intel.com>
+#Branch Type: expiring
+#Ip Owner: Kyle Pelton <kyle.d.pelton@intel.com>
+#SDL Contact: Charles Prestopine <charles.d.prestopine@intel.com>
+#Config Options: N/A
+ssh://git@gitlab.devtools.intel.com:29418/otc-power-management-enabling-team/otc-power-kernel.git clear_linux_patches_for_next 95924046695bcb2355797f4442fec90362c3e2a4
+
+#Topic Branch: perf-tools
+#Classification: public
+#Description: Updates to perf tools for Intel PT
+#Jira: NEXT-1902
+#Contributor: Adrian Hunter <adrian.hunter@intel.com>
+#Branch Type: expiring
+#Ip Owner: Beeman Strong <beeman.strong@intel.com>
+#SDL Contact: Kai Svahn <kai.svahn@intel.com>
+#Config Options: N/A
+ssh://git-amr-3.devtools.intel.com:29418/otc_mmc-linux intel-pt-perf-tools-v5.7 154b69424871c52054a12135402f63f0e99b9d70
+
+#Topic Branch: rar
+#Classification: intel confidential
+#Description: Remove Action Request (RAR) TLB Shootdown
+#Jira: NEXT-1926
+#Contributor: Yu-cheng Yu <yu-cheng.yu@intel.com>
+#Branch Type: expiring
+#Ip Owner: Ido  Ouziel <ido.ouziel@intel.com>
+#SDL Contact: Yu-cheng Yu <yu-cheng.yu@intel.com>
+#Config Options:
+#	CONFIG_X86_INTEL_RAR=y
+ssh://git@gitlab.devtools.intel.com:29418/yyu32/rar.git rar f04944ded9f5725e32470892d204a4e1b203f491
+
+#Topic Branch: ipc
+#Classification: intel confidential
+#Description: VPU/IPC support for Keem Bay and TBH
+#Jira: NEXT-1916
+#Contributor: Daniele Alessandrelli  <daniele.alessandrelli@intel.com>
+#Branch Type: expiring
+#Ip Owner: Farrell, David T <david.t.farrell@intel.com>
+#SDL Contact: Walsh, Liz <liz.walsh@intel.com>
+#Config Options:
+#	CONFIG_KEEMBAY_IPC=y
+#	CONFIG_KEEMBAY_VPU_IPC=y
+#	CONFIG_KEEMBAY_IPC_TEST=m
+#	CONFIG_KEEMBAY_VPU_IPC_TEST=m
+ssh://git@gitlab.devtools.intel.com:29418/mvds-linux-dev/thunder-bay-linux/tbh-linux.git release-v5.7-rc1 318f0f9dd9eb7c4585fc520a5ffdef269c702605
+
+#Topic Branch: pmt
+#Classification: intel confidential
+#Description: Intel Converged Telemetry Architecture
+#Jira: NEXT-1925
+#Contributor: David E Box  <david.e.box@intel.com>
+#Branch Type: expiring
+#Ip Owner: Van De Groenendaal, Johan <johan.van.de.groenendaal@intel.com>, Ayinala, Manohar <manohar.ayinala@intel.com>, Krithivas, Ramamurthy <ramamurthy.krithivas@intel.com>
+#SDL Contact: Prestopine, Charles D <charles.d.prestopine@intel.com>
+#Config Options:
+#	CONFIG_MFD_INTEL_PMT=m
+#	CONFIG_INTEL_PMT_TELEM=m
+#	CONFIG_INTEL_PMT_WATCHER=m
+#	CONFIG_INTEL_PMT_CRASHLOG=m
+ssh://git@gitlab.devtools.intel.com:29418/debox1/linux-kernel-dev.git cta_arch_5.7 5a40b00842201ed1bb062e7abb9f506f92b869d4
+
+#Topic Branch: ADC/TGPIO/PWM/QEP/MCAN
+#Classification: intel confidential
+#Description: TGPIO branch
+#Jira: NEXT-1909
+#Contributor: Jarkko Nikula  <jarkko.nikula@linux.intel.com>
+#Branch Type: expiring
+#Ip Owner: Abdul Rahman Ismail <abdul.r.ismail@intel.com>, Tan, Raymond <raymond.tan@intel.com>
+#SDL Contact: Svahn, Kai <kai.svahn@intel.com>
+#Config Options:
+#	CONFIG_INTEL_ADC=m
+#	CONFIG_PWM_DWC=m
+#	CONFIG_COUNTER=y
+#	CONFIG_INTEL_QEP=m
+#	CONFIG_CAN_M_CAN=m
+#	CONFIG_CAN_M_CAN_PCI=m
+#	CONFIG_CAN_CALC_BITTIMING=y
+git://git-amr-4.devtools.intel.com/jarkkoni-linux.git for-intel-next d7f3c97614774f836178e5e2dc6ec670bf378276
+
+#Topic Branch: SVOS Kernel
+#Classification: intel confidential
+#Description: SVOS Kernel/Driver Changes for v5.6
+#Jira: NEXT-1915
+#Contributor: Tom Stonecypher <tom.stonecypher@intel.com>
+#Branch Type: expiring
+#Ip Owner: Tom Stonecypher <tom.stonecypher@intel.com>
+#SDL Contact: Tom Stonecypher <tom.stonecypher@intel.com>
+#Config Options:
+#	CONFIG_SVOS=n
+#	CONFIG_SVFS_ACPI=n
+#	CONFIG_SVOS_RAS_ERRORCORRECT=n
+ssh://git-amr-1.devtools.intel.com:29418/svos_kernel-next.git svos-next-pull-5.7 b5ea42dfe6d8b412687ea0fd31d22f470a88aca9
+
+#Topic Branch: Intel User interrupt
+#Classification: intel confidential
+#Description: Intel User interrupt support
+#Jira: NEXT-1917
+#Contributor: Sohil Mehta <sohil.mehta@intel.com>
+#Branch Type: expiring
+#Ip Owner: Jacob Pan <jacob.jun.pan@intel.com>, Ashok Raj <ashok.raj@intel.com>
+#SDL Contact: Jacob Pan <jacob.jun.pan@intel.com>, Ashok Raj <ashok.raj@intel.com>
+#Config Options:
+#	CONFIG_X86_INTEL_USER_INTERRUPT=y
+ssh://git-ger-6.devtools.intel.com:29418/uli-linux-kernel.git uipi-intel-next fd4d4e7857cb93eb3cff1cd9675ab99c4a0b1384
+
+#Topic Branch: rdt
+#Classification: intel confidential
+#Description: Collection of new Intel RDT features
+#Jira: NEXT-1896
+#Contributor: Reinette Chatre <reinette.chatre@intel.com>
+#Branch Type: expiring
+#Ip Owner: Tony Luck <tony.luck@intel.com>
+#SDL Contact: Reinette Chatre <reinette.chatre@intel.com>
+#Config Options:
+#	CONFIG_X86_CPU_RESCTRL=y
+ssh://git-amr-2.devtools.intel.com:29418/rt_linux-linux.git rdt/for-intel-next 77f5a5e78387ab46692fa9cb80e10b807ca5cf3f
+
+#Topic Branch: PKS
+#Classification: intel confidential
+#Description: These patches are preparation for follow-one PKSpatches
+#Jira: NEXT-1908
+#Contributor: Fenghua Yu <fenghua.yu@intel.com>
+#Branch Type: expiring
+#Ip Owner: Ravi Shankar <ravi.v.shankar@intel.com>
+#SDL Contact: Dave Hansen <dave.hansen@intel.com>
+#Config Options: N/A
+ssh://git-amr-4.devtools.intel.com:29418/enabling_cldemote_in_linux_kerne-linux_git.git pks 63ac8aa11a2423ba1331829869c6738d6db15b2a
+
+#Topic Branch: vmdos_split_lock
+#Classification: intel confidential
+#Description: Enable vmdos
+#Jira: NEXT-1934
+#Contributor: Fenghua Yu <fenghua.yu@intel.com>
+#Branch Type: expiring
+#Ip Owner: Ravi Shankar <ravi.v.shankar@intel.com>
+#SDL Contact: Ashok Raj <ashok.raj@intel.com>
+#Config Options: N/A
+ssh://git-amr-4.devtools.intel.com:29418/enabling_cldemote_in_linux_kerne-linux_git.git vmdos c147364fa2b995165cb31617d43bb90bfcb91374
+
+#Topic Branch: kvm-vmdos
+#Classification: intel confidential
+#Description: Bus Lock VM exit & No-commit VM exit
+#Jira: NEXT-1936
+#Contributor: Xiaoyao Li <xiaoyao.li@intel.com>
+#Branch Type: expiring
+#Ip Owner: Shanbhogue, Vedvyas <vedvyas.shanbhogue@intel.com>
+#SDL Contact: Xiaoyao Li <xiaoyao.li@intel.com>
+#Config Options: N/A
+ssh://git@gitlab.devtools.intel.com:29418/xiaoyaol/linux.git vm-dos-virt-intel-next 1e62490fdd49305b146f654b755688b4bfbcdf2e
+
+#Topic Branch: CXL
+#Classification: intel confidential
+#Description: CXL Preliminary Enumeration / PCIe for A0
+#Jira: NEXT-1898
+#Contributor: Sean Kelley <sean.v.kelley@linux.intel.com>
+#Branch Type: expiring
+#Ip Owner: Prajwal Mohan <prajwal.karur.mohan@intel.com>
+#SDL Contact: Sean Kelley <sean.v.kelley@linux.intel.com>
+#Config Options: N/A
+ssh://git@gitlab.devtools.intel.com:29418/svkelley/cxl-dev.git cxl-next fe82b95250e18c34fb043021dcf12de803ef1227
+
+#Topic Branch: libnvdimm
+#Classification: intel confidential
+#Description: Implementation for DCPMM Runtime Firmware Activation support
+#Jira: NEXT-1912
+#Contributor: Dan Williams <dan.j.williams@intel.com>
+#Branch Type: expiring
+#Ip Owner: Murugasamy Nachimuthu <murugasamy.nachimuthu@intel.com>
+#SDL Contact: Dan Williams <dan.j.williams@intel.com>
+#Config Options: N/A
+ssh://git@gitlab.devtools.intel.com:29418/otc-clk-server/linux-nvdimm/linux.git for-5.8/firmware-activate dbeacc9c7a36f21cbf1a6cc84b82445ddb0b7226
+
+#Topic Branch: dlb
+#Classification: intel confidential
+#Description: Configuration and use of the DLB (1.0) device
+#Jira: NEXT-1944
+#Contributor: Gage Eads <gage.eads@intel.com>
+#Branch Type: expiring
+#Ip Owner: Niall McDonnell <niall.mcdonnell@intel.com>
+#SDL Contact: Gage Eads <gage.eads@intel.com>
+#Config Options:
+#	CONFIG_INTEL_DLB=m
+ssh://git@gitlab.devtools.intel.com:29418/cwa/linux-kernel.git dlb_for_intel_next_v5.7-rc3 1b1f6b47548f1a960e4c69d871e29ddc775a8cf7
+
+#Topic Branch: storage_d3
+#Classification: public
+#Description: Add support for StorageD3Enable_DSD
+#Jira: NEXT-1924
+#Contributor: David Box <david.e.box@intel.com>
+#Branch Type: expiring
+#Ip Owner: 
+#SDL Contact: Charles Prestopine <charles.d.prestopine@intel.com>
+#Config Options: N/A
+ssh://git@gitlab.devtools.intel.com:29418/debox1/linux-kernel-dev.git pm-support-for-intel-next de66fc68e7f774b935d148612b475fabd1741f8a
+
+#Topic Branch: LASS
+#Classification: intel confidential
+#Description: Enable ISA extensionof LASS
+#Jira: NEXT-1914
+#Contributor: Yian Chen <yian.chen@intel.com>
+#Branch Type: expiring
+#Ip Owner: Vedvyas Shanbhogue <vedvyas.shanbhogue@intel.com>
+#SDL Contact: vedvyas shanbhogue <vedvyas.shanbhogue@intel.com>
+#Config Options: N/A
+ssh://git@gitlab.devtools.intel.com:29418/chenyian/lass-kernel-v5.6-rc2.git lass-kernel 520fd376482628b671ade6a151994239cd842f7b
+
+#Topic Branch: simics-fixup
+#Classification: public
+#Description: Fix a kernel panic observed when MSR_TURBO_RATIO_LIMIT does not return a sane value.
+#Jira: NEXT-1923
+#Contributor: Ricardo Neri <ricardo.neri-calderon@linux.intel.com>
+#Branch Type: expiring
+#Ip Owner: 
+#SDL Contact: Ravi Shankar <ravi.v.shankar@intel.com>
+#Config Options: N/A
+ssh://git@gitlab.devtools.intel.com:29418/ranerica/linux-dev.git rneri/fix_freq_invariance 44bdc9ea69d95acc7b7ac6ba449a23dd9614b908
+
+#Topic Branch: dlb2
+#Classification: intel confidential
+#Description: The dlb2 driver is a kernel module that supports configuration and use of the DLB 2.0 device
+#Jira: NEXT-1945
+#Contributor: Gage Eads <gage.eads@intel.com>
+#Branch Type: expiring
+#Ip Owner: Niall Mcdonnell <niall.mcdonnell@intel.com>
+#SDL Contact: Gage Eads <gage.eads@intel.com>
+#Config Options:
+#	CONFIG_INTEL_DLB2=m
+#	CONFIG_INTEL_DLB2_DATAPATH=y
+#	CONFIG_INTEL_DLB2_SIOV=n
+#	CONFIG_INTEL_IOMMU=y
+#	CONFIG_VFIO=y
+#	CONFIG_VFIO_MDEV=y
+#	CONFIG_VFIO_MDEV_DEVICE=y
+#	CONFIG_PCI_IOV=y
+ssh://git@gitlab.devtools.intel.com:29418/cwa/linux-kernel.git dlb2_for_intel_next_v5.7-rc3 1d6b51b4af4c2b7e3ae9837d3dc076e99bd8ad92
+

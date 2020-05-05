@@ -1,0 +1,219 @@
+INTEL CONFIDENTIAL. FOR INTERNAL USE ONLY.
+------------------------------------------------------------------------
+README.intel.perf-cnl:
+
+- Linux perf support for Cannonlake
+This implements Linux perf PMU support for Cannonlake Client.
+Include both core and uncore support.
+For core support, add a new PEBS event constraint table, update the event for topdown recovery_bubbles.
+For uncore support, add new pci id for IMC, add new MSR address for CBOX, get CBOX# from CNL_UNC_CBO_CONFIG MSR directly, and move clocktick event to its own PMU.
+
+Event list is internal only
+
+Open issues:
+- kernel driver event list is not final
+
+Owner: Kan Liang
+
+README.intel.cxl:
+
+Compute eXpress Link
+
+What IP features are eanbled by this code?
+  CXL enumeration for Devices and Ports
+  Basic PCIe UUID string identification for CXL hardware when running OSC
+  Requires CXL hardware (PCIe card)
+  Will dmesg provide output (dev_info) for success or failure
+
+  Example output on SKL NUC with no CXL support:
+
+seanvk@arch-skl-dev1 ~ % dmesg | grep OSC                                                                                         :(
+[    0.487594] ACPI: \_PR_.CPU0: _OSC native thermal LVT Acked
+[    0.543368] acpi PNP0A08:00: _OSC: OS supports [ExtendedConfig ASPM ClockPM Segments MSI HPX-Type3]
+[    0.543420] ACPI_OSC: Failed run OSC: 33DB4D5B-1FF7-401C-9657-7441C03DD766
+[    0.543466] ACPI_OSC: Failed run OSC: 68F2D50B-C469-4d8A-BD3D-941A103FD3FC
+[    0.543469] acpi PNP0A08:00: _OSC failed (AE_ERROR); disabling ASPM
+
+[    0.546486] pci 0000:00:1c.0: CXL: pci_cxl_init() : upstream/downstream port found
+[    0.546491] pci 0000:00:1c.0: CXL: pci_cxl_init() : No CXL capability found
+[    0.546804] pci 0000:00:1c.1: CXL: pci_cxl_init() : upstream/downstream port found
+[    0.546810] pci 0000:00:1c.1: CXL: pci_cxl_init() : No CXL capability found
+[    0.547128] pci 0000:00:1c.2: CXL: pci_cxl_init() : upstream/downstream port found
+[    0.547134] pci 0000:00:1c.2: CXL: pci_cxl_init() : No CXL capability found
+[    0.547459] pci 0000:00:1c.4: CXL: pci_cxl_init() : upstream/downstream port found
+[    0.547465] pci 0000:00:1c.4: CXL: pci_cxl_init() : No CXL capability found
+[    0.549704] pci 0000:02:00.0: CXL: pci_cxl_init() : dev 0, func 0 found
+[    0.549714] pci 0000:02:00.0: CXL: pci_cxl_init() : No CXL capability found
+[    0.550263] pci 0000:03:00.0: CXL: pci_cxl_init() : dev 0, func 0 found
+[    0.550277] pci 0000:03:00.0: CXL: pci_cxl_init() : No CXL capability found
+
+  Example output in Simics using Cambria Turtle Back Falls Virtual Test Card:
+
+root@CannotLeaveINTEL ~ # dmesg | grep -i osc
+[ 7.444523] pci 0000:4e:00.0: CXL: pci_cxl_init() : CXL capability found
+[ 7.453523] pci 0000:4e:00.0: CXL: Cache+ IO+ Mem+ Viral- HDMCount 1
+[ 7.461533] pci 0000:4e:00.0: CXL: cap ctrl status ctrl2 status2 lock
+[ 7.469523] pci 0000:4e:00.0: CXL: 001f 0002 0000 0000 0000 0000
+
+Which Platforms are affected by this code?
+  SPR
+Are any bugs fixed or introduced by this code?
+  Second release, fixed Root Complex Endpoint detection, as demonstrated in example Simics output
+  Still essentially a "hello world"
+
+README.intel.rdt:
+
+Features related to Intel Resource Director Technology (RDT)
+
+Supported platforms: Icelake Server (ICX), Snow Ridge (SNR), Sapphire
+Rapids (SPR).
+
+Changelog:
+- Support wider MBM counters. New feature in ICX and SNR. (LCK-7726)
+- Support MBA2.0 min/max control. New feature in ICX and SNR. (LCK-7725).
+- Recognize and advertise MBA3.0, new architectural feature available starting with SPR.
+
+README.intel_th:
+
+# Intel Trace Hub
+# Contains support for Tiger Lake, Tiger Lake PCH-H, Emmitsburg, Alder Lake.
+# Classification: IC
+# SDL contact: Kai Svahn <kai.svahn@intel.com>
+# IP owner: Marcus Winston <marcus.winston@intel.com>
+# Maintained by Alexander Shishkin <alexander.shishkin@linux.intel.com>
+# Authorized use contact: Alexander Shishkin <alexander.shishkin@linux.intel.com>
+# Config options: CONFIG_STM*=m CONFIG_INTEL_TH*=m
+# Supplementary tool: https://git-amr-1.devtools.intel.com/gerrit/gitweb?p=linux-npk-npktool.git;tflink=projects.linux-npk/scm.npktool
+# Intel-Next branch: intel_th-for-intel-next
+# Public subset: intel_th-pub
+# Fixes subset: intel_th-fixes
+
+
+README.intel.tbh-mvds:
+
+Ingredient Summary
+==================
+
+What part(s)/IP block(s)/feature(s) are enabled by this code?
+-------------------------------------------------------------
+
+This code adds supports for the following features to the Keem Bay and Thunder
+Bay Harbor SoCs:
+* IPC communication
+* VPU firmware loading and booting
+
+Which platform(s) are affected by this code?
+--------------------------------------------
+
+The Keem Bay and Thunder Bay Harbor platforms.
+
+
+Are any bugs fixed or introduced by this code?
+----------------------------------------------
+
+None
+
+Configuration options
+---------------------
+
+CONFIG_KEEMBAY_IPC=y|m
+CONFIG_KEEMBAY_VPU_IPC=y|m
+
+(They depend on ARM64)
+
+README.intel.svos:
+
+================
+SVOS
+================
+
+Intel SVOS kernel extensions.  Extensions to the Intel Next kernel used for
+silicon validation.  Intel Next + SVOS extensions = svos-next.
+
+All of the SVOS extensions are demarcated with CONFIG_SVOS, which is disabled by
+default.  The SVOS extensions are intended to be used only in the kernels
+included in the SVOS distros.
+
+SVOS (System Validation Operating System) is Intel's OS foundation for silicon
+validation test software. SVOS consists of a modified kernel (included here)
+plus (not included) a logical filesystem (svfs), IP validation drivers,
+libraries and test applications that work together to expose registers,
+allocate system resources, program test devices and perform highly concurrent
+system-harassing test cases.
+
+http://goto/svos
+
+Classification: Intel Confidential.  SVOS is for Intel internal use only.
+
+================
+
+README.intel.mei:
+
+======================
+CSE post v5.6 changes
+======================
+
+Affected IP: CSE/CSME
+----------------------
+
+Embargoed Supported MEI Devices
+===============================
+
+Cedar Falls
+------------
+0x18D3  /* Cedar Falls */
+
+Tiger Lake Point
+-----------------
+0x42E0  /* Tiger Lake K */
+0x43E0  /* Tiger Lake H */
+
+Mule Creek Canyon (EHL) - upstream in 5.3-rc2
+-----------------------
+0x4970  /* Mule Creek Canyon */
+0x4975  /* Mule Creek Canyon 4 SPD */
+
+Lake Field
+-----------
+0x98E0  /* Lake Field */
+
+Inovation Engine
+-----------------
+0xA1F8  /* Lewisburg IE (SPT) */
+0xA278  /* Lewisburg IE SSX (SPT) */
+
+Jasper Lake
+-----------
+0x38E0  /* Jasper Point - testing only */
+
+Eagle Stream
+------------
+0x18E0 /* Eagle Stream WS */
+
+Ader Lake
+
+0x7AE8  /* Alder Lake Point S */
+0x7A60  /* Alder Lake Point LP */
+
+New Features:
+=============
+
+ * Virtio HW layer.
+ * ACRN SOS code
+ * Bump driver to support HBM 2.2
+ * KDI - support for 3K signatures
+ * Experimental sysfs symbolic link to between client and char device node.
+
+New Drivers:
+============
+KDI - Kernel DAL API module
+
+Bug Fixes:
+==========
+
+Known Issues:
+=============
+
+
+------------------------------------------------------------------------
+Intel Next Maintainers <intel-next-maintainers@eclists.intel.com>
