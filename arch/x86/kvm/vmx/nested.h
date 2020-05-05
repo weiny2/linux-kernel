@@ -86,7 +86,7 @@ static inline int nested_vmx_reflect_vmexit(struct kvm_vcpu *vcpu,
 	 * is only valid for EXCEPTION_NMI exits.  For EXTERNAL_INTERRUPT
 	 * we need to query the in-kernel LAPIC.
 	 */
-	WARN_ON(exit_reason == EXIT_REASON_EXTERNAL_INTERRUPT);
+	WARN_ON(basic(exit_reason) == EXIT_REASON_EXTERNAL_INTERRUPT);
 	if ((exit_intr_info &
 	     (INTR_INFO_VALID_MASK | INTR_INFO_DELIVER_CODE_MASK)) ==
 	    (INTR_INFO_VALID_MASK | INTR_INFO_DELIVER_CODE_MASK)) {
