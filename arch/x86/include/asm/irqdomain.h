@@ -10,6 +10,9 @@ enum {
 	/* Allocate contiguous CPU vectors */
 	X86_IRQ_ALLOC_CONTIGUOUS_VECTORS		= 0x1,
 	X86_IRQ_ALLOC_LEGACY				= 0x2,
+#ifdef CONFIG_SVOS
+	X86_IRQ_ALLOC_SVOS			= 0x44,
+#endif
 };
 
 extern struct irq_domain *x86_vector_domain;

@@ -1279,6 +1279,15 @@ SYSCALL_DEFINE1(close, unsigned int, fd)
 	return retval;
 }
 
+#ifdef CONFIG_SVOS
+int ksys_close_svos(unsigned int fd)
+{
+    int retval = __close_fd(current->files, fd);
+    return retval;
+}
+EXPORT_SYMBOL(ksys_close_svos);
+#endif
+
 /*
  * This routine simulates a hangup on the tty, to arrange that users
  * are given clean terminals at login time.

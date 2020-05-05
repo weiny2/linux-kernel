@@ -75,6 +75,22 @@ static int alloc_masks(struct irq_desc *desc, int node)
 		return -ENOMEM;
 	}
 #endif
+
+#ifdef CONFIG_SVOS
+	if (!zalloc_cpumask_var_node(&desc->inprogress, GFP_KERNEL, node)) {
+#ifdef CONFIG_GENERIC_PENDING_IRQ
+		free_cpumask_var(desc->pending_mask);
+#endif
+		return -ENOMEM;
+	}
+	if (!zalloc_cpumask_var_node(&desc->pending, GFP_KERNEL, node)) {
+#ifdef CONFIG_GENERIC_PENDING_IRQ
+		free_cpumask_var(desc->pending_mask);
+#endif
+		free_cpumask_var(desc->inprogress);
+		return -ENOMEM;
+	}
+#endif
 	return 0;
 }
 

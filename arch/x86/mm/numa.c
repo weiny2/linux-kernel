@@ -28,6 +28,12 @@ EXPORT_SYMBOL(node_data);
 static struct numa_meminfo numa_meminfo __initdata_or_meminfo;
 static struct numa_meminfo numa_reserved_meminfo __initdata_or_meminfo;
 
+#ifdef CONFIG_SVOS
+#include <asm/svos.h>
+extern unsigned long svos_max_pfn;
+void __init svos_numa_data_init(struct numa_meminfo *);
+#endif
+
 static int numa_distance_cnt;
 static u8 *numa_distance;
 
@@ -240,7 +246,11 @@ static void __init alloc_node_data(int nid)
 int __init numa_cleanup_meminfo(struct numa_meminfo *mi)
 {
 	const u64 low = 0;
+#ifdef CONFIG_SVOS
+	const u64 high = PFN_PHYS(svos_max_pfn);
+#else
 	const u64 high = PFN_PHYS(max_pfn);
+#endif
 	int i, j, k;
 
 	/* first, trim all entries */
@@ -583,7 +593,11 @@ static int __init numa_register_memblks(struct numa_meminfo *mi)
 
 	/* Finally register nodes. */
 	for_each_node_mask(nid, node_possible_map) {
+#ifdef CONFIG_SVOS
+		u64 start = PFN_PHYS(svos_max_pfn);
+#else
 		u64 start = PFN_PHYS(max_pfn);
+#endif
 		u64 end = 0;
 
 		for (i = 0; i < mi->nr_blks; i++) {
@@ -630,6 +644,22 @@ static void __init numa_init_array(void)
 		rr = next_node_in(rr, node_online_map);
 	}
 }
+#ifdef CONFIG_SVOS
+extern struct svos_node_memory svos_node_memory[];
+extern nodemask_t svos_nodes_parsed;
+void __init svos_numa_data_init(struct numa_meminfo *mi) {
+        int i;
+        memset(&svos_node_memory,0,sizeof(struct svos_node_memory) * MAX_NUMNODES);
+        memcpy(&svos_nodes_parsed,&numa_nodes_parsed,sizeof(numa_nodes_parsed));
+        for (i = 0; i < mi->nr_blks; i++) {
+                struct numa_memblk *mb = &mi->blk[i];
+                memblock_set_node(mb->start, mb->end - mb->start, &memblock.memory, mb->nid);
+                svos_node_memory[mb->nid].initialized = 1;
+                svos_node_memory[mb->nid].os_base = mb->start;
+                svos_node_memory[mb->nid].total_size =  mb->end - mb->start;
+        }
+}
+#endif
 
 static int __init numa_init(int (*init_func)(void))
 {
@@ -670,6 +700,9 @@ static int __init numa_init(int (*init_func)(void))
 		return ret;
 
 	numa_emulation(&numa_meminfo, numa_distance_cnt);
+#ifdef CONFIG_SVOS
+	svos_numa_data_init(&numa_meminfo);
+#endif
 
 	ret = numa_register_memblks(&numa_meminfo);
 	if (ret < 0)
@@ -688,6 +721,29 @@ static int __init numa_init(int (*init_func)(void))
 	return 0;
 }
 
+#ifdef CONFIG_SVOS
+/**
+ * dummy_numa_init - Fallback dummy NUMA init
+ *
+ * Used if there's no underlying NUMA architecture, NUMA initialization
+ * fails, or NUMA is disabled on the command line.
+ *
+ * Must online at least one node and add memory blocks that cover all
+ * allowed memory.  This function must not fail.
+ */
+static int __init dummy_numa_init(void)
+{
+	printk(KERN_INFO "%s\n",
+	       numa_off ? "NUMA turned off" : "No NUMA configuration found");
+	printk(KERN_INFO "Faking a node at [mem %#018Lx-%#018Lx]\n",
+	       0LLU, PFN_PHYS(svos_max_pfn) - 1);
+
+	node_set(0, numa_nodes_parsed);
+	numa_add_memblk(0, 0, PFN_PHYS(svos_max_pfn));
+
+	return 0;
+}
+#else
 /**
  * dummy_numa_init - Fallback dummy NUMA init
  *
@@ -709,6 +765,7 @@ static int __init dummy_numa_init(void)
 
 	return 0;
 }
+#endif
 
 /**
  * x86_numa_init - Initialize NUMA

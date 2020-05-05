@@ -497,6 +497,28 @@ static void x86_vector_free_irqs(struct irq_domain *domain,
 	}
 }
 
+#ifdef CONFIG_SVOS
+#include <linux/irq.h>
+static bool svos_vector_configure(unsigned int virq, struct irq_data *irqd,
+		struct apic_chip_data *apicd)
+{
+	unsigned long flags;
+	bool realloc = false;
+
+	apicd->vector = virq;
+	apicd->cpu = 0;
+
+	raw_spin_lock_irqsave(&vector_lock, flags);
+
+	trace_vector_setup(virq, true, 0);
+	apic_update_irq_cfg(irqd, apicd->vector, apicd->cpu);
+	irq_matrix_assign_cpu(vector_matrix, apicd->cpu, apicd->vector);
+
+	raw_spin_unlock_irqrestore(&vector_lock, flags);
+	return realloc;
+}
+#endif
+
 static bool vector_configure_legacy(unsigned int virq, struct irq_data *irqd,
 				    struct apic_chip_data *apicd)
 {
@@ -573,6 +595,12 @@ static int x86_vector_alloc_irqs(struct irq_domain *domain, unsigned int virq,
 			if (!vector_configure_legacy(virq + i, irqd, apicd))
 				continue;
 		}
+#ifdef CONFIG_SVOS
+		else if (info->flags & X86_IRQ_ALLOC_SVOS) {
+			if (!svos_vector_configure(virq + i, irqd, apicd))
+				continue;
+		}
+#endif
 
 		err = assign_irq_vector_policy(irqd, info);
 		trace_vector_setup(virq + i, false, err);

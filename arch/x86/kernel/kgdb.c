@@ -529,6 +529,10 @@ static int __kgdb_notify(struct die_args *args, unsigned long cmd)
 	struct pt_regs *regs = args->regs;
 
 	switch (cmd) {
+#ifdef CONFIG_SVOS
+	case DIE_TRAP:
+		return NOTIFY_DONE;
+#endif
 	case DIE_DEBUG:
 		if (atomic_read(&kgdb_cpu_doing_single_step) != -1) {
 			if (user_mode(regs))
