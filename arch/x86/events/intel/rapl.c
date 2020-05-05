@@ -144,6 +144,8 @@ static inline struct rapl_pmu *cpu_to_rapl_pmu(unsigned int cpu)
 {
 	unsigned int dieid = topology_logical_die_id(cpu);
 
+	if (!rapl_pmus)
+		return NULL;
 	/*
 	 * The unsigned check also catches the '-1' return value for non
 	 * existent mappings in the topology map.
@@ -525,6 +527,9 @@ static int rapl_cpu_offline(unsigned int cpu)
 {
 	struct rapl_pmu *pmu = cpu_to_rapl_pmu(cpu);
 	int target;
+
+	if (!pmu)
+		return 0;
 
 	/* Check if exiting cpu is used for collecting rapl events */
 	if (!cpumask_test_and_clear_cpu(cpu, &rapl_cpu_mask))

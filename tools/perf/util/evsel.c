@@ -1091,8 +1091,10 @@ void perf_evsel__config(struct evsel *evsel, struct record_opts *opts,
 		attr->branch_sample_type = opts->branch_stack;
 	}
 
-	if (opts->sample_weight)
+	if (opts->sample_weight) {
 		perf_evsel__set_sample_bit(evsel, WEIGHT);
+		perf_evsel__set_sample_bit(evsel, LATENCY);
+	}
 
 	attr->task  = track;
 	attr->mmap  = track;
@@ -2293,6 +2295,13 @@ int perf_evsel__parse_sample(struct evsel *evsel, union perf_event *event,
 		data->aux_sample.size = sz;
 		data->aux_sample.data = (char *)array;
 		array = (void *)array + sz;
+	}
+
+	data->ins_lat = 0;
+	if (type & PERF_SAMPLE_LATENCY) {
+		OVERFLOW_CHECK_u64(array);
+		data->ins_lat = *array;
+		array++;
 	}
 
 	return 0;

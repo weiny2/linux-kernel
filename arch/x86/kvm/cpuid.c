@@ -351,6 +351,8 @@ void kvm_set_cpu_caps(void)
 		kvm_cpu_cap_set(X86_FEATURE_INTEL_STIBP);
 	if (boot_cpu_has(X86_FEATURE_AMD_SSBD))
 		kvm_cpu_cap_set(X86_FEATURE_SPEC_CTRL_SSBD);
+	if (boot_cpu_has(X86_FEATURE_ARCH_LBR))
+		kvm_cpu_cap_set(X86_FEATURE_ARCH_LBR);
 
 	kvm_cpu_cap_mask(CPUID_7_1_EAX,
 		F(AVX512_BF16)
@@ -678,6 +680,11 @@ static inline int __do_cpuid_func(struct kvm_cpuid_array *array, u32 function)
 			}
 			entry->edx = 0;
 		}
+		break;
+	/* Architectural LBR */
+	case 0x1c:
+		if (kvm_cpu_cap_has(X86_FEATURE_ARCH_LBR))
+			do_host_cpuid(array, function, 0);
 		break;
 	/* Intel PT */
 	case 0x14:

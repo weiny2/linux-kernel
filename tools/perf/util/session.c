@@ -1256,7 +1256,7 @@ static void dump_sample(struct evsel *evsel, union perf_event *event,
 		stack_user__printf(&sample->user_stack);
 
 	if (sample_type & PERF_SAMPLE_WEIGHT)
-		printf("... weight: %" PRIu64 "\n", sample->weight);
+		printf("... weight: %" PRIu64 ", latency: %" PRIu64 "\n", sample->weight, sample->ins_lat);
 
 	if (sample_type & PERF_SAMPLE_DATA_SRC)
 		printf(" . data_src: 0x%"PRIx64"\n", sample->data_src);

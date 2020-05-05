@@ -95,6 +95,8 @@
 #define INTEL_FAM6_ROCKETLAKE		0xA7
 #define INTEL_FAM6_ROCKETLAKE_L		0xA8
 
+#define INTEL_FAM6_SAPPHIRERAPIDS	0x8F
+
 /* "Small Core" Processors (Atom) */
 
 #define INTEL_FAM6_ATOM_BONNELL		0x1C /* Diamondville, Pineview */
