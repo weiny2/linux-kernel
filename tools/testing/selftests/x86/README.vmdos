@@ -1,0 +1,29 @@
+Test split lock and vmdos
+
+By default, split lock/vmdos option is "warn". Use this kernel option
+to change behavior of split lock/vmdos:
+
+    split_lock_detect=
+              #AC for split lock            #DB for bus lock
+
+    off       Do nothing                    Do nothing
+
+    warn      Kernel OOPs                   Kernel warn rate limited
+              User warn rate limited        User warn rate limited
+
+    fatal     Kernel OOPs                   Kernel warn rate limited
+              Send SIGBUS to user           Send SIGBUS to user
+
+    ratelimit N/A                           Kernel warn rate limited
+                                            User application sleeps for 1 sec
+
+To test split lock/vmdos in the kernel:
+#insmod test_split_lock_drv.ko
+
+To test split lock/vmdos in user:
+#gcc split_lock_test_user.c -o split_lock_test_user
+#split_lock_test_user
+
+Please check the above behavior table to verify if the two tests work.
+
+contact: Fenghua Yu <fenghua.yu@intel.com>

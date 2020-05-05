@@ -64,3 +64,5 @@ $(obj)/capflags.c: $(cpufeature) $(vmxfeature) $(src)/mkcapflags.sh FORCE
 	$(call if_changed,mkcapflags)
 endif
 targets += capflags.c
+
+obj-m					+= test_split_lock_drv.o
