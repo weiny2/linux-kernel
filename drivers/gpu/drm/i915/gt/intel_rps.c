@@ -8,6 +8,7 @@
 
 #include "i915_drv.h"
 #include "intel_gt.h"
+#include "intel_gt_clock_utils.h"
 #include "intel_gt_irq.h"
 #include "intel_gt_pm_irq.h"
 #include "intel_rps.h"
@@ -57,7 +58,7 @@ static u32 rps_pm_mask(struct intel_rps *rps, u8 val)
 	if (val < rps->max_freq_softlimit)
 		mask |= GEN6_PM_RP_UP_EI_EXPIRED | GEN6_PM_RP_UP_THRESHOLD;
 
-	mask &= READ_ONCE(rps->pm_events);
+	mask &= rps->pm_events;
 
 	return rps_pm_sanitize_mask(rps, ~mask);
 }
@@ -70,18 +71,11 @@ static void rps_reset_ei(struct intel_rps *rps)
 static void rps_enable_interrupts(struct intel_rps *rps)
 {
 	struct intel_gt *gt = rps_to_gt(rps);
-	u32 events;
+
+	GT_TRACE(gt, "interrupts:on rps->pm_events: %x, rps_pm_mask:%x\n",
+		 rps->pm_events, rps_pm_mask(rps, rps->last_freq));
 
 	rps_reset_ei(rps);
-
-	if (IS_VALLEYVIEW(gt->i915))
-		/* WaGsvRC0ResidencyMethod:vlv */
-		events = GEN6_PM_RP_UP_EI_EXPIRED;
-	else
-		events = (GEN6_PM_RP_UP_THRESHOLD |
-			  GEN6_PM_RP_DOWN_THRESHOLD |
-			  GEN6_PM_RP_DOWN_TIMEOUT);
-	WRITE_ONCE(rps->pm_events, events);
 
 	spin_lock_irq(&gt->irq_lock);
 	gen6_gt_pm_enable_irq(gt, rps->pm_events);
@@ -120,8 +114,6 @@ static void rps_disable_interrupts(struct intel_rps *rps)
 {
 	struct intel_gt *gt = rps_to_gt(rps);
 
-	WRITE_ONCE(rps->pm_events, 0);
-
 	intel_uncore_write(gt->uncore,
 			   GEN6_PMINTRMSK, rps_pm_sanitize_mask(rps, ~0u));
 
@@ -140,6 +132,7 @@ static void rps_disable_interrupts(struct intel_rps *rps)
 	cancel_work_sync(&rps->work);
 
 	rps_reset_interrupts(rps);
+	GT_TRACE(gt, "interrupts:off\n");
 }
 
 static const struct cparams {
@@ -186,14 +179,12 @@ static void gen5_rps_init(struct intel_rps *rps)
 	fmin = (rgvmodectl & MEMMODE_FMIN_MASK);
 	fstart = (rgvmodectl & MEMMODE_FSTART_MASK) >>
 		MEMMODE_FSTART_SHIFT;
-	DRM_DEBUG_DRIVER("fmax: %d, fmin: %d, fstart: %d\n",
-			 fmax, fmin, fstart);
+	drm_dbg(&i915->drm, "fmax: %d, fmin: %d, fstart: %d\n",
+		fmax, fmin, fstart);
 
 	rps->min_freq = fmax;
+	rps->efficient_freq = fstart;
 	rps->max_freq = fmin;
-
-	rps->idle_freq = rps->min_freq;
-	rps->cur_freq = rps->idle_freq;
 }
 
 static unsigned long
@@ -456,7 +447,8 @@ static bool gen5_rps_enable(struct intel_rps *rps)
 
 	if (wait_for_atomic((intel_uncore_read(uncore, MEMSWCTL) &
 			     MEMCTL_CMD_STS) == 0, 10))
-		DRM_ERROR("stuck trying to change perf mode\n");
+		drm_err(&uncore->i915->drm,
+			"stuck trying to change perf mode\n");
 	mdelay(1);
 
 	gen5_rps_set(rps, rps->cur_freq);
@@ -533,8 +525,8 @@ static u32 rps_limits(struct intel_rps *rps, u8 val)
 
 static void rps_set_power(struct intel_rps *rps, int new_power)
 {
-	struct intel_uncore *uncore = rps_to_uncore(rps);
-	struct drm_i915_private *i915 = rps_to_i915(rps);
+	struct intel_gt *gt = rps_to_gt(rps);
+	struct intel_uncore *uncore = gt->uncore;
 	u32 threshold_up = 0, threshold_down = 0; /* in % */
 	u32 ei_up = 0, ei_down = 0;
 
@@ -579,19 +571,25 @@ static void rps_set_power(struct intel_rps *rps, int new_power)
 	/* When byt can survive without system hang with dynamic
 	 * sw freq adjustments, this restriction can be lifted.
 	 */
-	if (IS_VALLEYVIEW(i915))
+	if (IS_VALLEYVIEW(gt->i915))
 		goto skip_hw_write;
 
-	set(uncore, GEN6_RP_UP_EI, GT_INTERVAL_FROM_US(i915, ei_up));
-	set(uncore, GEN6_RP_UP_THRESHOLD,
-	    GT_INTERVAL_FROM_US(i915, ei_up * threshold_up / 100));
+	GT_TRACE(gt,
+		 "changing power mode [%d], up %d%% @ %dus, down %d%% @ %dus\n",
+		 new_power, threshold_up, ei_up, threshold_down, ei_down);
 
-	set(uncore, GEN6_RP_DOWN_EI, GT_INTERVAL_FROM_US(i915, ei_down));
+	set(uncore, GEN6_RP_UP_EI,
+	    intel_gt_ns_to_pm_interval(gt, ei_up * 1000));
+	set(uncore, GEN6_RP_UP_THRESHOLD,
+	    intel_gt_ns_to_pm_interval(gt, ei_up * threshold_up * 10));
+
+	set(uncore, GEN6_RP_DOWN_EI,
+	    intel_gt_ns_to_pm_interval(gt, ei_down * 1000));
 	set(uncore, GEN6_RP_DOWN_THRESHOLD,
-	    GT_INTERVAL_FROM_US(i915, ei_down * threshold_down / 100));
+	    intel_gt_ns_to_pm_interval(gt, ei_down * threshold_down * 10));
 
 	set(uncore, GEN6_RP_CONTROL,
-	    (INTEL_GEN(i915) > 9 ? 0 : GEN6_RP_MEDIA_TURBO) |
+	    (INTEL_GEN(gt->i915) > 9 ? 0 : GEN6_RP_MEDIA_TURBO) |
 	    GEN6_RP_MEDIA_HW_NORMAL_MODE |
 	    GEN6_RP_MEDIA_IS_GFX |
 	    GEN6_RP_ENABLE |
@@ -646,6 +644,8 @@ static void gen6_rps_set_thresholds(struct intel_rps *rps, u8 val)
 
 void intel_rps_mark_interactive(struct intel_rps *rps, bool interactive)
 {
+	GT_TRACE(rps_to_gt(rps), "mark interactive: %s\n", yesno(interactive));
+
 	mutex_lock(&rps->power.mutex);
 	if (interactive) {
 		if (!rps->power.interactive++ && READ_ONCE(rps->active))
@@ -673,6 +673,9 @@ static int gen6_rps_set(struct intel_rps *rps, u8 val)
 			 GEN6_AGGRESSIVE_TURBO);
 	set(uncore, GEN6_RPNSWREQ, swreq);
 
+	GT_TRACE(rps_to_gt(rps), "set val:%x, freq:%d, swreq:%x\n",
+		 val, intel_gpu_freq(rps, val), swreq);
+
 	return 0;
 }
 
@@ -684,6 +687,9 @@ static int vlv_rps_set(struct intel_rps *rps, u8 val)
 	vlv_punit_get(i915);
 	err = vlv_punit_write(i915, PUNIT_REG_GPU_FREQ_REQ, val);
 	vlv_punit_put(i915);
+
+	GT_TRACE(rps_to_gt(rps), "set val:%x, freq:%d\n",
+		 val, intel_gpu_freq(rps, val));
 
 	return err;
 }
@@ -715,10 +721,10 @@ static int rps_set(struct intel_rps *rps, u8 val, bool update)
 
 void intel_rps_unpark(struct intel_rps *rps)
 {
-	u8 freq;
-
 	if (!rps->enabled)
 		return;
+
+	GT_TRACE(rps_to_gt(rps), "unpark:%x\n", rps->cur_freq);
 
 	/*
 	 * Use the user's desired frequency as a guide, but for better
@@ -728,9 +734,10 @@ void intel_rps_unpark(struct intel_rps *rps)
 
 	WRITE_ONCE(rps->active, true);
 
-	freq = max(rps->cur_freq, rps->efficient_freq),
-	freq = clamp(freq, rps->min_freq_softlimit, rps->max_freq_softlimit);
-	intel_rps_set(rps, freq);
+	intel_rps_set(rps,
+		      clamp(rps->cur_freq,
+			    rps->min_freq_softlimit,
+			    rps->max_freq_softlimit));
 
 	rps->last_adj = 0;
 
@@ -786,6 +793,8 @@ void intel_rps_park(struct intel_rps *rps)
 	 */
 	rps->cur_freq =
 		max_t(int, round_down(rps->cur_freq - 1, 2), rps->min_freq);
+
+	GT_TRACE(rps_to_gt(rps), "park:%x\n", rps->cur_freq);
 }
 
 void intel_rps_boost(struct i915_request *rq)
@@ -801,6 +810,9 @@ void intel_rps_boost(struct i915_request *rq)
 	if (!i915_request_has_waitboost(rq) &&
 	    !dma_fence_is_signaled_locked(&rq->fence)) {
 		set_bit(I915_FENCE_FLAG_BOOST, &rq->fence.flags);
+
+		GT_TRACE(rps_to_gt(rps), "boost fence:%llx:%llx\n",
+			 rq->fence.context, rq->fence.seqno);
 
 		if (!atomic_fetch_inc(&rps->num_waiters) &&
 		    READ_ONCE(rps->cur_freq) < rps->boost_freq)
@@ -896,12 +908,14 @@ static void gen6_rps_init(struct intel_rps *rps)
 
 static bool rps_reset(struct intel_rps *rps)
 {
+	struct drm_i915_private *i915 = rps_to_i915(rps);
+
 	/* force a reset */
 	rps->power.mode = -1;
 	rps->last_freq = -1;
 
 	if (rps_set(rps, rps->min_freq, true)) {
-		DRM_ERROR("Failed to reset RPS to initial values\n");
+		drm_err(&i915->drm, "Failed to reset RPS to initial values\n");
 		return false;
 	}
 
@@ -912,19 +926,17 @@ static bool rps_reset(struct intel_rps *rps)
 /* See the Gen9_GT_PM_Programming_Guide doc for the below */
 static bool gen9_rps_enable(struct intel_rps *rps)
 {
-	struct drm_i915_private *i915 = rps_to_i915(rps);
-	struct intel_uncore *uncore = rps_to_uncore(rps);
+	struct intel_gt *gt = rps_to_gt(rps);
+	struct intel_uncore *uncore = gt->uncore;
 
 	/* Program defaults and thresholds for RPS */
-	if (IS_GEN(i915, 9))
+	if (IS_GEN(gt->i915, 9))
 		intel_uncore_write_fw(uncore, GEN6_RC_VIDEO_FREQ,
 				      GEN9_FREQUENCY(rps->rp1_freq));
 
-	/* 1 second timeout */
-	intel_uncore_write_fw(uncore, GEN6_RP_DOWN_TIMEOUT,
-			      GT_INTERVAL_FROM_US(i915, 1000000));
-
 	intel_uncore_write_fw(uncore, GEN6_RP_IDLE_HYSTERSIS, 0xa);
+
+	rps->pm_events = GEN6_PM_RP_UP_THRESHOLD | GEN6_PM_RP_DOWN_THRESHOLD;
 
 	return rps_reset(rps);
 }
@@ -936,11 +948,9 @@ static bool gen8_rps_enable(struct intel_rps *rps)
 	intel_uncore_write_fw(uncore, GEN6_RC_VIDEO_FREQ,
 			      HSW_FREQUENCY(rps->rp1_freq));
 
-	/* NB: Docs say 1s, and 1000000 - which aren't equivalent */
-	intel_uncore_write_fw(uncore, GEN6_RP_DOWN_TIMEOUT,
-			      100000000 / 128); /* 1 second timeout */
-
 	intel_uncore_write_fw(uncore, GEN6_RP_IDLE_HYSTERSIS, 10);
+
+	rps->pm_events = GEN6_PM_RP_UP_THRESHOLD | GEN6_PM_RP_DOWN_THRESHOLD;
 
 	return rps_reset(rps);
 }
@@ -952,6 +962,10 @@ static bool gen6_rps_enable(struct intel_rps *rps)
 	/* Power down if completely idle for over 50ms */
 	intel_uncore_write_fw(uncore, GEN6_RP_DOWN_TIMEOUT, 50000);
 	intel_uncore_write_fw(uncore, GEN6_RP_IDLE_HYSTERSIS, 10);
+
+	rps->pm_events = (GEN6_PM_RP_UP_THRESHOLD |
+			  GEN6_PM_RP_DOWN_THRESHOLD |
+			  GEN6_PM_RP_DOWN_TIMEOUT);
 
 	return rps_reset(rps);
 }
@@ -1038,6 +1052,10 @@ static bool chv_rps_enable(struct intel_rps *rps)
 			      GEN6_RP_UP_BUSY_AVG |
 			      GEN6_RP_DOWN_IDLE_AVG);
 
+	rps->pm_events = (GEN6_PM_RP_UP_THRESHOLD |
+			  GEN6_PM_RP_DOWN_THRESHOLD |
+			  GEN6_PM_RP_DOWN_TIMEOUT);
+
 	/* Setting Fixed Bias */
 	vlv_punit_get(i915);
 
@@ -1052,8 +1070,8 @@ static bool chv_rps_enable(struct intel_rps *rps)
 	drm_WARN_ONCE(&i915->drm, (val & GPLLENABLE) == 0,
 		      "GPLL not enabled\n");
 
-	DRM_DEBUG_DRIVER("GPLL enabled? %s\n", yesno(val & GPLLENABLE));
-	DRM_DEBUG_DRIVER("GPU status: 0x%08x\n", val);
+	drm_dbg(&i915->drm, "GPLL enabled? %s\n", yesno(val & GPLLENABLE));
+	drm_dbg(&i915->drm, "GPU status: 0x%08x\n", val);
 
 	return rps_reset(rps);
 }
@@ -1136,6 +1154,9 @@ static bool vlv_rps_enable(struct intel_rps *rps)
 			      GEN6_RP_UP_BUSY_AVG |
 			      GEN6_RP_DOWN_IDLE_CONT);
 
+	/* WaGsvRC0ResidencyMethod:vlv */
+	rps->pm_events = GEN6_PM_RP_UP_EI_EXPIRED;
+
 	vlv_punit_get(i915);
 
 	/* Setting Fixed Bias */
@@ -1150,8 +1171,8 @@ static bool vlv_rps_enable(struct intel_rps *rps)
 	drm_WARN_ONCE(&i915->drm, (val & GPLLENABLE) == 0,
 		      "GPLL not enabled\n");
 
-	DRM_DEBUG_DRIVER("GPLL enabled? %s\n", yesno(val & GPLLENABLE));
-	DRM_DEBUG_DRIVER("GPU status: 0x%08x\n", val);
+	drm_dbg(&i915->drm, "GPLL enabled? %s\n", yesno(val & GPLLENABLE));
+	drm_dbg(&i915->drm, "GPU status: 0x%08x\n", val);
 
 	return rps_reset(rps);
 }
@@ -1199,6 +1220,11 @@ void intel_rps_enable(struct intel_rps *rps)
 	struct drm_i915_private *i915 = rps_to_i915(rps);
 	struct intel_uncore *uncore = rps_to_uncore(rps);
 
+	if (!HAS_RPS(i915))
+		return;
+
+	intel_gt_check_clock_frequency(rps_to_gt(rps));
+
 	intel_uncore_forcewake_get(uncore, FORCEWAKE_ALL);
 	if (IS_CHERRYVIEW(i915))
 		rps->enabled = chv_rps_enable(rps);
@@ -1216,11 +1242,17 @@ void intel_rps_enable(struct intel_rps *rps)
 	if (!rps->enabled)
 		return;
 
-	drm_WARN_ON(&i915->drm, rps->max_freq < rps->min_freq);
-	drm_WARN_ON(&i915->drm, rps->idle_freq > rps->max_freq);
+	GT_TRACE(rps_to_gt(rps),
+		 "min:%x, max:%x, freq:[%d, %d]\n",
+		 rps->min_freq, rps->max_freq,
+		 intel_gpu_freq(rps, rps->min_freq),
+		 intel_gpu_freq(rps, rps->max_freq));
 
-	drm_WARN_ON(&i915->drm, rps->efficient_freq < rps->min_freq);
-	drm_WARN_ON(&i915->drm, rps->efficient_freq > rps->max_freq);
+	GEM_BUG_ON(rps->max_freq < rps->min_freq);
+	GEM_BUG_ON(rps->idle_freq > rps->max_freq);
+
+	GEM_BUG_ON(rps->efficient_freq < rps->min_freq);
+	GEM_BUG_ON(rps->efficient_freq > rps->max_freq);
 }
 
 static void gen6_rps_disable(struct intel_rps *rps)
@@ -1308,7 +1340,8 @@ static void vlv_init_gpll_ref_freq(struct intel_rps *rps)
 				  CCK_GPLL_CLOCK_CONTROL,
 				  i915->czclk_freq);
 
-	DRM_DEBUG_DRIVER("GPLL reference freq: %d kHz\n", rps->gpll_ref_freq);
+	drm_dbg(&i915->drm, "GPLL reference freq: %d kHz\n",
+		rps->gpll_ref_freq);
 }
 
 static void vlv_rps_init(struct intel_rps *rps)
@@ -1336,28 +1369,24 @@ static void vlv_rps_init(struct intel_rps *rps)
 		i915->mem_freq = 1333;
 		break;
 	}
-	DRM_DEBUG_DRIVER("DDR speed: %d MHz\n", i915->mem_freq);
+	drm_dbg(&i915->drm, "DDR speed: %d MHz\n", i915->mem_freq);
 
 	rps->max_freq = vlv_rps_max_freq(rps);
 	rps->rp0_freq = rps->max_freq;
-	DRM_DEBUG_DRIVER("max GPU freq: %d MHz (%u)\n",
-			 intel_gpu_freq(rps, rps->max_freq),
-			 rps->max_freq);
+	drm_dbg(&i915->drm, "max GPU freq: %d MHz (%u)\n",
+		intel_gpu_freq(rps, rps->max_freq), rps->max_freq);
 
 	rps->efficient_freq = vlv_rps_rpe_freq(rps);
-	DRM_DEBUG_DRIVER("RPe GPU freq: %d MHz (%u)\n",
-			 intel_gpu_freq(rps, rps->efficient_freq),
-			 rps->efficient_freq);
+	drm_dbg(&i915->drm, "RPe GPU freq: %d MHz (%u)\n",
+		intel_gpu_freq(rps, rps->efficient_freq), rps->efficient_freq);
 
 	rps->rp1_freq = vlv_rps_guar_freq(rps);
-	DRM_DEBUG_DRIVER("RP1(Guar Freq) GPU freq: %d MHz (%u)\n",
-			 intel_gpu_freq(rps, rps->rp1_freq),
-			 rps->rp1_freq);
+	drm_dbg(&i915->drm, "RP1(Guar Freq) GPU freq: %d MHz (%u)\n",
+		intel_gpu_freq(rps, rps->rp1_freq), rps->rp1_freq);
 
 	rps->min_freq = vlv_rps_min_freq(rps);
-	DRM_DEBUG_DRIVER("min GPU freq: %d MHz (%u)\n",
-			 intel_gpu_freq(rps, rps->min_freq),
-			 rps->min_freq);
+	drm_dbg(&i915->drm, "min GPU freq: %d MHz (%u)\n",
+		intel_gpu_freq(rps, rps->min_freq), rps->min_freq);
 
 	vlv_iosf_sb_put(i915,
 			BIT(VLV_IOSF_SB_PUNIT) |
@@ -1387,28 +1416,24 @@ static void chv_rps_init(struct intel_rps *rps)
 		i915->mem_freq = 1600;
 		break;
 	}
-	DRM_DEBUG_DRIVER("DDR speed: %d MHz\n", i915->mem_freq);
+	drm_dbg(&i915->drm, "DDR speed: %d MHz\n", i915->mem_freq);
 
 	rps->max_freq = chv_rps_max_freq(rps);
 	rps->rp0_freq = rps->max_freq;
-	DRM_DEBUG_DRIVER("max GPU freq: %d MHz (%u)\n",
-			 intel_gpu_freq(rps, rps->max_freq),
-			 rps->max_freq);
+	drm_dbg(&i915->drm, "max GPU freq: %d MHz (%u)\n",
+		intel_gpu_freq(rps, rps->max_freq), rps->max_freq);
 
 	rps->efficient_freq = chv_rps_rpe_freq(rps);
-	DRM_DEBUG_DRIVER("RPe GPU freq: %d MHz (%u)\n",
-			 intel_gpu_freq(rps, rps->efficient_freq),
-			 rps->efficient_freq);
+	drm_dbg(&i915->drm, "RPe GPU freq: %d MHz (%u)\n",
+		intel_gpu_freq(rps, rps->efficient_freq), rps->efficient_freq);
 
 	rps->rp1_freq = chv_rps_guar_freq(rps);
-	DRM_DEBUG_DRIVER("RP1(Guar) GPU freq: %d MHz (%u)\n",
-			 intel_gpu_freq(rps, rps->rp1_freq),
-			 rps->rp1_freq);
+	drm_dbg(&i915->drm, "RP1(Guar) GPU freq: %d MHz (%u)\n",
+		intel_gpu_freq(rps, rps->rp1_freq), rps->rp1_freq);
 
 	rps->min_freq = chv_rps_min_freq(rps);
-	DRM_DEBUG_DRIVER("min GPU freq: %d MHz (%u)\n",
-			 intel_gpu_freq(rps, rps->min_freq),
-			 rps->min_freq);
+	drm_dbg(&i915->drm, "min GPU freq: %d MHz (%u)\n",
+		intel_gpu_freq(rps, rps->min_freq), rps->min_freq);
 
 	vlv_iosf_sb_put(i915,
 			BIT(VLV_IOSF_SB_PUNIT) |
@@ -1471,12 +1496,13 @@ static void rps_work(struct work_struct *work)
 {
 	struct intel_rps *rps = container_of(work, typeof(*rps), work);
 	struct intel_gt *gt = rps_to_gt(rps);
+	struct drm_i915_private *i915 = rps_to_i915(rps);
 	bool client_boost = false;
 	int new_freq, adj, min, max;
 	u32 pm_iir = 0;
 
 	spin_lock_irq(&gt->irq_lock);
-	pm_iir = fetch_and_zero(&rps->pm_iir) & READ_ONCE(rps->pm_events);
+	pm_iir = fetch_and_zero(&rps->pm_iir) & rps->pm_events;
 	client_boost = atomic_read(&rps->num_waiters);
 	spin_unlock_irq(&gt->irq_lock);
 
@@ -1494,6 +1520,12 @@ static void rps_work(struct work_struct *work)
 	max = rps->max_freq_softlimit;
 	if (client_boost)
 		max = rps->max_freq;
+
+	GT_TRACE(gt,
+		 "pm_iir:%x, client_boost:%s, last:%d, cur:%x, min:%x, max:%x\n",
+		 pm_iir, yesno(client_boost),
+		 adj, new_freq, min, max);
+
 	if (client_boost && new_freq < rps->boost_freq) {
 		new_freq = rps->boost_freq;
 		adj = 0;
@@ -1546,7 +1578,7 @@ static void rps_work(struct work_struct *work)
 	new_freq = clamp_t(int, new_freq, min, max);
 
 	if (intel_rps_set(rps, new_freq)) {
-		DRM_DEBUG_DRIVER("Failed to set new GPU frequency\n");
+		drm_dbg(&i915->drm, "Failed to set new GPU frequency\n");
 		rps->last_adj = 0;
 	}
 
@@ -1568,6 +1600,8 @@ void gen11_rps_irq_handler(struct intel_rps *rps, u32 pm_iir)
 	if (unlikely(!events))
 		return;
 
+	GT_TRACE(gt, "irq events:%x\n", events);
+
 	gen6_gt_pm_mask_irq(gt, events);
 
 	rps->pm_iir |= events;
@@ -1579,9 +1613,11 @@ void gen6_rps_irq_handler(struct intel_rps *rps, u32 pm_iir)
 	struct intel_gt *gt = rps_to_gt(rps);
 	u32 events;
 
-	events = pm_iir & READ_ONCE(rps->pm_events);
+	events = pm_iir & rps->pm_events;
 	if (events) {
 		spin_lock(&gt->irq_lock);
+
+		GT_TRACE(gt, "irq events:%x\n", events);
 
 		gen6_gt_pm_mask_irq(gt, events);
 		rps->pm_iir |= events;
@@ -1668,9 +1704,10 @@ void intel_rps_init(struct intel_rps *rps)
 		sandybridge_pcode_read(i915, GEN6_READ_OC_PARAMS,
 				       &params, NULL);
 		if (params & BIT(31)) { /* OC supported */
-			DRM_DEBUG_DRIVER("Overclocking supported, max: %dMHz, overclock: %dMHz\n",
-					 (rps->max_freq & 0xff) * 50,
-					 (params & 0xff) * 50);
+			drm_dbg(&i915->drm,
+				"Overclocking supported, max: %dMHz, overclock: %dMHz\n",
+				(rps->max_freq & 0xff) * 50,
+				(params & 0xff) * 50);
 			rps->max_freq = params & 0xff;
 		}
 	}
@@ -1678,7 +1715,9 @@ void intel_rps_init(struct intel_rps *rps)
 	/* Finally allow us to boost to max by default */
 	rps->boost_freq = rps->max_freq;
 	rps->idle_freq = rps->min_freq;
-	rps->cur_freq = rps->idle_freq;
+
+	/* Start in the middle, from here we will autotune based on workload */
+	rps->cur_freq = rps->efficient_freq;
 
 	rps->pm_intrmsk_mbz = 0;
 
@@ -1722,7 +1761,7 @@ static u32 read_cagf(struct intel_rps *rps)
 		freq = vlv_punit_read(i915, PUNIT_REG_GPU_FREQ_STS);
 		vlv_punit_put(i915);
 	} else {
-		freq = intel_uncore_read(rps_to_gt(rps)->uncore, GEN6_RPSTAT1);
+		freq = intel_uncore_read(rps_to_uncore(rps), GEN6_RPSTAT1);
 	}
 
 	return intel_rps_get_cagf(rps, freq);
@@ -1730,7 +1769,7 @@ static u32 read_cagf(struct intel_rps *rps)
 
 u32 intel_rps_read_actual_frequency(struct intel_rps *rps)
 {
-	struct intel_runtime_pm *rpm = rps_to_gt(rps)->uncore->rpm;
+	struct intel_runtime_pm *rpm = rps_to_uncore(rps)->rpm;
 	intel_wakeref_t wakeref;
 	u32 freq = 0;
 
@@ -1930,3 +1969,7 @@ bool i915_gpu_turbo_disable(void)
 	return ret;
 }
 EXPORT_SYMBOL_GPL(i915_gpu_turbo_disable);
+
+#if IS_ENABLED(CONFIG_DRM_I915_SELFTEST)
+#include "selftest_rps.c"
+#endif
