@@ -712,7 +712,7 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": "561adedef398abb68a417e5f742d95049aabe2c3"
+            "stuck_at_ref": ""
         },
         {
             "branch": "perf-intel-next",
