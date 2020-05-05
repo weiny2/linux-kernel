@@ -60,3 +60,4 @@ obj-$(CONFIG_UACCE)		+= uacce/
 obj-$(CONFIG_XILINX_SDFEC)	+= xilinx_sdfec.o
 obj-$(CONFIG_KEEMBAY_IPC)	+= keembay-ipc/
 obj-$(CONFIG_INTEL_DLB)		+= dlb/
+obj-$(CONFIG_INTEL_DLB2)	+= dlb2/
