@@ -940,7 +940,6 @@ void __init fpu__init_system_xstate(void)
 {
 	unsigned int eax, ebx, ecx, edx;
 	static int on_boot_cpu __initdata = 1;
-	u64 available_xfeatures;
 	int err;
 	int i;
 
@@ -967,22 +966,22 @@ void __init fpu__init_system_xstate(void)
 	 * Find user xstates supported by the processor.
 	 */
 	cpuid_count(XSTATE_CPUID, 0, &eax, &ebx, &ecx, &edx);
-	available_xfeatures = eax + ((u64)edx << 32);
+	xfeatures_mask_all = eax + ((u64)edx << 32);
 
 	/*
 	 * Find supervisor xstates supported by the processor.
 	 */
 	cpuid_count(XSTATE_CPUID, 1, &eax, &ebx, &ecx, &edx);
-	available_xfeatures |= ecx + ((u64)edx << 32);
+	xfeatures_mask_all |= ecx + ((u64)edx << 32);
 
-	if ((available_xfeatures & XFEATURE_MASK_FPSSE) != XFEATURE_MASK_FPSSE) {
+	if ((xfeatures_mask_user() & XFEATURE_MASK_FPSSE) != XFEATURE_MASK_FPSSE) {
 		/*
 		 * This indicates that something really unexpected happened
 		 * with the enumeration.  Disable XSAVE and try to continue
 		 * booting without it.  This is too early to BUG().
 		 */
 		pr_err("x86/fpu: FP/SSE not present amongst the CPU's xstate features: 0x%llx.\n",
-			available_xfeatures);
+		       xfeatures_mask_all);
 		goto out_disable;
 	}
 
@@ -1007,7 +1006,7 @@ void __init fpu__init_system_xstate(void)
 		}
 	}
 
-	xfeatures_mask_all &= available_xfeatures;
+	xfeatures_mask_all &= fpu__get_supported_xfeatures_mask();
 	xstate_area_mask = xfeatures_mask_all & ~XFEATURE_MASK_BLOBS;
 
 	for (i = XFEATURE_BLOB_BEGIN; i <= XFEATURE_BLOB_END; i++) {
