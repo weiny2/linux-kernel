@@ -1287,14 +1287,14 @@
                 }
             ],
             "description": "intel_rapl/ntel_idle support for ElkhartLake, JaperLake, CometLake, TigerLake, CooperLake, RocketLake and Sapphire Rapids.",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Evelyn Fields",
                     "email": "evelyn.fields@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1971",
             "name": "rapl/idle",
             "repourl": "ssh://git-ccr-1.devtools.intel.com:29418/otc_linux_rui-rapl",
             "sdl_contact": [
