@@ -2778,6 +2778,13 @@ static int nvme_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	quirks |= check_vendor_combination_bug(pdev);
 
 	/*
+	 * Platform requires storage device to use D3 for kernel managed
+	 * suspend.
+	 */
+	if (pdev->storage_d3)
+		quirks |= NVME_QUIRK_SIMPLE_SUSPEND;
+
+	/*
 	 * Double check that our mempool alloc size will cover the biggest
 	 * command we support.
 	 */
