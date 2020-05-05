@@ -48,3 +48,11 @@ Description:	(RW) Configure whether trace stops when the last available window
 		becomes full (1/y/Y) or wraps around and continues until the next
 		window becomes available again (0/n/N).
 
+What:		/sys/bus/intel_th/devices/<intel_th_id>-msc<msc-id>/modes
+Date:		May 2019
+KernelVersion:	5.2
+Contact:	Alexander Shishkin <alexander.shishkin@linux.intel.com>
+Description:	(RO) Lists all possible modes, that is, values that can be
+		written to the "mode" file described above. This includes
+		the hardware operating modes ("single", "multi", etc) and
+		all the buffer drivers that are currently loaded.
