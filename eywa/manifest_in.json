@@ -3416,6 +3416,41 @@
             ],
             "status": "intel confidential",
             "stuck_at_ref": ""
+        },
+        {
+            "branch": "sbl_for_intelnxt",
+            "branch_type": "expiring",
+            "config_options": [
+                {
+                    "name": "CONFIG_INTEL_WMI_SBL_FW_UPDATE",
+                    "value": "y"
+                }
+            ],
+            "contributor": [
+                {
+                    "name": "Jithu Joseph",
+                    "email": "jithu.joseph@intel.com"
+                }
+            ],
+            "description": "Slim bootloader firmware update signaling driver",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Maurice Ma",
+                    "email": "maurice.ma@intel.com"
+                }
+            ],
+            "jira": "NEXT-1973",
+            "name": "Slim_Bootloader",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/jithujos/sbl-fw-update.git",
+            "sdl_contact": [
+                {
+                    "name": "Cindy Johnson",
+                    "email": "cindy.r.johnson@intel.com"
+                }
+            ],
+            "status": "public",
+            "stuck_at_ref": ""
         }
     ]
 }
