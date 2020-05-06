@@ -1606,7 +1606,7 @@ static void adaptive_pebs_save_regs(struct pt_regs *regs,
 }
 
 #define PEBS_CACHE_LATENCY_OFFSET	32
-#define PEBS_INSTR_LATENCY_MASK		0xffff
+#define PEBS_INSTR_LATENCY_MASK		0xff
 /*
  * With adaptive PEBS the layout depends on what fields are configured.
  */
