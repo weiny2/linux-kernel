@@ -2903,15 +2903,15 @@
                     "email": "kyle.d.pelton@intel.com"
                 }
             ],
-            "description": "Workarounds for the SLE emulation environmentused by validation teams",
-            "enabled": false,
+            "description": "Workarounds for the SLE emulation environment used by validation teams for 5.7",
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "kyle.d.pelton@intel.com",
                     "email": "kyle.d.pelton@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1972",
             "name": "Workarounds for SLE",
             "repourl": "ssh://git@gitlab.devtools.intel.com:29418/otc-power-management-enabling-team/otc-power-kernel.git",
             "sdl_contact": [
