@@ -14,6 +14,7 @@
 #define DMA_SRC_ADDR_FILLIN(x)		(0x1100 + (x) * 4)
 #define DMA_DST_ADDR_FILLIN(x)		(0x1200 + (x) * 4)
 #define DMA_XBAR_SEL(x)			(0x1300 + (x) * 4)
+#define DMA_REGACCESS_CHID_CFG		0x1400
 
 #define CTL_CH_TRANSFER_MODE_MASK	GENMASK(1, 0)
 #define CTL_CH_TRANSFER_MODE_S2S	0
@@ -28,6 +29,8 @@
 #define XBAR_SEL_DEVID_MASK		GENMASK(15, 0)
 #define XBAR_SEL_RX_TX_BIT		BIT(16)
 #define XBAR_SEL_RX_TX_SHIFT		16
+
+#define REGACCESS_CHID_MASK		GENMASK(2, 0)
 
 static bool xbar_filter(struct dma_chan *chan, void *param)
 {
@@ -45,12 +48,21 @@ static void xbar_configure(struct acpi_dma_spec *dma_spec, struct dma_chan *chan
 {
 	struct dw_dma_chip_pdata *data = dev_get_drvdata(dma_spec->dev);
 	struct pci_dev *pdev = to_pci_dev(dma_spec->consumer);
+#if 0
 	phys_addr_t base = pci_resource_start(pdev, 0);
+#endif
 	void __iomem *x = data->chip->regs;
 	size_t d = dma_spec->index;
 	int c = chan->chan_id;
 	u32 value;
 
+	/* DMA Channel ID Configuration register must be programmed first */
+	value = readl(x + DMA_REGACCESS_CHID_CFG);
+	value &= ~REGACCESS_CHID_MASK;
+	value |= c;
+	writel(value, x + DMA_REGACCESS_CHID_CFG);
+
+#if 0
 	/* Configure upper part of the address */
 	if (d) {
 		writel(upper_32_bits(base), x + DMA_SRC_ADDR_FILLIN(c));
@@ -59,19 +71,33 @@ static void xbar_configure(struct acpi_dma_spec *dma_spec, struct dma_chan *chan
 		writel(0, x + DMA_SRC_ADDR_FILLIN(c));
 		writel(upper_32_bits(base), x + DMA_DST_ADDR_FILLIN(c));
 	}
+#endif
 
 	/* Configure crossbar selection */
 	value = readl(x + DMA_XBAR_SEL(c));
-	value &= XBAR_SEL_DEVID_MASK | XBAR_SEL_RX_TX_BIT;
-	value |= pdev->devfn | (d << XBAR_SEL_RX_TX_SHIFT);
+
+	/* DEVFN selection */
+	value &= XBAR_SEL_DEVID_MASK;
+	value |= pdev->devfn;
+
+	/* Direction */
+	if (d)
+		value &= ~XBAR_SEL_RX_TX_BIT;
+	else
+		value |= XBAR_SEL_RX_TX_BIT;
+
 	writel(value, x + DMA_XBAR_SEL(c));
 
 	/* Configure channel attributes */
 	value = readl(x + DMA_CTL_CH(c));
+#if 0
 	value &= CTL_CH_RD_NON_SNOOP_BIT | CTL_CH_WR_NON_SNOOP_BIT;
 	value &= CTL_CH_RD_RS_MASK | CTL_CH_WR_RS_MASK;
+#endif
 	value &= CTL_CH_TRANSFER_MODE_MASK;
+#if 0
 	value |= d ? CTL_CH_RD_NON_SNOOP_BIT : CTL_CH_WR_NON_SNOOP_BIT;
+#endif
 	value |= d ? CTL_CH_TRANSFER_MODE_S2D : CTL_CH_TRANSFER_MODE_D2S;
 	writel(value, x + DMA_CTL_CH(c));
 }
