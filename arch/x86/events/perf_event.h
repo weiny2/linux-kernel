@@ -322,6 +322,11 @@ struct cpu_hw_events {
 	int				n_pair; /* Large increment events */
 
 	void				*kfree_on_online[X86_PERF_KFREE_MAX];
+
+	/*
+	 * Hybrid PMU support
+	 */
+	int			        hybrid_pmu_idx;
 };
 
 #define __EVENT_CONSTRAINT_RANGE(c, e, n, m, w, o, f) {	\
@@ -628,6 +633,39 @@ enum {
 	x86_lbr_exclusive_max,
 };
 
+enum x86_hybrid_pmu_type_idx {
+	X86_HYBRID_PMU_QUARK_IDX	= 0,
+	X86_HYBRID_PMU_ATOM_IDX		= 1,
+	X86_HYBRID_PMU_KNIGHTS_IDX	= 2,
+	X86_HYBRID_PMU_CORE_IDX		= 3,
+
+	X86_HYBRID_PMU_MAX_INDEX
+};
+
+/* Hybrid PMU type */
+enum x86_hybrid_pmu_type {
+	X86_NON_HYBRID_PMU		= 0,
+	X86_HYBRID_PMU_QUARK		= 1U << X86_HYBRID_PMU_QUARK_IDX,
+	X86_HYBRID_PMU_ATOM		= 1U << X86_HYBRID_PMU_ATOM_IDX,
+	X86_HYBRID_PMU_KNIGHTS		= 1U << X86_HYBRID_PMU_KNIGHTS_IDX,
+	X86_HYBRID_PMU_CORE		= 1U << X86_HYBRID_PMU_CORE_IDX,
+
+	X86_HYBRID_PMU_MAX		= 1U << X86_HYBRID_PMU_MAX_INDEX
+};
+
+struct x86_hybrid_pmu {
+	struct pmu			pmu;
+	const char			*name;
+	enum x86_hybrid_pmu_type	type;
+	cpumask_t			supported_cpus;
+	union perf_capabilities		intel_cap;
+};
+
+#define IS_X86_HYBRID			x86_pmu.hybrid_pmu_bitmap
+
+/* Get hybrid_pmu_idx from CPU ID */
+#define X86_HYBRID_GET_IDX_FROM_CPU(_cpu)		\
+	((cpu_data(_cpu).cpu_type >> 4) - 1)
 /*
  * struct x86_pmu - generic x86 pmu
  */
@@ -849,6 +887,19 @@ struct x86_pmu {
 	int (*check_period) (struct perf_event *event, u64 period);
 
 	int (*aux_output_match) (struct perf_event *event);
+
+	/*
+	 * Hybrid support
+	 *
+	 * Most of PMU capabilities are the same among different hybrid PMUs.
+	 * The common part can be found in global x86_pmu, which is available
+	 * for all PMUs.
+	 *
+	 * The unique part can be found in hybrid_pmu.
+	 * The hybrid_pmu_bitmap is the bits map of available hybrid_pmu.
+	 */
+	unsigned long			hybrid_pmu_bitmap;
+	struct x86_hybrid_pmu		hybrid_pmu[X86_HYBRID_PMU_MAX_INDEX];
 };
 
 struct x86_perf_task_context {

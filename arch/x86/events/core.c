@@ -47,6 +47,7 @@ struct x86_pmu x86_pmu __read_mostly;
 
 DEFINE_PER_CPU(struct cpu_hw_events, cpu_hw_events) = {
 	.enabled = 1,
+	.hybrid_pmu_idx = -1,
 };
 
 DEFINE_STATIC_KEY_FALSE(rdpmc_never_available_key);
