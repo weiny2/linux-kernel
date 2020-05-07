@@ -1732,7 +1732,7 @@
                 }
             ],
             "description": "Fixup between mei/pm-testing",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Kyle Pelton",
