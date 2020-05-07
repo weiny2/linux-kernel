@@ -674,6 +674,8 @@ struct x86_hybrid_pmu {
 					[PERF_COUNT_HW_CACHE_MAX]
 					[PERF_COUNT_HW_CACHE_OP_MAX]
 					[PERF_COUNT_HW_CACHE_RESULT_MAX];
+	struct event_constraint		*event_constraints;
+	struct event_constraint		*pebs_constraints;
 };
 
 #define IS_X86_HYBRID			x86_pmu.hybrid_pmu_bitmap
@@ -689,6 +691,9 @@ struct x86_hybrid_pmu {
 
 #define X86_HYBRID_READ_FROM_CPUC(_name, _cpuc)				\
 	(HAS_VALID_HYBRID_PMU_IN_CPUC(_cpuc) ? x86_pmu.hybrid_pmu[(_cpuc)->hybrid_pmu_idx]._name : x86_pmu._name)
+
+#define X86_HYBRID_READ_FROM_EVENT(_name, _event)			\
+	(IS_X86_HYBRID ? ((struct x86_hybrid_pmu *)(_event->pmu))->_name : x86_pmu._name)
 
 /*
  * struct x86_pmu - generic x86 pmu
