@@ -5791,6 +5791,12 @@ __init int intel_pmu_init(void)
 	if (x86_pmu.intel_cap.perf_metrics)
 		x86_pmu.intel_ctrl |= 1ULL << 48;
 
+	if (x86_pmu.pebs && (x86_pmu.intel_cap.pebs_format == 4) &&
+	    x86_pmu.intel_cap.pebs_output_pt_available) {
+		pr_cont("PEBS-via-PT, ");
+		x86_get_pmu()->capabilities |= PERF_PMU_CAP_AUX_OUTPUT;
+	}
+
 	return 0;
 }
 
