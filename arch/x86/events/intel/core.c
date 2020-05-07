@@ -3134,7 +3134,10 @@ x86_get_event_constraints(struct cpu_hw_events *cpuc, int idx,
 		}
 	}
 
-	return &unconstrained;
+	if (!HAS_VALID_HYBRID_PMU_IN_CPUC(cpuc))
+		return &unconstrained;
+
+	return &x86_pmu.hybrid_pmu[cpuc->hybrid_pmu_idx].unconstrained;
 }
 
 static struct event_constraint *

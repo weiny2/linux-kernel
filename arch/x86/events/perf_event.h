@@ -664,6 +664,7 @@ struct x86_hybrid_pmu {
 	int				max_pebs_events;
 	int				num_counters;
 	int				num_counters_fixed;
+	struct event_constraint		unconstrained;
 };
 
 #define IS_X86_HYBRID			x86_pmu.hybrid_pmu_bitmap
