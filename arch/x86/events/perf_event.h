@@ -661,6 +661,9 @@ struct x86_hybrid_pmu {
 	union perf_capabilities		intel_cap;
 
 	u64				intel_ctrl;
+	int				max_pebs_events;
+	int				num_counters;
+	int				num_counters_fixed;
 };
 
 #define IS_X86_HYBRID			x86_pmu.hybrid_pmu_bitmap
