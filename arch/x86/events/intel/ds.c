@@ -1069,6 +1069,7 @@ static void adaptive_pebs_record_size_update(void)
 
 static u64 pebs_update_adaptive_cfg(struct perf_event *event)
 {
+	u64 rtm_abort_event = X86_HYBRID_READ_FROM_EVENT(rtm_abort_event, event);
 	struct perf_event_attr *attr = &event->attr;
 	u64 sample_type = attr->sample_type;
 	u64 pebs_data_cfg = 0;
@@ -1092,7 +1093,7 @@ static u64 pebs_update_adaptive_cfg(struct perf_event *event)
 
 	tsx_weight = (sample_type & PERF_SAMPLE_WEIGHT) &&
 		     ((attr->config & INTEL_ARCH_EVENT_MASK) ==
-		      x86_pmu.rtm_abort_event);
+		      rtm_abort_event);
 
 	if (gprs || (attr->precise_ip < 2) || tsx_weight)
 		pebs_data_cfg |= PEBS_DATACFG_GP;

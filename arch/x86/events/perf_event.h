@@ -677,6 +677,7 @@ struct x86_hybrid_pmu {
 	struct event_constraint		*event_constraints;
 	struct event_constraint		*pebs_constraints;
 	struct extra_reg		*extra_regs;
+	u64				rtm_abort_event;
 };
 
 #define IS_X86_HYBRID			x86_pmu.hybrid_pmu_bitmap
