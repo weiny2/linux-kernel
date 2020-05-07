@@ -688,7 +688,16 @@ static struct pmu pmu;
 
 static inline int is_x86_event(struct perf_event *event)
 {
-	return event->pmu == &pmu;
+	int bit;
+
+	if (!IS_X86_HYBRID)
+		return event->pmu == &pmu;
+
+	for_each_set_bit(bit, &x86_pmu.hybrid_pmu_bitmap, X86_HYBRID_PMU_MAX_INDEX) {
+		if (event->pmu == &x86_pmu.hybrid_pmu[bit].pmu)
+			return true;
+	}
+	return false;
 }
 
 struct pmu *x86_get_pmu(void)
