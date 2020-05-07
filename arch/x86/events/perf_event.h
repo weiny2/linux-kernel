@@ -659,6 +659,8 @@ struct x86_hybrid_pmu {
 	enum x86_hybrid_pmu_type	type;
 	cpumask_t			supported_cpus;
 	union perf_capabilities		intel_cap;
+
+	u64				intel_ctrl;
 };
 
 #define IS_X86_HYBRID			x86_pmu.hybrid_pmu_bitmap
@@ -666,6 +668,15 @@ struct x86_hybrid_pmu {
 /* Get hybrid_pmu_idx from CPU ID */
 #define X86_HYBRID_GET_IDX_FROM_CPU(_cpu)		\
 	((cpu_data(_cpu).cpu_type >> 4) - 1)
+
+#define HAS_VALID_HYBRID_PMU_IN_CPUC(_cpuc)				\
+	(IS_X86_HYBRID &&						\
+	 ((_cpuc)->hybrid_pmu_idx >= X86_HYBRID_PMU_QUARK_IDX) &&	\
+	 ((_cpuc)->hybrid_pmu_idx < X86_HYBRID_PMU_MAX_INDEX))
+
+#define X86_HYBRID_READ_FROM_CPUC(_name, _cpuc)				\
+	(HAS_VALID_HYBRID_PMU_IN_CPUC(_cpuc) ? x86_pmu.hybrid_pmu[(_cpuc)->hybrid_pmu_idx]._name : x86_pmu._name)
+
 /*
  * struct x86_pmu - generic x86 pmu
  */
@@ -1124,6 +1135,10 @@ ssize_t events_sysfs_show(struct device *dev, struct device_attribute *attr,
 ssize_t events_ht_sysfs_show(struct device *dev, struct device_attribute *attr,
 			  char *page);
 
+/*
+ * The disabled fixed counter is from CPUID 10.ECX cpu leaf.
+ * Only common counters are enumerated by CPUID. Use common intel_ctrl here.
+ */
 static inline bool fixed_counter_disabled(int i)
 {
 	return x86_pmu.intel_ctrl &&
