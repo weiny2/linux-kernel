@@ -130,6 +130,7 @@ struct rapl_pmus {
 enum rapl_unit_quirk {
 	RAPL_UNIT_QUIRK_NONE,
 	RAPL_UNIT_QUIRK_HSW,
+	RAPL_UNIT_QUIRK_SPR,
 };
 
 struct rapl_model {
@@ -601,6 +602,10 @@ static int rapl_check_hw_unit(enum rapl_unit_quirk apply_quirk)
 	case RAPL_UNIT_QUIRK_HSW:
 		rapl_hw_unit[PERF_RAPL_RAM] = 16;
 		break;
+	case RAPL_UNIT_QUIRK_SPR:
+		rapl_hw_unit[PERF_RAPL_RAM] = 16;
+		rapl_hw_unit[PERF_RAPL_PSYS] = 0;
+		break;
 	}
 
 	/*
@@ -716,6 +721,15 @@ static struct rapl_model model_skl = {
 			  BIT(PERF_RAPL_PSYS),
 };
 
+static struct rapl_model model_spr = {
+	.events		= BIT(PERF_RAPL_PP0) |
+			  BIT(PERF_RAPL_PKG) |
+			  BIT(PERF_RAPL_RAM) |
+			  BIT(PERF_RAPL_PSYS),
+	.apply_quirk	= RAPL_UNIT_QUIRK_SPR,
+};
+
+
 static const struct x86_cpu_id rapl_model_match[] __initconst = {
 	X86_MATCH_INTEL_FAM6_MODEL(SANDYBRIDGE,		&model_snb),
 	X86_MATCH_INTEL_FAM6_MODEL(SANDYBRIDGE_X,	&model_snbep),
@@ -744,6 +758,7 @@ static const struct x86_cpu_id rapl_model_match[] __initconst = {
 	X86_MATCH_INTEL_FAM6_MODEL(ICELAKE,		&model_skl),
 	X86_MATCH_INTEL_FAM6_MODEL(COMETLAKE_L,		&model_skl),
 	X86_MATCH_INTEL_FAM6_MODEL(COMETLAKE,		&model_skl),
+	X86_MATCH_INTEL_FAM6_MODEL(ALDERLAKE_X,		&model_spr),
 	{},
 };
 MODULE_DEVICE_TABLE(x86cpu, rapl_model_match);
