@@ -724,6 +724,7 @@ struct x86_pmu {
 	int		max_events;
 	int		num_counters;
 	int		num_counters_fixed;
+	unsigned	fixed_mask;
 	int		cntval_bits;
 	u64		cntval_mask;
 	union {
