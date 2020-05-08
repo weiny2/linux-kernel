@@ -82,7 +82,8 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "",
+            "last_enabled": "v5.7"
         },
         {
             "branch": "testing",
@@ -102,7 +103,8 @@
             "repourl": "git://git.kernel.org/pub/scm/linux/kernel/git/rafael/linux-pm.git",
             "sdl_contact": [],
             "status": "public",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "",
+            "last_enabled": "v5.7"
         },
         {
             "branch": "next",
@@ -127,7 +129,8 @@
             "repourl": "git://github.com/jsakkine-intel/linux-sgx.git",
             "sdl_contact": [],
             "status": "public",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "",
+            "last_enabled": "v5.7"
         },
         {
             "branch": "for-intel-next",
@@ -170,7 +173,8 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "",
+            "last_enabled": "v5.7"
         },
         {
             "branch": "split_lock",
@@ -200,7 +204,8 @@
                 }
             ],
             "status": "public",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "",
+            "last_enabled": "v5.7"
         },
         {
             "branch": "for-intel-next",
@@ -239,7 +244,8 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "",
+            "last_enabled": "v5.7"
         },
         {
             "branch": "for-eywa",
@@ -330,7 +336,8 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "",
+            "last_enabled": "v5.7"
         },
         {
             "branch": "ntb-next-upstream",
@@ -389,7 +396,8 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "",
+            "last_enabled": "v5.7"
         },
         {
             "branch": "cse-5.7",
@@ -488,7 +496,8 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "",
+            "last_enabled": "v5.7"
         },
         {
             "branch": "to_eywa_intel_ish",
@@ -581,7 +590,8 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "",
+            "last_enabled": "v5.7"
         },
         {
             "branch": "for-eywa",
@@ -712,7 +722,8 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "",
+            "last_enabled": "v5.7"
         },
         {
             "branch": "perf-intel-next",
@@ -750,7 +761,8 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "",
+            "last_enabled": "v5.7"
         },
         {
             "branch": "powertop",
@@ -780,7 +792,8 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "",
+            "last_enabled": "v5.7"
         },
         {
             "branch": "kl",
@@ -819,7 +832,8 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "",
+            "last_enabled": "v5.7"
         },
         {
             "branch": "rpmb",
@@ -1001,7 +1015,8 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "",
+            "last_enabled": "v5.7"
         },
         {
             "branch": "pmc_core",
@@ -1048,7 +1063,8 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "",
+            "last_enabled": "v5.7"
         },
         {
             "branch": "dev/mainline-v5.6",
@@ -1178,7 +1194,8 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "",
+            "last_enabled": "v5.7"
         },
         {
             "branch": "for-eywa",
@@ -1269,7 +1286,8 @@
                 }
             ],
             "status": "public",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "",
+            "last_enabled": "v5.7"
         },
         {
             "branch": "for-intel-next",
@@ -1304,7 +1322,8 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "",
+            "last_enabled": "v5.7"
         },
         {
             "branch": "intel-next-release",
@@ -1580,7 +1599,8 @@
                 }
             ],
             "status": "public",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "",
+            "last_enabled": "v5.7"
         },
         {
             "branch": "chrome-dmc-patch",
@@ -1610,7 +1630,8 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "",
+            "last_enabled": "v5.7"
         },
         {
             "branch": "intel_next_branding",
@@ -1649,7 +1670,8 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "",
+            "last_enabled": "v5.7"
         },
         {
             "branch": "to_eywa_thermal",
@@ -1749,7 +1771,8 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "",
+            "last_enabled": "v5.7"
         },
         {
             "branch": "cet",
@@ -1792,7 +1815,8 @@
                 }
             ],
             "status": "public",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "",
+            "last_enabled": "v5.7"
         },
         {
             "branch": "pasid",
@@ -1865,7 +1889,8 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "",
+            "last_enabled": "v5.7"
         },
         {
             "branch": "intel-next",
@@ -2051,7 +2076,8 @@
                 }
             ],
             "status": "public",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "",
+            "last_enabled": "v5.7"
         },
         {
             "branch": "intel-pt-perf-tools-v5.7",
@@ -2081,7 +2107,8 @@
                 }
             ],
             "status": "public",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "",
+            "last_enabled": "v5.7"
         },
         {
             "branch": "rar",
@@ -2116,7 +2143,8 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "",
+            "last_enabled": "v5.7"
         },
         {
             "branch": "release-v5.7-rc1",
@@ -2163,7 +2191,8 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "",
+            "last_enabled": "v5.7"
         },
         {
             "branch": "iommu-workarounds",
@@ -2253,7 +2282,8 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "",
+            "last_enabled": "v5.7"
         },
         {
             "branch": "for-intel-next",
@@ -2316,7 +2346,8 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "",
+            "last_enabled": "v5.7"
         },
         {
             "branch": "tbh/dev",
@@ -2487,7 +2518,8 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "",
+            "last_enabled": "v5.7"
         },
         {
             "branch": "uipi-intel-next",
@@ -2530,7 +2562,8 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "",
+            "last_enabled": "v5.7"
         },
         {
             "branch": "for-intel-next-5.6",
@@ -2604,7 +2637,8 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "",
+            "last_enabled": "v5.7"
         },
         {
             "branch": "rneri/hybrid",
@@ -2673,7 +2707,8 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "",
+            "last_enabled": "v5.7"
         },
         {
             "branch": "resctrl_selftest",
@@ -2921,7 +2956,8 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "",
+            "last_enabled": "v5.7"
         },
         {
             "branch": "s0ix_debug",
@@ -3028,7 +3064,8 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "",
+            "last_enabled": "v5.7"
         },
         {
             "branch": "vm-dos-virt-intel-next",
@@ -3058,7 +3095,8 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "",
+            "last_enabled": "v5.7"
         },
         {
             "branch": "lxy/bus-lock-debug-exception",
@@ -3177,7 +3215,8 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "",
+            "last_enabled": "v5.7"
         },
         {
             "branch": "for-5.8/firmware-activate",
@@ -3207,7 +3246,8 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "",
+            "last_enabled": "v5.7"
         },
         {
             "branch": "dlb_for_intel_next_v5.7-rc3",
@@ -3242,7 +3282,8 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "",
+            "last_enabled": "v5.7"
         },
         {
             "branch": "kvm-pks",
@@ -3297,7 +3338,8 @@
                 }
             ],
             "status": "public",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "",
+            "last_enabled": "v5.7"
         },
         {
             "branch": "lass-kernel",
@@ -3327,7 +3369,8 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "",
+            "last_enabled": "v5.7"
         },
         {
             "branch": "rneri/fix_freq_invariance",
@@ -3352,7 +3395,8 @@
                 }
             ],
             "status": "public",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "",
+            "last_enabled": "v5.7"
         },
         {
             "branch": "dlb2_for_intel_next_v5.7-rc3",
@@ -3415,7 +3459,8 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "",
+            "last_enabled": "v5.7"
         },
         {
             "branch": "sbl_for_intelnxt",
@@ -3450,7 +3495,8 @@
                 }
             ],
             "status": "public",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "",
+            "last_enabled": "v5.7"
         },
         {
             "branch": "sof-for-next-5.7-rc4",
@@ -3484,7 +3530,8 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "",
+            "last_enabled": "v5.7"
         }
     ]
 }
