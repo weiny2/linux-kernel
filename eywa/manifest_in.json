@@ -3463,7 +3463,7 @@
                 }
             ],
             "description": "This  SOF branch is used by the audio driver team toprepare for ADL-S PO.",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Wong, Kar Leong",
