@@ -3451,6 +3451,40 @@
             ],
             "status": "public",
             "stuck_at_ref": ""
+        },
+        {
+            "branch": "sof-for-next-5.7-rc4",
+            "branch_type": "expiring",
+            "config_options": [],
+            "contributor": [
+                {
+                    "name": "Kai Vehmanen",
+                    "email": "kai.vehmanen@linux.intel.com"
+                }
+            ],
+            "description": "This  SOF branch is used by the audio driver team toprepare for ADL-S PO.",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Wong, Kar Leong",
+                    "email": "kar.leong.wong@intel.com"
+                }
+            ],
+            "jira": "NEXT-1974",
+            "name": "sof_audio",
+            "repourl": "ssh://git-amr-4.devtools.intel.com:29418/otc_audio-linux",
+            "sdl_contact": [
+                {
+                    "name": "Filip Kaczmarski",
+                    "email": "filip.kaczmarski@intel.com"
+                },
+                {
+                    "name": "Mengdong Lin",
+                    "email": "mengdong.lin@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": ""
         }
     ]
 }
