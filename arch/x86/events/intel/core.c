@@ -3966,6 +3966,30 @@ tfa_get_event_constraints(struct cpu_hw_events *cpuc, int idx,
 	return c;
 }
 
+static struct event_constraint *
+adl_get_event_constraints(struct cpu_hw_events *cpuc, int idx,
+			  struct perf_event *event)
+{
+	if (cpuc->hybrid_pmu_idx == X86_HYBRID_PMU_CORE_IDX)
+		return icl_get_event_constraints(cpuc, idx, event);
+	if (cpuc->hybrid_pmu_idx == X86_HYBRID_PMU_ATOM_IDX)
+		return tnt_get_event_constraints(cpuc, idx, event);
+
+	WARN_ON(1);
+	return &emptyconstraint;
+}
+
+static int adl_hw_config(struct perf_event *event)
+{
+	struct x86_hybrid_pmu *pmu = container_of(event->pmu, struct x86_hybrid_pmu, pmu);
+
+	if (pmu->type == X86_HYBRID_PMU_CORE)
+		return hsw_hw_config(event);
+
+	WARN_ON(pmu->type != X86_HYBRID_PMU_ATOM);
+	return intel_pmu_hw_config(event);
+}
+
 /*
  * Broadwell:
  *
@@ -4428,6 +4452,14 @@ static int intel_pmu_aux_output_match(struct perf_event *event)
 		return 0;
 
 	return is_intel_pt_event(event);
+}
+
+static int intel_pmu_filter_match(struct perf_event *event)
+{
+	struct x86_hybrid_pmu *pmu = container_of(event->pmu, struct x86_hybrid_pmu, pmu);
+	unsigned int cpu = smp_processor_id();
+
+	return cpumask_test_cpu(cpu, &pmu->supported_cpus);
 }
 
 PMU_FORMAT_ATTR(offcore_rsp, "config1:0-63");
@@ -5173,6 +5205,76 @@ static const struct attribute_group *attr_update[] = {
 	NULL,
 };
 
+EVENT_ATTR_STR_HYBRID(topdown-fe-bound, td_fe_bound_adl_hybrid, "event=0x71,umask=0x0", X86_HYBRID_PMU_ATOM);
+EVENT_ATTR_STR_HYBRID(topdown-retiring, td_retiring_adl_hybrid, "event=0x72,umask=0x0", X86_HYBRID_PMU_ATOM);
+EVENT_ATTR_STR_HYBRID(topdown-bad-spec, td_bad_spec_adl_hybrid, "event=0x73,umask=0x0", X86_HYBRID_PMU_ATOM);
+EVENT_ATTR_STR_HYBRID(topdown-be-bound, td_be_bound_adl_hybrid, "event=0x74,umask=0x0", X86_HYBRID_PMU_ATOM);
+
+static struct attribute *adl_hybrid_events_attrs[] = {
+	EVENT_PTR(td_fe_bound_adl_hybrid),
+	EVENT_PTR(td_retiring_adl_hybrid),
+	EVENT_PTR(td_bad_spec_adl_hybrid),
+	EVENT_PTR(td_be_bound_adl_hybrid),
+	NULL,
+};
+
+EVENT_ATTR_STR_HYBRID(mem-loads, mem_ld_adl_hybrid, "event=0xcd,umask=0x1,ldlat=3", X86_HYBRID_PMU_CORE);
+EVENT_ATTR_STR_HYBRID(mem-stores, mem_st_adl_hybrid, "event=0xcd,umask=0x2", X86_HYBRID_PMU_CORE);
+
+static struct attribute *adl_hybrid_mem_attrs[] = {
+	EVENT_PTR(mem_ld_adl_hybrid),
+	EVENT_PTR(mem_st_adl_hybrid),
+	NULL,
+};
+
+EVENT_ATTR_STR_HYBRID(tx-start, tx_start_adl_hybrid, "event=0xc9,umask=0x1", X86_HYBRID_PMU_CORE);
+EVENT_ATTR_STR_HYBRID(tx-commit, tx_commit_adl_hybrid, "event=0xc9,umask=0x2", X86_HYBRID_PMU_CORE);
+EVENT_ATTR_STR_HYBRID(tx-abort, tx_abort_adl_hybrid, "event=0xc9,umask=0x4", X86_HYBRID_PMU_CORE);
+EVENT_ATTR_STR_HYBRID(tx-conflict, tx_conflict_adl_hybrid, "event=0x54,umask=0x1", X86_HYBRID_PMU_CORE);
+EVENT_ATTR_STR_HYBRID(el-start, el_start_adl_hybrid, "event=0xc8,umask=0x1", X86_HYBRID_PMU_CORE);
+EVENT_ATTR_STR_HYBRID(el-commit, el_commit_adl_hybrid, "event=0xc8,umask=0x2", X86_HYBRID_PMU_CORE);
+EVENT_ATTR_STR_HYBRID(el-abort, el_abort_adl_hybrid, "event=0xc8,umask=0x4", X86_HYBRID_PMU_CORE);
+EVENT_ATTR_STR_HYBRID(el-conflict, el_conflict_adl_hybrid, "event=0x54,umask=0x1", X86_HYBRID_PMU_CORE);
+EVENT_ATTR_STR_HYBRID(cycles-t, cycles_t_adl_hybrid, "event=0x3c,in_tx=1", X86_HYBRID_PMU_CORE);
+EVENT_ATTR_STR_HYBRID(cycles-ct, cycles_ct_adl_hybrid, "event=0x3c,in_tx=1,in_tx_cp=1", X86_HYBRID_PMU_CORE);
+EVENT_ATTR_STR_HYBRID(tx-capacity-read, tx_capacity_read_adl_hybrid, "event=0x54,umask=0x80", X86_HYBRID_PMU_CORE);
+EVENT_ATTR_STR_HYBRID(tx-capacity-write, tx_capacity_write_adl_hybrid, "event=0x54,umask=0x2", X86_HYBRID_PMU_CORE);
+EVENT_ATTR_STR_HYBRID(el-capacity-read, el_capacity_read_adl_hybrid, "event=0x54,umask=0x80", X86_HYBRID_PMU_CORE);
+EVENT_ATTR_STR_HYBRID(el-capacity-write, el_capacity_write_adl_hybrid, "event=0x54,umask=0x2", X86_HYBRID_PMU_CORE);
+
+static struct attribute *adl_hybrid_tsx_attrs[] = {
+	EVENT_PTR(tx_start_adl_hybrid),
+	EVENT_PTR(tx_abort_adl_hybrid),
+	EVENT_PTR(tx_commit_adl_hybrid),
+	EVENT_PTR(tx_capacity_read_adl_hybrid),
+	EVENT_PTR(tx_capacity_write_adl_hybrid),
+	EVENT_PTR(tx_conflict_adl_hybrid),
+	EVENT_PTR(el_start_adl_hybrid),
+	EVENT_PTR(el_abort_adl_hybrid),
+	EVENT_PTR(el_commit_adl_hybrid),
+	EVENT_PTR(el_capacity_read_adl_hybrid),
+	EVENT_PTR(el_capacity_write_adl_hybrid),
+	EVENT_PTR(el_conflict_adl_hybrid),
+	EVENT_PTR(cycles_t_adl_hybrid),
+	EVENT_PTR(cycles_ct_adl_hybrid),
+	NULL,
+};
+
+FORMAT_ATTR_HYBRID(in_tx, X86_HYBRID_PMU_CORE);
+FORMAT_ATTR_HYBRID(in_tx_cp, X86_HYBRID_PMU_CORE);
+FORMAT_ATTR_HYBRID(offcore_rsp, X86_HYBRID_PMU_CORE);
+FORMAT_ATTR_HYBRID(ldlat, X86_HYBRID_PMU_CORE);
+FORMAT_ATTR_HYBRID(frontend, X86_HYBRID_PMU_CORE | X86_HYBRID_PMU_ATOM);
+
+static struct attribute *adl_hybrid_extra_attr[] = {
+	FORMAT_HYBRID_PTR(in_tx),
+	FORMAT_HYBRID_PTR(in_tx_cp),
+	FORMAT_HYBRID_PTR(offcore_rsp),
+	FORMAT_HYBRID_PTR(ldlat),
+	FORMAT_HYBRID_PTR(frontend),
+	NULL,
+};
+
 static bool is_attr_for_this_pmu(struct kobject *kobj, struct attribute *attr)
 {
 	struct device *dev = kobj_to_dev(kobj);
@@ -5293,6 +5395,7 @@ __init int intel_pmu_init(void)
 	bool pmem = false;
 	int version, i;
 	char *name;
+	struct x86_hybrid_pmu *pmu;
 
 	if (!cpu_has(&boot_cpu_data, X86_FEATURE_ARCH_PERFMON)) {
 		switch (boot_cpu_data.x86) {
@@ -5916,6 +6019,76 @@ __init int intel_pmu_init(void)
 		x86_pmu.validate_group = icl_validate_group;
 		pr_cont("Sapphire Rapids events, ");
 		name = "sapphirerapids";
+		break;
+
+	case INTEL_FAM6_ALDERLAKE_HYBRID:
+		if (!boot_cpu_has(X86_FEATURE_HYBRID_CPU))
+			return -ENODEV;
+
+		/* Alderlake has 2 type of CPU */
+		/* Init common part */
+		x86_pmu.late_ack = true;
+		x86_pmu.pebs_aliases = NULL;
+		x86_pmu.pebs_prec_dist = true;
+		x86_pmu.flags |= PMU_FL_HAS_RSP_1;
+		x86_pmu.flags |= PMU_FL_NO_HT_SHARING;
+		x86_pmu.flags |= PMU_FL_PEBS_ALL;
+		x86_pmu.lbr_pt_coexist = true;
+		intel_pmu_pebs_data_source_skl(false);
+
+		x86_pmu.filter_match = intel_pmu_filter_match;
+		x86_pmu.get_event_constraints = adl_get_event_constraints;
+		x86_pmu.hw_config = adl_hw_config;
+
+		/* PERF METRICS and PEBS via PT are not common features */
+		x86_pmu.intel_cap.perf_metrics = 0;
+		x86_pmu.intel_cap.pebs_output_pt_available = 0;
+
+		td_attr = adl_hybrid_events_attrs;
+		mem_attr = adl_hybrid_mem_attrs;
+		tsx_attr = adl_hybrid_tsx_attrs;
+		extra_attr = adl_hybrid_extra_attr;
+
+		/* Init big core */
+		set_bit(X86_HYBRID_PMU_CORE_IDX, &x86_pmu.hybrid_pmu_bitmap);
+		pmu = &x86_pmu.hybrid_pmu[X86_HYBRID_PMU_CORE_IDX];
+		pmu->name = "cpu_core";
+		pmu->type = X86_HYBRID_PMU_CORE;
+		pmu->max_pebs_events = MAX_PEBS_EVENTS;
+		pmu->num_counters = 8;
+		pmu->num_counters_fixed = 4;
+
+		pmu->unconstrained = (struct event_constraint)
+					__EVENT_CONSTRAINT(0, (1ULL << pmu->num_counters) - 1,
+							   0, pmu->num_counters, 0, 0);
+
+		memcpy(pmu->hw_cache_event_ids, skl_hw_cache_event_ids, sizeof(pmu->hw_cache_event_ids));
+		memcpy(pmu->hw_cache_extra_regs, skl_hw_cache_extra_regs, sizeof(pmu->hw_cache_extra_regs));
+		pmu->hw_cache_event_ids[C(ITLB)][C(OP_READ)][C(RESULT_ACCESS)] = -1;
+		pmu->event_constraints = intel_adl_event_constraints;
+		pmu->pebs_constraints = intel_adl_pebs_event_constraints;
+		pmu->extra_regs = intel_icl_extra_regs;
+
+		/* Init small core */
+		set_bit(X86_HYBRID_PMU_ATOM_IDX, &x86_pmu.hybrid_pmu_bitmap);
+		pmu = &x86_pmu.hybrid_pmu[X86_HYBRID_PMU_ATOM_IDX];
+		pmu->name = "cpu_atom";
+		pmu->type = X86_HYBRID_PMU_ATOM;
+		pmu->max_pebs_events = x86_pmu.max_pebs_events;
+		pmu->num_counters = x86_pmu.num_counters;
+		pmu->num_counters_fixed = x86_pmu.num_counters_fixed;
+
+		pmu->unconstrained = (struct event_constraint)
+					__EVENT_CONSTRAINT(0, (1ULL << pmu->num_counters) - 1,
+							   0, pmu->num_counters, 0, 0);
+
+		memcpy(pmu->hw_cache_event_ids, glp_hw_cache_event_ids, sizeof(pmu->hw_cache_event_ids));
+		memcpy(pmu->hw_cache_extra_regs, tnt_hw_cache_extra_regs, sizeof(pmu->hw_cache_extra_regs));
+		pmu->hw_cache_event_ids[C(ITLB)][C(OP_READ)][C(RESULT_ACCESS)] = -1;
+		pmu->event_constraints = intel_slm_event_constraints;
+		pmu->extra_regs = intel_tnt_extra_regs;
+		pr_cont("Alderlake Hybrid events, ");
+		name = "Alderlake Hybrid";
 		break;
 
 	default:
