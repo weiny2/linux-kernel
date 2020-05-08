@@ -3671,7 +3671,8 @@ static int intel_pmu_hw_config(struct perf_event *event)
 		event->hw.flags |= PERF_X86_EVENT_PEBS_VIA_PT;
 	}
 
-	if (event->attr.type != PERF_TYPE_RAW)
+	if ((event->attr.type == PERF_TYPE_HARDWARE) ||
+	    (event->attr.type == PERF_TYPE_HW_CACHE))
 		return 0;
 
 	/*
@@ -4215,11 +4216,82 @@ static void intel_pmu_check_extra_regs(struct extra_reg *extra_regs)
 	}
 }
 
+static void init_hybrid_pmu(int cpu)
+{
+	struct cpu_hw_events *cpuc = &per_cpu(cpu_hw_events, cpu);
+	int idx = X86_HYBRID_GET_IDX_FROM_CPU(cpu);
+	struct cpuinfo_x86 *c = &cpu_data(cpu);
+	struct x86_hybrid_pmu *pmu;
+
+	if (WARN_ON(idx >= X86_HYBRID_PMU_MAX_INDEX))
+		return;
+
+	if (!test_bit(idx, &x86_pmu.hybrid_pmu_bitmap))
+		return;
+
+	cpuc->hybrid_pmu_idx = idx;
+	pmu = &x86_pmu.hybrid_pmu[idx];
+
+	/* Only check pmu for the first CPU */
+	if (!cpumask_empty(&pmu->supported_cpus)) {
+		cpumask_set_cpu(cpu, &pmu->supported_cpus);
+		return;
+	}
+
+	/* Check capability */
+	if (cpu_has(c, X86_FEATURE_PDCM))
+		rdmsrl(MSR_IA32_PERF_CAPABILITIES, pmu->intel_cap.capabilities);
+
+	/* Ignore fixed mask for now */
+	intel_pmu_check_num_counters(&pmu->num_counters,
+				     &pmu->num_counters_fixed,
+				     &pmu->intel_ctrl);
+
+	intel_pmu_check_event_constraints(pmu->event_constraints,
+					  pmu->num_counters,
+					  pmu->num_counters_fixed,
+					  pmu->intel_ctrl);
+
+
+	intel_pmu_check_extra_regs(pmu->extra_regs);
+
+	pr_info("%s PMU driver: ", pmu->name);
+
+	if (pmu->intel_cap.pebs_output_pt_available) {
+		pmu->pmu.capabilities |= PERF_PMU_CAP_AUX_OUTPUT;
+		pr_cont("PEBS-via-PT ");
+	}
+
+	if (pmu->intel_cap.perf_metrics) {
+		pmu->intel_ctrl |= 1ULL << 48;
+		pr_cont("Topdown ");
+	}
+
+	pr_cont("\n");
+
+	pr_info("... version:                %d\n",     x86_pmu.version);
+	pr_info("... bit width:              %d\n",     x86_pmu.cntval_bits);
+	pr_info("... generic registers:      %d\n",     pmu->num_counters);
+	pr_info("... value mask:             %016Lx\n", x86_pmu.cntval_mask);
+	pr_info("... max period:             %016Lx\n", x86_pmu.max_period);
+	pr_info("... fixed-purpose events:   %lu\n",
+			hweight64((((1ULL << pmu->num_counters_fixed) - 1)
+				   << INTEL_PMC_IDX_FIXED) & pmu->intel_ctrl));
+	pr_info("... event mask:             %016Lx\n", pmu->intel_ctrl);
+
+	cpumask_set_cpu(cpu, &pmu->supported_cpus);
+
+	return;
+}
+
 static void intel_pmu_cpu_starting(int cpu)
 {
 	struct cpu_hw_events *cpuc = &per_cpu(cpu_hw_events, cpu);
 	int core_id = topology_core_id(cpu);
 	int i;
+
+	if (IS_X86_HYBRID)
+		init_hybrid_pmu(cpu);
 
 	init_debug_store_on_cpu(cpu);
 	/*
@@ -4299,6 +4371,14 @@ static void free_excl_cntrs(struct cpu_hw_events *cpuc)
 
 static void intel_pmu_cpu_dying(int cpu)
 {
+	struct cpu_hw_events *cpuc = &per_cpu(cpu_hw_events, cpu);
+	int idx = cpuc->hybrid_pmu_idx;
+
+	if (idx != -1) {
+		cpumask_clear_cpu(cpu, &x86_pmu.hybrid_pmu[idx].supported_cpus);
+		cpuc->hybrid_pmu_idx = -1;
+	}
+
 	fini_debug_store_on_cpu(cpu);
 
 	if (x86_pmu.counter_freezing)

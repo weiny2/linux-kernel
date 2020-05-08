@@ -436,7 +436,7 @@ int x86_setup_perfctr(struct perf_event *event)
 		local64_set(&hwc->period_left, hwc->sample_period);
 	}
 
-	if (attr->type == PERF_TYPE_RAW)
+	if (attr->type == event->pmu->type)
 		return x86_pmu_extra_regs(event->attr.config, event);
 
 	if (attr->type == PERF_TYPE_HW_CACHE)
@@ -571,7 +571,7 @@ int x86_pmu_hw_config(struct perf_event *event)
 	if (!event->attr.exclude_kernel)
 		event->hw.config |= ARCH_PERFMON_EVENTSEL_OS;
 
-	if (event->attr.type == PERF_TYPE_RAW)
+	if (event->attr.type == event->pmu->type)
 		event->hw.config |= event->attr.config & X86_RAW_EVENT_MASK;
 
 	if (event->attr.sample_period && x86_pmu.limit_period) {
@@ -1968,16 +1968,18 @@ static int __init init_hw_perf_events(void)
 
 	pmu.attr_update = x86_pmu.attr_update;
 
-	pr_info("... version:                %d\n",     x86_pmu.version);
-	pr_info("... bit width:              %d\n",     x86_pmu.cntval_bits);
-	pr_info("... generic registers:      %d\n",     x86_pmu.num_counters);
-	pr_info("... value mask:             %016Lx\n", x86_pmu.cntval_mask);
-	pr_info("... max period:             %016Lx\n", x86_pmu.max_period);
-	pr_info("... fixed-purpose events:   %lu\n",
-			hweight64((((1ULL << x86_pmu.num_counters_fixed) - 1)
+	/* Dump Hybrid PMU information later */
+	if (!IS_X86_HYBRID) {
+		pr_info("... version:                %d\n",     x86_pmu.version);
+		pr_info("... bit width:              %d\n",     x86_pmu.cntval_bits);
+		pr_info("... generic registers:      %d\n",     x86_pmu.num_counters);
+		pr_info("... value mask:             %016Lx\n", x86_pmu.cntval_mask);
+		pr_info("... max period:             %016Lx\n", x86_pmu.max_period);
+		pr_info("... fixed-purpose events:   %lu\n",
+				hweight64((((1ULL << x86_pmu.num_counters_fixed) - 1)
 					<< INTEL_PMC_IDX_FIXED) & x86_pmu.intel_ctrl));
-	pr_info("... event mask:             %016Lx\n", x86_pmu.intel_ctrl);
-
+		pr_info("... event mask:             %016Lx\n", x86_pmu.intel_ctrl);
+	}
 	/*
 	 * Install callbacks. Core will call them for each online
 	 * cpu.
@@ -1998,9 +2000,28 @@ static int __init init_hw_perf_events(void)
 	if (err)
 		goto out1;
 
-	err = perf_pmu_register(&pmu, "cpu", PERF_TYPE_RAW);
-	if (err)
-		goto out2;
+	if (!IS_X86_HYBRID) {
+		err = perf_pmu_register(&pmu, "cpu", PERF_TYPE_RAW);
+		if (err)
+			goto out2;
+	} else {
+		struct x86_hybrid_pmu *hybrid_pmu;
+		int bit;
+
+		for_each_set_bit(bit, &x86_pmu.hybrid_pmu_bitmap, X86_HYBRID_PMU_MAX_INDEX) {
+			hybrid_pmu = &x86_pmu.hybrid_pmu[bit];
+
+			hybrid_pmu->pmu = pmu;
+			hybrid_pmu->pmu.attr_update = x86_pmu.attr_update;
+			hybrid_pmu->pmu.capabilities |= PERF_PMU_CAP_HETEROGENEOUS_CPUS;
+
+			err = perf_pmu_register(&hybrid_pmu->pmu, hybrid_pmu->name, -1);
+			if (err)
+				clear_bit(bit, &x86_pmu.hybrid_pmu_bitmap);
+		}
+		if (!x86_pmu.hybrid_pmu_bitmap)
+			goto out2;
+	}
 
 	return 0;
 
@@ -2133,6 +2154,11 @@ static struct cpu_hw_events *allocate_fake_cpuc(void)
 		return ERR_PTR(-ENOMEM);
 	cpuc->is_fake = 1;
 
+	if (IS_X86_HYBRID)
+		cpuc->hybrid_pmu_idx = X86_HYBRID_GET_IDX_FROM_CPU(cpu);
+	else
+		cpuc->hybrid_pmu_idx = -1;
+
 	if (intel_cpuc_prepare(cpuc, cpu))
 		goto error;
 
@@ -2217,16 +2243,19 @@ out:
 
 static int x86_pmu_event_init(struct perf_event *event)
 {
-	int err;
+	struct x86_hybrid_pmu *hybrid_pmu = NULL;
+	int err, cpu = -1;
 
-	switch (event->attr.type) {
-	case PERF_TYPE_RAW:
-	case PERF_TYPE_HARDWARE:
-	case PERF_TYPE_HW_CACHE:
-		break;
-
-	default:
+	if ((event->attr.type != event->pmu->type) &&
+	    (event->attr.type != PERF_TYPE_HARDWARE) &&
+	    (event->attr.type != PERF_TYPE_HW_CACHE))
 		return -ENOENT;
+
+	if (IS_X86_HYBRID) {
+		cpu = (event->cpu != -1) ? event->cpu : task_cpu(event->hw.target);
+		hybrid_pmu = container_of(event->pmu, struct x86_hybrid_pmu, pmu);
+		if (!cpumask_test_cpu(cpu, &hybrid_pmu->supported_cpus))
+			return -ENOENT;
 	}
 
 	err = __x86_pmu_event_init(event);
