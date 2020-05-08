@@ -932,6 +932,7 @@ struct x86_pmu {
 	 */
 	unsigned long			hybrid_pmu_bitmap;
 	struct x86_hybrid_pmu		hybrid_pmu[X86_HYBRID_PMU_MAX_INDEX];
+	int				(*filter_match)(struct perf_event *event);
 };
 
 struct x86_perf_task_context {
