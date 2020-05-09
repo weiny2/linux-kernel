@@ -127,9 +127,15 @@ struct rapl_pmus {
 	struct rapl_pmu		*pmus[];
 };
 
+enum rapl_unit_quirk {
+	RAPL_UNIT_QUIRK_NONE,
+	RAPL_UNIT_QUIRK_HSW,
+	RAPL_UNIT_QUIRK_SPR,
+};
+
 struct rapl_model {
 	unsigned long	events;
-	bool		apply_quirk;
+	enum rapl_unit_quirk	apply_quirk;
 };
 
  /* 1/2^hw_unit Joule */
@@ -575,7 +581,7 @@ static int rapl_cpu_online(unsigned int cpu)
 	return 0;
 }
 
-static int rapl_check_hw_unit(bool apply_quirk)
+static int rapl_check_hw_unit(enum rapl_unit_quirk apply_quirk)
 {
 	u64 msr_rapl_power_unit_bits;
 	int i;
@@ -592,8 +598,15 @@ static int rapl_check_hw_unit(bool apply_quirk)
 	 * "Intel Xeon Processor E5-1600 and E5-2600 v3 Product Families, V2
 	 * of 2. Datasheet, September 2014, Reference Number: 330784-001 "
 	 */
-	if (apply_quirk)
+	switch (apply_quirk) {
+	case RAPL_UNIT_QUIRK_HSW:
 		rapl_hw_unit[PERF_RAPL_RAM] = 16;
+		break;
+	case RAPL_UNIT_QUIRK_SPR:
+		rapl_hw_unit[PERF_RAPL_RAM] = 16;
+		rapl_hw_unit[PERF_RAPL_PSYS] = 0;
+		break;
+	}
 
 	/*
 	 * Calculate the timer rate:
@@ -672,14 +685,12 @@ static struct rapl_model model_snb = {
 	.events		= BIT(PERF_RAPL_PP0) |
 			  BIT(PERF_RAPL_PKG) |
 			  BIT(PERF_RAPL_PP1),
-	.apply_quirk	= false,
 };
 
 static struct rapl_model model_snbep = {
 	.events		= BIT(PERF_RAPL_PP0) |
 			  BIT(PERF_RAPL_PKG) |
 			  BIT(PERF_RAPL_RAM),
-	.apply_quirk	= false,
 };
 
 static struct rapl_model model_hsw = {
@@ -687,20 +698,19 @@ static struct rapl_model model_hsw = {
 			  BIT(PERF_RAPL_PKG) |
 			  BIT(PERF_RAPL_RAM) |
 			  BIT(PERF_RAPL_PP1),
-	.apply_quirk	= false,
 };
 
 static struct rapl_model model_hsx = {
 	.events		= BIT(PERF_RAPL_PP0) |
 			  BIT(PERF_RAPL_PKG) |
 			  BIT(PERF_RAPL_RAM),
-	.apply_quirk	= true,
+	.apply_quirk	= RAPL_UNIT_QUIRK_HSW,
 };
 
 static struct rapl_model model_knl = {
 	.events		= BIT(PERF_RAPL_PKG) |
 			  BIT(PERF_RAPL_RAM),
-	.apply_quirk	= true,
+	.apply_quirk	= RAPL_UNIT_QUIRK_HSW,
 };
 
 static struct rapl_model model_skl = {
@@ -709,8 +719,16 @@ static struct rapl_model model_skl = {
 			  BIT(PERF_RAPL_RAM) |
 			  BIT(PERF_RAPL_PP1) |
 			  BIT(PERF_RAPL_PSYS),
-	.apply_quirk	= false,
 };
+
+static struct rapl_model model_spr = {
+	.events		= BIT(PERF_RAPL_PP0) |
+			  BIT(PERF_RAPL_PKG) |
+			  BIT(PERF_RAPL_RAM) |
+			  BIT(PERF_RAPL_PSYS),
+	.apply_quirk	= RAPL_UNIT_QUIRK_SPR,
+};
+
 
 static const struct x86_cpu_id rapl_model_match[] __initconst = {
 	X86_MATCH_INTEL_FAM6_MODEL(SANDYBRIDGE,		&model_snb),
@@ -740,6 +758,7 @@ static const struct x86_cpu_id rapl_model_match[] __initconst = {
 	X86_MATCH_INTEL_FAM6_MODEL(ICELAKE,		&model_skl),
 	X86_MATCH_INTEL_FAM6_MODEL(COMETLAKE_L,		&model_skl),
 	X86_MATCH_INTEL_FAM6_MODEL(COMETLAKE,		&model_skl),
+	X86_MATCH_INTEL_FAM6_MODEL(ALDERLAKE_X,		&model_spr),
 	{},
 };
 MODULE_DEVICE_TABLE(x86cpu, rapl_model_match);
