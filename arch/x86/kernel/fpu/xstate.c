@@ -853,7 +853,7 @@ static unsigned int __init get_xsave_area_size(u64 mask, bool compacted)
 		return 0;
 
 	if (!compacted) {
-		int max_nr = fls64(mask);
+		int max_nr = fls64(mask) - 1;
 
 		return (xfeature_uncompacted_offset(max_nr) +
 			xfeature_size(max_nr));
