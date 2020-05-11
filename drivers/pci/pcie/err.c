@@ -166,7 +166,7 @@ pci_ers_result_t pcie_do_recovery(struct pci_dev *dev,
 	if (state == pci_channel_io_frozen) {
 		pci_walk_bus(bus, report_frozen_detected, &status);
 		status = reset_link(dev);
-		if (status != PCI_ERS_RESULT_RECOVERED) {
+		if (status == PCI_ERS_RESULT_DISCONNECT) {
 			pci_warn(dev, "link reset failed\n");
 			goto failed;
 		}
