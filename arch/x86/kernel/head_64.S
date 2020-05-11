@@ -45,9 +45,159 @@ L4_PAGE_OFFSET = l4_index(__PAGE_OFFSET_BASE_L4)
 L4_START_KERNEL = l4_index(__START_KERNEL_map)
 
 L3_START_KERNEL = pud_index(__START_KERNEL_map)
-
 	.text
 	__HEAD
+
+#ifdef CONFIG_X86_SLE_SUPPORT
+	.code32
+	.balign 4
+SYM_CODE_START(startup_32)
+	r_base = .
+startup_32:
+	cli
+	lgdt    p_gdt_32 - __START_KERNEL_map
+	/* Fixed range MTRR settings */
+	/*
+	 * 0x0     --- 0x6FFFF -- WB
+         * 0x70000 --- 0x7FFFF -- UC -- dmesg log(64KB)
+         */
+	mov $0x00060606, %edx
+	mov $0x06060606, %eax
+	mov $0x250, %ecx	/* MSR_MTRRfix64K_00000 */
+	wrmsr
+
+       /*
+        * 0x80000 --- 0x8FFFF -- UC -- dmesg log(64KB)
+        * 0x90000 --- 0x9FFFF -- WB
+        */
+	mov $0x06060606, %edx
+	mov $0x00000000, %eax
+	mov $0x258, %ecx	/* MSR_MTRRfix16K_80000 */
+	wrmsr
+
+	/* 0xA0000 --- 0xBFFFF -- UC */
+	mov $0x0, %edx
+	mov $0x0, %eax
+	mov $0x259, %ecx	/* MSR_MTRRfix16K_A0000 */
+	wrmsr
+
+	/* 0xC0000 --- 0xC7FFF -- WP */
+	mov $0x05050505, %edx
+	mov $0x05050505, %eax
+	mov $0x268, %ecx	/* MSR_MTRRfix4K_C0000 */
+	wrmsr
+
+	/* 0xC8000 --- 0xCFFFF -- WP */
+	mov $0x05050505, %edx
+	mov $0x05050505, %eax
+	mov $0x269, %ecx	/* MSR_MTRRfix4K_C8000 */
+	wrmsr
+
+	/* 0xD0000 --- 0xD7FFF -- WP */
+	mov $0x05050505, %edx
+	mov $0x05050505, %eax
+	mov $0x26a, %ecx	/* MSR_MTRRfix4K_D0000 */
+	wrmsr
+
+	/* 0xD8000 --- 0xDFFFF -- WP */
+	mov $0x05050505, %edx
+	mov $0x05050505, %eax
+	mov $0x26b, %ecx	/* MSR_MTRRfix4K_D8000 */
+	wrmsr
+
+	/* 0xE0000 --- 0xE7FFF -- WP */
+	mov $0x05050505, %edx
+	mov $0x05050505, %eax
+	mov $0x26c, %ecx	/* MSR_MTRRfix4K_E0000 */
+	wrmsr
+
+	/* 0xE8000 --- 0xEFFFF -- WP */
+	mov $0x05050505, %edx
+	mov $0x05050505, %eax
+	mov $0x26d, %ecx	/* MSR_MTRRfix4K_E8000 */
+	wrmsr
+
+	/* 0xF0000 --- 0xF7FFFF -- WP */
+	mov $0x05050505, %edx
+	mov $0x05050505, %eax
+	mov $0x26e, %ecx	/* MSR_MTRRfix4K_F0000 */
+	wrmsr
+
+	/* 0xF8000 --- 0xFFFFFF -- WP */
+	mov $0x05050505, %edx
+	mov $0x05050505, %eax
+	mov $0x26f, %ecx	/* MSR_MTRRfix4K_F8000 */
+	wrmsr
+
+	/* enable fixed range MTRR */
+	/* 0:7 - Default Memory Type
+	 * 10  - Fixed range MTRR enable/disable
+	 * 11  - MTRR enable/disable
+	 */
+	mov $0xc06,%eax		/* Enable variable range MTRRs, default UC */
+	xor %edx, %edx
+	mov $0x2ff,%ecx		/* IA32_MTRR_DEF_TYPE */
+	wrmsr
+
+	/* The code below (page table setup) expects the physical start of the kernel in edi */
+	movl	$CONFIG_PHYSICAL_START, %edi
+
+	/* Enable PAE mode */
+	movl	$X86_CR4_PAE, %eax
+	movl	%eax, %cr4
+
+        leal    (init_top_pgt- r_base)(%edi), %eax
+
+	movl	%eax, %cr3
+
+	/* Enable Long mode in EFER */
+	xorl	%eax,%eax
+	movl	$MSR_EFER, %ecx
+	rdmsr
+
+	/* Enable Long Mode */
+	btsl    $_EFER_LME, %eax
+	xorl	%edx, %edx
+	wrmsr
+
+	xorl	%eax,%eax
+
+	/* Enable paging and in turn activate Long Mode */
+	/* Enable protected mode */
+
+	mov	$(X86_CR0_PG | X86_CR0_PE), %eax
+	mov	%eax, %cr0
+	/*
+	 * At this point we're in long mode but in 32bit compatibility mode
+	 * with EFER.LME = 1, CS.L = 0, CS.D = 1 (and in turn
+	 * EFER.LMA = 1). Now we want to jump in 64bit mode, to do that we use
+	 * the new gdt/idt that has __KERNEL_CS with CS.L = 1.
+	 */
+	ljmp $__KERNEL_CS, $(startup_64 - __START_KERNEL_map)
+
+SYM_CODE_END(startup_32)
+	.balign 4
+SYM_DATA_START_LOCAL(cpu_gdt_table)
+	.quad   0x0000000000000000      /* NULL descriptor */
+	.quad   0x0                     /* unused */
+	.quad   0x00af9a000000ffff      /* __KERNEL_CS */
+	.quad   0x00cf92000000ffff      /* __KERNEL_DS */
+	.quad   0x00cffa000000ffff      /* __USER32_CS */
+	.quad   0x00cff2000000ffff      /* __USER_DS, __USER32_DS  */
+	.quad   0x00affa000000ffff      /* __USER_CS */
+	.quad   0x00cf9a000000ffff      /* __KERNEL32_CS */
+	.quad   0,0                     /* TSS */
+	.quad   0,0                     /* LDT */
+	.quad   0,0,0                   /* three TLS descriptors */
+	.quad   0x0000f40000000000      /* node/CPU stored in limit */
+SYM_DATA_END_LABEL(cpu_gdt_table,SYM_L_LOCAL,cpu_gdt_table_end)
+
+SYM_DATA_LOCAL(p_gdt_32)
+	.word   cpu_gdt_table_end-cpu_gdt_table-1
+	.long   cpu_gdt_table-__START_KERNEL_map
+SYM_DATA_END_LABEL(p_gdt_32,SYM_L_LOCAL,p_gdt_32_end)
+
+#endif  /* CONFIG_X86_SLE_SUPPORT */
 	.code64
 SYM_CODE_START_NOALIGN(startup_64)
 	UNWIND_HINT_EMPTY
@@ -106,6 +256,90 @@ SYM_CODE_START(secondary_startup_64)
 	 * to have any identity mapped pages in the kernel page table
 	 * after the boot processor executes this code.
 	 */
+#ifdef CONFIG_X86_SLE_SUPPORT
+	/* Fixed range MTRR settings */
+	/*
+	 * 0x0     --- 0x6FFFF -- WB
+         * 0x70000 --- 0x7FFFF -- UC -- dmesg log(64KB)
+         */
+	mov $0x00060606, %edx
+	mov $0x06060606, %eax
+	mov $0x250, %ecx	/* MSR_MTRRfix64K_00000 */
+	wrmsr
+
+       /*
+        * 0x80000 --- 0x8FFFF -- UC -- dmesg log(64KB)
+        * 0x90000 --- 0x9FFFF -- WB
+        */
+	mov $0x06060606, %edx
+	mov $0x00000000, %eax
+	mov $0x258, %ecx	/* MSR_MTRRfix16K_80000 */
+	wrmsr
+
+	/* 0xA0000 --- 0xBFFFF -- UC */
+	mov $0x0, %edx
+	mov $0x0, %eax
+	mov $0x259, %ecx	/* MSR_MTRRfix16K_A0000 */
+	wrmsr
+
+	/* 0xC0000 --- 0xC7FFF -- WP */
+	mov $0x05050505, %edx
+	mov $0x05050505, %eax
+	mov $0x268, %ecx	/* MSR_MTRRfix4K_C0000 */
+	wrmsr
+
+	/* 0xC8000 --- 0xCFFFF -- WP */
+	mov $0x05050505, %edx
+	mov $0x05050505, %eax
+	mov $0x269, %ecx	/* MSR_MTRRfix4K_C8000 */
+	wrmsr
+
+	/* 0xD0000 --- 0xD7FFF -- WP */
+	mov $0x05050505, %edx
+	mov $0x05050505, %eax
+	mov $0x26a, %ecx	/* MSR_MTRRfix4K_D0000 */
+	wrmsr
+
+	/* 0xD8000 --- 0xDFFFF -- WP */
+	mov $0x05050505, %edx
+	mov $0x05050505, %eax
+	mov $0x26b, %ecx	/* MSR_MTRRfix4K_D8000 */
+	wrmsr
+
+	/* 0xE0000 --- 0xE7FFF -- WP */
+	mov $0x05050505, %edx
+	mov $0x05050505, %eax
+	mov $0x26c, %ecx	/* MSR_MTRRfix4K_E0000 */
+	wrmsr
+
+	/* 0xE8000 --- 0xEFFFF -- WP */
+	mov $0x05050505, %edx
+	mov $0x05050505, %eax
+	mov $0x26d, %ecx	/* MSR_MTRRfix4K_E8000 */
+	wrmsr
+
+	/* 0xF0000 --- 0xF7FFFF -- WP */
+	mov $0x05050505, %edx
+	mov $0x05050505, %eax
+	mov $0x26e, %ecx	/* MSR_MTRRfix4K_F0000 */
+	wrmsr
+
+	/* 0xF8000 --- 0xFFFFFF -- WP */
+	mov $0x05050505, %edx
+	mov $0x05050505, %eax
+	mov $0x26f, %ecx	/* MSR_MTRRfix4K_F8000 */
+	wrmsr
+
+	/* enable fixed range MTRR */
+	/* 0:7 - Default Memory Type
+	 * 10  - Fixed range MTRR enable/disable
+	 * 11  - MTRR enable/disable
+	 */
+	mov $0xc06,%eax		/* Enable variable range MTRRs, default UC */
+	xor %edx, %edx
+	mov $0x2ff,%ecx		/* IA32_MTRR_DEF_TYPE */
+	wrmsr
+#endif
 
 	/* Sanitize CPU configuration */
 	call verify_cpu
@@ -383,7 +617,7 @@ SYM_DATA(early_recursion_flag, .long 0)
 
 	.data
 
-#if defined(CONFIG_XEN_PV) || defined(CONFIG_PVH)
+#if defined(CONFIG_XEN_PV) || defined(CONFIG_PVH) || defined(CONFIG_X86_SLE_SUPPORT)
 SYM_DATA_START_PTI_ALIGNED(init_top_pgt)
 	.quad   level3_ident_pgt - __START_KERNEL_map + _KERNPG_TABLE_NOENC
 	.org    init_top_pgt + L4_PAGE_OFFSET*8, 0
@@ -415,6 +649,7 @@ SYM_DATA_START_PTI_ALIGNED(init_top_pgt)
 	.fill	PTI_USER_PGD_FILL,8,0
 SYM_DATA_END(init_top_pgt)
 #endif
+
 
 #ifdef CONFIG_X86_5LEVEL
 SYM_DATA_START_PAGE_ALIGNED(level4_kernel_pgt)
