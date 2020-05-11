@@ -294,6 +294,22 @@ static struct extra_reg intel_icl_extra_regs[] __read_mostly = {
 	EVENT_EXTRA_END
 };
 
+static struct extra_reg intel_adl_extra_regs[] __read_mostly = {
+	INTEL_UEVENT_EXTRA_REG(0x012a, MSR_OFFCORE_RSP_0, 0x3fffffffffull, RSP_0),
+	INTEL_UEVENT_EXTRA_REG(0x012b, MSR_OFFCORE_RSP_1, 0x3fffffffffull, RSP_1),
+	INTEL_UEVENT_PEBS_LDLAT_EXTRA_REG(0x01cd),
+	INTEL_UEVENT_EXTRA_REG(0x01c6, MSR_PEBS_FRONTEND, 0x7fff17, FE),
+	/*
+	 * The original Fixed Ctr 3 are shared from different metrics
+	 * events. So use the extra reg to enforce the same
+	 * configuration on the original register, but do not actually
+	 * write to it.
+	 */
+	INTEL_UEVENT_EXTRA_REG(0x0400, 0, -1L, TOPDOWN),
+	INTEL_UEVENT_TOPDOWN_EXTRA_REG(0x1000),
+	EVENT_EXTRA_END
+};
+
 static struct event_constraint intel_adl_event_constraints[] = {
 	FIXED_EVENT_CONSTRAINT(0x00c0, 0),	/* INST_RETIRED.ANY */
 	FIXED_EVENT_CONSTRAINT(0x01c0, 0),	/* INST_RETIRED.PREC_DIST */
@@ -5581,9 +5597,14 @@ __init int intel_pmu_init(void)
 		memcpy(hw_cache_extra_regs, skl_hw_cache_extra_regs, sizeof(hw_cache_extra_regs));
 		hw_cache_event_ids[C(ITLB)][C(OP_READ)][C(RESULT_ACCESS)] = -1;
 
+		hw_cache_event_ids[C(LL)][C(OP_READ)][C(RESULT_ACCESS)] = 0x12a;
+		hw_cache_event_ids[C(LL)][C(OP_READ)][C(RESULT_MISS)] = 0x12a;
+		hw_cache_event_ids[C(LL)][C(OP_WRITE)][C(RESULT_ACCESS)] = 0x12a;
+		hw_cache_event_ids[C(LL)][C(OP_WRITE)][C(RESULT_MISS)] = 0x12a;
+
 		x86_pmu.event_constraints = intel_adl_event_constraints;
 		x86_pmu.pebs_constraints = intel_adl_pebs_event_constraints;
-		x86_pmu.extra_regs = intel_icl_extra_regs;
+		x86_pmu.extra_regs = intel_adl_extra_regs;
 		x86_pmu.pebs_aliases = NULL;
 		x86_pmu.pebs_prec_dist = true;
 		x86_pmu.flags |= PMU_FL_HAS_RSP_1;
