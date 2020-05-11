@@ -30,6 +30,7 @@
 #define DWC_TIMERS_COMP_VERSION	0xac
 
 #define DWC_TIMERS_TOTAL	8
+#define DWC_CLK_PERIOD_NS	10
 
 /* Timer Control Register */
 #define DWC_TIM_CTRL_EN		BIT(0)
@@ -38,11 +39,6 @@
 #define DWC_TIM_CTRL_MODE_USER	(1 << 1)
 #define DWC_TIM_CTRL_INT_MASK	BIT(2)
 #define DWC_TIM_CTRL_PWM	BIT(3)
-
-struct dwc_pwm_driver_data {
-	unsigned long clk_period_ns;
-	int npwm;
-};
 
 struct dwc_pwm_ctx {
 	u32 cnt;
@@ -88,35 +84,6 @@ static void __dwc_pwm_configure(struct dwc_pwm *dwc, int pwm,
 
 	ctrl = DWC_TIM_CTRL_MODE_USER | DWC_TIM_CTRL_PWM;
 	dwc_pwm_writel(ctrl, dwc->base, DWC_TIM_CTRL(pwm));
-}
-
-static u32 __dwc_pwm_duty_ns(struct dwc_pwm *dwc, int pwm)
-{
-	u32 duty;
-
-	duty = dwc_pwm_readl(dwc->base, DWC_TIM_LD_CNT2(pwm));
-	duty += 1;
-	duty *= dwc->clk_period_ns;
-
-	return duty;
-}
-
-static u32 __dwc_pwm_period_ns(struct dwc_pwm *dwc, int pwm, u32 duty)
-{
-	u32 period;
-
-	period = dwc_pwm_readl(dwc->base, DWC_TIM_LD_CNT(pwm));
-	period += 1;
-	period *= dwc->clk_period_ns;
-	period += duty;
-
-	return period;
-}
-
-static bool __dwc_pwm_is_enabled(struct dwc_pwm *dwc, int pwm)
-{
-	return !!(dwc_pwm_readl(dwc->base,
-				DWC_TIM_CTRL(pwm)) & DWC_TIM_CTRL_EN);
 }
 
 static void __dwc_pwm_set_enable(struct dwc_pwm *dwc, int pwm, int enabled)
@@ -169,13 +136,26 @@ static void dwc_pwm_get_state(struct pwm_chip *chip, struct pwm_device *pwm,
 			      struct pwm_state *state)
 {
 	struct dwc_pwm *dwc = to_dwc_pwm(chip);
+	u64 duty, period;
 
 	pm_runtime_get_sync(dwc->dev);
 
-	state->enabled = __dwc_pwm_is_enabled(dwc, pwm->hwpwm);
-	state->duty_cycle = __dwc_pwm_duty_ns(dwc, pwm->hwpwm);
-	state->period = __dwc_pwm_period_ns(dwc, pwm->hwpwm,
-					    state->duty_cycle);
+	state->enabled = !!(dwc_pwm_readl(dwc->base,
+				DWC_TIM_CTRL(pwm->hwpwm)) & DWC_TIM_CTRL_EN);
+
+	duty = dwc_pwm_readl(dwc->base, DWC_TIM_LD_CNT2(pwm->hwpwm));
+	duty += 1;
+	duty *= dwc->clk_period_ns;
+	/* Cap the value to 2^32-1 ns */
+	state->duty_cycle = min(duty, (u64)(u32)-1);
+
+	period = dwc_pwm_readl(dwc->base, DWC_TIM_LD_CNT(pwm->hwpwm));
+	period += 1;
+	period *= dwc->clk_period_ns;
+	period += duty;
+	/* Cap the value to 2^32-1 ns */
+	state->period = min(period, (u64)(u32)-1);
+
 	state->polarity = PWM_POLARITY_NORMAL;
 
 	pm_runtime_put_sync(dwc->dev);
@@ -189,12 +169,10 @@ static const struct pwm_ops dwc_pwm_ops = {
 
 static int dwc_pwm_probe(struct pci_dev *pci, const struct pci_device_id *id)
 {
-	struct dwc_pwm_driver_data *data;
 	struct dwc_pwm *dwc;
 	struct device *dev;
 	int ret;
 
-	data = (struct dwc_pwm_driver_data *) id->driver_data;
 	dev = &pci->dev;
 
 	dwc = devm_kzalloc(&pci->dev, sizeof(*dwc), GFP_KERNEL);
@@ -202,7 +180,7 @@ static int dwc_pwm_probe(struct pci_dev *pci, const struct pci_device_id *id)
 		return -ENOMEM;
 
 	dwc->dev = dev;
-	dwc->clk_period_ns = data->clk_period_ns;
+	dwc->clk_period_ns = DWC_CLK_PERIOD_NS;
 
 	ret = pcim_enable_device(pci);
 	if (ret) {
@@ -228,7 +206,7 @@ static int dwc_pwm_probe(struct pci_dev *pci, const struct pci_device_id *id)
 
 	dwc->chip.dev = dev;
 	dwc->chip.ops = &dwc_pwm_ops;
-	dwc->chip.npwm = data->npwm;
+	dwc->chip.npwm = DWC_TIMERS_TOTAL;
 	dwc->chip.base = -1;
 
 	ret = pwmchip_add(&dwc->chip);
@@ -296,22 +274,17 @@ static int dwc_pwm_resume(struct device *dev)
 
 static SIMPLE_DEV_PM_OPS(dwc_pwm_pm_ops, dwc_pwm_suspend, dwc_pwm_resume);
 
-static const struct dwc_pwm_driver_data ehl_driver_data = {
-	.npwm = 8,
-	.clk_period_ns = 10,
-};
-
 static const struct pci_device_id dwc_pwm_id_table[] = {
-	{ PCI_VDEVICE(INTEL, 0x4bb7), (kernel_ulong_t) &ehl_driver_data },
+	{ PCI_VDEVICE(INTEL, 0x4bb7) }, /* Elkhart Lake */
 	{  }	/* Terminating Entry */
 };
 MODULE_DEVICE_TABLE(pci, dwc_pwm_id_table);
 
 static struct pci_driver dwc_pwm_driver = {
-	.name		= "pwm-dwc",
-	.probe		= dwc_pwm_probe,
-	.remove		= dwc_pwm_remove,
-	.id_table	= dwc_pwm_id_table,
+	.name = "pwm-dwc",
+	.probe = dwc_pwm_probe,
+	.remove = dwc_pwm_remove,
+	.id_table = dwc_pwm_id_table,
 	.driver = {
 		.pm = &dwc_pwm_pm_ops,
 	},
