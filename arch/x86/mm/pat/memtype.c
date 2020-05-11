@@ -584,7 +584,11 @@ int memtype_reserve(u64 start, u64 end, enum page_cache_mode req_type,
 	int err = 0;
 
 	start = sanitize_phys(start);
+#ifdef CONFIG_SVOS
+	end = sanitize_phys(end-1) + 1;
+#else
 	end = sanitize_phys(end);
+#endif
 	if (start >= end) {
 		WARN(1, "%s failed: [mem %#010Lx-%#010Lx], req %s\n", __func__,
 				start, end - 1, cattr_name(req_type));
@@ -665,7 +669,11 @@ int memtype_free(u64 start, u64 end)
 		return 0;
 
 	start = sanitize_phys(start);
+#ifdef CONFIG_SVOS
+	end = sanitize_phys(end-1) + 1;
+#else
 	end = sanitize_phys(end);
+#endif
 
 	/* Low ISA region is always mapped WB. No need to track */
 	if (x86_platform.is_untracked_pat_range(start, end))
@@ -943,6 +951,7 @@ static int reserve_pfn_range(u64 paddr, unsigned long size, pgprot_t *vma_prot,
 		return ret;
 
 	if (pcm != want_pcm) {
+#ifndef CONFIG_SVOS /* SVOS allows memory cache attribute aliasing */
 		if (strict_prot ||
 		    !is_new_memtype_allowed(paddr, size, want_pcm, pcm)) {
 			memtype_free(paddr, paddr + size);
@@ -954,6 +963,7 @@ static int reserve_pfn_range(u64 paddr, unsigned long size, pgprot_t *vma_prot,
 			       cattr_name(pcm));
 			return -EINVAL;
 		}
+#endif
 		/*
 		 * We allow returning different type than the one requested in
 		 * non strict case.

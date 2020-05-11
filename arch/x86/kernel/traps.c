@@ -60,6 +60,12 @@
 #include <asm/vdso.h>
 #include <asm/iommu.h>
 
+#ifdef CONFIG_SVOS
+#include <linux/svos.h>
+int (*svMiscIntHandlerKernelP)(int irq, void *interrupt_res, struct pt_regs *regs) = NULL;
+        /* Pointer to vector of interrupt resources for kernel's use in calling back to svfs.*/
+void ***svExternalInterruptDataKernelP = NULL;
+#endif
 #ifdef CONFIG_X86_64
 #include <asm/x86_init.h>
 #include <asm/pgalloc.h>
@@ -191,6 +197,10 @@ static nokprobe_inline int
 do_trap_no_signal(struct task_struct *tsk, int trapnr, const char *str,
 		  struct pt_regs *regs,	long error_code)
 {
+#ifdef CONFIG_SVOS
+	extern int svos_trap_hook(int, struct pt_regs *);
+	if (svos_trap_hook(trapnr, regs)) return 0;
+#endif
 	if (v8086_mode(regs)) {
 		/*
 		 * Traps 0, 1, 3, 4, and 5 should be forwarded to vm86.

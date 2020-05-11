@@ -555,3 +555,22 @@ void __init kdb_initbptab(void)
 	 * Architecture dependent initialization.
 	 */
 }
+#ifdef CONFIG_SVOS
+//
+// Entry points added for svos calls
+// one set of code at end of module allows for
+// easier patching on subsequent rebase.
+//
+int sv_kdb_bp(int argc, const char **argv)
+{
+	return kdb_bp(argc, argv);
+}
+int sv_kdb_bc(int argc, const char **argv)
+{
+	return kdb_bc(argc, argv);
+}
+int sv_kdb_ss(int argc, const char **argv)
+{
+	return kdb_ss( argc, argv );
+}
+#endif

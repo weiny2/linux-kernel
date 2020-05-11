@@ -792,6 +792,8 @@ kgdb_handle_exception(int evector, int signo, int ecode, struct pt_regs *regs)
 
 	if (arch_kgdb_ops.enable_nmi)
 		arch_kgdb_ops.enable_nmi(0);
+
+#ifndef CONFIG_SVOS
 	/*
 	 * Avoid entering the debugger if we were triggered due to an oops
 	 * but panic_timeout indicates the system should automatically
@@ -800,6 +802,7 @@ kgdb_handle_exception(int evector, int signo, int ecode, struct pt_regs *regs)
 	 */
 	if (signo != SIGTRAP && panic_timeout)
 		return 1;
+#endif
 
 	memset(ks, 0, sizeof(struct kgdb_state));
 	ks->cpu			= raw_smp_processor_id();
@@ -932,6 +935,7 @@ void kgdb_panic(const char *msg)
 	if (!kgdb_io_module_registered)
 		return;
 
+#ifndef CONFIG_SVOS
 	/*
 	 * We don't want to get stuck waiting for input from user if
 	 * "panic_timeout" indicates the system should automatically
@@ -939,6 +943,7 @@ void kgdb_panic(const char *msg)
 	 */
 	if (panic_timeout)
 		return;
+#endif
 
 	if (dbg_kdb_mode)
 		kdb_printf("PANIC: %s\n", msg);
