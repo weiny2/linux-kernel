@@ -7,6 +7,7 @@
 #include "i915_drv.h"
 #include "intel_context.h"
 #include "intel_gt.h"
+#include "intel_gt_clock_utils.h"
 #include "intel_gt_pm.h"
 #include "intel_gt_requests.h"
 #include "intel_mocs.h"
@@ -576,6 +577,8 @@ int intel_gt_init(struct intel_gt *gt)
 	 */
 	intel_uncore_forcewake_get(gt->uncore, FORCEWAKE_ALL);
 
+	intel_gt_init_clock_frequency(gt);
+
 	err = intel_gt_init_scratch(gt, IS_GEN(gt->i915, 2) ? SZ_256K : SZ_4K);
 	if (err)
 		goto out_fw;
@@ -635,8 +638,7 @@ void intel_gt_driver_remove(struct intel_gt *gt)
 {
 	__intel_gt_disable(gt);
 
-	intel_uc_fini_hw(&gt->uc);
-	intel_uc_fini(&gt->uc);
+	intel_uc_driver_remove(&gt->uc);
 
 	intel_engines_release(gt);
 }
