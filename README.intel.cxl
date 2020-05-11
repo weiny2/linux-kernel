@@ -1,0 +1,43 @@
+Compute eXpress Link
+
+What IP features are eanbled by this code?
+  CXL enumeration for Devices and Ports
+  Basic PCIe UUID string identification for CXL hardware when running OSC
+  Requires CXL hardware (PCIe card)
+  Will dmesg provide output (dev_info) for success or failure
+
+  Example output on SKL NUC with no CXL support:
+
+seanvk@arch-skl-dev1 ~ % dmesg | grep OSC                                                                                         :(
+[    0.487594] ACPI: \_PR_.CPU0: _OSC native thermal LVT Acked
+[    0.543368] acpi PNP0A08:00: _OSC: OS supports [ExtendedConfig ASPM ClockPM Segments MSI HPX-Type3]
+[    0.543420] ACPI_OSC: Failed run OSC: 33DB4D5B-1FF7-401C-9657-7441C03DD766
+[    0.543466] ACPI_OSC: Failed run OSC: 68F2D50B-C469-4d8A-BD3D-941A103FD3FC
+[    0.543469] acpi PNP0A08:00: _OSC failed (AE_ERROR); disabling ASPM
+
+[    0.546486] pci 0000:00:1c.0: CXL: pci_cxl_init() : upstream/downstream port found
+[    0.546491] pci 0000:00:1c.0: CXL: pci_cxl_init() : No CXL capability found
+[    0.546804] pci 0000:00:1c.1: CXL: pci_cxl_init() : upstream/downstream port found
+[    0.546810] pci 0000:00:1c.1: CXL: pci_cxl_init() : No CXL capability found
+[    0.547128] pci 0000:00:1c.2: CXL: pci_cxl_init() : upstream/downstream port found
+[    0.547134] pci 0000:00:1c.2: CXL: pci_cxl_init() : No CXL capability found
+[    0.547459] pci 0000:00:1c.4: CXL: pci_cxl_init() : upstream/downstream port found
+[    0.547465] pci 0000:00:1c.4: CXL: pci_cxl_init() : No CXL capability found
+[    0.549704] pci 0000:02:00.0: CXL: pci_cxl_init() : dev 0, func 0 found
+[    0.549714] pci 0000:02:00.0: CXL: pci_cxl_init() : No CXL capability found
+[    0.550263] pci 0000:03:00.0: CXL: pci_cxl_init() : dev 0, func 0 found
+[    0.550277] pci 0000:03:00.0: CXL: pci_cxl_init() : No CXL capability found
+
+  Example output in Simics using Cambria Turtle Back Falls Virtual Test Card:
+
+root@CannotLeaveINTEL ~ # dmesg | grep -i osc
+[ 7.444523] pci 0000:4e:00.0: CXL: pci_cxl_init() : CXL capability found
+[ 7.453523] pci 0000:4e:00.0: CXL: Cache+ IO+ Mem+ Viral- HDMCount 1
+[ 7.461533] pci 0000:4e:00.0: CXL: cap ctrl status ctrl2 status2 lock
+[ 7.469523] pci 0000:4e:00.0: CXL: 001f 0002 0000 0000 0000 0000
+
+Which Platforms are affected by this code?
+  SPR
+Are any bugs fixed or introduced by this code?
+  Second release, fixed Root Complex Endpoint detection, as demonstrated in example Simics output
+  Still essentially a "hello world"
