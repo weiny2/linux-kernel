@@ -1,0 +1,76 @@
+The scripts in this directory are intended to fascilitate the regular merge of
+the Intel Next kernel.
+
+manifest.in:
+  The input file to generate the manifest.
+manifest:
+  A generated file listing the git repository, branch, and commit ID to merge.
+gen-manifest.sh:
+  This script reads from manifest.in and generates the manifest.
+merge.sh:
+  This script performs the merge, taking the manifest as input.
+build-test.sh
+  Builds the kernel with allyesconfig as well as allmodconfig as sanity check.
+merge-commit.sh
+  Utility to help prepare the master and linus branches for upstream.
+
+The steps below assume that the otc_intel_next-linux.git repo has been cloned
+with defaults so that the remote from where it was cloned is named "origin". In
+addition there should be a branch named "eywa" that is created locally as a
+tracking branch of origin/eywa and a branch named "linus" that is created
+locally as a tracking branch of origin/linus. Finally, there should be a branch
+named "configs" that is created locally and is tracking origin/configs.
+
+To perform the merge, you need to account for the fact that this directory will
+disappear as you reset to Linus' latest release. The basic workflow looks like
+this:
+
+$ cd linux-eywa
+$ git checkout linus
+$ git pull
+$ git checkout eywa
+$ git pull
+$ cd eywa
+$ ./gen-manifest.sh
+$ mv manifest ../
+$ cp merge.sh ../
+$ cd ..
+$ git checkout master
+$ git branch -D master-old
+$ ./merge.sh
+
+If you're *really* lucky this will complete without error. You're not that
+lucky.
+
+Use your git-fu to manually merge the conflicts where you can. If you can't, you
+will need to reset to the last successful merge, then comment out the failing
+branch in the generated manifest file and notify the submitter that it cannot be
+merged with confidence. To continue:
+
+$ ./merge.sh -c
+
+Repeat until the merge completes.
+
+Now perform a basic build test as below. It is recommended to set
+OUTPUT_DIR, which will be passed as "O=OUTPUT_DIR" to the kernel build,
+to help keep the kernel source directory clean. If OUTPUT_DIR is not set
+the build output will be in the source directory.
+
+$ eywa/build-test.sh OUTPUT_DIR
+
+If ALL TESTS PASSED, tag the merge and push master and the tag to the Team Forge
+repository.
+
+Commit the manifest and merge log into eywa directory (master branch):
+$ eywa/merge-commit.sh [-p] [-o kernelcommit]
+
+The above script will also prepare the appropriate command lines that can be
+used to tag and push the successful merge. At this point perform a sanity check
+that all is ok and then perform the printed actions. When the master branch
+changes are pushed upstream you may see a message like "JUMBO PUSH
+detected", as the message indicates, this is nothing to worry about. The
+commandline option "-p" can be used to request the script to perform the
+recommended actions.
+
+A commit-message temporary file is generated on script exit. If you prefer to
+provide a filename, use the "-o" command-line option.
