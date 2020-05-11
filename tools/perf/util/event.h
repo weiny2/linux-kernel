@@ -128,6 +128,7 @@ struct perf_sample {
 	u64 stream_id;
 	u64 period;
 	u64 weight;
+	u64 ins_lat;
 	u64 transaction;
 	u64 insn_cnt;
 	u64 cyc_cnt;

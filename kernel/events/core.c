@@ -1877,6 +1877,9 @@ static void __perf_event_header_size(struct perf_event *event, u64 sample_type)
 	if (sample_type & PERF_SAMPLE_CGROUP)
 		size += sizeof(data->cgroup);
 
+	if (sample_type & PERF_SAMPLE_LATENCY)
+		size += sizeof(data->latency);
+
 	event->header_size = size;
 }
 
@@ -6897,6 +6900,9 @@ void perf_output_sample(struct perf_output_handle *handle,
 		if (data->aux_size)
 			perf_aux_sample_output(event, handle, data);
 	}
+
+	if (sample_type & PERF_SAMPLE_LATENCY)
+		perf_output_put(handle, data->latency);
 
 	if (!event->attr.watermark) {
 		int wakeup_events = event->attr.wakeup_events;
