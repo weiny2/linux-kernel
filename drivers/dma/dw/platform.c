@@ -83,7 +83,7 @@ static int dw_probe(struct platform_device *pdev)
 
 	dw_dma_of_controller_register(chip->dw);
 
-	dw_dma_acpi_controller_register(chip->dw);
+	data->acpi_controller_register(chip->dw);
 
 	return 0;
 
@@ -99,7 +99,7 @@ static int dw_remove(struct platform_device *pdev)
 	struct dw_dma_chip *chip = data->chip;
 	int ret;
 
-	dw_dma_acpi_controller_free(chip->dw);
+	data->acpi_controller_free(chip->dw);
 
 	dw_dma_of_controller_free(chip->dw);
 
@@ -149,9 +149,9 @@ static const struct acpi_device_id dw_dma_acpi_id_table[] = {
 	{ "808622C0", (kernel_ulong_t)&dw_dma_chip_pdata },
 
 	/* Elkhart Lake iDMA 32-bit (PSE DMA) */
-	{ "80864BB4", (kernel_ulong_t)&idma32_chip_pdata },
-	{ "80864BB5", (kernel_ulong_t)&idma32_chip_pdata },
-	{ "80864BB6", (kernel_ulong_t)&idma32_chip_pdata },
+	{ "80864BB4", (kernel_ulong_t)&xbar_chip_pdata },
+	{ "80864BB5", (kernel_ulong_t)&xbar_chip_pdata },
+	{ "80864BB6", (kernel_ulong_t)&xbar_chip_pdata },
 
 	{ }
 };

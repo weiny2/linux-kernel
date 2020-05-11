@@ -4822,7 +4822,13 @@ void pci_bridge_wait_for_secondary_bus(struct pci_dev *dev)
 	if (!pcie_downstream_port(dev))
 		return;
 
-	if (pcie_get_speed_cap(dev) <= PCIE_SPEED_5_0GT) {
+	/*
+	 * Since PCIe spec mandates that all downstream ports that support
+	 * speeds greater than 5 GT/s must support data link layer active
+	 * reporting so we use that here to determine when the delay should
+	 * be issued.
+	 */
+	if (!dev->link_active_reporting) {
 		pci_dbg(dev, "waiting %d ms for downstream link\n", delay);
 		msleep(delay);
 	} else {

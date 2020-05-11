@@ -2,6 +2,7 @@
 #ifndef DW_SPI_HEADER_H
 #define DW_SPI_HEADER_H
 
+#include <linux/irqreturn.h>
 #include <linux/io.h>
 #include <linux/scatterlist.h>
 
@@ -90,7 +91,7 @@ enum dw_ssi_type {
 
 struct dw_spi;
 struct dw_spi_dma_ops {
-	int (*dma_init)(struct dw_spi *dws);
+	int (*dma_init)(struct device *dev, struct dw_spi *dws);
 	void (*dma_exit)(struct dw_spi *dws);
 	int (*dma_setup)(struct dw_spi *dws, struct spi_transfer *xfer);
 	bool (*can_dma)(struct spi_controller *master, struct spi_device *spi,
@@ -129,7 +130,6 @@ struct dw_spi {
 	u32			current_freq;	/* frequency in hz */
 
 	/* DMA info */
-	int			dma_inited;
 	struct dma_chan		*txchan;
 	struct dma_chan		*rxchan;
 	unsigned long		dma_chan_busy;
@@ -254,5 +254,7 @@ extern int dw_spi_suspend_host(struct dw_spi *dws);
 extern int dw_spi_resume_host(struct dw_spi *dws);
 
 /* platform related setup */
-extern int dw_spi_mid_init(struct dw_spi *dws); /* Intel MID platforms */
+extern int dw_spi_mid_init_mfld(struct dw_spi *dws);
+extern int dw_spi_mid_init_generic(struct dw_spi *dws);
+
 #endif /* DW_SPI_HEADER_H */

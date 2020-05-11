@@ -9,6 +9,7 @@
  * Copyright (C) 2009 Provigent Ltd.
  */
 
+#include <linux/errno.h>
 #include <linux/i2c.h>
 
 #define DW_IC_DEFAULT_FUNCTIONALITY (I2C_FUNC_I2C |			\
@@ -314,15 +315,82 @@ static inline void __i2c_dw_disable_nowait(struct dw_i2c_dev *dev)
 
 void __i2c_dw_disable(struct dw_i2c_dev *dev);
 
-extern int i2c_dw_probe(struct dw_i2c_dev *dev);
+extern void i2c_dw_configure_master(struct dw_i2c_dev *dev);
+extern int i2c_dw_probe_master(struct dw_i2c_dev *dev);
+
 #if IS_ENABLED(CONFIG_I2C_DESIGNWARE_SLAVE)
+extern void i2c_dw_configure_slave(struct dw_i2c_dev *dev);
 extern int i2c_dw_probe_slave(struct dw_i2c_dev *dev);
 #else
+static inline void i2c_dw_configure_slave(struct dw_i2c_dev *dev) { }
 static inline int i2c_dw_probe_slave(struct dw_i2c_dev *dev) { return -EINVAL; }
 #endif
+
+static inline int i2c_dw_probe(struct dw_i2c_dev *dev)
+{
+	switch (dev->mode) {
+	case DW_IC_SLAVE:
+		return i2c_dw_probe_slave(dev);
+	case DW_IC_MASTER:
+		return i2c_dw_probe_master(dev);
+	default:
+		dev_err(dev->dev, "Wrong operation mode: %d\n", dev->mode);
+		return -EINVAL;
+	}
+}
+
+static inline void i2c_dw_configure(struct dw_i2c_dev *dev)
+{
+	if (i2c_detect_slave_mode(dev->dev))
+		i2c_dw_configure_slave(dev);
+	else
+		i2c_dw_configure_master(dev);
+}
 
 #if IS_ENABLED(CONFIG_I2C_DESIGNWARE_BAYTRAIL)
 extern int i2c_dw_probe_lock_support(struct dw_i2c_dev *dev);
 #else
 static inline int i2c_dw_probe_lock_support(struct dw_i2c_dev *dev) { return 0; }
+#endif
+
+static const u32 i2c_dw_supported_speeds[] = {
+	I2C_MAX_HIGH_SPEED_MODE_FREQ,
+	I2C_MAX_FAST_MODE_PLUS_FREQ,
+	I2C_MAX_FAST_MODE_FREQ,
+	I2C_MAX_STANDARD_MODE_FREQ,
+};
+
+static inline int i2c_dw_validate_speed(struct dw_i2c_dev *dev)
+{
+	struct i2c_timings *t = &dev->timings;
+	unsigned int i;
+
+	/*
+	 * Only standard mode at 100kHz, fast mode at 400kHz,
+	 * fast mode plus at 1MHz and high speed mode at 3.4MHz are supported.
+	 */
+	for (i = 0; i < ARRAY_SIZE(i2c_dw_supported_speeds); i++) {
+		if (t->bus_freq_hz == i2c_dw_supported_speeds[i])
+			return 0;
+	}
+
+	dev_err(dev->dev,
+		"%d Hz is unsupported, only 100kHz, 400kHz, 1MHz and 3.4MHz are supported\n",
+		t->bus_freq_hz);
+
+	return -EINVAL;
+}
+
+#if IS_ENABLED(CONFIG_ACPI)
+int i2c_dw_acpi_configure(struct device *device);
+void i2c_dw_acpi_adjust_bus_speed(struct device *device);
+#else
+static inline int i2c_dw_acpi_configure(struct device *device) { return -ENODEV; }
+static inline void i2c_dw_acpi_adjust_bus_speed(struct device *device) {}
+#endif
+
+#if IS_ENABLED(CONFIG_OF)
+int i2c_dw_of_configure(struct device *device);
+#else
+static inline int i2c_dw_of_configure(struct device *device) { return -ENODEV; }
 #endif
