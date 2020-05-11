@@ -220,6 +220,7 @@ struct kvm_stats_debugfs_item debugfs_entries[] = {
 	{ "nmi_injections", VCPU_STAT(nmi_injections) },
 	{ "req_event", VCPU_STAT(req_event) },
 	{ "l1d_flush", VCPU_STAT(l1d_flush) },
+	{ "bus_locks", VCPU_STAT(bus_locks) },
 	{ "mmu_shadow_zapped", VM_STAT(mmu_shadow_zapped) },
 	{ "mmu_pte_write", VM_STAT(mmu_pte_write) },
 	{ "mmu_pte_updated", VM_STAT(mmu_pte_updated) },

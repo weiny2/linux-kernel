@@ -1027,6 +1027,7 @@ struct kvm_vcpu_stat {
 	u64 irq_injections;
 	u64 nmi_injections;
 	u64 req_event;
+	u64 bus_locks;
 };
 
 struct x86_instruction_info;
