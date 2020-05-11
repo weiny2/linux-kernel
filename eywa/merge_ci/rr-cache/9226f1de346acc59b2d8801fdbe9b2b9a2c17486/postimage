@@ -1590,6 +1590,8 @@ static void pmc_core_dbgfs_register(struct pmc_dev *pmcdev)
 	}
 }
 
+#endif /* CONFIG_DEBUG_FS */
+
 static const struct x86_cpu_id intel_pmc_core_ids[] = {
 	X86_MATCH_INTEL_FAM6_MODEL(SKYLAKE_L,		&spt_reg_map),
 	X86_MATCH_INTEL_FAM6_MODEL(SKYLAKE,		&spt_reg_map),
@@ -2030,6 +2032,8 @@ static __maybe_unused int pmc_core_resume(struct device *dev)
 
 	return 0;
 }
+
+#endif
 
 static const struct dev_pm_ops pmc_core_pm_ops = {
 	SET_LATE_SYSTEM_SLEEP_PM_OPS(pmc_core_suspend, pmc_core_resume)
