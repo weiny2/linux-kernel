@@ -50,6 +50,10 @@ typedef struct {
 	u16 pkey_allocation_map;
 	s16 execute_only_pkey;
 #endif
+
+#ifdef CONFIG_INTEL_IOMMU_SVM
+	int pasid;
+#endif
 } mm_context_t;
 
 #define INIT_MM_CONTEXT(mm)						\
