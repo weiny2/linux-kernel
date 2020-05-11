@@ -908,7 +908,7 @@
                 },
                 {
                     "name": "CONFIG_NVME_CORE",
-                    "value": "y"
+                    "value": "m"
                 },
                 {
                     "name": "CONFIG_BLK_DEV_NVME",
@@ -926,14 +926,14 @@
                 }
             ],
             "description": "RPMB (CSE) support and SPD (storage proxy driver)",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "William Stevens",
                     "email": "william.a.stevens@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1984",
             "name": "rpmb",
             "repourl": "ssh://git-ger-8.devtools.intel.com:29418/sfip_linux-linux-mei.git",
             "sdl_contact": [
@@ -951,7 +951,8 @@
                 }
             ],
             "status": "public",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "",
+            "last_enabled": "v5.7"
         },
         {
             "branch": "for-intel-next",
