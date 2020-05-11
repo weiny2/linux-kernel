@@ -239,12 +239,12 @@ struct tb_path *tb_path_alloc(struct tb *tb, struct tb_port *src, int src_hopid,
 	if (!path)
 		return NULL;
 
-	/*
-	 * Number of hops on a path is the distance between the two
-	 * switches plus the source adapter port.
-	 */
-	num_hops = abs(tb_route_length(tb_route(src->sw)) -
-		       tb_route_length(tb_route(dst->sw))) + 1;
+	i = 0;
+	tb_for_each_port_on_path(src, dst, in_port)
+		i++;
+
+	/* Each hop takes two ports */
+	num_hops = i / 2;
 
 	path->hops = kcalloc(num_hops, sizeof(*path->hops), GFP_KERNEL);
 	if (!path->hops) {
@@ -559,21 +559,20 @@ bool tb_path_is_invalid(struct tb_path *path)
 }
 
 /**
- * tb_path_switch_on_path() - Does the path go through certain switch
+ * tb_path_port_on_path() - Does the path go through certain port
  * @path: Path to check
- * @sw: Switch to check
+ * @port: Switch to check
  *
- * Goes over all hops on path and checks if @sw is any of them.
+ * Goes over all hops on path and checks if @port is any of them.
  * Direction does not matter.
  */
-bool tb_path_switch_on_path(const struct tb_path *path,
-			    const struct tb_switch *sw)
+bool tb_path_port_on_path(const struct tb_path *path, const struct tb_port *port)
 {
 	int i;
 
 	for (i = 0; i < path->path_length; i++) {
-		if (path->hops[i].in_port->sw == sw ||
-		    path->hops[i].out_port->sw == sw)
+		if (path->hops[i].in_port == port ||
+		    path->hops[i].out_port == port)
 			return true;
 	}
 
