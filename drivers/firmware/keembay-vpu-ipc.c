@@ -1504,23 +1504,29 @@ static int keembay_vpu_ipc_probe(struct platform_device *pdev)
 	spin_lock_init(&vpu_dev->lock);
 	init_waitqueue_head(&vpu_dev->ready_queue);
 
+	/* Find matching IPC device. */
+	rc = ipc_device_get(vpu_dev);
+	if (rc)
+		return rc;
+
 	/* Retrieve clocks */
 	rc = retrieve_clocks(vpu_dev);
 	if (rc) {
 		dev_err(dev, "Failed to retrieve clocks %d\n", rc);
 		return rc;
 	}
-
-	rc = ipc_device_get(vpu_dev);
-	if (rc)
+	rc = clk_prepare_enable(vpu_dev->cpu_clock);
+	if (rc) {
+		dev_err(dev, "Failed to enable VPU clock: %d\n", rc);
 		return rc;
+	}
 
 	/* Retrieve memory regions, allocate memory */
 	rc = setup_reserved_memory(vpu_dev);
 	if (rc) {
 		dev_err(dev, "Failed to set up reserved memory regions: %d\n",
 			rc);
-		return rc;
+		goto probe_fail_post_clk_en;
 	}
 
 	/* Request watchdog timer resources */
@@ -1572,6 +1578,8 @@ static int keembay_vpu_ipc_probe(struct platform_device *pdev)
 
 probe_fail_post_resmem_setup:
 	of_reserved_mem_device_release(dev);
+probe_fail_post_clk_en:
+	clk_disable_unprepare(vpu_dev->cpu_clock);
 
 	return rc;
 }
@@ -1590,6 +1598,8 @@ static int keembay_vpu_ipc_remove(struct platform_device *pdev)
 	}
 
 	of_reserved_mem_device_release(dev);
+
+	clk_disable_unprepare(vpu_dev->cpu_clock);
 
 	ipc_device_put(vpu_dev);
 
