@@ -1318,7 +1318,7 @@
             ],
             "jira": "NEXT-1971",
             "name": "rapl/idle",
-            "repourl": "ssh://git-ccr-1.devtools.intel.com:29418/otc_linux_rui-rapl",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/rzhang1/for-intel-next.git",
             "sdl_contact": [
                 {
                     "name": "Charles D Prestopine",
