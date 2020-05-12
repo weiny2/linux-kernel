@@ -469,6 +469,13 @@ static inline void pci_ats_init(struct pci_dev *d) { }
 static inline void pci_restore_ats_state(struct pci_dev *dev) { }
 #endif /* CONFIG_PCI_ATS */
 
+#ifdef CONFIG_PCI_CXL
+/* Compute eXpress Link */
+void pci_cxl_init(struct pci_dev *dev);
+#else
+static inline void pci_cxl_init(struct pci_dev *dev) { }
+#endif
+
 #ifdef CONFIG_PCI_PRI
 void pci_pri_init(struct pci_dev *dev);
 void pci_restore_pri_state(struct pci_dev *pdev);

@@ -115,6 +115,15 @@ config XEN_PCIDEV_FRONTEND
 	  The PCI device frontend driver allows the kernel to import arbitrary
 	  PCI devices from a PCI backend to support PCI driver domains.
 
+config PCI_CXL
+	bool "Enable PCI Compute eXpress Link"
+	depends on PCI
+	help
+	  Say Y here if you want the PCI core to detect CXL devices, decode, and
+	  cache the DVSEC CXL Extended Capability as configured by BIOS.
+
+	  When in doubt, say N.
+
 config PCI_ATS
 	bool
 
