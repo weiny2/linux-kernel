@@ -130,6 +130,15 @@ static int idxd_setup_interrupts(struct idxd_device *idxd)
 		}
 		dev_dbg(dev, "Allocated idxd-msix %d for vector %d\n",
 			i, msix->vector);
+
+		if (idxd->hw.gen_cap.int_handle_req) {
+			rc = idxd_device_request_int_handle(idxd, i,
+							    &idxd->int_handles[i]);
+			if (rc < 0)
+				goto err_no_irq;
+			dev_dbg(dev, "int handle requested: %u\n",
+				idxd->int_handles[i]);
+		}
 	}
 
 	idxd_unmask_error_interrupts(idxd);
@@ -158,6 +167,14 @@ static int idxd_setup_internals(struct idxd_device *idxd)
 	int i;
 
 	init_waitqueue_head(&idxd->cmd_waitq);
+
+	if (idxd->hw.gen_cap.int_handle_req) {
+		idxd->int_handles = devm_kcalloc(dev, idxd->max_wqs,
+						 sizeof(int), GFP_KERNEL);
+		if (!idxd->int_handles)
+			return -ENOMEM;
+	}
+
 	idxd->groups = devm_kcalloc(dev, idxd->max_groups,
 				    sizeof(struct idxd_group), GFP_KERNEL);
 	if (!idxd->groups)
