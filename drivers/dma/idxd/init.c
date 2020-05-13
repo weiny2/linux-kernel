@@ -217,8 +217,40 @@ static void idxd_read_table_offsets(struct idxd_device *idxd)
 	idxd->msix_perm_offset = offsets.msix_perm * 0x100;
 	dev_dbg(dev, "IDXD MSIX Permission Offset: %#x\n",
 		idxd->msix_perm_offset);
+	idxd->ims_offset = offsets.ims * 0x100;
+	dev_dbg(dev, "IDXD IMS Offset: %#x\n", idxd->ims_offset);
 	idxd->perfmon_offset = offsets.perfmon * 0x100;
 	dev_dbg(dev, "IDXD Perfmon Offset: %#x\n", idxd->perfmon_offset);
+}
+
+static int device_supports_ims(struct pci_dev *pdev)
+{
+	int dvsec;
+	u16 val16;
+	u32 val32;
+
+	dvsec = pci_find_ext_capability(pdev, 0x23);
+	pci_read_config_word(pdev, dvsec + 0x4, &val16);
+	if (val16 != 0x8086) {
+		dev_dbg(&pdev->dev, "DVSEC vendor id is not Intel\n");
+		return -EOPNOTSUPP;
+	}
+
+	pci_read_config_word(pdev, dvsec + 0x8, &val16);
+	if (val16 != 0x5) {
+		dev_dbg(&pdev->dev, "DVSEC ID is not SIOV\n");
+		return -EOPNOTSUPP;
+	}
+
+	pci_read_config_dword(pdev, dvsec + 0x14, &val32);
+	if (val32 & 0x1) {
+		dev_dbg(&pdev->dev, "IMS supported for device\n");
+		return 0;
+	}
+
+	dev_dbg(&pdev->dev, "IMS unsupported for device\n");
+
+	return -EOPNOTSUPP;
 }
 
 static void idxd_read_caps(struct idxd_device *idxd)
@@ -233,9 +265,11 @@ static void idxd_read_caps(struct idxd_device *idxd)
 	dev_dbg(dev, "max xfer size: %llu bytes\n", idxd->max_xfer_bytes);
 	idxd->max_batch_size = 1U << idxd->hw.gen_cap.max_batch_shift;
 	dev_dbg(dev, "max batch size: %u\n", idxd->max_batch_size);
+	if (device_supports_ims(idxd->pdev) == 0)
+		idxd->ims_size = idxd->hw.gen_cap.max_ims_mult * 256ULL;
+	dev_dbg(dev, "IMS size: %u\n", idxd->ims_size);
 	if (idxd->hw.gen_cap.config_en)
 		set_bit(IDXD_FLAG_CONFIGURABLE, &idxd->flags);
-
 	/* reading group capabilities */
 	idxd->hw.group_cap.bits =
 		ioread64(idxd->reg_base + IDXD_GRPCAP_OFFSET);
@@ -280,6 +314,7 @@ static struct idxd_device *idxd_alloc(struct pci_dev *pdev)
 
 	idxd->pdev = pdev;
 	spin_lock_init(&idxd->dev_lock);
+	atomic_set(&idxd->num_allocated_ims, 0);
 
 	return idxd;
 }
@@ -363,9 +398,18 @@ static int idxd_probe(struct idxd_device *idxd)
 
 	idxd->major = idxd_cdev_get_major(idxd);
 
+	rc = sbitmap_init_node(&idxd->ims_sbmap, idxd->ims_size, -1,
+			       GFP_KERNEL, dev_to_node(dev));
+	if (rc < 0)
+		goto sbitmap_fail;
+
 	dev_dbg(dev, "IDXD device %d probed successfully\n", idxd->id);
 	return 0;
 
+ sbitmap_fail:
+	mutex_lock(&idxd_idr_lock);
+	idr_remove(&idxd_idrs[idxd->type], idxd->id);
+	mutex_unlock(&idxd_idr_lock);
  err_idr_fail:
 	idxd_mask_error_interrupts(idxd);
 	idxd_mask_msix_vectors(idxd);

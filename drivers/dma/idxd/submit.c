@@ -83,7 +83,8 @@ int idxd_submit_desc(struct idxd_wq *wq, struct idxd_desc *desc)
 		return -EIO;
 
 	portal = wq->portal +
-		 idxd_get_wq_portal_offset(IDXD_PORTAL_UNLIMITED);
+		 idxd_get_wq_portal_offset(IDXD_PORTAL_UNLIMITED,
+					   IDXD_IRQ_MSIX);
 
 	/*
 	 * The wmb() flushes writes to coherent DMA data before
