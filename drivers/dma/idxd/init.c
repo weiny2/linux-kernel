@@ -341,6 +341,12 @@ static int idxd_probe(struct idxd_device *idxd)
 	if (rc)
 		goto err_setup;
 
+	/* If the configs are readonly, then load them from device */
+	if (!test_bit(IDXD_FLAG_CONFIGURABLE, &idxd->flags)) {
+		dev_dbg(dev, "Loading RO device config\n");
+		idxd_device_load_config(idxd);
+	}
+
 	rc = idxd_setup_interrupts(idxd);
 	if (rc)
 		goto err_setup;

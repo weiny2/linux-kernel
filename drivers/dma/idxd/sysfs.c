@@ -118,14 +118,17 @@ static int idxd_config_bus_probe(struct device *dev)
 		if (!try_module_get(THIS_MODULE))
 			return -ENXIO;
 
-		/* Perform IDXD configuration and enabling */
-		spin_lock_irqsave(&idxd->dev_lock, flags);
-		rc = idxd_device_config(idxd);
-		spin_unlock_irqrestore(&idxd->dev_lock, flags);
-		if (rc < 0) {
-			module_put(THIS_MODULE);
-			dev_warn(dev, "Device config failed: %d\n", rc);
-			return rc;
+		if (test_bit(IDXD_FLAG_CONFIGURABLE, &idxd->flags)) {
+			/* Perform DSA configuration and enabling */
+			spin_lock_irqsave(&idxd->dev_lock, flags);
+			rc = idxd_device_config(idxd);
+			spin_unlock_irqrestore(&idxd->dev_lock, flags);
+			if (rc < 0) {
+				module_put(THIS_MODULE);
+				dev_warn(dev, "Device config failed: %d\n",
+					 rc);
+				return rc;
+			}
 		}
 
 		/* start device */
@@ -206,14 +209,26 @@ static int idxd_config_bus_probe(struct device *dev)
 			return rc;
 		}
 
-		spin_lock_irqsave(&idxd->dev_lock, flags);
-		rc = idxd_device_config(idxd);
-		spin_unlock_irqrestore(&idxd->dev_lock, flags);
-		if (rc < 0) {
-			mutex_unlock(&wq->wq_lock);
-			dev_warn(dev, "Writing WQ %d config failed: %d\n",
-				 wq->id, rc);
-			return rc;
+		if (test_bit(IDXD_FLAG_CONFIGURABLE, &idxd->flags)) {
+			spin_lock_irqsave(&idxd->dev_lock, flags);
+			rc = idxd_device_config(idxd);
+			spin_unlock_irqrestore(&idxd->dev_lock, flags);
+			if (rc < 0) {
+				mutex_unlock(&wq->wq_lock);
+				dev_warn(dev, "Writing WQ %d config failed: %d\n",
+					 wq->id, rc);
+				return rc;
+			}
+		} else {
+			spin_lock_irqsave(&idxd->dev_lock, flags);
+			rc = idxd_device_ro_config(idxd);
+			spin_unlock_irqrestore(&idxd->dev_lock, flags);
+			if (rc < 0) {
+				mutex_unlock(&wq->wq_lock);
+				dev_warn(dev, "Writing WQ %d config failed: %d\n",
+					 wq->id, rc);
+				return rc;
+			}
 		}
 
 		rc = idxd_wq_enable(wq);
