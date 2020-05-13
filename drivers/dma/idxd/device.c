@@ -319,6 +319,30 @@ void idxd_wq_unmap_portal(struct idxd_wq *wq)
 	devm_iounmap(dev, wq->portal);
 }
 
+int idxd_wq_abort(struct idxd_wq *wq)
+{
+	struct idxd_device *idxd = wq->idxd;
+	struct device *dev = &idxd->pdev->dev;
+	u32 operand, status;
+
+	dev_dbg(dev, "Abort WQ %d\n", wq->id);
+	if (wq->state != IDXD_WQ_ENABLED) {
+		dev_dbg(dev, "WQ %d not active\n", wq->id);
+		return -ENXIO;
+	}
+
+	operand = BIT(wq->id % 16) | ((wq->id / 16) << 16);
+	dev_dbg(dev, "cmd: %u operand: %#x\n", IDXD_CMD_ABORT_WQ, operand);
+	idxd_cmd_exec(idxd, IDXD_CMD_ABORT_WQ, operand, &status);
+	if (status != IDXD_CMDSTS_SUCCESS) {
+		dev_dbg(dev, "WQ abort failed: %#x\n", status);
+		return -ENXIO;
+	}
+
+	dev_dbg(dev, "WQ %d aborted\n", wq->id);
+	return 0;
+}
+
 int idxd_wq_set_pasid(struct idxd_wq *wq, int pasid)
 {
 	struct idxd_device *idxd = wq->idxd;
@@ -395,6 +419,32 @@ void idxd_wq_disable_cleanup(struct idxd_wq *wq)
 			wq->id, i, wq_offset,
 			ioread32(idxd->reg_base + wq_offset));
 	}
+}
+
+void idxd_wq_update_pasid(struct idxd_wq *wq, int pasid)
+{
+	struct idxd_device *idxd = wq->idxd;
+	int offset;
+
+	lockdep_assert_held(&idxd->dev_lock);
+
+	/* PASID fields are 8 bytes into the WQCFG register */
+	offset = idxd->wqcfg_offset + wq->id * 32 + 8;
+	wq->wqcfg.pasid = pasid;
+	iowrite32(wq->wqcfg.bits[2], idxd->reg_base + offset);
+}
+
+void idxd_wq_update_priv(struct idxd_wq *wq, int priv)
+{
+	struct idxd_device *idxd = wq->idxd;
+	int offset;
+
+	lockdep_assert_held(&idxd->dev_lock);
+
+	/* priv field is 8 bytes into the WQCFG register */
+	offset = idxd->wqcfg_offset + wq->id * 32 + 8;
+	wq->wqcfg.priv = !!priv;
+	iowrite32(wq->wqcfg.bits[2], idxd->reg_base + offset);
 }
 
 /* Device control bits */
@@ -527,11 +577,37 @@ void idxd_device_drain_pasid(struct idxd_device *idxd, int pasid)
 	struct device *dev = &idxd->pdev->dev;
 	u32 operand;
 
-	lockdep_assert_held(&idxd->dev_lock);
 	operand = pasid;
 	dev_dbg(dev, "cmd: %u operand: %#x\n", IDXD_CMD_DRAIN_PASID, operand);
 	idxd_cmd_exec(idxd, IDXD_CMD_DRAIN_PASID, operand, NULL);
 	dev_dbg(dev, "pasid %d drained\n", pasid);
+}
+
+int idxd_device_request_int_handle(struct idxd_device *idxd, int idx,
+				   int *handle)
+{
+	struct device *dev = &idxd->pdev->dev;
+	u32 operand, status;
+
+	if (!idxd->hw.gen_cap.int_handle_req)
+		return -EOPNOTSUPP;
+
+	dev_dbg(dev, "get int handle, idx %d\n", idx);
+
+	operand = idx & 0xffff;
+	dev_dbg(dev, "cmd: %u operand: %#x\n",
+		IDXD_CMD_REQUEST_INT_HANDLE, operand);
+	idxd_cmd_exec(idxd, IDXD_CMD_REQUEST_INT_HANDLE, operand, &status);
+
+	if (status != IDXD_CMDSTS_SUCCESS) {
+		dev_dbg(dev, "request int handle failed: %#x\n", status);
+		return -ENXIO;
+	}
+
+	*handle = (status >> 8) & 0xffff;
+
+	dev_dbg(dev, "int handle acquired: %u\n", *handle);
+	return 0;
 }
 
 /* Device configuration bits */
