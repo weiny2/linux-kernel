@@ -33,6 +33,9 @@ static const uuid_le mei_nfc_info_guid = MEI_UUID_NFC_INFO;
 #define MEI_UUID_HDCP UUID_LE(0xB638AB7E, 0x94E2, 0x4EA2, \
 			      0xA5, 0x52, 0xD1, 0xC5, 0x4B, 0x62, 0x7F, 0x04)
 
+#define MEI_UUID_WIFI UUID_LE(0x2F6B04CD, 0xD1BF, 0x4005, \
+		              0xA1, 0xAF, 0x98, 0xEE, 0x29, 0xE5, 0x3C, 0x5A)
+
 #define MEI_UUID_ANY NULL_UUID_LE
 
 /**
@@ -488,6 +491,7 @@ static struct mei_fixup {
 	MEI_FIXUP(MEI_UUID_WD, mei_wd),
 	MEI_FIXUP(MEI_UUID_MKHIF_FIX, mei_mkhi_fix),
 	MEI_FIXUP(MEI_UUID_HDCP, whitelist),
+	MEI_FIXUP(MEI_UUID_WIFI, whitelist),
 	MEI_FIXUP(MEI_UUID_ANY, vt_support),
 };
 
