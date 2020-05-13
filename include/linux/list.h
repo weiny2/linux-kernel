@@ -493,6 +493,18 @@ static inline void list_splice_tail_init(struct list_head *list,
 	container_of(ptr, type, member)
 
 /**
+ * list_entry_select - get the correct struct for this entry based on condition
+ * @condition:	the condition to choose a particular &struct list head pointer
+ * @ptr_a:      the &struct list_head pointer if @condition is not met.
+ * @ptr_b:      the &struct list_head pointer if @condition is met.
+ * @type:       the type of the struct this is embedded in.
+ * @member:     the name of the list_head within the struct.
+ */
+#define list_entry_select(condition, ptr_a, ptr_b, type, member)\
+	(condition) ? list_entry(ptr_a, type, member) :		\
+		      list_entry(ptr_b, type, member)
+
+/**
  * list_first_entry - get the first element from a list
  * @ptr:	the list head to take the element from.
  * @type:	the type of the struct this is embedded in.
@@ -502,6 +514,17 @@ static inline void list_splice_tail_init(struct list_head *list,
  */
 #define list_first_entry(ptr, type, member) \
 	list_entry((ptr)->next, type, member)
+
+/**
+ * list_first_entry_select - get the first element from list based on condition
+ * @condition:  the condition to choose a particular &struct list head pointer
+ * @ptr_a:      the &struct list_head pointer if @condition is not met.
+ * @ptr_b:      the &struct list_head pointer if @condition is met.
+ * @type:       the type of the struct this is embedded in.
+ * @member:     the name of the list_head within the struct.
+ */
+#define list_first_entry_select(condition, ptr_a, ptr_b, type, member)  \
+	list_entry_select((condition), (ptr_a)->next, (ptr_b)->next, type, member)
 
 /**
  * list_last_entry - get the last element from a list
@@ -600,6 +623,19 @@ static inline void list_splice_tail_init(struct list_head *list,
 #define list_for_each_entry(pos, head, member)				\
 	for (pos = list_first_entry(head, typeof(*pos), member);	\
 	     &pos->member != (head);					\
+	     pos = list_next_entry(pos, member))
+
+/**
+ * list_for_each_entry_select - iterate over list of given type based on condition
+ * @condition:  the condition to choose a particular &struct list head pointer
+ * @pos:        the type * to use as a loop cursor.
+ * @head_a:     the head for your list if condition is met.
+ * @head_b:     the head for your list if condition is not met.
+ * @member:     the name of the list_head within the struct.
+ */
+#define list_for_each_entry_select(condition, pos, head_a, head_b, member)\
+	for (pos = list_first_entry_select((condition), head_a, head_b, typeof(*pos), member);\
+	     (condition) ? &pos->member != (head_a) : &pos->member != (head_b);\
 	     pos = list_next_entry(pos, member))
 
 /**

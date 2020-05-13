@@ -53,6 +53,12 @@ irq_remapping_get_irq_domain(struct irq_alloc_info *info);
 extern struct irq_domain *
 arch_create_remap_msi_irq_domain(struct irq_domain *par, const char *n, int id);
 
+/* Create IMS irqdomain, use @parent as the parent irqdomain. */
+#ifdef CONFIG_MSI_IMS
+extern struct irq_domain *arch_create_ims_irq_domain(struct irq_domain *parent,
+						     const char *name);
+#endif
+
 /* Get parent irqdomain for interrupt remapping irqdomain */
 static inline struct irq_domain *arch_get_ir_parent_domain(void)
 {

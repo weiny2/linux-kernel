@@ -1984,6 +1984,7 @@ void device_initialize(struct device *dev)
 	set_dev_node(dev, -1);
 #ifdef CONFIG_GENERIC_MSI_IRQ
 	INIT_LIST_HEAD(&dev->msi_list);
+	INIT_LIST_HEAD(&dev->platform_msi_list);
 #endif
 	INIT_LIST_HEAD(&dev->links.consumers);
 	INIT_LIST_HEAD(&dev->links.suppliers);
