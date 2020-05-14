@@ -539,3 +539,36 @@ int vidxd_free_ims_entry(struct vdcm_idxd *vidxd, int msix_idx)
 {
 	return 0;
 }
+
+static void vidxd_send_errors(struct vdcm_idxd *vidxd)
+{
+	struct idxd_device *idxd = vidxd->idxd;
+	struct vdcm_idxd_pci_bar0 *bar0 = &vidxd->bar0;
+	u64 *swerr = (u64 *)&bar0->cap_ctrl_regs[IDXD_SWERR_OFFSET];
+	int i;
+
+	for (i = 0; i < 4; i++) {
+		*swerr = idxd->sw_err.bits[i];
+		swerr++;
+	}
+	vidxd_send_interrupt(vidxd, 0);
+}
+
+void idxd_wq_vidxd_send_errors(struct idxd_wq *wq)
+{
+	struct vdcm_idxd *vidxd;
+
+	list_for_each_entry(vidxd, &wq->vdcm_list, list)
+		vidxd_send_errors(vidxd);
+}
+
+void idxd_vidxd_send_errors(struct idxd_device *idxd)
+{
+	int i;
+
+	for (i = 0; i < idxd->max_wqs; i++) {
+		struct idxd_wq *wq = &idxd->wqs[i];
+
+		idxd_wq_vidxd_send_errors(wq);
+	}
+}
