@@ -38,5 +38,6 @@ int vidxd_setup_ims_entry(struct vdcm_idxd *vidxd, int ims_idx, u32 val);
 int vidxd_send_interrupt(struct vdcm_idxd *vidxd, int msix_idx);
 void vidxd_do_command(struct vdcm_idxd *vidxd, u32 val);
 void vidxd_reset(struct vdcm_idxd *vidxd);
+void idxd_wq_vidxd_send_errors(struct idxd_wq *wq);
 
 #endif
