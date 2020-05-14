@@ -369,5 +369,7 @@ void idxd_wq_del_cdev(struct idxd_wq *wq);
 /* mdev */
 int idxd_mdev_host_init(struct idxd_device *idxd);
 void idxd_mdev_host_release(struct idxd_device *idxd);
+void idxd_wq_vidxd_send_errors(struct idxd_wq *wq);
+void idxd_vidxd_send_errors(struct idxd_device *idxd);
 
 #endif

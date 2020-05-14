@@ -148,6 +148,8 @@ irqreturn_t idxd_misc_thread(int vec, void *data)
 
 			if (wq->type == IDXD_WQT_USER)
 				wake_up_interruptible(&wq->idxd_cdev.err_queue);
+			else if (wq->type == IDXD_WQT_MDEV)
+				idxd_wq_vidxd_send_errors(wq);
 		} else {
 			int i;
 
@@ -156,6 +158,8 @@ irqreturn_t idxd_misc_thread(int vec, void *data)
 
 				if (wq->type == IDXD_WQT_USER)
 					wake_up_interruptible(&wq->idxd_cdev.err_queue);
+				else if (wq->type == IDXD_WQT_MDEV)
+					idxd_vidxd_send_errors(idxd);
 			}
 		}
 
