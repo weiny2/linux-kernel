@@ -1728,14 +1728,14 @@
                 }
             ],
             "description": "Intel Speed Select Technology",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Vasudevan Srinivasan",
                     "email": "vasudevan.srinivasan@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1986",
             "name": "sst",
             "repourl": "ssh://git-amr-4.devtools.intel.com:29418/otc_linux_spandruv-internal.git",
             "sdl_contact": [
@@ -1745,7 +1745,8 @@
                 }
             ],
             "status": "public",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "",
+            "last_enabled": "v5.7"
         },
         {
             "branch": "fixups",
