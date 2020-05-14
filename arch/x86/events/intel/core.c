@@ -4266,6 +4266,8 @@ static void init_hybrid_pmu(int cpu)
 	if (cpu_has(c, X86_FEATURE_PDCM))
 		rdmsrl(MSR_IA32_PERF_CAPABILITIES, pmu->intel_cap.capabilities);
 
+	pr_info("capabilities: 0x%llx\n", pmu->intel_cap.capabilities);
+
 	/* Ignore fixed mask for now */
 	intel_pmu_check_num_counters(&pmu->num_counters,
 				     &pmu->num_counters_fixed,
@@ -5414,8 +5416,12 @@ __init int intel_pmu_init(void)
 	 * Branch Misses Retired hw_event or not.
 	 */
 	cpuid(10, &eax.full, &ebx.full, &fixed_mask, &edx.full);
-	if (eax.split.mask_length < ARCH_PERFMON_EVENTS_COUNT)
-		return -ENODEV;
+	pr_info("CPUID 10: EAX 0x%x ebx 0x%x ecx 0x%x edx 0x%x\n",
+		eax.full, ebx.full, fixed_mask, edx.full);
+
+	/* TODO: ignore eax.split.mask_length for now */
+//	if (eax.split.mask_length < ARCH_PERFMON_EVENTS_COUNT)
+//		return -ENODEV;
 	if (!fixed_mask)
 		fixed_mask = -1;
 
@@ -5457,6 +5463,7 @@ __init int intel_pmu_init(void)
 		rdmsrl(MSR_IA32_PERF_CAPABILITIES, capabilities);
 		x86_pmu.intel_cap.capabilities = capabilities;
 	}
+	pr_info("capabilities 0x%llx\n", x86_pmu.intel_cap.capabilities);
 
 	if (x86_pmu.intel_cap.lbr_format == LBR_FORMAT_32) {
 		x86_pmu.lbr_reset = intel_pmu_lbr_reset_32;
