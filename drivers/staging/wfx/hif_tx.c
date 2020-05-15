@@ -23,8 +23,8 @@ void wfx_init_hif_cmd(struct wfx_hif_cmd *hif_cmd)
 	mutex_init(&hif_cmd->key_renew_lock);
 }
 
-static void wfx_fill_header(struct hif_msg *hif, int if_id, unsigned int cmd,
-			    size_t size)
+static void wfx_fill_header(struct hif_msg *hif, int if_id,
+			    unsigned int cmd, size_t size)
 {
 	if (if_id == -1)
 		if_id = 2;
@@ -47,8 +47,8 @@ static void *wfx_alloc_hif(size_t body_len, struct hif_msg **hif)
 		return NULL;
 }
 
-int wfx_cmd_send(struct wfx_dev *wdev, struct hif_msg *request, void *reply,
-		 size_t reply_len, bool async)
+int wfx_cmd_send(struct wfx_dev *wdev, struct hif_msg *request,
+		 void *reply, size_t reply_len, bool async)
 {
 	const char *mib_name = "";
 	const char *mib_sep = "";
@@ -82,6 +82,9 @@ int wfx_cmd_send(struct wfx_dev *wdev, struct hif_msg *request, void *reply,
 	if (async)
 		return 0;
 
+	if (wdev->poll_irq)
+		wfx_bh_poll_irq(wdev);
+
 	ret = wait_for_completion_timeout(&wdev->hif_cmd.done, 1 * HZ);
 	if (!ret) {
 		dev_err(wdev->dev, "chip is abnormally long to answer\n");
@@ -91,7 +94,7 @@ int wfx_cmd_send(struct wfx_dev *wdev, struct hif_msg *request, void *reply,
 	if (!ret) {
 		dev_err(wdev->dev, "chip did not answer\n");
 		wfx_pending_dump_old_frames(wdev, 3000);
-		wdev->chip_frozen = 1;
+		wdev->chip_frozen = true;
 		reinit_completion(&wdev->hif_cmd.done);
 		ret = -ETIMEDOUT;
 	} else {
@@ -103,7 +106,7 @@ int wfx_cmd_send(struct wfx_dev *wdev, struct hif_msg *request, void *reply,
 
 	if (ret &&
 	    (cmd == HIF_REQ_ID_READ_MIB || cmd == HIF_REQ_ID_WRITE_MIB)) {
-		mib_name = get_mib_name(((u16 *) request)[2]);
+		mib_name = get_mib_name(((u16 *)request)[2]);
 		mib_sep = "/";
 	}
 	if (ret < 0)
@@ -173,8 +176,8 @@ int hif_reset(struct wfx_vif *wvif, bool reset_stat)
 	return ret;
 }
 
-int hif_read_mib(struct wfx_dev *wdev, int vif_id, u16 mib_id, void *val,
-		 size_t val_len)
+int hif_read_mib(struct wfx_dev *wdev, int vif_id, u16 mib_id,
+		 void *val, size_t val_len)
 {
 	int ret;
 	struct hif_msg *hif;
@@ -186,17 +189,17 @@ int hif_read_mib(struct wfx_dev *wdev, int vif_id, u16 mib_id, void *val,
 	wfx_fill_header(hif, vif_id, HIF_REQ_ID_READ_MIB, sizeof(*body));
 	ret = wfx_cmd_send(wdev, hif, reply, buf_len, false);
 
-	if (!ret && mib_id != reply->mib_id) {
+	if (!ret && mib_id != le16_to_cpu(reply->mib_id)) {
 		dev_warn(wdev->dev,
 			 "%s: confirmation mismatch request\n", __func__);
 		ret = -EIO;
 	}
 	if (ret == -ENOMEM)
-		dev_err(wdev->dev,
-			"buffer is too small to receive %s (%zu < %d)\n",
-			get_mib_name(mib_id), val_len, reply->length);
+		dev_err(wdev->dev, "buffer is too small to receive %s (%zu < %d)\n",
+			get_mib_name(mib_id), val_len,
+			le16_to_cpu(reply->length));
 	if (!ret)
-		memcpy(val, &reply->mib_data, reply->length);
+		memcpy(val, &reply->mib_data, le16_to_cpu(reply->length));
 	else
 		memset(val, 0xFF, val_len);
 	kfree(hif);
@@ -204,8 +207,8 @@ int hif_read_mib(struct wfx_dev *wdev, int vif_id, u16 mib_id, void *val,
 	return ret;
 }
 
-int hif_write_mib(struct wfx_dev *wdev, int vif_id, u16 mib_id, void *val,
-		  size_t val_len)
+int hif_write_mib(struct wfx_dev *wdev, int vif_id, u16 mib_id,
+		  void *val, size_t val_len)
 {
 	int ret;
 	struct hif_msg *hif;
@@ -296,19 +299,22 @@ int hif_join(struct wfx_vif *wvif, const struct ieee80211_bss_conf *conf,
 	struct hif_msg *hif;
 	struct hif_req_join *body = wfx_alloc_hif(sizeof(*body), &hif);
 
+	WARN_ON(!conf->beacon_int);
 	WARN_ON(!conf->basic_rates);
+	WARN_ON(sizeof(body->ssid) < ssidlen);
+	WARN(!conf->ibss_joined && !ssidlen, "joining an unknown BSS");
 	body->infrastructure_bss_mode = !conf->ibss_joined;
 	body->short_preamble = conf->use_short_preamble;
 	if (channel && channel->flags & IEEE80211_CHAN_NO_IR)
 		body->probe_for_join = 0;
 	else
 		body->probe_for_join = 1;
-	body->channel_number = cpu_to_le16(channel->hw_value);
+	body->channel_number = channel->hw_value;
 	body->beacon_interval = cpu_to_le32(conf->beacon_int);
 	body->basic_rate_set =
 		cpu_to_le32(wfx_rate_mask_to_hw(wvif->wdev, conf->basic_rates));
 	memcpy(body->bssid, conf->bssid, sizeof(body->bssid));
-	if (!conf->ibss_joined && ssid) {
+	if (ssid) {
 		body->ssid_length = cpu_to_le32(ssidlen);
 		memcpy(body->ssid, ssid, ssidlen);
 	}
@@ -318,17 +324,15 @@ int hif_join(struct wfx_vif *wvif, const struct ieee80211_bss_conf *conf,
 	return ret;
 }
 
-int hif_set_bss_params(struct wfx_vif *wvif,
-		       const struct hif_req_set_bss_params *arg)
+int hif_set_bss_params(struct wfx_vif *wvif, int aid, int beacon_lost_count)
 {
 	int ret;
 	struct hif_msg *hif;
-	struct hif_req_set_bss_params *body = wfx_alloc_hif(sizeof(*body),
-							    &hif);
+	struct hif_req_set_bss_params *body =
+		wfx_alloc_hif(sizeof(*body), &hif);
 
-	memcpy(body, arg, sizeof(*body));
-	cpu_to_le16s(&body->aid);
-	cpu_to_le32s(&body->operational_rate_set);
+	body->aid = cpu_to_le16(aid);
+	body->beacon_lost_count = beacon_lost_count;
 	wfx_fill_header(hif, wvif->id, HIF_REQ_ID_SET_BSS_PARAMS,
 			sizeof(*body));
 	ret = wfx_cmd_send(wvif->wdev, hif, NULL, 0, false);
@@ -428,9 +432,10 @@ int hif_start(struct wfx_vif *wvif, const struct ieee80211_bss_conf *conf,
 	struct hif_msg *hif;
 	struct hif_req_start *body = wfx_alloc_hif(sizeof(*body), &hif);
 
+	WARN_ON(!conf->beacon_int);
 	body->dtim_period = conf->dtim_period;
 	body->short_preamble = conf->use_short_preamble;
-	body->channel_number = cpu_to_le16(channel->hw_value);
+	body->channel_number = channel->hw_value;
 	body->beacon_interval = cpu_to_le32(conf->beacon_int);
 	body->basic_rate_set =
 		cpu_to_le32(wfx_rate_mask_to_hw(wvif->wdev, conf->basic_rates));
@@ -465,7 +470,7 @@ int hif_map_link(struct wfx_vif *wvif, u8 *mac_addr, int flags, int sta_id)
 
 	if (mac_addr)
 		ether_addr_copy(body->mac_addr, mac_addr);
-	body->map_link_flags = *(struct hif_map_link_flags *) &flags;
+	body->map_link_flags = *(struct hif_map_link_flags *)&flags;
 	body->peer_sta_id = sta_id;
 	wfx_fill_header(hif, wvif->id, HIF_REQ_ID_MAP_LINK, sizeof(*body));
 	ret = wfx_cmd_send(wvif->wdev, hif, NULL, 0, false);
@@ -489,8 +494,8 @@ int hif_update_ie_beacon(struct wfx_vif *wvif, const u8 *ies, size_t ies_len)
 	return ret;
 }
 
-int hif_sl_send_pub_keys(struct wfx_dev *wdev, const uint8_t *pubkey,
-			 const uint8_t *pubkey_hmac)
+int hif_sl_send_pub_keys(struct wfx_dev *wdev,
+			 const u8 *pubkey, const u8 *pubkey_hmac)
 {
 	int ret;
 	struct hif_msg *hif;
@@ -506,7 +511,7 @@ int hif_sl_send_pub_keys(struct wfx_dev *wdev, const uint8_t *pubkey,
 	ret = wfx_cmd_send(wdev, hif, NULL, 0, false);
 	kfree(hif);
 	// Compatibility with legacy secure link
-	if (ret == SL_PUB_KEY_EXCHANGE_STATUS_SUCCESS)
+	if (ret == le32_to_cpu(HIF_STATUS_SLK_NEGO_SUCCESS))
 		ret = 0;
 	return ret;
 }
@@ -524,8 +529,7 @@ int hif_sl_config(struct wfx_dev *wdev, const unsigned long *bitmap)
 	return ret;
 }
 
-int hif_sl_set_mac_key(struct wfx_dev *wdev, const u8 *slk_key,
-		       int destination)
+int hif_sl_set_mac_key(struct wfx_dev *wdev, const u8 *slk_key, int destination)
 {
 	int ret;
 	struct hif_msg *hif;
@@ -538,7 +542,7 @@ int hif_sl_set_mac_key(struct wfx_dev *wdev, const u8 *slk_key,
 	ret = wfx_cmd_send(wdev, hif, NULL, 0, false);
 	kfree(hif);
 	// Compatibility with legacy secure link
-	if (ret == SL_MAC_KEY_STATUS_SUCCESS)
+	if (ret == le32_to_cpu(HIF_STATUS_SLK_SET_KEY_SUCCESS))
 		ret = 0;
 	return ret;
 }

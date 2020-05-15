@@ -233,11 +233,7 @@ static int hdm_poison_channel(struct most_interface *iface, int channel)
 	unsigned long flags;
 	spinlock_t *lock; /* temp. lock */
 
-	if (unlikely(!iface)) {
-		dev_warn(&mdev->usb_device->dev, "Poison: Bad interface.\n");
-		return -EIO;
-	}
-	if (unlikely(channel < 0 || channel >= iface->num_channels)) {
+	if (channel < 0 || channel >= iface->num_channels) {
 		dev_warn(&mdev->usb_device->dev, "Channel ID out of range.\n");
 		return -ECHRNG;
 	}
@@ -278,13 +274,13 @@ static int hdm_add_padding(struct most_dev *mdev, int channel, struct mbo *mbo)
 	unsigned int j, num_frames;
 
 	if (!frame_size)
-		return -EIO;
+		return -EINVAL;
 	num_frames = mbo->buffer_length / frame_size;
 
 	if (num_frames < 1) {
 		dev_err(&mdev->usb_device->dev,
 			"Missed minimal transfer unit.\n");
-		return -EIO;
+		return -EINVAL;
 	}
 
 	for (j = num_frames - 1; j > 0; j--)
@@ -312,7 +308,7 @@ static int hdm_remove_padding(struct most_dev *mdev, int channel,
 	unsigned int j, num_frames;
 
 	if (!frame_size)
-		return -EIO;
+		return -EINVAL;
 	num_frames = mbo->processed_length / USB_MTU;
 
 	for (j = 1; j < num_frames; j++)
@@ -552,19 +548,18 @@ static void hdm_read_completion(struct urb *urb)
 static int hdm_enqueue(struct most_interface *iface, int channel,
 		       struct mbo *mbo)
 {
-	struct most_dev *mdev;
+	struct most_dev *mdev = to_mdev(iface);
 	struct most_channel_config *conf;
 	int retval = 0;
 	struct urb *urb;
 	unsigned long length;
 	void *virt_address;
 
-	if (unlikely(!iface || !mbo))
-		return -EIO;
-	if (unlikely(iface->num_channels <= channel || channel < 0))
+	if (!mbo)
+		return -EINVAL;
+	if (iface->num_channels <= channel || channel < 0)
 		return -ECHRNG;
 
-	mdev = to_mdev(iface);
 	conf = &mdev->conf[channel];
 
 	mutex_lock(&mdev->io_mutex);
@@ -581,7 +576,7 @@ static int hdm_enqueue(struct most_interface *iface, int channel,
 
 	if ((conf->direction & MOST_CH_TX) && mdev->padding_active[channel] &&
 	    hdm_add_padding(mdev, channel, mbo)) {
-		retval = -EIO;
+		retval = -EINVAL;
 		goto err_free_urb;
 	}
 
@@ -669,19 +664,20 @@ static int hdm_configure_channel(struct most_interface *iface, int channel,
 	struct most_dev *mdev = to_mdev(iface);
 	struct device *dev = &mdev->usb_device->dev;
 
+	if (!conf) {
+		dev_err(dev, "Bad config pointer.\n");
+		return -EINVAL;
+	}
+	if (channel < 0 || channel >= iface->num_channels) {
+		dev_err(dev, "Channel ID out of range.\n");
+		return -EINVAL;
+	}
+
 	mdev->is_channel_healthy[channel] = true;
 	mdev->clear_work[channel].channel = channel;
 	mdev->clear_work[channel].mdev = mdev;
 	INIT_WORK(&mdev->clear_work[channel].ws, wq_clear_halt);
 
-	if (unlikely(!iface || !conf)) {
-		dev_err(dev, "Bad interface or config pointer.\n");
-		return -EINVAL;
-	}
-	if (unlikely(channel < 0 || channel >= iface->num_channels)) {
-		dev_err(dev, "Channel ID out of range.\n");
-		return -EINVAL;
-	}
 	if (!conf->num_buffers || !conf->buffer_size) {
 		dev_err(dev, "Misconfig: buffer size or #buffers zero.\n");
 		return -EINVAL;
@@ -745,10 +741,8 @@ static void hdm_request_netinfo(struct most_interface *iface, int channel,
 						   unsigned char,
 						   unsigned char *))
 {
-	struct most_dev *mdev;
+	struct most_dev *mdev = to_mdev(iface);
 
-	BUG_ON(!iface);
-	mdev = to_mdev(iface);
 	mdev->on_netinfo = on_netinfo;
 	if (!on_netinfo)
 		return;
@@ -1228,11 +1222,39 @@ static void hdm_disconnect(struct usb_interface *interface)
 	put_device(&mdev->dev);
 }
 
+static int hdm_suspend(struct usb_interface *interface, pm_message_t message)
+{
+	struct most_dev *mdev = usb_get_intfdata(interface);
+	int i;
+
+	mutex_lock(&mdev->io_mutex);
+	for (i = 0; i < mdev->iface.num_channels; i++) {
+		most_stop_enqueue(&mdev->iface, i);
+		usb_kill_anchored_urbs(&mdev->busy_urbs[i]);
+	}
+	mutex_unlock(&mdev->io_mutex);
+	return 0;
+}
+
+static int hdm_resume(struct usb_interface *interface)
+{
+	struct most_dev *mdev = usb_get_intfdata(interface);
+	int i;
+
+	mutex_lock(&mdev->io_mutex);
+	for (i = 0; i < mdev->iface.num_channels; i++)
+		most_resume_enqueue(&mdev->iface, i);
+	mutex_unlock(&mdev->io_mutex);
+	return 0;
+}
+
 static struct usb_driver hdm_usb = {
 	.name = "hdm_usb",
 	.id_table = usbid,
 	.probe = hdm_probe,
 	.disconnect = hdm_disconnect,
+	.resume = hdm_resume,
+	.suspend = hdm_suspend,
 };
 
 module_usb_driver(hdm_usb);
