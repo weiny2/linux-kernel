@@ -432,6 +432,11 @@ void uintr_free_uvec(struct task_struct *t, int uvec)
 {
 	u64 msr64;
 
+	if (!t->thread.ui_recv) {
+		pr_debug("recv: task=%d has already exited\n",t->pid);
+		return;
+	}
+
 	if (uvec < UINTR_MAX_UVEC_NR)
 		clear_bit(uvec, (unsigned long *)&t->thread.ui_recv->uvec_mask);
 
