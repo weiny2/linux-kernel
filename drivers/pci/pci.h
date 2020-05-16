@@ -472,8 +472,16 @@ static inline void pci_restore_ats_state(struct pci_dev *dev) { }
 #ifdef CONFIG_PCI_CXL
 /* Compute eXpress Link */
 void pci_cxl_init(struct pci_dev *dev);
+int pci_cxl_mem_enable(struct pci_dev *dev);
+void pci_cxl_mem_disable(struct pci_dev *dev);
+int pci_cxl_cache_enable(struct pci_dev *dev);
+void pci_cxl_cache_disable(struct pci_dev *dev);
 #else
 static inline void pci_cxl_init(struct pci_dev *dev) { }
+static inline int pci_cxl_mem_enable(struct pci_dev *dev) { return 0; }
+static inline void pci_cxl_mem_disable(struct pci_dev *dev) { }
+static inline int pci_cxl_cache_enable(struct pci_dev *dev) { return 0; }
+static inline void pci_cxl_cache_disable(struct pci_dev *dev) { }
 #endif
 
 #ifdef CONFIG_PCI_PRI
