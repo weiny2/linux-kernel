@@ -159,7 +159,7 @@
                 }
             ],
             "description": "Drm embargo branch",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Rodrigio Vivi",
@@ -318,7 +318,7 @@
                 }
             ],
             "description": "MMC Subsystem and SCS (eMMC/SD card/SDIO/UFS) driver enabling",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Rajesh Bhaskar",
