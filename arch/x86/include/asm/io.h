@@ -424,4 +424,32 @@ static inline void iosubmit_cmds512(void __iomem *dst, const void *src,
 	}
 }
 
+/**
+ * enqcmds - copy a 512 bits data unit to single MMIO location
+ * @dst: destination, in MMIO space (must be 512-bit aligned)
+ * @src: source
+ *
+ * Submit data from kernel space to MMIO space, in a unit of 512 bits.
+ * Order of data access is not guaranteed, nor is a memory barrier
+ * performed afterwards. The command returns false (0) on failure, and true (1)
+ * on success.
+ *
+ * Warning: Do not use this helper unless your driver has checked that the CPU
+ * instruction is supported on the platform.
+ */
+static inline bool enqcmds(void __iomem *dst, const void *src)
+{
+	bool retry;
+
+	/* ENQCMDS [rdx], rax */
+	asm volatile(".byte 0xf3, 0x0f, 0x38, 0xf8, 0x02, 0x66, 0x90\t\n"
+		     "setz %0\t\n"
+		     : "=r"(retry) : "a" (dst), "d" (src));
+	/* Submission failure is indicated via EFLAGS.ZF=1 */
+	if (retry)
+		return false;
+
+	return true;
+}
+
 #endif /* _ASM_X86_IO_H */
