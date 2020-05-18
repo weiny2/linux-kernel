@@ -256,6 +256,23 @@ fail:
 
 #define nop() asm volatile ("nop")
 
+static inline void movdir64b(void *__dst, const void *src)
+{
+	/*
+	 * Note that this isn't an "on-stack copy", just definition of "dst"
+	 * as a pointer to 64-bytes of stuff that is going to be overwritten.
+	 * In the MOVDIR64B case that may be needed as you can use the
+	 * MOVDIR64B instruction to copy arbitrary memory around. This trick
+	 * lets the compiler know how much gets clobbered.
+	 */
+	volatile struct { char _[64]; } *dst = __dst;
+
+	/* MOVDIR64B [rdx], rax */
+	asm volatile(".byte 0x66, 0x0f, 0x38, 0xf8, 0x02"
+		     : "=m" (dst)
+		     : "d" (src), "a" (dst));
+}
+
 
 #endif /* __KERNEL__ */
 
