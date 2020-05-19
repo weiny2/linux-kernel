@@ -1301,13 +1301,15 @@ int dma_async_device_register(struct dma_device *device)
 	}
 
 
-	if (!device->device_tx_status) {
+	if (!device->device_tx_status &&
+	    !dma_has_cap(DMA_DIRECT, device->cap_mask)) {
 		dev_err(device->dev, "Device tx_status is not defined\n");
 		return -EIO;
 	}
 
 
-	if (!device->device_issue_pending) {
+	if (!device->device_issue_pending &&
+	    !dma_has_cap(DMA_DIRECT, device->cap_mask)) {
 		dev_err(device->dev, "Device issue_pending is not defined\n");
 		return -EIO;
 	}
