@@ -328,6 +328,7 @@ void idxd_device_drain_pasid(struct idxd_device *idxd, int pasid);
 void idxd_device_load_config(struct idxd_device *idxd);
 int idxd_device_request_int_handle(struct idxd_device *idxd, int idx,
 				   int *handle);
+void idxd_device_abort_pasid(struct idxd_device *idxd, int pasid);
 
 /* work queue control */
 int idxd_wq_alloc_resources(struct idxd_wq *wq);
