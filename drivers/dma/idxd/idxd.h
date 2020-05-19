@@ -21,13 +21,6 @@ extern struct kmem_cache *idxd_desc_pool;
 #define IDXD_REG_TIMEOUT	50
 #define IDXD_DRAIN_TIMEOUT	5000
 
-enum idxd_type {
-	IDXD_TYPE_UNKNOWN = -1,
-	IDXD_TYPE_DSA = 0,
-	IDXD_TYPE_IAX,
-	IDXD_TYPE_MAX,
-};
-
 #define IDXD_NAME_SIZE		128
 
 struct idxd_device_driver {
@@ -94,11 +87,6 @@ struct idxd_wq_uuid {
 #define IDXD_ALLOCATED_BATCH_SIZE	128U
 #define WQ_NAME_SIZE   1024
 #define WQ_TYPE_SIZE   10
-
-enum idxd_op_type {
-	IDXD_OP_BLOCK = 0,
-	IDXD_OP_NONBLOCK = 1,
-};
 
 enum idxd_complete_type {
 	IDXD_COMPLETE_NORMAL = 0,
@@ -229,26 +217,6 @@ struct idxd_device {
 	struct mutex mdev_lock; /* mdev creation lock */
 };
 
-/* IDXD software descriptor */
-struct idxd_desc {
-	union {
-		struct dsa_hw_desc *hw;
-		struct iax_hw_desc *iax_hw;
-	};
-	dma_addr_t desc_dma;
-	union {
-		struct dsa_completion_record *completion;
-		struct iax_completion_record *iax_completion;
-	};
-	dma_addr_t compl_dma;
-	struct dma_async_tx_descriptor txd;
-	struct llist_node llnode;
-	struct list_head list;
-	int id;
-	int cpu;
-	struct idxd_wq *wq;
-};
-
 #define confdev_to_idxd(dev) container_of(dev, struct idxd_device, conf_dev)
 #define confdev_to_wq(dev) container_of(dev, struct idxd_wq, conf_dev)
 
@@ -311,6 +279,11 @@ static inline int idxd_wq_refcount(struct idxd_wq *wq)
 	return wq->client_count;
 };
 
+static inline struct idxd_wq *to_idxd_wq(struct dma_chan *c)
+{
+	return container_of(c, struct idxd_wq, dma_chan);
+}
+
 const char *idxd_get_dev_name(struct idxd_device *idxd);
 int idxd_register_bus_type(void);
 void idxd_unregister_bus_type(void);
@@ -361,11 +334,6 @@ int idxd_wq_abort(struct idxd_wq *wq);
 void idxd_wq_update_pasid(struct idxd_wq *wq, int pasid);
 void idxd_wq_update_priv(struct idxd_wq *wq, int priv);
 
-/* submission */
-int idxd_submit_desc(struct idxd_wq *wq, struct idxd_desc *desc);
-struct idxd_desc *idxd_alloc_desc(struct idxd_wq *wq, enum idxd_op_type optype);
-void idxd_free_desc(struct idxd_wq *wq, struct idxd_desc *desc);
-
 /* dmaengine */
 int idxd_register_dma_device(struct idxd_device *idxd);
 void idxd_unregister_dma_device(struct idxd_device *idxd);
@@ -388,5 +356,8 @@ int idxd_mdev_host_init(struct idxd_device *idxd);
 void idxd_mdev_host_release(struct idxd_device *idxd);
 void idxd_wq_vidxd_send_errors(struct idxd_wq *wq);
 void idxd_vidxd_send_errors(struct idxd_device *idxd);
+
+/* kdirect */
+void idxd_setup_dma_kdirect(struct idxd_device *idxd);
 
 #endif

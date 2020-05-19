@@ -68,12 +68,9 @@ static inline bool is_idxd_wq_dev(struct device *dev)
 	return dev ? dev->type == &idxd_wq_device_type : false;
 }
 
-static inline bool is_idxd_wq_dmaengine(struct idxd_wq *wq)
+static inline bool is_idxd_wq_kernel(struct idxd_wq *wq)
 {
-	if (wq->type == IDXD_WQT_KERNEL &&
-	    strcmp(wq->name, "dmaengine") == 0)
-		return true;
-	return false;
+	return wq->type == IDXD_WQT_KERNEL ? true : false;
 }
 
 static inline bool is_idxd_wq_cdev(struct idxd_wq *wq)
@@ -270,7 +267,7 @@ static int idxd_config_bus_probe(struct device *dev)
 
 		dev_info(dev, "wq %s enabled\n", dev_name(&wq->conf_dev));
 
-		if (is_idxd_wq_dmaengine(wq)) {
+		if (is_idxd_wq_kernel(wq)) {
 			rc = idxd_register_dma_channel(wq);
 			if (rc < 0) {
 				dev_dbg(dev, "DMA channel register failed\n");
@@ -306,7 +303,7 @@ static void disable_wq(struct idxd_wq *wq)
 		return;
 	}
 
-	if (is_idxd_wq_dmaengine(wq))
+	if (is_idxd_wq_kernel(wq))
 		idxd_unregister_dma_channel(wq);
 	else if (is_idxd_wq_cdev(wq))
 		idxd_wq_del_cdev(wq);
@@ -1331,14 +1328,6 @@ static ssize_t wq_name_store(struct device *dev,
 
 	if (strlen(buf) > WQ_NAME_SIZE || strlen(buf) == 0)
 		return -EINVAL;
-
-	/*
-	 * This is temporarily placed here until we have SVM support for
-	 * dmaengine.
-	 */
-	if (wq->type == IDXD_WQT_KERNEL &&
-	    wq->idxd->pasid_enabled)
-		return -EOPNOTSUPP;
 
 	memset(wq->name, 0, WQ_NAME_SIZE + 1);
 	strncpy(wq->name, buf, WQ_NAME_SIZE);

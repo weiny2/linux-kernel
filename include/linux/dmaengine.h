@@ -1500,7 +1500,7 @@ dmaengine_kd_device_get_info(struct dma_chan *chan, unsigned int op, u64 *data)
 {
 	if (!chan || !chan->device ||
 	    !chan->device->kdops.device_get_info)
-		return 0;
+		return -EOPNOTSUPP;
 
 	return chan->device->kdops.device_get_info(chan, op, data);
 }
