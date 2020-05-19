@@ -13,6 +13,7 @@
 
 #include <asm/msr.h>
 #include <asm/processor.h>
+#include <asm/archrandom.h>
 
 #define KEYLOCKER_CPUID			0x019
 #define KEYLOCKER_CPUID_EBX_ENABLED	BIT(0)
@@ -23,7 +24,8 @@
 /* The CPU-internal key related definitions */
 
 #define LOADIWKEY_RETRY_LOOPS		10
-#define LOADIWKEY	".byte 0xf3,0x0f,0x38,0xdc,0xc8"
+#define LOADIWKEY	".byte 0xf3,0x0f,0x38,0xdc,0xd1"
+#define LOADIWKEY_OPERANDS		3
 
 #define MSR_IA32_COPY_LOCAL_TO_PLATFORM	0xd91
 #define MSR_IA32_COPY_PLATFORM_TO_LOCAL	0xd92
@@ -34,9 +36,36 @@
 #define IWKEY_RESTORE_RETRY_LOOPS	1
 
 /* Load a randomized CPU-internal key */
-static inline bool x86_load_new_internal_key(void)
+static inline bool x86_load_random_internal_key(bool use_rdrand)
 {
 	unsigned int retry = LOADIWKEY_RETRY_LOOPS;
+
+	if (use_rdrand) {
+		u64 xmm[LOADIWKEY_OPERANDS*2];
+		int i;
+
+		for (i = 0; i < LOADIWKEY_OPERANDS*2; i++) {
+			unsigned long rand;
+
+			if (!rdrand_long(&rand))
+				return false;
+
+			xmm[i] = rand;
+		}
+
+		asm volatile ("movdqa %0, %%xmm0;"
+			      "movdqa %1, %%xmm1;"
+			      "movdqa %2, %%xmm2;"
+			      : : "m"(xmm[0]),
+				  "m"(xmm[1]),
+				  "m"(xmm[2]));
+
+		memset(xmm, 0, LOADIWKEY_OPERANDS *
+			       2*sizeof(u64));
+
+		asm volatile(LOADIWKEY : : "a" (0x0));
+		return true;
+	}
 
 	do {
 		bool err;
