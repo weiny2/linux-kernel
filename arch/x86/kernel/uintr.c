@@ -57,6 +57,8 @@ struct uintr_sender {
 #define UINTR_MAX_UITT_NR 64
 #define UINTR_MAX_UVEC_NR 64
 
+#define STUI_OPCODE "0xF3, 0x0F, 0x01, 0xEF"
+
 static struct uintr_upid_struct dummy_upid = {
 	.sc = {
 		.on = 1,
@@ -388,6 +390,9 @@ static int uintr_register_handler(u64 handler)
 	rdmsrl_safe(MSR_IA32_UINT_MISC, &misc_msr);
 	misc_msr |= (u64)UINTR_NOTIFICATION_VECTOR << 32;
 	wrmsrl_safe(MSR_IA32_UINT_MISC, misc_msr);
+
+	asm volatile(".byte " STUI_OPCODE " \n\t");
+
 	pr_debug("recv: UINT_MISC_MSR=%llx\n", misc_msr);
 
 	pr_debug("recv: task=%d register handler=%llx upid %llx\n",
