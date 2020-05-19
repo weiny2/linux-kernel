@@ -52,16 +52,17 @@ struct vfio_pci_irq_ctx {
 
 struct vfio_pci_device;
 struct vfio_pci_region;
+struct vfio_pci_common_dev;
 
 struct vfio_pci_regops {
-	size_t	(*rw)(struct vfio_pci_device *vdev, char __user *buf,
+	size_t	(*rw)(struct vfio_pci_common_dev *cdev, char __user *buf,
 		      size_t count, loff_t *ppos, bool iswrite);
-	void	(*release)(struct vfio_pci_device *vdev,
+	void	(*release)(struct vfio_pci_common_dev *cdev,
 			   struct vfio_pci_region *region);
-	int	(*mmap)(struct vfio_pci_device *vdev,
+	int	(*mmap)(struct vfio_pci_common_dev *cdev,
 			struct vfio_pci_region *region,
 			struct vm_area_struct *vma);
-	int	(*add_capability)(struct vfio_pci_device *vdev,
+	int	(*add_capability)(struct vfio_pci_common_dev *cdev,
 				  struct vfio_pci_region *region,
 				  struct vfio_info_cap *caps);
 };
@@ -99,22 +100,31 @@ struct vfio_pci_vf_token {
 	int			users;
 };
 
-struct vfio_pci_device {
+struct vfio_pci_common_dev {
 	struct pci_dev		*pdev;
+	int			num_regions;
+	struct vfio_pci_region	*region;
+	u8			*fault_pages;
+	struct mutex		fault_queue_lock;
+	int			num_ext_irqs;
+	struct vfio_ext_irq	*ext_irqs;
+	struct mutex		igate;
+};
+
+struct vfio_pci_device {
+	union {
+		struct pci_dev *pdev;
+		struct vfio_pci_common_dev cdev;
+	};
 	void __iomem		*barmap[PCI_STD_NUM_BARS];
 	bool			bar_mmap_supported[PCI_STD_NUM_BARS];
 	u8			*pci_config_map;
 	u8			*vconfig;
 	struct perm_bits	*msi_perm;
 	spinlock_t		irqlock;
-	struct mutex		igate;
 	struct vfio_pci_irq_ctx	*ctx;
 	int			num_ctx;
 	int			irq_type;
-	struct vfio_ext_irq	*ext_irqs;
-	int			num_ext_irqs;
-	int			num_regions;
-	struct vfio_pci_region	*region;
 	u8			msi_qmax;
 	u8			msix_bar;
 	u16			msix_size;
@@ -136,14 +146,17 @@ struct vfio_pci_device {
 	int			ioeventfds_nr;
 	struct eventfd_ctx	*err_trigger;
 	struct eventfd_ctx	*req_trigger;
-	u8			*fault_pages;
-	struct mutex		fault_queue_lock;
 	struct list_head	dummy_resources_list;
 	struct mutex		ioeventfds_lock;
 	struct list_head	ioeventfds_list;
 	struct vfio_pci_vf_token	*vf_token;
 	struct notifier_block	nb;
 };
+
+static inline struct vfio_pci_device *to_vdev(struct vfio_pci_common_dev *cdev)
+{
+	return container_of(cdev, struct vfio_pci_device, cdev);
+}
 
 #define is_intx(vdev) (vdev->irq_type == VFIO_PCI_INTX_IRQ_INDEX)
 #define is_msi(vdev) (vdev->irq_type == VFIO_PCI_MSI_IRQ_INDEX)
@@ -153,10 +166,10 @@ struct vfio_pci_device {
 
 extern void vfio_pci_intx_mask(struct vfio_pci_device *vdev);
 extern void vfio_pci_intx_unmask(struct vfio_pci_device *vdev);
-extern int vfio_pci_register_irq(struct vfio_pci_device *vdev,
+extern int vfio_pci_register_irq(struct vfio_pci_common_dev *cdev,
 				 unsigned int type, unsigned int subtype,
 				 u32 flags);
-extern int vfio_pci_get_ext_irq_index(struct vfio_pci_device *vdev,
+extern int vfio_pci_get_ext_irq_index(struct vfio_pci_common_dev *cdev,
 				      unsigned int type, unsigned int subtype);
 
 extern int vfio_pci_set_irqs_ioctl(struct vfio_pci_device *vdev,
@@ -180,7 +193,7 @@ struct vfio_pci_fault_abi {
 	u32 entry_size;
 };
 
-extern size_t vfio_pci_dma_fault_rw(struct vfio_pci_device *vdev,
+extern size_t vfio_pci_dma_fault_rw(struct vfio_pci_common_dev *cdev,
 				    char __user *buf, size_t count,
 				    loff_t *ppos, bool iswrite);
 
@@ -190,13 +203,27 @@ extern void vfio_pci_uninit_perm_bits(void);
 extern int vfio_config_init(struct vfio_pci_device *vdev);
 extern void vfio_config_free(struct vfio_pci_device *vdev);
 
-extern int vfio_pci_register_dev_region(struct vfio_pci_device *vdev,
+extern int vfio_pci_register_dev_region(struct vfio_pci_common_dev *cdev,
 					unsigned int type, unsigned int subtype,
 					const struct vfio_pci_regops *ops,
 					size_t size, u32 flags, void *data);
 
 extern int vfio_pci_set_power_state(struct vfio_pci_device *vdev,
 				    pci_power_t state);
+
+extern int vfio_pci_init_dma_fault_region(struct vfio_pci_common_dev *cdev);
+extern int vfio_pci_set_ext_irq_trigger(struct vfio_pci_common_dev *cdev,
+					unsigned int index, unsigned int start,
+					unsigned int count, uint32_t flags,
+					void *data);
+extern void vfio_pci_dma_fault_release(struct vfio_pci_common_dev *cdev,
+				       struct vfio_pci_region *region);
+extern int vfio_pci_dma_fault_mmap(struct vfio_pci_common_dev *cdev,
+				   struct vfio_pci_region *region,
+				   struct vm_area_struct *vma);
+extern int vfio_pci_dma_fault_add_capability(struct vfio_pci_common_dev *cdev,
+					     struct vfio_pci_region *region,
+					     struct vfio_info_cap *caps);
 
 #ifdef CONFIG_VFIO_PCI_IGD
 extern int vfio_pci_igd_init(struct vfio_pci_device *vdev);
