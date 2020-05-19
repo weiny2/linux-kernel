@@ -35,6 +35,20 @@ static int idxd_get_mdev_pasid(struct mdev_device *mdev)
 	return iommu_aux_get_pasid(domain, dev->parent);
 }
 
+static int idxd_get_host_pasid(struct mdev_device *mdev, int pasid)
+{
+	struct iommu_domain *domain;
+	struct device *dev = mdev_dev(mdev);
+
+	domain = mdev_get_iommu_domain(dev);
+	if (!domain)
+		return -EINVAL;
+
+	/* FIXME */
+	/* return iommu_get_host_pasid(domain, dev, NULL, pasid); */
+	return pasid;
+}
+
 int vidxd_send_interrupt(struct vdcm_idxd *vidxd, int msix_idx)
 {
 	int rc = -1;
@@ -98,6 +112,8 @@ void vidxd_mmio_init(struct vdcm_idxd *vidxd)
 
 	if (wq_dedicated(wq))
 		wqcfg->mode = 1;
+	else if (idxd->pasid_enabled)
+		wqcfg->pasid_en = 1;
 
 	if (idxd->hw.gen_cap.block_on_fault &&
 	    test_bit(WQ_FLAG_BLOCK_ON_FAULT, &wq->flags))
@@ -298,6 +314,18 @@ void vidxd_reset(struct vdcm_idxd *vidxd)
 	idxd_complete_command(vidxd, IDXD_CMDSTS_SUCCESS);
 }
 
+static void vidxd_drain_pasid(struct vdcm_idxd *vidxd, int pasid)
+{
+	idxd_device_drain_pasid(vidxd->idxd, pasid);
+	idxd_complete_command(vidxd, IDXD_CMDSTS_SUCCESS);
+}
+
+static void vidxd_abort_pasid(struct vdcm_idxd *vidxd, int pasid)
+{
+	idxd_device_abort_pasid(vidxd->idxd, pasid);
+	idxd_complete_command(vidxd, IDXD_CMDSTS_SUCCESS);
+}
+
 static void vidxd_alloc_int_handle(struct vdcm_idxd *vidxd, int vidx)
 {
 	bool ims = (vidx >> 16) & 1;
@@ -330,12 +358,14 @@ static void vidxd_wq_enable(struct vdcm_idxd *vidxd, int wq_id)
 {
 	struct idxd_wq *wq;
 	struct vdcm_idxd_pci_bar0 *bar0 = &vidxd->bar0;
+	bool pasid_enabled = (*(u16 *)&vidxd->cfg[VIDXD_PASID_OFFSET + 6]) & 1U;
 	union wq_cap_reg *wqcap;
 	struct mdev_device *mdev = vidxd->vdev.mdev;
 	struct device *dev = mdev_dev(mdev);
+	unsigned long flags;
 	struct idxd_device *idxd;
 	union wqcfg *vwqcfg, *wqcfg;
-	unsigned long flags;
+	bool wq_pasid_enable;
 
 	dev_dbg(dev, "%s\n", __func__);
 
@@ -374,21 +404,39 @@ static void vidxd_wq_enable(struct vdcm_idxd *vidxd, int wq_id)
 		return;
 	}
 
-	if (wq_dedicated(wq)) {
-		int wq_pasid;
-		u32 status;
-		int priv;
+	if ((!wq_dedicated(wq) && vwqcfg->pasid_en == 0) ||
+	    (vwqcfg->pasid_en && pasid_enabled == 0)) {
+		idxd_complete_command(vidxd, IDXD_CMDSTS_ERR_PASID_EN);
+		return;
+	}
 
-		wq_pasid = idxd_get_mdev_pasid(mdev);
-		priv = 1;
+	wq_pasid_enable = vwqcfg->pasid_en;
+
+	/*
+	 * If dedicated WQ and PASID is not enabled, program the default PASID
+	 * in the WQ PASID register
+	 */
+	if (wq_dedicated(wq)) {
+		int wq_pasid, gpasid = -1;
+		bool priv;
+		u32 status;
+
+		if (wq_pasid_enable) {
+			gpasid = vwqcfg->pasid;
+			priv = vwqcfg->priv;
+			wq_pasid = idxd_get_host_pasid(mdev, gpasid);
+		} else {
+			wq_pasid = idxd_get_mdev_pasid(mdev);
+			priv = 1;
+		}
 
 		if (wq_pasid >= 0) {
 			wqcfg->bits[2] &= ~0x3fffff00;
 			wqcfg->priv = priv;
 			wqcfg->pasid_en = 1;
 			wqcfg->pasid = wq_pasid;
-			dev_dbg(dev, "program pasid %d in wq %d\n",
-				wq_pasid, wq->id);
+			dev_dbg(dev, "program pasid %d:%d in wq %d\n",
+				gpasid, wq_pasid, wq->id);
 			spin_lock_irqsave(&idxd->dev_lock, flags);
 			idxd_wq_update_pasid(wq, wq_pasid);
 			idxd_wq_update_priv(wq, priv);
@@ -402,8 +450,8 @@ static void vidxd_wq_enable(struct vdcm_idxd *vidxd, int wq_id)
 			}
 		} else {
 			dev_err(dev,
-				"idxd pasid setup failed wq %d wq_pasid %d\n",
-				wq->id, wq_pasid);
+				"idxd pasid setup failed wq %d gpasid %d\n",
+				wq->id, gpasid);
 			idxd_complete_command(vidxd, IDXD_CMDSTS_ERR_PASID_EN);
 			return;
 		}
@@ -462,8 +510,8 @@ void vidxd_do_command(struct vdcm_idxd *vidxd, u32 val)
 
 	reg->bits = val;
 
-	dev_dbg(dev, "%s: cmd code: %u reg: %x\n", __func__, reg->cmd,
-		reg->bits);
+	dev_dbg(dev, "%s: cmd code: %u reg: %x\n",
+		__func__, reg->cmd, reg->bits);
 
 	switch (reg->cmd) {
 	case IDXD_CMD_ENABLE_DEVICE:
@@ -493,6 +541,12 @@ void vidxd_do_command(struct vdcm_idxd *vidxd, u32 val)
 	case IDXD_CMD_ABORT_WQ:
 		vidxd_wq_abort(vidxd, reg->operand);
 		break;
+	case IDXD_CMD_DRAIN_PASID:
+		vidxd_drain_pasid(vidxd, reg->operand);
+		break;
+	case IDXD_CMD_ABORT_PASID:
+		vidxd_abort_pasid(vidxd, reg->operand);
+		break;
 	case IDXD_CMD_REQUEST_INT_HANDLE:
 		vidxd_alloc_int_handle(vidxd, reg->operand);
 		break;
@@ -506,7 +560,8 @@ int vidxd_setup_ims_entry(struct vdcm_idxd *vidxd, int ims_idx, u32 val)
 {
 	struct mdev_device *mdev = vidxd->vdev.mdev;
 	struct device *dev = mdev_dev(mdev);
-	int pasid;
+	int gpasid, pasid;
+	bool paside;
 	unsigned int ims_offset;
 
 	/*
@@ -519,8 +574,18 @@ int vidxd_setup_ims_entry(struct vdcm_idxd *vidxd, int ims_idx, u32 val)
 		return -EINVAL;
 	}
 
+	paside = (val >> 3) & 1;
+
 	/* Setup the PASID filtering */
-	pasid = idxd_get_mdev_pasid(mdev);
+	if (paside) {
+		gpasid = (val >> 12) & 0xfffff;
+		pasid = idxd_get_host_pasid(mdev, gpasid);
+		if (pasid < 0)
+			dev_warn(dev, "Failed to get host pasid %d:%d\n",
+				 gpasid, pasid);
+	} else {
+		pasid = idxd_get_mdev_pasid(mdev);
+	}
 
 	if (pasid >= 0) {
 		val = (1 << 3) | (pasid << 12) | (val & 7);
