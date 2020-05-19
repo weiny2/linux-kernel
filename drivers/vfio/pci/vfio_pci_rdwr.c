@@ -274,20 +274,20 @@ ssize_t vfio_pci_vga_rw(struct vfio_pci_device *vdev, char __user *buf,
 	return done;
 }
 
-size_t vfio_pci_dma_fault_rw(struct vfio_pci_device *vdev, char __user *buf,
-			     size_t count, loff_t *ppos, bool iswrite)
+size_t vfio_pci_dma_fault_rw(struct vfio_pci_common_dev *cdev,
+		char __user *buf, size_t count, loff_t *ppos, bool iswrite)
 {
 	unsigned int i = VFIO_PCI_OFFSET_TO_INDEX(*ppos) - VFIO_PCI_NUM_REGIONS;
 	loff_t pos = *ppos & VFIO_PCI_OFFSET_MASK;
-	void *base = vdev->region[i].data;
+	void *base = cdev->region[i].data;
 	int ret = -EFAULT;
 
-	if (pos >= vdev->region[i].size)
+	if (pos >= cdev->region[i].size)
 		return -EINVAL;
 
-	count = min(count, (size_t)(vdev->region[i].size - pos));
+	count = min(count, (size_t)(cdev->region[i].size - pos));
 
-	mutex_lock(&vdev->fault_queue_lock);
+	mutex_lock(&cdev->fault_queue_lock);
 
 	if (iswrite) {
 		struct vfio_region_dma_fault *header =
@@ -314,10 +314,10 @@ size_t vfio_pci_dma_fault_rw(struct vfio_pci_device *vdev, char __user *buf,
 	*ppos += count;
 	ret = count;
 unlock:
-	mutex_unlock(&vdev->fault_queue_lock);
+	mutex_unlock(&cdev->fault_queue_lock);
 	return ret;
 }
-
+EXPORT_SYMBOL_GPL(vfio_pci_dma_fault_rw);
 
 static int vfio_pci_ioeventfd_handler(void *opaque, void *unused)
 {
