@@ -3508,7 +3508,180 @@
         {
             "branch": "sof-for-next-5.7-rc4",
             "branch_type": "expiring",
-            "config_options": [],
+            "config_options": [
+                {
+                    "name": "CONFIG_SND_SOC_INTEL_SKL_HDA_DSP_GENERIC_MACH",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_SND_SOC_INTEL_EHL_RT5660_MACH",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_SND_SOC_INTEL_SOUNDWIRE_SOF_MACH",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_SND_SOC_SOF_TOPLEVEL",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_SND_SOC_SOF_PCI",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_SND_SOC_SOF_ACPI",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_SND_SOC_SOF_OF",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_SND_SOC_SOF_CLIENT_SUPPORT",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_SND_SOC_SOF",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_SND_SOC_SOF_PROBE_WORK_QUEUE",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_SND_SOC_SOF_INTEL_TOPLEVEL",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_SND_SOC_SOF_INTEL_ACPI",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_SND_SOC_SOF_INTEL_PCI",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_SND_SOC_SOF_INTEL_COMMON",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_SND_SOC_INTEL_USER_FRIENDLY_LONG_NAMES",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_SND_SOC_SOF_TIGERLAKE_SUPPORT",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_SND_SOC_SOF_TIGERLAKE",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_SND_SOC_SOF_ELKHARTLAKE_SUPPORT",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_SND_SOC_SOF_ELKHARTLAKE",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_SND_SOC_SOF_JASPERLAKE_SUPPORT",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_SND_SOC_SOF_JASPERLAKE",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_SND_SOC_SOF_ALDERLAKE_SUPPORT",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_SND_SOC_SOF_ALDERLAKE",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_SND_SOC_SOF_HDA_COMMON",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_SND_SOC_SOF_HDA_LINK",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_SND_SOC_SOF_HDA_AUDIO_CODEC",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_SND_SOC_SOF_HDA_COMMON_HDMI_CODEC",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_SND_SOC_SOF_HDA_LINK_BASELINE",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_SND_SOC_SOF_HDA",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_SND_SOC_SOF_INTEL_SOUNDWIRE_LINK",
+                    "value": "y"
+                },
+                {
+                    "name": "CONFIG_SND_SOC_SOF_XTENSA",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_SND_SOC_RT298",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_SND_SOC_RT1011",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_SND_SOC_RT1308_SDW",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_SND_SOC_RT700",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_SND_SOC_RT700_SDW",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_SND_SOC_RT711",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_SND_SOC_RT711_SDW",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_SND_SOC_RT715",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_SND_SOC_RT715_SDW",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_SOUNDWIRE",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_SOUNDWIRE_CADENCE",
+                    "value": "m"
+                },
+                {
+                    "name": "CONFIG_SOUNDWIRE_INTEL",
+                    "value": "m"
+                }
+            ],
             "contributor": [
                 {
                     "name": "Kai Vehmanen",
