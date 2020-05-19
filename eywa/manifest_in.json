@@ -3519,10 +3519,6 @@
                     "value": "m"
                 },
                 {
-                    "name": "CONFIG_SND_SOC_INTEL_EHL_RT5660_MACH",
-                    "value": "m"
-                },
-                {
                     "name": "CONFIG_SND_SOC_INTEL_SOUNDWIRE_SOF_MACH",
                     "value": "m"
                 },
@@ -3541,10 +3537,6 @@
                 {
                     "name": "CONFIG_SND_SOC_SOF_OF",
                     "value": "m"
-                },
-                {
-                    "name": "CONFIG_SND_SOC_SOF_CLIENT_SUPPORT",
-                    "value": "y"
                 },
                 {
                     "name": "CONFIG_SND_SOC_SOF",
@@ -3619,10 +3611,6 @@
                     "value": "y"
                 },
                 {
-                    "name": "CONFIG_SND_SOC_SOF_HDA_COMMON_HDMI_CODEC",
-                    "value": "y"
-                },
-                {
                     "name": "CONFIG_SND_SOC_SOF_HDA_LINK_BASELINE",
                     "value": "m"
                 },
@@ -3636,14 +3624,6 @@
                 },
                 {
                     "name": "CONFIG_SND_SOC_SOF_XTENSA",
-                    "value": "m"
-                },
-                {
-                    "name": "CONFIG_SND_SOC_RT298",
-                    "value": "m"
-                },
-                {
-                    "name": "CONFIG_SND_SOC_RT1011",
                     "value": "m"
                 },
                 {
