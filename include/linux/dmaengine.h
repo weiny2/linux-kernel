@@ -758,6 +758,7 @@ enum dma_chan_info_op {
  * @device_get_desc - get allocated descriptor form driver
  * @device_free_desc - free allocated descriptor back to driver
  * @device_submit_and_wait - submit descriptor and wait on completion
+ * @device_submit - submit descriptor
  * @device_get_info - retrieve specific information from the device
  */
 struct dma_kernel_direct_ops {
@@ -765,7 +766,8 @@ struct dma_kernel_direct_ops {
 	void * (*device_get_desc)(struct dma_chan *chan, unsigned long flags);
 	void (*device_free_desc)(struct dma_chan *chan, void *desc);
 	int (*device_submit_and_wait)(struct dma_chan *chan, void *desc,
-				      unsigned long flags, int timeout);
+				      int timeout);
+	int (*device_submit)(struct dma_chan *chan, void *desc);
 	int (*device_get_info)(struct dma_chan *chan, unsigned int op,
 			       u64 *data);
 };
@@ -1484,15 +1486,23 @@ static inline void dmaengine_kd_free_desc(struct dma_chan *chan, void *desc)
 }
 
 static inline int
-dmaengine_kd_submit_and_wait(struct dma_chan *chan, void *desc,
-			     unsigned long flags, int timeout)
+dmaengine_kd_submit_and_wait(struct dma_chan *chan, void *desc, int timeout)
 {
 	if (!chan || !chan->device ||
 	    !chan->device->kdops.device_submit_and_wait)
 		return -EOPNOTSUPP;
 
-	return chan->device->kdops.device_submit_and_wait(chan, desc, flags,
-							  timeout);
+	return chan->device->kdops.device_submit_and_wait(chan, desc, timeout);
+}
+
+static inline int
+dmaengine_kd_submit(struct dma_chan *chan, void *desc)
+{
+	if (!chan || !chan->device ||
+	    !chan->device->kdops.device_submit)
+		return -EOPNOTSUPP;
+
+	return chan->device->kdops.device_submit(chan, desc);
 }
 
 static inline u64
@@ -1500,7 +1510,7 @@ dmaengine_kd_device_get_info(struct dma_chan *chan, unsigned int op, u64 *data)
 {
 	if (!chan || !chan->device ||
 	    !chan->device->kdops.device_get_info)
-		return 0;
+		return -EOPNOTSUPP;
 
 	return chan->device->kdops.device_get_info(chan, op, data);
 }
