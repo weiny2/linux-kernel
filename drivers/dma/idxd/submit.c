@@ -17,7 +17,7 @@ static struct idxd_desc *__get_desc(struct idxd_wq *wq, int idx, int cpu)
 	memset(desc->hw, 0, sizeof(struct dsa_hw_desc));
 	memset(desc->completion, 0, idxd->compl_size);
 	desc->cpu = cpu;
-
+	desc->done = NULL;
 	if (idxd->pasid_enabled)
 		desc->hw->pasid = idxd->pasid;
 
