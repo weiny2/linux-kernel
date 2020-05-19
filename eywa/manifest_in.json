@@ -3196,7 +3196,12 @@
         {
             "branch": "cxl-next",
             "branch_type": "expiring",
-            "config_options": [],
+            "config_options": [
+                {
+                    "name": "CONFIG_PCI_CXL",
+                    "value": "y"
+                }
+            ],
             "contributor": [
                 {
                     "name": "Sean Kelley",
