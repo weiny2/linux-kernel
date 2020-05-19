@@ -287,6 +287,10 @@ int uintr_register_sender(struct task_struct *recv_task, int uvec_no)
 	int ret = 0;
 	int entry;
 
+	// This is still racy. But minimize race with this check.
+	if (!is_uvec_active(recv_task))
+		return -EINVAL;
+
 	/* Allocate an entry in UITT for the sender to link to a
 	 * receiver task
 	 */
