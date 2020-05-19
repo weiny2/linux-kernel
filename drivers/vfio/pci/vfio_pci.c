@@ -266,15 +266,17 @@ int vfio_pci_set_power_state(struct vfio_pci_device *vdev, pci_power_t state)
 	return ret;
 }
 
-static void vfio_pci_dma_fault_release(struct vfio_pci_device *vdev,
+void vfio_pci_dma_fault_release(struct vfio_pci_common_dev *cdev,
 				       struct vfio_pci_region *region)
 {
 }
+EXPORT_SYMBOL_GPL(vfio_pci_dma_fault_release);
 
-static int vfio_pci_dma_fault_mmap(struct vfio_pci_device *vdev,
+int vfio_pci_dma_fault_mmap(struct vfio_pci_common_dev *cdev,
 				   struct vfio_pci_region *region,
 				   struct vm_area_struct *vma)
 {
+	struct vfio_pci_device *vdev = to_vdev(cdev);
 	u64 phys_len, req_len, pgoff, req_start;
 	unsigned long long addr;
 	unsigned int ret;
@@ -293,7 +295,7 @@ static int vfio_pci_dma_fault_mmap(struct vfio_pci_device *vdev,
 	if (req_start + req_len > phys_len)
 		return -EINVAL;
 
-	addr = virt_to_phys(vdev->fault_pages);
+	addr = virt_to_phys(cdev->fault_pages);
 	vma->vm_private_data = vdev;
 	vma->vm_pgoff = (addr >> PAGE_SHIFT) + pgoff;
 
@@ -301,8 +303,9 @@ static int vfio_pci_dma_fault_mmap(struct vfio_pci_device *vdev,
 			      req_len, vma->vm_page_prot);
 	return ret;
 }
+EXPORT_SYMBOL_GPL(vfio_pci_dma_fault_mmap);
 
-static int vfio_pci_dma_fault_add_capability(struct vfio_pci_device *vdev,
+int vfio_pci_dma_fault_add_capability(struct vfio_pci_common_dev *cdev,
 					     struct vfio_pci_region *region,
 					     struct vfio_info_cap *caps)
 {
@@ -335,6 +338,7 @@ static int vfio_pci_dma_fault_add_capability(struct vfio_pci_device *vdev,
 
 	return ret;
 }
+EXPORT_SYMBOL_GPL(vfio_pci_dma_fault_add_capability);
 
 static const struct vfio_pci_regops vfio_pci_dma_fault_regops = {
 	.rw		= vfio_pci_dma_fault_rw,
@@ -345,11 +349,11 @@ static const struct vfio_pci_regops vfio_pci_dma_fault_regops = {
 
 int vfio_pci_iommu_dev_fault_handler(struct iommu_fault *fault, void *data)
 {
-	struct vfio_pci_device *vdev = (struct vfio_pci_device *)data;
+	struct vfio_pci_common_dev *cdev = (struct vfio_pci_common_dev *)data;
 	struct vfio_region_dma_fault *reg =
-		(struct vfio_region_dma_fault *)vdev->fault_pages;
+		(struct vfio_region_dma_fault *)cdev->fault_pages;
 	struct iommu_fault *new =
-		(struct iommu_fault *)(vdev->fault_pages + reg->offset +
+		(struct iommu_fault *)(cdev->fault_pages + reg->offset +
 			reg->head * reg->entry_size);
 	int head, tail, size, ext_irq_index;
 	int ret = 0;
@@ -359,8 +363,8 @@ int vfio_pci_iommu_dev_fault_handler(struct iommu_fault *fault, void *data)
 	    fault->type != IOMMU_FAULT_PAGE_REQ)
 		return -ENOENT;
 
-	mutex_lock(&vdev->fault_queue_lock);
-	dev_dbg(&vdev->pdev->dev, "%s, enque fault event\n", __func__);
+	mutex_lock(&cdev->fault_queue_lock);
+	dev_dbg(&cdev->pdev->dev, "%s, enque fault event\n", __func__);
 	head = reg->head;
 	tail = reg->tail;
 	size = reg->nb_entries;
@@ -373,32 +377,33 @@ int vfio_pci_iommu_dev_fault_handler(struct iommu_fault *fault, void *data)
 	*new = *fault;
 	reg->head = (head + 1) % size;
 unlock:
-	mutex_unlock(&vdev->fault_queue_lock);
+	mutex_unlock(&cdev->fault_queue_lock);
 	if (ret)
 		return ret;
 
-	ext_irq_index = vfio_pci_get_ext_irq_index(vdev, VFIO_IRQ_TYPE_NESTED,
+	ext_irq_index = vfio_pci_get_ext_irq_index(cdev, VFIO_IRQ_TYPE_NESTED,
 						   VFIO_IRQ_SUBTYPE_DMA_FAULT);
 	if (ext_irq_index < 0)
 		return -EINVAL;
 
-	mutex_lock(&vdev->igate);
-	dev_dbg(&vdev->pdev->dev, "%s, signal QEMU\n", __func__);
-	if (vdev->ext_irqs[ext_irq_index].trigger)
-		eventfd_signal(vdev->ext_irqs[ext_irq_index].trigger, 1);
-	mutex_unlock(&vdev->igate);
+	mutex_lock(&cdev->igate);
+	dev_dbg(&cdev->pdev->dev, "%s, signal QEMU\n", __func__);
+	if (cdev->ext_irqs[ext_irq_index].trigger)
+		eventfd_signal(cdev->ext_irqs[ext_irq_index].trigger, 1);
+	mutex_unlock(&cdev->igate);
 	return 0;
 }
+EXPORT_SYMBOL_GPL(vfio_pci_iommu_dev_fault_handler);
 
 #define DMA_FAULT_RING_LENGTH 512
 
-static int vfio_pci_init_dma_fault_region(struct vfio_pci_device *vdev)
+int vfio_pci_init_dma_fault_region(struct vfio_pci_common_dev *cdev)
 {
 	struct vfio_region_dma_fault *header;
 	size_t size;
 	int ret;
 
-	mutex_init(&vdev->fault_queue_lock);
+	mutex_init(&cdev->fault_queue_lock);
 
 	/*
 	 * We provision 1 page for the header and space for
@@ -407,36 +412,37 @@ static int vfio_pci_init_dma_fault_region(struct vfio_pci_device *vdev)
 	size = ALIGN(sizeof(struct iommu_fault) *
 		     DMA_FAULT_RING_LENGTH, PAGE_SIZE) + PAGE_SIZE;
 
-	vdev->fault_pages = kzalloc(size, GFP_KERNEL);
-	if (!vdev->fault_pages)
+	cdev->fault_pages = kzalloc(size, GFP_KERNEL);
+	if (!cdev->fault_pages)
 		return -ENOMEM;
 
-	ret = vfio_pci_register_dev_region(vdev,
+	ret = vfio_pci_register_dev_region(cdev,
 		VFIO_REGION_TYPE_NESTED,
 		VFIO_REGION_SUBTYPE_NESTED_DMA_FAULT,
 		&vfio_pci_dma_fault_regops, size,
 		VFIO_REGION_INFO_FLAG_READ | VFIO_REGION_INFO_FLAG_WRITE |
 		VFIO_REGION_INFO_FLAG_MMAP,
-		vdev->fault_pages);
+		cdev->fault_pages);
 	if (ret)
 		goto out;
 
-	header = (struct vfio_region_dma_fault *)vdev->fault_pages;
+	header = (struct vfio_region_dma_fault *)cdev->fault_pages;
 	header->entry_size = sizeof(struct iommu_fault);
 	header->nb_entries = DMA_FAULT_RING_LENGTH;
 	header->offset = PAGE_SIZE;
 
-	ret = iommu_register_device_fault_handler(&vdev->pdev->dev,
+	ret = iommu_register_device_fault_handler(&cdev->pdev->dev,
 					vfio_pci_iommu_dev_fault_handler,
-					vdev);
+					cdev);
 	if (ret)
 		goto out;
 
 	return 0;
 out:
-	kfree(vdev->fault_pages);
+	kfree(cdev->fault_pages);
 	return ret;
 }
+EXPORT_SYMBOL_GPL(vfio_pci_init_dma_fault_region);
 
 static int vfio_pci_enable(struct vfio_pci_device *vdev)
 {
@@ -536,11 +542,11 @@ static int vfio_pci_enable(struct vfio_pci_device *vdev)
 		}
 	}
 
-	ret = vfio_pci_init_dma_fault_region(vdev);
+	ret = vfio_pci_init_dma_fault_region(&vdev->cdev);
 	if (ret)
 		goto disable_exit;
 
-	ret = vfio_pci_register_irq(vdev, VFIO_IRQ_TYPE_NESTED,
+	ret = vfio_pci_register_irq(&vdev->cdev, VFIO_IRQ_TYPE_NESTED,
 				    VFIO_IRQ_SUBTYPE_DMA_FAULT,
 				    VFIO_IRQ_INFO_EVENTFD);
 	if (ret)
@@ -558,6 +564,7 @@ disable_exit:
 static void vfio_pci_disable(struct vfio_pci_device *vdev)
 {
 	struct pci_dev *pdev = vdev->pdev;
+	struct vfio_pci_common_dev *cdev = &vdev->cdev;
 	struct vfio_pci_dummy_resource *dummy_res, *tmp;
 	struct vfio_pci_ioeventfd *ioeventfd, *ioeventfd_tmp;
 	int i, bar;
@@ -569,13 +576,13 @@ static void vfio_pci_disable(struct vfio_pci_device *vdev)
 				VFIO_IRQ_SET_ACTION_TRIGGER,
 				vdev->irq_type, 0, 0, NULL);
 
-	for (i = 0; i < vdev->num_ext_irqs; i++)
+	for (i = 0; i < cdev->num_ext_irqs; i++)
 		vfio_pci_set_irqs_ioctl(vdev, VFIO_IRQ_SET_DATA_NONE |
 					VFIO_IRQ_SET_ACTION_TRIGGER,
 					VFIO_PCI_NUM_IRQS + i, 0, 0, NULL);
-	vdev->num_ext_irqs = 0;
-	kfree(vdev->ext_irqs);
-	vdev->ext_irqs = NULL;
+	cdev->num_ext_irqs = 0;
+	kfree(cdev->ext_irqs);
+	cdev->ext_irqs = NULL;
 
 	/* Device closed, don't need mutex here */
 	list_for_each_entry_safe(ioeventfd, ioeventfd_tmp,
@@ -588,12 +595,12 @@ static void vfio_pci_disable(struct vfio_pci_device *vdev)
 
 	vdev->virq_disabled = false;
 
-	for (i = 0; i < vdev->num_regions; i++)
-		vdev->region[i].ops->release(vdev, &vdev->region[i]);
+	for (i = 0; i < cdev->num_regions; i++)
+		cdev->region[i].ops->release(cdev, &cdev->region[i]);
 
-	vdev->num_regions = 0;
-	kfree(vdev->region);
-	vdev->region = NULL; /* don't krealloc a freed pointer */
+	cdev->num_regions = 0;
+	kfree(cdev->region);
+	cdev->region = NULL; /* don't krealloc a freed pointer */
 
 	vfio_config_free(vdev);
 
@@ -784,7 +791,7 @@ static int vfio_pci_get_irq_count(struct vfio_pci_device *vdev, int irq_type)
 	} else if (irq_type == VFIO_PCI_REQ_IRQ_INDEX) {
 		return 1;
 	} else if (irq_type >= VFIO_PCI_NUM_IRQS &&
-		   irq_type < VFIO_PCI_NUM_IRQS + vdev->num_ext_irqs) {
+		   irq_type < VFIO_PCI_NUM_IRQS + vdev->cdev.num_ext_irqs) {
 		return 1;
 	}
 
@@ -906,36 +913,38 @@ static int msix_mmappable_cap(struct vfio_pci_device *vdev,
 	return vfio_info_add_capability(caps, &header, sizeof(header));
 }
 
-int vfio_pci_register_dev_region(struct vfio_pci_device *vdev,
+int vfio_pci_register_dev_region(struct vfio_pci_common_dev *cdev,
 				 unsigned int type, unsigned int subtype,
 				 const struct vfio_pci_regops *ops,
 				 size_t size, u32 flags, void *data)
 {
 	struct vfio_pci_region *region;
 
-	region = krealloc(vdev->region,
-			  (vdev->num_regions + 1) * sizeof(*region),
+	region = krealloc(cdev->region,
+			  (cdev->num_regions + 1) * sizeof(*region),
 			  GFP_KERNEL);
 	if (!region)
 		return -ENOMEM;
 
-	vdev->region = region;
-	vdev->region[vdev->num_regions].type = type;
-	vdev->region[vdev->num_regions].subtype = subtype;
-	vdev->region[vdev->num_regions].ops = ops;
-	vdev->region[vdev->num_regions].size = size;
-	vdev->region[vdev->num_regions].flags = flags;
-	vdev->region[vdev->num_regions].data = data;
+	cdev->region = region;
+	cdev->region[cdev->num_regions].type = type;
+	cdev->region[cdev->num_regions].subtype = subtype;
+	cdev->region[cdev->num_regions].ops = ops;
+	cdev->region[cdev->num_regions].size = size;
+	cdev->region[cdev->num_regions].flags = flags;
+	cdev->region[cdev->num_regions].data = data;
 
-	vdev->num_regions++;
+	cdev->num_regions++;
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(vfio_pci_register_dev_region);
 
 static long vfio_pci_ioctl(void *device_data,
 			   unsigned int cmd, unsigned long arg)
 {
 	struct vfio_pci_device *vdev = device_data;
+	struct vfio_pci_common_dev *cdev = &vdev->cdev;
 	unsigned long minsz;
 
 	if (cmd == VFIO_DEVICE_GET_INFO) {
@@ -954,8 +963,8 @@ static long vfio_pci_ioctl(void *device_data,
 		if (vdev->reset_works)
 			info.flags |= VFIO_DEVICE_FLAGS_RESET;
 
-		info.num_regions = VFIO_PCI_NUM_REGIONS + vdev->num_regions;
-		info.num_irqs = VFIO_PCI_NUM_IRQS + vdev->num_ext_irqs;
+		info.num_regions = VFIO_PCI_NUM_REGIONS + cdev->num_regions;
+		info.num_irqs = VFIO_PCI_NUM_IRQS + cdev->num_ext_irqs;
 
 		return copy_to_user((void __user *)arg, &info, minsz) ?
 			-EFAULT : 0;
@@ -1057,29 +1066,29 @@ static long vfio_pci_ioctl(void *device_data,
 					.header.version = 1 };
 
 			if (info.index >=
-			    VFIO_PCI_NUM_REGIONS + vdev->num_regions)
+			    VFIO_PCI_NUM_REGIONS + cdev->num_regions)
 				return -EINVAL;
 			info.index = array_index_nospec(info.index,
 							VFIO_PCI_NUM_REGIONS +
-							vdev->num_regions);
+							cdev->num_regions);
 
 			i = info.index - VFIO_PCI_NUM_REGIONS;
 
 			info.offset = VFIO_PCI_INDEX_TO_OFFSET(info.index);
-			info.size = vdev->region[i].size;
-			info.flags = vdev->region[i].flags;
+			info.size = cdev->region[i].size;
+			info.flags = cdev->region[i].flags;
 
-			cap_type.type = vdev->region[i].type;
-			cap_type.subtype = vdev->region[i].subtype;
+			cap_type.type = cdev->region[i].type;
+			cap_type.subtype = cdev->region[i].subtype;
 
 			ret = vfio_info_add_capability(&caps, &cap_type.header,
 						       sizeof(cap_type));
 			if (ret)
 				return ret;
 
-			if (vdev->region[i].ops->add_capability) {
-				ret = vdev->region[i].ops->add_capability(vdev,
-						&vdev->region[i], &caps);
+			if (cdev->region[i].ops->add_capability) {
+				ret = cdev->region[i].ops->add_capability(cdev,
+						&cdev->region[i], &caps);
 				if (ret)
 					return ret;
 			}
@@ -1122,7 +1131,7 @@ static long vfio_pci_ioctl(void *device_data,
 			return -EFAULT;
 
 		if (info.argsz < minsz ||
-			info.index >= VFIO_PCI_NUM_IRQS + vdev->num_ext_irqs)
+			info.index >= VFIO_PCI_NUM_IRQS + cdev->num_ext_irqs)
 			return -EINVAL;
 
 		if (info.argsz >= capsz)
@@ -1153,16 +1162,16 @@ static long vfio_pci_ioctl(void *device_data,
 			int ret, i;
 
 			if (info.index >= VFIO_PCI_NUM_IRQS +
-						vdev->num_ext_irqs)
+						cdev->num_ext_irqs)
 				return -EINVAL;
 			info.index = array_index_nospec(info.index,
 							VFIO_PCI_NUM_IRQS +
-							vdev->num_ext_irqs);
+							cdev->num_ext_irqs);
 			i = info.index - VFIO_PCI_NUM_IRQS;
 
-			info.flags = vdev->ext_irqs[i].flags;
-			cap_type.type = vdev->ext_irqs[i].type;
-			cap_type.subtype = vdev->ext_irqs[i].subtype;
+			info.flags = cdev->ext_irqs[i].flags;
+			cap_type.type = cdev->ext_irqs[i].type;
+			cap_type.subtype = cdev->ext_irqs[i].subtype;
 
 			ret = vfio_info_add_capability(&caps,
 					&cap_type.header,
@@ -1210,7 +1219,7 @@ static long vfio_pci_ioctl(void *device_data,
 		max = vfio_pci_get_irq_count(vdev, hdr.index);
 
 		ret = vfio_set_irqs_validate_and_prepare(&hdr, max,
-				VFIO_PCI_NUM_IRQS + vdev->num_ext_irqs,
+				VFIO_PCI_NUM_IRQS + cdev->num_ext_irqs,
 				&data_size);
 		if (ret)
 			return ret;
@@ -1222,12 +1231,12 @@ static long vfio_pci_ioctl(void *device_data,
 				return PTR_ERR(data);
 		}
 
-		mutex_lock(&vdev->igate);
+		mutex_lock(&cdev->igate);
 
 		ret = vfio_pci_set_irqs_ioctl(vdev, hdr.flags, hdr.index,
 					      hdr.start, hdr.count, data);
 
-		mutex_unlock(&vdev->igate);
+		mutex_unlock(&cdev->igate);
 		kfree(data);
 
 		return ret;
@@ -1503,8 +1512,9 @@ static ssize_t vfio_pci_rw(void *device_data, char __user *buf,
 {
 	unsigned int index = VFIO_PCI_OFFSET_TO_INDEX(*ppos);
 	struct vfio_pci_device *vdev = device_data;
+	struct vfio_pci_common_dev *cdev = &vdev->cdev;
 
-	if (index >= VFIO_PCI_NUM_REGIONS + vdev->num_regions)
+	if (index >= VFIO_PCI_NUM_REGIONS + cdev->num_regions)
 		return -EINVAL;
 
 	switch (index) {
@@ -1523,7 +1533,7 @@ static ssize_t vfio_pci_rw(void *device_data, char __user *buf,
 		return vfio_pci_vga_rw(vdev, buf, count, ppos, iswrite);
 	default:
 		index -= VFIO_PCI_NUM_REGIONS;
-		return vdev->region[index].ops->rw(vdev, buf,
+		return cdev->region[index].ops->rw(cdev, buf,
 						   count, ppos, iswrite);
 	}
 
@@ -1551,6 +1561,7 @@ static ssize_t vfio_pci_write(void *device_data, const char __user *buf,
 static int vfio_pci_mmap(void *device_data, struct vm_area_struct *vma)
 {
 	struct vfio_pci_device *vdev = device_data;
+	struct vfio_pci_common_dev *cdev = &vdev->cdev;
 	struct pci_dev *pdev = vdev->pdev;
 	unsigned int index;
 	u64 phys_len, req_len, pgoff, req_start;
@@ -1564,11 +1575,11 @@ static int vfio_pci_mmap(void *device_data, struct vm_area_struct *vma)
 		return -EINVAL;
 	if (index >= VFIO_PCI_NUM_REGIONS) {
 		int regnum = index - VFIO_PCI_NUM_REGIONS;
-		struct vfio_pci_region *region = vdev->region + regnum;
+		struct vfio_pci_region *region = cdev->region + regnum;
 
 		if (region && region->ops && region->ops->mmap &&
 		    (region->flags & VFIO_REGION_INFO_FLAG_MMAP))
-			return region->ops->mmap(vdev, region, vma);
+			return region->ops->mmap(cdev, region, vma);
 		return -EINVAL;
 	}
 	if (index >= VFIO_PCI_ROM_REGION_INDEX)
@@ -1613,9 +1624,10 @@ static int vfio_pci_mmap(void *device_data, struct vm_area_struct *vma)
 static void vfio_pci_request(void *device_data, unsigned int count)
 {
 	struct vfio_pci_device *vdev = device_data;
+	struct vfio_pci_common_dev *cdev = &vdev->cdev;
 	struct pci_dev *pdev = vdev->pdev;
 
-	mutex_lock(&vdev->igate);
+	mutex_lock(&cdev->igate);
 
 	if (vdev->req_trigger) {
 		if (!(count % 10))
@@ -1628,7 +1640,7 @@ static void vfio_pci_request(void *device_data, unsigned int count)
 			"No device request channel registered, blocked until released by user\n");
 	}
 
-	mutex_unlock(&vdev->igate);
+	mutex_unlock(&cdev->igate);
 }
 
 static int vfio_pci_validate_vf_token(struct vfio_pci_device *vdev,
@@ -1853,7 +1865,7 @@ static int vfio_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 
 	vdev->pdev = pdev;
 	vdev->irq_type = VFIO_PCI_NUM_IRQS;
-	mutex_init(&vdev->igate);
+	mutex_init(&vdev->cdev.igate);
 	spin_lock_init(&vdev->irqlock);
 	mutex_init(&vdev->ioeventfds_lock);
 	INIT_LIST_HEAD(&vdev->ioeventfds_list);
@@ -1922,6 +1934,7 @@ out_group_put:
 static void vfio_pci_remove(struct pci_dev *pdev)
 {
 	struct vfio_pci_device *vdev;
+	struct vfio_pci_common_dev *cdev;
 
 	pci_disable_sriov(pdev);
 
@@ -1938,11 +1951,12 @@ static void vfio_pci_remove(struct pci_dev *pdev)
 	if (vdev->nb.notifier_call)
 		bus_unregister_notifier(&pci_bus_type, &vdev->nb);
 
+	cdev = &vdev->cdev;
 	vfio_pci_reflck_put(vdev->reflck);
 
 	vfio_iommu_group_put(pdev->dev.iommu_group, &pdev->dev);
-	kfree(vdev->region);
-	kfree(vdev->fault_pages);
+	kfree(cdev->region);
+	kfree(cdev->fault_pages);
 	mutex_destroy(&vdev->ioeventfds_lock);
 
 	if (!disable_idle_d3)
@@ -1975,12 +1989,12 @@ static pci_ers_result_t vfio_pci_aer_err_detected(struct pci_dev *pdev,
 		return PCI_ERS_RESULT_DISCONNECT;
 	}
 
-	mutex_lock(&vdev->igate);
+	mutex_lock(&vdev->cdev.igate);
 
 	if (vdev->err_trigger)
 		eventfd_signal(vdev->err_trigger, 1);
 
-	mutex_unlock(&vdev->igate);
+	mutex_unlock(&vdev->cdev.igate);
 
 	vfio_device_put(device);
 
