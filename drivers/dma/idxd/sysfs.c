@@ -207,13 +207,6 @@ static int idxd_config_bus_probe(struct device *dev)
 				mutex_unlock(&wq->wq_lock);
 				return -EINVAL;
 			}
-
-			/* This check is added until we have SVM support for mdev */
-			if (wq->type == IDXD_WQT_MDEV) {
-				dev_warn(dev, "Shared MDEV unsupported.");
-				mutex_unlock(&wq->wq_lock);
-				return -EINVAL;
-			}
 		}
 
 		rc = idxd_wq_alloc_resources(wq);
