@@ -311,6 +311,16 @@ config INTEL_IDXD_SVM
 comment "SVM support not enabled for Intel Accelerator (see INTEL_IDXD_SVM)"
 	depends on INTEL_IDXD && !INTEL_IDXD_SVM
 
+config INTEL_IDXD_KTEST
+	tristate "Intel IDXD kernel direct API test"
+	depends on INTEL_IDXD && INTEL_IDXD_SVM && DMATEST
+	help
+	  Enable support for IDXD kernel direct API testing.
+
+	  Say Y if you want to perform testing for idxd KAPI.
+
+	  If unsure, say N
+
 config INTEL_IOATDMA
 	tristate "Intel I/OAT DMA support"
 	depends on PCI && X86_64
