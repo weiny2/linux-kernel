@@ -3697,6 +3697,37 @@
             "status": "intel confidential",
             "stuck_at_ref": "",
             "last_enabled": "v5.7"
+        },
+        {
+            "branch": "sm-off",
+            "branch_type": "expiring",
+            "config_options": [],
+            "contributor": [
+                {
+                    "name": "Yian Chen",
+                    "email": "yian.chen@intel.com"
+                }
+            ],
+            "description": "Add option to disablescalable mode",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Ashok Raj",
+                    "email": "ashok.raj@intel.com"
+                }
+            ],
+            "jira": "NEXT-1992",
+            "name": "disable_scalable_mode",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/chenyian/linux-kernel.git",
+            "sdl_contact": [
+                {
+                    "name": "Ashok Raj",
+                    "email": "ashok.raj@intel.com"
+                }
+            ],
+            "status": "public",
+            "stuck_at_ref": "",
+            "last_enabled": "v5.7"
         }
     ]
 }
