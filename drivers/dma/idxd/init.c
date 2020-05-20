@@ -133,11 +133,11 @@ static int idxd_setup_interrupts(struct idxd_device *idxd)
 
 		if (idxd->hw.gen_cap.int_handle_req) {
 			rc = idxd_device_request_int_handle(idxd, i,
-							    &idxd->int_handles[i]);
+							    &idxd->int_handles[i - 1]);
 			if (rc < 0)
 				goto err_no_irq;
 			dev_dbg(dev, "int handle requested: %u\n",
-				idxd->int_handles[i]);
+				idxd->int_handles[i - 1]);
 		}
 	}
 
@@ -203,6 +203,8 @@ static int idxd_setup_internals(struct idxd_device *idxd)
 		wq->id = i;
 		wq->idxd = idxd;
 		mutex_init(&wq->wq_lock);
+		INIT_LIST_HEAD(&wq->uuid_list);
+		INIT_LIST_HEAD(&wq->vdcm_list);
 		wq->idxd_cdev.minor = -1;
 	}
 
@@ -331,6 +333,7 @@ static struct idxd_device *idxd_alloc(struct pci_dev *pdev)
 
 	idxd->pdev = pdev;
 	spin_lock_init(&idxd->dev_lock);
+	mutex_init(&idxd->mdev_lock);
 	atomic_set(&idxd->num_allocated_ims, 0);
 
 	return idxd;
@@ -482,6 +485,12 @@ static int idxd_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		return -ENODEV;
 	}
 
+	rc = idxd_mdev_host_init(idxd);
+	if (rc < 0) {
+		dev_err(dev, "VFIO mdev init failed\n");
+		return rc;
+	}
+
 	rc = idxd_setup_sysfs(idxd);
 	if (rc) {
 		dev_err(dev, "IDXD sysfs setup failed\n");
@@ -556,6 +565,7 @@ static void idxd_remove(struct pci_dev *pdev)
 	dev_dbg(&pdev->dev, "%s called\n", __func__);
 	idxd_cleanup_sysfs(idxd);
 	idxd_shutdown(pdev);
+	idxd_mdev_host_release(idxd);
 	if (idxd->pasid_enabled)
 		idxd_disable_system_pasid(idxd);
 	mutex_lock(&idxd_idr_lock);

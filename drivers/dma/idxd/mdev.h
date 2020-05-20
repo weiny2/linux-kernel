@@ -48,6 +48,8 @@ struct ims_irq_entry {
 
 struct idxd_vdev {
 	struct mdev_device *mdev;
+	struct vfio_region *region;
+	int num_regions;
 	struct eventfd_ctx *msix_trigger[VIDXD_MAX_MSIX_ENTRIES];
 	struct notifier_block group_notifier;
 	struct kvm *kvm;
@@ -78,5 +80,26 @@ static inline struct vdcm_idxd *to_vidxd(struct idxd_vdev *vdev)
 {
 	return container_of(vdev, struct vdcm_idxd, vdev);
 }
+
+#define IDXD_MDEV_NAME_LEN 16
+#define IDXD_MDEV_DESCRIPTION_LEN 64
+
+enum idxd_mdev_type {
+	IDXD_MDEV_TYPE_WQ = 0,
+};
+
+#define IDXD_MDEV_TYPES 1
+
+struct vdcm_idxd_type {
+	char name[IDXD_MDEV_NAME_LEN];
+	char description[IDXD_MDEV_DESCRIPTION_LEN];
+	enum idxd_mdev_type type;
+	unsigned int avail_instance;
+};
+
+enum idxd_vdcm_rw {
+	IDXD_VDCM_READ = 0,
+	IDXD_VDCM_WRITE,
+};
 
 #endif

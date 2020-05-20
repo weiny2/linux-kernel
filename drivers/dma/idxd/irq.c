@@ -60,7 +60,7 @@ static void idxd_device_reinit(struct work_struct *work)
 		struct idxd_wq *wq = &idxd->wqs[i];
 
 		if (wq->state == IDXD_WQ_ENABLED) {
-			rc = idxd_wq_enable(wq);
+			rc = idxd_wq_enable(wq, NULL);
 			if (rc < 0) {
 				dev_warn(dev, "Unable to re-enable wq %s\n",
 					 dev_name(&wq->conf_dev));
