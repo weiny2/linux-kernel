@@ -1899,7 +1899,7 @@
             "last_enabled": "v5.7"
         },
         {
-            "branch": "intel-next",
+            "branch": "idxd-intel-next",
             "branch_type": "expiring",
             "config_options": [
                 {
@@ -1912,7 +1912,7 @@
                 },
                 {
                     "name": "CONFIG_DMA_ENGINE",
-                    "value": "y"
+                    "value": "m"
                 },
                 {
                     "name": "CONFIG_DMATEST",
@@ -1941,6 +1941,10 @@
                 {
                     "name": "CONFIG_INTEL_IDXD_KTEST",
                     "value": "m"
+                },
+                {
+                    "name": "CONFIG_INTEL_IDXD_SVM",
+                    "value": "y"
                 }
             ],
             "contributor": [
@@ -1950,14 +1954,14 @@
                 }
             ],
             "description": "Intel combined Accelerator driver (DSA & IAX)",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Rajesh Pamujula",
                     "email": "rajesh.s.pamujula@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1993",
             "name": "idxd",
             "repourl": "ssh://git@gitlab.devtools.intel.com:29418/otc-clk-server/linux-dsa/kernel.git",
             "sdl_contact": [
@@ -1966,8 +1970,9 @@
                     "email": "dave.jiang@intel.com"
                 }
             ],
-            "status": "public",
-            "stuck_at_ref": ""
+            "status": "intel confidential",
+            "stuck_at_ref": "",
+            "last_enabled": "v5.7"
         },
         {
             "branch": "for-sos-intel-next",
