@@ -272,7 +272,7 @@ static int uintr_sender_init(struct task_struct *t)
 
 	rdmsrl_safe(MSR_IA32_UINT_MISC, &msr64);
 	pr_debug("send: old UINT_MISC MSR=%llx\n", msr64);
-	msr64 &= ~0xFFFFFFFF;
+	msr64 &= 0xFFFFFFFF00000000;
 	msr64 |= UINTR_MAX_UITT_NR;
 	wrmsrl_safe(MSR_IA32_UINT_MISC, msr64);
 	pr_debug("send: new UINT_MISC MSR=%llx\n", msr64);
