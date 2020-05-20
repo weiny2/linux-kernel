@@ -8,6 +8,10 @@
 #include <linux/percpu-rwsem.h>
 #include <linux/wait.h>
 #include <linux/cdev.h>
+#include <linux/pci.h>
+#include <linux/irq.h>
+#include <linux/idxd.h>
+#include <linux/uuid.h>
 #include "registers.h"
 
 #define IDXD_DRIVER_VERSION	"1.00"
@@ -71,6 +75,7 @@ enum idxd_wq_type {
 	IDXD_WQT_NONE = 0,
 	IDXD_WQT_KERNEL,
 	IDXD_WQT_USER,
+	IDXD_WQT_MDEV,
 };
 
 struct idxd_cdev {
@@ -78,6 +83,11 @@ struct idxd_cdev {
 	struct device *dev;
 	int minor;
 	struct wait_queue_head err_queue;
+};
+
+struct idxd_wq_uuid {
+	guid_t uuid;
+	struct list_head list;
 };
 
 #define IDXD_ALLOCATED_BATCH_SIZE	128U
@@ -121,6 +131,9 @@ struct idxd_wq {
 	struct sbitmap_queue sbq;
 	struct dma_chan dma_chan;
 	char name[WQ_NAME_SIZE + 1];
+	struct list_head uuid_list;
+	int uuids;
+	struct list_head vdcm_list;
 };
 
 struct idxd_engine {
@@ -206,6 +219,7 @@ struct idxd_device {
 	atomic_t num_allocated_ims;
 	struct sbitmap ims_sbmap;
 	int *int_handles;
+	struct mutex mdev_lock; /* mdev creation lock */
 };
 
 /* IDXD software descriptor */
@@ -289,6 +303,7 @@ void idxd_cleanup_sysfs(struct idxd_device *idxd);
 int idxd_register_driver(void);
 void idxd_unregister_driver(void);
 struct bus_type *idxd_get_bus_type(struct idxd_device *idxd);
+bool is_idxd_wq_mdev(struct idxd_wq *wq);
 
 /* device interrupt control */
 irqreturn_t idxd_irq_handler(int vec, void *data);
@@ -317,8 +332,8 @@ int idxd_device_request_int_handle(struct idxd_device *idxd, int idx,
 /* work queue control */
 int idxd_wq_alloc_resources(struct idxd_wq *wq);
 void idxd_wq_free_resources(struct idxd_wq *wq);
-int idxd_wq_enable(struct idxd_wq *wq);
-int idxd_wq_disable(struct idxd_wq *wq);
+int idxd_wq_enable(struct idxd_wq *wq, u32 *status);
+int idxd_wq_disable(struct idxd_wq *wq, u32 *status);
 void idxd_wq_drain(struct idxd_wq *wq);
 int idxd_wq_map_portal(struct idxd_wq *wq);
 void idxd_wq_unmap_portal(struct idxd_wq *wq);
@@ -350,5 +365,9 @@ void idxd_cdev_remove(void);
 int idxd_cdev_get_major(struct idxd_device *idxd);
 int idxd_wq_add_cdev(struct idxd_wq *wq);
 void idxd_wq_del_cdev(struct idxd_wq *wq);
+
+/* mdev */
+int idxd_mdev_host_init(struct idxd_device *idxd);
+void idxd_mdev_host_release(struct idxd_device *idxd);
 
 #endif
