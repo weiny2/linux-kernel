@@ -7094,7 +7094,11 @@ static int check_return_code(struct bpf_verifier_env *env)
 	switch (env->prog->type) {
 	case BPF_PROG_TYPE_CGROUP_SOCK_ADDR:
 		if (env->prog->expected_attach_type == BPF_CGROUP_UDP4_RECVMSG ||
-		    env->prog->expected_attach_type == BPF_CGROUP_UDP6_RECVMSG)
+		    env->prog->expected_attach_type == BPF_CGROUP_UDP6_RECVMSG ||
+		    env->prog->expected_attach_type == BPF_CGROUP_INET4_GETPEERNAME ||
+		    env->prog->expected_attach_type == BPF_CGROUP_INET6_GETPEERNAME ||
+		    env->prog->expected_attach_type == BPF_CGROUP_INET4_GETSOCKNAME ||
+		    env->prog->expected_attach_type == BPF_CGROUP_INET6_GETSOCKNAME)
 			range = tnum_range(1, 1);
 		break;
 	case BPF_PROG_TYPE_CGROUP_SKB:
@@ -7120,10 +7124,11 @@ static int check_return_code(struct bpf_verifier_env *env)
 		case BPF_TRACE_FEXIT:
 			range = tnum_const(0);
 			break;
-		case BPF_TRACE_ITER:
 		case BPF_TRACE_RAW_TP:
 		case BPF_MODIFY_RETURN:
 			return 0;
+		case BPF_TRACE_ITER:
+			break;
 		default:
 			return -ENOTSUPP;
 		}
