@@ -35,7 +35,6 @@
 #define IGC_FCRTL		0x02160  /* FC Receive Threshold Low - RW */
 #define IGC_FCRTH		0x02168  /* FC Receive Threshold High - RW */
 #define IGC_FCRTV		0x02460  /* FC Refresh Timer Value - RW */
-#define IGC_FCSTS		0x02464  /* FC Status - RO */
 
 /* PCIe Register Description */
 #define IGC_GCR			0x05B00  /* PCIe control- RW */
@@ -49,6 +48,7 @@
 #define IGC_FACTPS		0x05B30
 
 /* Interrupt Register Description */
+#define IGC_EICR		0x01580  /* Ext. Interrupt Cause read - W0 */
 #define IGC_EICS		0x01520  /* Ext. Interrupt Cause Set - W0 */
 #define IGC_EIMS		0x01524  /* Ext. Interrupt Mask Set/Read - RW */
 #define IGC_EIMC		0x01528  /* Ext. Interrupt Mask Clear - WO */
@@ -119,6 +119,7 @@
 #define IGC_RLPML		0x05004  /* Rx Long Packet Max Length */
 #define IGC_RFCTL		0x05008  /* Receive Filter Control*/
 #define IGC_MTA			0x05200  /* Multicast Table Array - RW Array */
+#define IGC_RA			0x05400  /* Receive Address - RW Array */
 #define IGC_UTA			0x0A000  /* Unicast Table Array - RW */
 #define IGC_RAL(_n)		(0x05400 + ((_n) * 0x08))
 #define IGC_RAH(_n)		(0x05404 + ((_n) * 0x08))
@@ -230,6 +231,18 @@
 #define IGC_FTQF(_n)	(0x059E0 + (4 * (_n)))  /* 5-tuple Queue Fltr */
 
 #define IGC_RXPBS	0x02404  /* Rx Packet Buffer Size - RW */
+
+/* Transmit Scheduling Registers */
+#define IGC_TQAVCTRL		0x3570
+#define IGC_TXQCTL(_n)		(0x3344 + 0x4 * (_n))
+#define IGC_BASET_L		0x3314
+#define IGC_BASET_H		0x3318
+#define IGC_QBVCYCLET		0x331C
+#define IGC_QBVCYCLET_S		0x3320
+
+#define IGC_STQT(_n)		(0x3324 + 0x4 * (_n))
+#define IGC_ENDQT(_n)		(0x3334 + 0x4 * (_n))
+#define IGC_DTXMXPKTSZ		0x355C
 
 /* System Time Registers */
 #define IGC_SYSTIML	0x0B600  /* System time register Low - RO */
