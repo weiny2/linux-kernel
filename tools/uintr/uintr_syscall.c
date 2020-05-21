@@ -254,6 +254,32 @@ void sender_thread_start(pthread_t *pt, int *uvecfd)
 
 }
 
+void receiver_test_uif(void)
+{
+
+	int uif = _testui();
+
+	printf("UIF flag by default %d\n", uif);
+
+	_stui();
+	printf("UIF flag after stui %d\n", _testui());
+	_clui();
+	printf("UIF flag after clui %d\n", _testui());
+	_stui();
+	printf("UIF flag after stui %d\n", _testui());
+	_clui();
+	printf("UIF flag after clui %d\n", _testui());
+
+	if(uif)
+		_stui();
+	else
+		_clui();
+
+	printf("UIF flag setting back to default %d\n", _testui());
+
+}
+
+
 int main(int argc, char *argv[])
 {
 	struct ui_receiver recv[MAX_NUM_RECEIVERS];
@@ -278,6 +304,9 @@ int main(int argc, char *argv[])
 		// Setup receiver
 		recv[i].handler = ui_handler;
 		receiver_register_syscall(&recv[i]);
+
+		receiver_test_uif();
+
 		receiver_read_uvec(&recv[i]);
 		_stui();
 		receiver_debug_syscall();

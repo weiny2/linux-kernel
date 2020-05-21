@@ -42,6 +42,7 @@ struct uintr_receiver {
 	struct uintr_upid_struct *upid_kaddr;
 	u64 uirr; // Not needed with xsave
 	u64 uvec_mask; /* track active uvec per vector per bit */
+	u64 uif;
 };
 
 struct uintr_sender {
@@ -57,7 +58,22 @@ struct uintr_sender {
 #define UINTR_MAX_UITT_NR 64
 #define UINTR_MAX_UVEC_NR 64
 
-#define STUI_OPCODE "0xF3, 0x0F, 0x01, 0xEF"
+#define TESTUI_OPCODE	"0xF3, 0x0F, 0x01, 0xED"
+#define CLUI_OPCODE	"0xF3, 0x0F, 0x01, 0xEE"
+#define STUI_OPCODE	"0xF3, 0x0F, 0x01, 0xEF"
+#define WIDTH "q"
+
+static inline bool uintr_test_uif(void)
+{
+
+	unsigned long eflags;
+
+	asm volatile(".byte " TESTUI_OPCODE " \n\t");
+	asm volatile ("pushf" WIDTH "\n\tpop" WIDTH " %0" : "=rm" (eflags));
+
+	return (eflags & X86_EFLAGS_CF);
+
+}
 
 static struct uintr_upid_struct dummy_upid = {
 	.sc = {
@@ -122,6 +138,9 @@ inline void uintr_switch(struct task_struct *prev, struct task_struct *next)
 	if (is_uvec_active(prev)) {
 		/* stop sending UINTR interrutps to this thread */
 		prev->thread.ui_recv->upid_kaddr->sc.sn = 1;
+		prev->thread.ui_recv->uif = uintr_test_uif();
+
+		asm volatile(".byte " CLUI_OPCODE " \n\t");
 
 		wrmsrl_safe(MSR_IA32_UINT_MISC, 0ULL);
 		rdmsrl_safe(MSR_IA32_UINT_RR, &prev->thread.ui_recv->uirr);
@@ -148,6 +167,13 @@ inline void uintr_switch(struct task_struct *prev, struct task_struct *next)
 	if (is_uvec_active(next)) {
 		next->thread.ui_recv->upid_kaddr->sc.ndst =
 				cpu_to_ndst(smp_processor_id());
+
+		/* UIF could come set from the previous thread */
+		if (next->thread.ui_recv->uif) {
+			asm volatile(".byte " STUI_OPCODE " \n\t");
+		} else {
+			asm volatile(".byte " CLUI_OPCODE " \n\t");
+		}
 
 		wrmsrl_safe(MSR_IA32_UINT_PD, (u64)next->thread.ui_recv->upid_uaddr);
 		wrmsrl_safe(MSR_IA32_UINT_HANDLER,
@@ -352,6 +378,7 @@ static void *uintr_alloc_upid(struct task_struct *task)
 	return 0;
 }
 
+
 static int uintr_register_handler(u64 handler)
 {
 	struct uintr_upid_struct *upid;
@@ -391,7 +418,10 @@ static int uintr_register_handler(u64 handler)
 	misc_msr |= (u64)UINTR_NOTIFICATION_VECTOR << 32;
 	wrmsrl_safe(MSR_IA32_UINT_MISC, misc_msr);
 
-	asm volatile(".byte " STUI_OPCODE " \n\t");
+	if(uintr_test_uif())
+		pr_debug("recv: UIF already set before registration. Clearing UIF\n");
+
+	asm volatile(".byte " CLUI_OPCODE " \n\t");
 
 	pr_debug("recv: UINT_MISC_MSR=%llx\n", misc_msr);
 
@@ -461,6 +491,7 @@ void uintr_free_uvec(struct task_struct *t, int uvec)
 		wrmsrl_safe(MSR_IA32_UINT_PD, 0ULL);
 		wrmsrl_safe(MSR_IA32_UINT_RR, 0ULL);
 		wrmsrl_safe(MSR_IA32_UINT_HANDLER, 0ULL);
+		asm volatile(".byte " CLUI_OPCODE " \n\t");
 	}
 
 	// TODO: Verify code for dummy upid
@@ -481,6 +512,7 @@ void uintr_free(struct task_struct *t)
 		wrmsrl_safe(MSR_IA32_UINT_RR, 0ULL);
 		wrmsrl_safe(MSR_IA32_UINT_HANDLER, 0ULL);
 		wrmsrl_safe(MSR_IA32_UINT_STACKADJUST, 0ULL);
+		asm volatile(".byte " CLUI_OPCODE " \n\t");
 	}
 
 	// Free uitt
