@@ -3089,7 +3089,7 @@
                 }
             ],
             "description": "Bus Lock VM exit & No-commit VM exit",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Shanbhogue, Vedvyas",
