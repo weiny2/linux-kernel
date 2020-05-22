@@ -3654,7 +3654,7 @@ static int io_sendmsg(struct io_kiocb *req, bool force_nonblock)
 		}
 
 		flags = req->sr_msg.msg_flags;
-		if (flags & MSG_DONTWAIT)
+		if ((flags & MSG_DONTWAIT) || (req->file->f_flags & O_NONBLOCK))
 			req->flags |= REQ_F_NOWAIT;
 		else if (force_nonblock)
 			flags |= MSG_DONTWAIT;
@@ -3899,7 +3899,7 @@ static int io_recvmsg(struct io_kiocb *req, bool force_nonblock)
 		}
 
 		flags = req->sr_msg.msg_flags;
-		if (flags & MSG_DONTWAIT)
+		if ((flags & MSG_DONTWAIT) || (req->file->f_flags & O_NONBLOCK))
 			req->flags |= REQ_F_NOWAIT;
 		else if (force_nonblock)
 			flags |= MSG_DONTWAIT;
