@@ -8,9 +8,6 @@
 
 #include <linux/gfp.h>
 #include <linux/interrupt.h>
-#ifdef CONFIG_SVOS
-#include <linux/irq.h>
-#endif
 #include <linux/percpu.h>
 #include <linux/sched.h>
 #include <linux/cpumask.h>
@@ -21,11 +18,12 @@
 #include <asm/msr.h>
 #include <asm/mce.h>
 #ifdef CONFIG_SVOS
+#include <linux/irq.h>
 #include <linux/module.h>
 #include <linux/svos.h>
-// Boolean: processor has CMCI capability.
-int svos_do_CMCIs = 0;
-EXPORT_SYMBOL(svos_do_CMCIs);
+#ifndef CONFIG_SVOS_RAS_ERRORCORRECT
+#define SVOS_WITHOUT_RAS
+#endif
 #endif
 
 #include "internal.h"
@@ -263,7 +261,7 @@ static bool cmci_storm_detect(void)
  */
 static void intel_threshold_interrupt(void)
 {
-#ifdef CONFIG_SVOS
+#ifdef SVOS_WITHOUT_RAS
 	int status;
 
 	/* Call any registered CMCI handlers before clearing status. */
@@ -346,8 +344,7 @@ static void cmci_discover(int banks)
 		} else {
 			WARN_ON(!test_bit(i, this_cpu_ptr(mce_poll_banks)));
 		}
-#ifdef CONFIG_SVOS
-#ifndef CONFIG_SVOS_RAS_ERRORCORRECT
+#ifdef SVOS_WITHOUT_RAS
 		/* On SVOS, CMCIs are disabled by default, to prevent
 		   automatic clearing of error status.  SV applications
 		   need visibility to all the error status. */
@@ -357,10 +354,6 @@ static void cmci_discover(int banks)
 			// Re-clear the bank status.
 			wrmsrl(MSR_IA32_MCx_STATUS(i), 0);
 		}
-#endif
-		/* Indicate to SVFS that CMCI hardware capability is present:
-		   previously passed cmci_supported() test. */
-		svos_do_CMCIs = 1;
 #endif
 	}
 	raw_spin_unlock_irqrestore(&cmci_discover_lock, flags);
