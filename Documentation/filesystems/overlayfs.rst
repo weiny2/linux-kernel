@@ -564,6 +564,13 @@ Note: the mount options index=off,nfs_export=on are conflicting and will
 result in an error.
 
 
+Disable sync
+------------
+By default, overlay skips sync on files residing on a lower layer.  It
+is possible to skip sync operations also for files on the upper layer
+with the 'nosync' mount option.
+
+
 Testsuite
 ---------
 
