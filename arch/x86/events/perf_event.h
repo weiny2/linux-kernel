@@ -921,6 +921,11 @@ struct x86_pmu {
 	int (*aux_output_match) (struct perf_event *event);
 
 	/*
+	 * Intel CET Shadow Stack
+	 */
+	 int (*store_shadow_stack_user) (struct perf_callchain_entry_ctx *entry);
+
+	/*
 	 * Hybrid support
 	 *
 	 * Most of PMU capabilities are the same among different hybrid PMUs.
