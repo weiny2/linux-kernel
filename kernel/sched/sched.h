@@ -349,7 +349,6 @@ struct cfs_bandwidth {
 
 	u8			idle;
 	u8			period_active;
-	u8			distribute_running;
 	u8			slack_started;
 	struct hrtimer		period_timer;
 	struct hrtimer		slack_timer;
@@ -890,9 +889,10 @@ struct rq {
 #ifdef CONFIG_SMP
 	unsigned long		last_blocked_load_update_tick;
 	unsigned int		has_blocked_load;
+	call_single_data_t	nohz_csd;
 #endif /* CONFIG_SMP */
 	unsigned int		nohz_tick_stopped;
-	atomic_t nohz_flags;
+	atomic_t		nohz_flags;
 #endif /* CONFIG_NO_HZ_COMMON */
 
 	unsigned long		nr_load_updates;
@@ -979,7 +979,7 @@ struct rq {
 
 	/* This is used to determine avg_idle's max value */
 	u64			max_idle_balance_cost;
-#endif
+#endif /* CONFIG_SMP */
 
 #ifdef CONFIG_IRQ_TIME_ACCOUNTING
 	u64			prev_irq_time;
@@ -1021,6 +1021,7 @@ struct rq {
 #endif
 
 #ifdef CONFIG_SMP
+	call_single_data_t	wake_csd;
 	struct llist_head	wake_list;
 #endif
 
@@ -1461,7 +1462,7 @@ struct sched_group {
 	 * by attaching extra space to the end of the structure,
 	 * depending on how many CPUs the kernel has booted up with)
 	 */
-	unsigned long		cpumask[0];
+	unsigned long		cpumask[];
 };
 
 static inline struct cpumask *sched_group_span(struct sched_group *sg)
@@ -1504,13 +1505,9 @@ static inline void unregister_sched_domain_sysctl(void)
 }
 #endif
 
-extern int newidle_balance(struct rq *this_rq, struct rq_flags *rf);
-
 #else
 
 static inline void sched_ttwu_pending(void) { }
-
-static inline int newidle_balance(struct rq *this_rq, struct rq_flags *rf) { return 0; }
 
 #endif /* CONFIG_SMP */
 
@@ -1918,6 +1915,8 @@ extern void init_dl_inactive_task_timer(struct sched_dl_entity *dl_se);
 #define BW_SHIFT		20
 #define BW_UNIT			(1 << BW_SHIFT)
 #define RATIO_SHIFT		8
+#define MAX_BW_BITS		(64 - BW_SHIFT)
+#define MAX_BW			((1ULL << MAX_BW_BITS) - 1)
 unsigned long to_ratio(u64 period, u64 runtime);
 
 extern void init_entity_runnable_average(struct sched_entity *se);
