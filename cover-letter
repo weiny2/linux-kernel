@@ -1,0 +1,98 @@
+PKS: Add Protection Keys Supervisor (PKS) support
+
+<proposed upstream cover letter>
+
+This patch set starts by introducing a new page protection mechanism for kernel
+pages, Protection Key Supervisor (PKS).
+
+PKS enables protections on 'domains' of pages within the kernel in the same way
+that user space pkeys do.  A domain has 1 of 16 pkeys and pages are assigned to
+that domain by adding the pkey to their page table protections.
+
+Access to supervisor pages within a defined domain can be controlled per-thread
+with a simple MSR write rather than through the page tables.  This also means
+that no TLB flushes are needed to control access.
+
+As is documented in the final patch, PKS is intended to harden against unwanted
+access to kernel pages.  But it does not completely restrict access under all
+conditions.  For example the MSR setting is not saved/restored during irqs.
+Thus the use of PKS is a hardening of kernel protections not a form of strict
+security.
+
+For consistent behavior with current page protections, pkey 0 is reserved and
+configured to allow full access to all pages as a default.
+
+Other keys are allocated by an allocator.  The allocator takes a name parameter
+to aid in reporting which kernel users are using which keys.  Kernel users
+should be prepared for the allocator to fail.  Thus they need to determine what
+if anything they want to do if a key is not available.  Currently, there is no
+way to share keys as it is not necessary with only 1 user.
+
+The following attributes of PKS make it perfect as a mechanism to protect PMEM
+from stray access within the kernel:
+
+   1) Fast switching of permissions
+   2) Prevents access without page table manipulations
+   3) Works on a per thread basis
+   4) No TLB flushes required
+
+Protecting against stray writes is particularly important for PMEM because,
+unlike writes to anonymous memory, writes to PMEM persists across a reboot.
+Thus data corruption could result in permanent loss of data.
+
+The 2nd half of this series thus uses the PKS mechanism to protect PMEM from
+stray access with CONFIG_ZONE_DEVICE_ACCESS_PROTECTION.
+
+Again, it is important to note that protecting against stray writes is not
+security and the intention is to simply harden PMEM.  Therefore, this
+implementation will automatically fall back to normal page table protections if
+PKS is not available or if no pkeys are available.
+
+Implementation details
+----------------------
+
+The use of kmap:
+
+To keep general access to PMEM pages general, we piggy back on the kmap()
+interface as there are many places in the kernel who do not have, nor should be
+required to have, apriori knowledge that a page is PMEM.  The modifications to
+the kmap code is careful to quickly determine which pages don't require special
+handling to reduce overhead for non PMEM pages.
+
+Modifications of task struct:
+
+Because pkey access is per-thread 2 modifications are made to the task struct.
+The first is a saved copy of the MSR during context switches.  The second
+reference counts access to the device domain to correctly handle kmap nesting
+properly.
+
+Breakdown of patches
+--------------------
+
+Implement PKS within x86 arch:
+
+	x86/pks: Enumerate Protection Keys for Supervisor pages
+	x86/pks: Enable PKS
+	x86/pks: Context switch PKRS MSR per task
+	x86/mm: Introduce PAGE_KERNEL_KEY(key)
+	x86/fpu: Refactor arch_set_user_pkey_access() for PKS support
+	x86/pks: Add pks_update_protection()
+	x86/pks: Allocate/free protection key for supervisor
+	x86/pks: Add pks_test code
+
+pre-req bug fixes for dax:
+
+	fs/dax: Remove unused size parameter
+	drivers/dax: Expand lock scope to cover the use of addresses
+
+Add stray write protection to pmem:
+
+	memremap: Add protection for pgmap modifier
+	kmap: Add stray write protection for device pages
+	dax: Stray write protection for dax_direct_access()
+	pmem: Stray write protection for pmem->virt_addr
+	[dax|pmem]: Enable stray write protection
+	Documentation/pkeys: Update documentation for kernel pkeys
+
+</proposed upstream cover letter>
+
