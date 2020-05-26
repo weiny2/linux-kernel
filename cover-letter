@@ -1,0 +1,181 @@
+PKS: Add Protection Keys Supervisor (PKS) support
+
+NOTES for New Intel internal review
+
+I've made some pretty major changes to the series after we realized that some
+callers of kmap() may break on pmem pages.  Specifically, kmap() is most often
+used as a single thread map/do something/unmap pattern.  In fact this is the
+pattern of ~209/229 callers of kmap().  This pattern works very well for our
+use case and the testing which was done.  However, there were another ~20 kmap
+users which do not follow this pattern.  And, as best I can tell, they expect
+the mapping to be 'global' and available to any thread who may access the
+mapping.[1]
+
+While we don't anticipate global mappings to  pmem there is a danger in
+changing the semantics of kmap().  Effectively, this would cause an unresolved
+page fault with little to no information about why the failure occurred.  This
+change in semantics of kmap() is not acceptable.  This new patch series
+introduces a new kmap call 'k[un]map_thread()' which is to be used when the
+mapping is contained to a single thread of execution.  It also keeps the kmap()
+semantics by allowing for a global update of the PKRS value if needed.
+
+It was considered to use kmap_atomic() instead.  Indeed some of the ~209 call
+sites could be converted to k[un]map_atomic() but not all.  Therefore, if a new
+call is required anyway, it is best to allow the thread to be preempted if
+needed and use the new call.[2]
+
+Other additions include:
+
+1) saving the PKRS state during NMI exceptions (suggested by Thomas Gleixner)
+2) fixing the broken IDT exception code
+3) addressing all code comments from the public RFC V2
+4) removing a couple of the preliminary patches out of the series as they were
+   submitted and accepted into 5.9 as DAX bug fixes
+
+
+[1] The following list is left as kmap().  It would be nice if more of them
+could be converted to kmap_thread()
+
+	drivers/firewire/net.c:         ptr = kmap(dev->broadcast_rcv_buffer.pages[u]);
+	drivers/gpu/drm/i915/gem/i915_gem_pages.c:              return kmap(sg_page(sgt->sgl));
+	drivers/gpu/drm/ttm/ttm_bo_util.c:              map->virtual = kmap(map->page);
+	drivers/infiniband/hw/qib/qib_user_sdma.c:      mpage = kmap(page);
+	drivers/misc/vmw_vmci/vmci_host.c:      context->notify = kmap(context->notify_page) + (uva & (PAGE_SIZE - 1));
+	drivers/misc/xilinx_sdfec.c:            addr = kmap(pages[i]);
+	drivers/mmc/host/usdhi6rol0.c:  host->pg.mapped         = kmap(host->pg.page);
+	drivers/mmc/host/usdhi6rol0.c:  host->pg.mapped = kmap(host->pg.page);
+	drivers/mmc/host/usdhi6rol0.c:  host->pg.mapped = kmap(host->pg.page);
+	drivers/nvme/target/tcp.c:              iov->iov_base = kmap(sg_page(sg)) + sg->offset + sg_offset;
+	drivers/scsi/libiscsi_tcp.c:            segment->sg_mapped = kmap(sg_page(sg));
+	drivers/target/iscsi/iscsi_target.c:            iov[i].iov_base = kmap(sg_page(sg)) + sg->offset + page_off;
+	drivers/target/target_core_transport.c:         return kmap(sg_page(sg)) + sg->offset;
+	fs/btrfs/check-integrity.c:             block_ctx->datav[i] = kmap(block_ctx->pagev[i]);
+	fs/ceph/dir.c:          cache_ctl->dentries = kmap(cache_ctl->page);
+	fs/ceph/inode.c:                ctl->dentries = kmap(ctl->page);
+	fs/erofs/zpvec.h:               kmap_atomic(ctor->curr) : kmap(ctor->curr);
+	lib/scatterlist.c:              miter->addr = kmap(miter->page) + miter->__offset;
+	net/ceph/pagelist.c:    pl->mapped_tail = kmap(page);
+	net/ceph/pagelist.c:            pl->mapped_tail = kmap(page);
+	virt/kvm/kvm_main.c:                    hva = kmap(page);
+
+[2] NOTE k[un]map_atomic() is obviously thread local so those calls use thread
+local PKRS updates as before.
+
+
+Changes from RFC V2:
+	Account for the fact that not all kmaps are 'thread local'
+		Introduce kmap_thread() concept for the majority of calls which
+		are thread local
+	Add save state during NMI exceptions
+	Fix up state saving during IDT exceptions
+	Clean up commit messages to reflect that writes and reads are prevented
+	Clean up function names
+
+Changes from RFC:
+	Clean up commit messages based on Peter Zijlstra's and Dave Hansen's
+		feedback
+	Fix static branch anti-pattern
+	New patch:
+	(memremap: Convert devmap static branch to {inc,dec})
+		This was the code I used as a model for my static branch which
+		I believe is wrong now.
+	New Patch:
+	(x86/entry: Preserve PKRS MSR through exceptions)
+		This attempts to preserve the per-logical-processor MSR, and
+		reference counting during exceptions.  I'd really like feed
+		back on this because I _think_ it should work but I'm afraid
+		I'm missing something as my testing has shown a lot of spotty
+		crashes which don't make sense to me.
+
+This patch set introduces a new page protection mechanism for supervisor pages,
+Protection Key Supervisor (PKS) and an initial user of them, persistent memory,
+PMEM.
+
+PKS enables protections on 'domains' of supervisor pages to limit supervisor
+mode access to those pages beyond the normal paging protections.  They work in
+a similar fashion to user space pkeys.  Like User page pkeys (PKU), supervisor
+pkeys are checked in addition to normal paging protections and Access or Writes
+can be disabled via a MSR update without TLB flushes when permissions change.
+A page mapping is assigned to a domain by setting a pkey in the page table
+entry.
+
+Unlike User pkeys no new instructions are added; rather WRMSR/RDMSR are used to
+update the PKRS register.
+
+XSAVE is not supported for the PKRS MSR.  To reduce software complexity the
+implementation saves/restores the MSR across context switches but not during
+irqs.  This is a compromise which results is a hardening of unwanted access
+without absolute restriction.
+
+For consistent behavior with current paging protections, pkey 0 is reserved and
+configured to allow full access via the pkey mechanism, thus preserving the
+default paging protections on mappings with the default pkey value of 0.
+
+Other keys, (1-15) are allocated by an allocator which prepares us for key
+contention from day one.  Kernel users should be prepared for the allocator to
+fail either because of key exhaustion or due to PKS not being supported on the
+arch and/or CPU instance.
+
+Protecting against stray writes is particularly important for PMEM because,
+unlike writes to anonymous memory, writes to PMEM persists across a reboot.
+Thus data corruption could result in permanent loss of data.
+
+The following attributes of PKS makes it perfect as a mechanism to protect PMEM
+from stray access within the kernel:
+
+   1) Fast switching of permissions
+   2) Prevents access without page table manipulations
+   3) Works on a per thread basis
+   4) No TLB flushes required
+
+The second half of this series thus uses the PKS mechanism to protect PMEM from
+stray access.
+
+PKS is available with 4 and 5 level paging.  Like PKRU is takes 4 bits from the
+PTE to store the pkey within the entry.
+
+
+Implementation details
+----------------------
+
+Modifications of task struct in patches:
+	(x86/pks: Preserve the PKRS MSR on context switch)
+	(memremap: Add zone device access protection)
+
+Because pkey access is per-thread 2 modifications are made to the task struct.
+The first is a saved copy of the MSR during context switches.  The second
+reference counts access to the device domain to correctly handle kmap nesting
+properly.
+
+
+Maintain PKS setting in a re-entrant manner in patch:
+	(memremap: Add zone device access protection)
+	(x86/entry: Preserve PKRS MSR across IDT exceptions)
+	(x86: Preserve PKS state across NMI exception)
+
+Using local_irq_save() seems to be the safest and fastest way to maintain kmap
+as re-entrant.  But there may be a better way.  spin_lock_irq() and atomic
+counters were considered.  But atomic counters do not properly protect the pkey
+update and spin_lock_irq() would deadlock.  Suggestions are welcome.
+
+Also preserving the pks state requires the exception handling code to store the
+ref count during exception processing.  This seems like a layering violation
+but it works.
+
+
+The use of kmap in patch:
+	(kmap: Add stray access protection for device pages)
+
+To keep general access to PMEM pages general, we piggy back on the kmap()
+interface as there are many places in the kernel who do not have, nor should be
+required to have, a priori knowledge that a page is PMEM.  The modifications to
+the kmap code is careful to quickly determine which pages don't require special
+handling to reduce overhead for non PMEM pages.
+
+Unfortunately, to maintain PKS as a thread local protection kmap() users did
+need to be modified to indicate if the mapping they are creating was 'global'
+or not.  This is done by preserving the original semantics of kmap() to be
+'global' and introduce a new kmap call 'kmap_thread()' as a thread local
+mapping.
+
+
