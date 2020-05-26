@@ -2287,4 +2287,6 @@ config HYPERV_TESTING
 
 endmenu # "Kernel Testing and Coverage"
 
+source "lib/Kconfig.twist"
+
 endmenu # Kernel hacking
