@@ -1,0 +1,40 @@
+RFC PKS: Add Protection Keys Supervisor (PKS) support
+
+I really want to get opinions on the use of PKS here and the oddities that pmem
+requires to use pks vs the more generic solutions we have thrown around for PKS
+core support as well as PMEM stray write protection.
+
+For actual upstream submission the intent is to release the entire series (core
+support with pmem user).  Basically the same as is shown in this RFC series.
+
+For this version of the internal series I have included the PKS core support,
+squashed the fixups patches I had before, added some more core
+support/cleanups, and have fixed up the issues identified by Dave and Dan.
+
+The changes to the core support are not, IMO, significant enough to alter the
+current support we see in intel-next.  Indeed the api is only extended slightly
+with the addition of the pks_supported() call.  So the KVM support already in
+intel-next and the planned kernel security keys work should not be affected
+much, if at all.
+
+For now, this exact code has not been tested yet.  I wanted to get the series
+based on upstream and right now 5.8-rc1 is not booting on simics.  I have not
+had much time to dig into why that is an issue.
+
+But I think the code is clean enough to get comments on it while I continue to
+work on the testing.
+
+<proposed upstream cover letter>
+
+This patch set starts by introducing a new protection key mechanism for kernel
+pages, Protection Key Supervisor (PKS).  And then uses that protection to
+protect PMEM from stray writes.
+
+PKS works in the same way as user protection keys except they apply to
+supervisor pages.  This feature allows quick access controls to large numbers
+of pages without a TLB flush and apply to the local thread/cpu.  Thereby making
+them ideal to protect PMEM in this way.
+
+</proposed upstream cover letter>
+
+
