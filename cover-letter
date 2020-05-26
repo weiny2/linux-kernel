@@ -1,0 +1,55 @@
+RFC PKS: Add Protection Keys Supervisor (PKS) support
+
+NOTE: PMEM patches only...
+
+I really want to get opinions on the use of PKS here and the oddities that pmem
+requires to use pks vs the more generic solutions we have thrown around for PKS
+core support as well as Pmem stray write protection.
+
+For actual upstream submission the intent is to release the entire series (core
+support with pmem user).
+
+For this internal review this series just shows the pmem support as the core
+support is already part of intel-next.
+
+Furthermore, this builds on the kmap cleanup patches which have been merged for
+5.8 but which are not yet in intel-next.
+
+This 'INTERNAL-RFC' consists of:
+
+2 patches to alter the core support:
+
+	squash into core support patch set: Remove extraneous comment
+	squash into core support patch set: ensure pks interface is defined on all arch's
+
+4 clean up patches:
+
+	PKey: Update documentation for kernel pkeys
+	fs/dax: Remove unused size parameter
+	drivers/dax: Expand lock scope to cover the use of kaddr
+	s390: add missing dax_read_lock()
+
+And the actual pmem implementation:
+
+	memremap: Add protection for pgmap modifier
+	kmap: Add stray write protection for device pages
+	dax: Stray write protection for dax_direct_access()
+	pmem: Stray write protection for pmem->virt_addr
+	[dax|pmem]: Enable stray write protection
+
+...
+
+This patch set includes the base core support for using protection keys for
+supervisor pages as well as the first user of that feature PMEM.
+
+Protection keys work in the same way as user protection keys except they apply
+to supervisor pages.  This feature allows quick access controls to large
+numbers of pages without a TLB flush and local to a thread.
+
+The patch series is made up of 2 sets of patches.  The first supplies general
+core pkey management support including allocating keys and supporting context
+switching.  The second set implements the first user of this feature to prevent
+stray writes from happening to persistent memory.
+
+...
+
