@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Advanced Micro Devices, Inc.
+ * Copyright 2020 Advanced Micro Devices, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -18,33 +18,12 @@
  * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
  * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
  * OTHER DEALINGS IN THE SOFTWARE.
- *
- * Authors: AMD
- *
  */
 
-#include <linux/string.h>
-#include <linux/acpi.h>
+#ifndef KFD_SMI_EVENTS_H_INCLUDED
+#define KFD_SMI_EVENTS_H_INCLUDED
 
-#include <drm/drm_probe_helper.h>
-#include <drm/amdgpu_drm.h>
-#include "dm_services.h"
-#include "amdgpu.h"
-#include "amdgpu_dm.h"
-#include "amdgpu_dm_irq.h"
-#include "amdgpu_pm.h"
+int kfd_smi_event_open(struct kfd_dev *dev, uint32_t *fd);
+void kfd_smi_event_update_vmfault(struct kfd_dev *dev, uint16_t pasid);
 
-
-
-unsigned long long dm_get_elapse_time_in_ns(struct dc_context *ctx,
-		unsigned long long current_time_stamp,
-		unsigned long long last_time_stamp)
-{
-	return current_time_stamp - last_time_stamp;
-}
-
-void dm_perf_trace_timestamp(const char *func_name, unsigned int line)
-{
-}
-
-/**** power component interfaces ****/
+#endif
