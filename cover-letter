@@ -1,0 +1,70 @@
+PKS: Add Protection Keys Supervisor (PKS) support
+
+I've redone a lot of the documentation and the cover letter below based on
+discussions on the list.
+
+I have found that it is more efficient to not use the pks_supported() call and
+so have removed that patch altogether.  It is better to determine that the key
+was not allocated and not try and determine why we did not get a key.
+
+Changes for this internal review:
+	Address comments from Dan
+	change to pks_update_protection()
+	Fix configuration defines
+	drop uneeded s390 patch
+	Fix some typos in cover letter (Ben)
+
+<proposed upstream cover letter>
+
+This patch set starts by introducing a new page access control mechanism for
+kernel pages, Protection Key Supervisor (PKS).
+
+PKS enables protections on 'domains' of pages within the kernel in the same way
+that user space pkeys does.  Access to supervisor pages within a defined
+'domain' can be controlled per-thread with a simple msr write rather than
+through the page tables.  This also means that no TLB flushes need to be
+performed to control access.
+
+As is documented in the final patch, PKS is intended to harden against unwanted
+access to kernel pages.  But it does not completely restrict access under all
+conditions.  For example the msr setting is not saved/restored during irqs.
+Thus the use of PKS is a mitigation strategy rather than a form of strict
+security.
+
+PKS is limited to 16 different keys.  One of which, key 0, is reserved for
+current kernel users and allows access to all pages as before.  Other keys are
+allocated by an allocator.  Kernel users should be prepared for the allocator
+to fail.  Thus they need to determine what if anything they want to do if a key
+is not available.  There is no way to specify a shared key as there is
+currently only 1 user being proposed.
+
+PKS 'domain' scope protection without page table/tlb interactions is perfect as
+a mechanism to mitigate PMEM from stray access within the kernel for the
+following reasons.
+
+   1) Fast switching of permissions
+   2) Also prevents read access to pages
+   3) Works on a per thread basis
+   4) No TLB flushes required
+
+Protecting against stray writes is particularly important for PMEM because,
+unlike writes to anonymous memory which can often be corrected with a reboot,
+PMEM persists.  Thus data corruption could result in permanent loss of data.
+
+The 2nd half of this series uses the PKS mechanism to protect PMEM from stray
+access.
+
+Because protecting against stray writes is not security, and is only available
+on some processors, the intention is to simply harden PMEM.
+
+Therefore failure to get a key will automatically fall back to not using PKS
+with normal page table protections.
+
+For general access to PMEM pages, we piggy back on the kmap() interface as
+there are many places in the kernel who should not be required apriori
+knowledge that a page is PMEM.  The modifications to the kmap code is careful
+to quickly determine pages which don't require special handling to reduce
+overhead for non PMEM pages.
+
+</proposed upstream cover letter>
+
