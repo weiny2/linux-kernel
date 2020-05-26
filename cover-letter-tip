@@ -1,0 +1,87 @@
+PKS: Add Protection Keys Supervisor (PKS) support RFC v3
+
+<Internal Intel Review>
+
+I'd like to get this reviewed for RFC at a minimum this week.  I at least need
+to get the TIP maintainers viewpoint on the status of the core code.
+
+My plan is to release 3 patch sets in the following order and cross reference
+them via lore links in follow on emails as I go.  ie follow these steps:
+
+	1) Release this core series
+		1a) include the full 'ecosystem' github link.
+		1b) Wait for review/questions
+	2) Update the cover letter for the PMEM use case patch set with core
+	   lore link
+	3) Release PMEM patch set
+	4) Update the cover letter for the trusted keys patch set with the core
+	   lore link
+	5) Release trusted key patch set
+	6) Email follow up on core series with lore links for 2 use cases.
+
+That gives reviewers of this series the ability to see the entire work together
+if they chose.
+
+</Internal Intel Review>
+
+<proposed cover letter>
+
+Introduce a new page protection mechanism for supervisor pages, Protection Key
+Supervisor (PKS).
+
+2 use cases for PKS are being developed, trusted keys and PMEM.  Trusted keys
+is a newer use case which is still being explored.  PMEM was submitted as part
+of the RFC (v2) series[1].  However, since then it was found that some callers
+of kmap() require a global implementation of PKS.  Specifically some users of
+kmap() expect mappings to be available to all kernel threads.  While global use
+of PKS is rare it needs to be included for correctness.  Unfortunately the
+kmap() updates required a large patch series to make the needed changes at the
+various kmap() call sites so that patch set has been split out.  Because the
+global PKS feature is only required for that use case it will be deferred to
+that set as well.  This patch set is being submitted as a precursor to both of
+the use cases.
+
+For an overview of the entire PKS ecosystem, a git tree including this series
+and the 2 use cases can be found here:
+
+	<insert public github link here>
+
+
+PKS enables protections on 'domains' of supervisor pages to limit supervisor
+mode access to those pages beyond the normal paging protections.  PKS works in
+a similar fashion to user space pkeys, PKU.  As with PKU, supervisor pkeys are
+checked in addition to normal paging protections and Access or Writes can be
+disabled via a MSR update without TLB flushes when permissions change.  Also
+like PKU, a page mapping is assigned to a domain by setting pkey bits in the
+page table entry for that mapping.
+
+Access is controlled through a PKRS register which is updated via WRMSR/RDMSR.
+
+XSAVE is not supported for the PKRS MSR.  Therefore the implementation
+saves/restores the MSR across context switches and during exceptions.  Nested
+exceptions are supported by each exception getting a new PKS state.
+
+For consistent behavior with current paging protections, pkey 0 is reserved and
+configured to allow full access via the pkey mechanism, thus preserving the
+default paging protections on mappings with the default pkey value of 0.
+
+Other keys, (1-15) are allocated by an allocator which prepares us for key
+contention from day one.  Kernel users should be prepared for the allocator to
+fail either because of key exhaustion or due to PKS not being supported on the
+arch and/or CPU instance.
+
+The following are key attributes of PKS.
+
+   1) Fast switching of permissions
+	1a) Prevents access without page table manipulations
+	1b) No TLB flushes required
+   2) Works on a per thread basis
+
+PKS is available with 4 and 5 level paging.  Like PKRU it consumes 4 bits from
+the PTE to store the pkey within the entry.
+
+
+[1] https://lore.kernel.org/lkml/20200717072056.73134-1-ira.weiny@intel.com/
+
+</proposed cover letter>
+
