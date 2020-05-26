@@ -1,0 +1,125 @@
+PKS: Add Protection Keys Supervisor (PKS) support
+
+This RFC series has been reviewed by Dave Hansen.
+
+Changes from RFC V2:
+	Clean up commit messages to reflect that writes and reads are prevented
+	Clean up function names
+
+Changes from RFC:
+	Clean up commit messages based on Peter Zijlstra's and Dave Hansen's
+		feedback
+	Fix static branch anti-pattern
+	New patch:
+	(memremap: Convert devmap static branch to {inc,dec})
+		This was the code I used as a model for my static branch which
+		I believe is wrong now.
+	New Patch:
+	(x86/entry: Preserve PKRS MSR through exceptions)
+		This attempts to preserve the per-logical-processor MSR, and
+		reference counting during exceptions.  I'd really like feed
+		back on this because I _think_ it should work but I'm afraid
+		I'm missing something as my testing has shown a lot of spotty
+		crashes which don't make sense to me.
+
+This patch set introduces a new page protection mechanism for supervisor pages,
+Protection Key Supervisor (PKS) and an initial user of them, persistent memory,
+PMEM.
+
+PKS enables protections on 'domains' of supervisor pages to limit supervisor
+mode access to those pages beyond the normal paging protections.  They work in
+a similar fashion to user space pkeys.  Like User page pkeys (PKU), supervisor
+pkeys are checked in addition to normal paging protections and Access or Writes
+can be disabled via a MSR update without TLB flushes when permissions change.
+A page mapping is assigned to a domain by setting a pkey in the page table
+entry.
+
+Unlike User pkeys no new instructions are added; rather WRMSR/RDMSR are used to
+update the PKRS register.
+
+XSAVE is not supported for the PKRS MSR.  To reduce software complexity the
+implementation saves/restores the MSR across context switches but not during
+irqs.  This is a compromise which results is a hardening of unwanted access
+without absolute restriction.
+
+For consistent behavior with current paging protections, pkey 0 is reserved and
+configured to allow full access via the pkey mechanism, thus preserving the
+default paging protections on mappings with the default pkey value of 0.
+
+Other keys, (1-15) are allocated by an allocator which prepares us for key
+contention from day one.  Kernel users should be prepared for the allocator to
+fail either because of key exhaustion or due to PKS not being supported on the
+arch and/or CPU instance.
+
+Protecting against stray writes is particularly important for PMEM because,
+unlike writes to anonymous memory, writes to PMEM persists across a reboot.
+Thus data corruption could result in permanent loss of data.
+
+The following attributes of PKS makes it perfect as a mechanism to protect PMEM
+from stray access within the kernel:
+
+   1) Fast switching of permissions
+   2) Prevents access without page table manipulations
+   3) Works on a per thread basis
+   4) No TLB flushes required
+
+The second half of this series thus uses the PKS mechanism to protect PMEM from
+stray access.
+
+PKS is available with 4 and 5 level paging.  Like PKRU is takes 4 bits from the
+PTE to store the pkey within the entry.
+
+
+Implementation details
+----------------------
+
+Modifications of task struct in patches:
+	(x86/pks: Preserve the PKRS MSR on context switch)
+	(memremap: Add zone device access protection)
+
+Because pkey access is per-thread 2 modifications are made to the task struct.
+The first is a saved copy of the MSR during context switches.  The second
+reference counts access to the device domain to correctly handle kmap nesting
+properly.
+
+
+Maintain PKS setting in a re-entrant manner in patch:
+	(memremap: Add zone device access protection)
+	(x86/entry: Preserve PKRS MSR through exceptions)
+
+Using local_irq_save() seems to be the safest and fastest way to maintain kmap
+as re-entrant.  But there may be a better way.  spin_lock_irq() and atomic
+counters were considered.  But atomic counters do not properly protect the pkey
+update and spin_lock_irq() would deadlock.  Suggestions are welcome.
+
+Also preserving the pks state requires the exception handling code to store the
+ref count during exception processing.  This seems like a layering violation
+but it works.
+
+
+The use of kmap in patch:
+	(kmap: Add stray access protection for device pages)
+
+To keep general access to PMEM pages general, we piggy back on the kmap()
+interface as there are many places in the kernel who do not have, nor should be
+required to have, a priori knowledge that a page is PMEM.  The modifications to
+the kmap code is careful to quickly determine which pages don't require special
+handling to reduce overhead for non PMEM pages.
+
+
+
+Breakdown of patches
+--------------------
+
+Implement PKS within x86 arch:
+
+<foo>
+
+pre-req bug fixes for dax:
+
+<bar>
+
+Add stray access protection to PMEM:
+
+<foobar>
+
