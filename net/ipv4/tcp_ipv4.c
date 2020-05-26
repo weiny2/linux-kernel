@@ -573,6 +573,8 @@ int tcp_v4_err(struct sk_buff *icmp_skb, u32 info)
 		if (fastopen && !fastopen->sk)
 			break;
 
+		ip_icmp_error(sk, skb, err, th->dest, info, (u8 *)th);
+
 		if (!sock_owned_by_user(sk)) {
 			sk->sk_err = err;
 
@@ -2780,6 +2782,7 @@ static int __net_init tcp_sk_init(struct net *net)
 		       sizeof(init_net.ipv4.sysctl_tcp_wmem));
 	}
 	net->ipv4.sysctl_tcp_comp_sack_delay_ns = NSEC_PER_MSEC;
+	net->ipv4.sysctl_tcp_comp_sack_slack_ns = 100 * NSEC_PER_USEC;
 	net->ipv4.sysctl_tcp_comp_sack_nr = 44;
 	net->ipv4.sysctl_tcp_fastopen = TFO_CLIENT_ENABLE;
 	spin_lock_init(&net->ipv4.tcp_fastopen_ctx_lock);
