@@ -3312,7 +3312,7 @@
                 }
             ],
             "description": "Protection Keys for Supervisor Pages KVM support",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "David Koufaty",
