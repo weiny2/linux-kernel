@@ -1759,8 +1759,8 @@
                     "email": "kyle.d.pelton@intel.com"
                 }
             ],
-            "description": "Fixup between mei/pm-testing",
-            "enabled": false,
+            "description": "Fixup between pks/kvm-pks",
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Kyle Pelton",
