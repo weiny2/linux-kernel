@@ -377,6 +377,13 @@ static void handle_critical_trips(struct thermal_zone_device *tz,
 				  int trip, enum thermal_trip_type trip_type)
 {
 	int trip_temp;
+	enum thermal_device_mode tz_mode = THERMAL_DEVICE_ENABLED;
+
+	if (tz->ops->get_mode)
+		tz->ops->get_mode(tz, &tz_mode);
+
+	if (tz_mode == THERMAL_DEVICE_DISABLED)
+		return;
 
 	tz->ops->get_trip_temp(tz, trip, &trip_temp);
 
