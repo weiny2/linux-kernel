@@ -1152,11 +1152,13 @@ static struct irq_domain *intel_get_irq_domain(struct irq_alloc_info *info)
 		if (iommu)
 			return iommu->ir_msi_domain;
 		break;
+#ifdef CONFIG_MSI_IMS
 	case X86_IRQ_ALLOC_TYPE_IMS:
 		iommu = map_gen_dev_to_ir(info->dev);
 		if (iommu)
 			return iommu->ir_ims_domain;
 		break;
+#endif
 	default:
 		break;
 	}
