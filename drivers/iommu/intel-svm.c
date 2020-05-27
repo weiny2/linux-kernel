@@ -22,6 +22,8 @@
 
 #include "intel-pasid.h"
 
+static int intel_svm_process_prq(struct intel_iommu *iommu,
+				struct page_req_dsc *prq, int head, int tail);
 static irqreturn_t prq_event_thread(int irq, void *d);
 
 #define PRQ_ORDER 0
@@ -263,6 +265,547 @@ static int alloc_pasid(struct intel_svm *svm, struct mm_struct *mm,
 	*new_pasid = true;
 
 	return pasid;
+}
+
+static int ioasid_status_change(struct notifier_block *nb,
+				unsigned long code, void *data)
+{
+	ioasid_t ioasid = *(ioasid_t *)data;
+	struct intel_svm_dev *sdev;
+	struct intel_svm *svm;
+
+	if (code == IOASID_FREE) {
+		/*
+		 * Unbind all devices associated with this PASID which is
+		 * being freed by other users such as VFIO.
+		 */
+		svm = ioasid_find(NULL, ioasid, NULL);
+		if (!svm || !svm->iommu)
+			return NOTIFY_DONE;
+
+		if (IS_ERR(svm))
+			return NOTIFY_BAD;
+
+		mutex_lock(&pasid_mutex);
+		list_for_each_entry_rcu(sdev, &svm->devs, list) {
+			/* Does not poison forward pointer */
+			list_del_rcu(&sdev->list);
+			intel_pasid_tear_down_entry(svm->iommu, sdev->dev,
+						    svm->pasid);
+			kfree_rcu(sdev, rcu);
+
+			if (list_empty(&svm->devs)) {
+				list_del(&svm->list);
+				ioasid_set_data(ioasid, NULL);
+				kfree(svm);
+			}
+			synchronize_rcu();
+		}
+		mutex_unlock(&pasid_mutex);
+
+		return NOTIFY_OK;
+	}
+
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block svm_ioasid_notifier = {
+		.notifier_call = ioasid_status_change,
+};
+
+#define PRQ_RING_MASK ((0x1000 << PRQ_ORDER) - 0x20)
+
+/*
+ * When a PASID is stopped or terminated, there can be pending PRQs
+ * (requests have not received responses) in software, remapping
+ * hardware, and devices.
+ * SW tracked pending PRQs should have been cleared by common code
+ * prior to this call. Here we drain the PRQs in hardware.
+ *
+ * There are two scenarios that PRQ drains are required:
+ * 1. unbind a PASID
+ * 2. resume phase of the PASID suspend/resume cycle.
+ *
+ * Here are the steps to be performed:
+ * 0. Disable PR interrupt
+ * 1. Take a snapshot of the page request queue, record current head and tail,
+ *    and mark PRQ entries with PASID to be dropped
+ * 2. Mark queue empty, Head = Tail.
+ * 2. Perform drain as in VT-d spec. 7.11. No queue full check since queue was
+ *    empty at the point of the drain.
+ * 3. Tail could have moved due to new PRQ written by HW
+ * 4. Process snapshot copy of PR queue
+ * 5. Process hardware PR queue, enable interrupt
+ * For an example, consider the following timeline going downward.
+ *    VT-d HW            VT-d Driver          User(KMD, guest)
+ * --------------------------------------------------------
+ *   [PR1.2.3]
+ *   [PR1.1.3] <tail>
+ *   [PR1.2.2]
+ *   [PR1.2.1]
+ *   [PR1.1.2]
+ *   [PR1.1.1] <head>
+ *   [IRQ] ->
+ *
+ *
+ *                                          <-  [unbind PASID 1]
+ *                       [delete pending PR]
+ *                       [drain PRQs]
+ *
+ *
+ * Decoder:
+ * PR.PASID.GroupID.Index,
+ * e.g. PR.1.2.3 indicates the Page request with PASID = 1, GroupID = 2,
+ * 3rd request in the group.
+ * LPIG: last page in group
+ * PDP: private data present
+ * KMD: kernel mode driver for native SVA
+ * Caller of unbind/suspend/resume PASID APIs must ensure no pending DMA
+ * activities prior to call.
+ */
+static void intel_svm_drain_prq(struct device *dev, int pasid)
+{
+	struct intel_iommu *iommu = intel_svm_device_to_iommu(dev);
+	struct device_domain_info *info;
+	struct dmar_domain *domain;
+	unsigned long flags;
+	int head, tail;
+	void *prqq;
+	struct qi_desc desc[3];
+	struct pci_dev *pdev;
+	int qdep, rc = 0;
+	u16 sid, did;
+	struct intel_svm *svm = NULL;
+
+	dev_dbg(dev, "%s: pasid %d\n", __func__, pasid);
+
+	rcu_read_lock();
+	svm = ioasid_find(NULL, pasid, NULL);
+	if (!svm) {
+		dev_err(dev, "PASID not found\n");
+		return;
+	}
+	rcu_read_unlock();
+
+	spin_lock_irqsave(&iommu->lock, flags);
+
+	tail = dmar_readq(iommu->reg + DMAR_PQT_REG) & PRQ_RING_MASK;
+	head = dmar_readq(iommu->reg + DMAR_PQH_REG) & PRQ_RING_MASK;
+
+	/*
+	 * Make a copy of the PR queue then process it offline without
+	 * blocking PRQ interrupts.
+	 */
+	prqq = kmemdup(iommu->prq, PAGE_SIZE ^ PRQ_ORDER, GFP_ATOMIC);
+	if (!prqq) {
+		spin_unlock_irqrestore(&iommu->lock, flags);
+		return;
+	}
+	/*
+	 * Make queue empty to allow further events and avoid the queue full
+	 * condition while we drain the queue.
+	 */
+	dmar_writeq(iommu->reg + DMAR_PQH_REG, tail);
+	spin_unlock_irqrestore(&iommu->lock, flags);
+
+	/* process the copy of PRQ, drained PASID already marked to be dropped */
+	if (intel_svm_process_prq(iommu, prqq, head, tail))
+		goto out_free;
+
+	/*
+	 * Perform steps prescribed in VT-d spec CH7.11 to drain page request
+	 * and responses.
+	 */
+	/* step a, submit an IWD with fence bit */
+	info = dev->archdata.iommu;
+	sid = PCI_DEVID(info->bus, info->devfn);
+	domain = info->domain;
+	did = domain->iommu_did[iommu->seq_id];
+	pdev = to_pci_dev(dev);
+	qdep = pci_ats_queue_depth(pdev);
+
+	/*
+	 * TODO: As a potential optimization for vIOMMU, we only need to send
+	 * IWD with drain D flag.
+	 */
+	memset(desc, 0, sizeof(desc));
+	desc[0].qw0 = QI_IWD_STATUS_DATA(QI_DONE) | QI_IWD_FENCE |
+		QI_IWD_TYPE;
+
+	/* step b, submit IOTLB and DIOTLB invalidation, any granu */
+	desc[1].qw0 = QI_EIOTLB_PASID(pasid) |
+		QI_EIOTLB_DID(did) |
+		QI_EIOTLB_GRAN(QI_GRAN_NONG_PASID)|
+		QI_EIOTLB_TYPE;
+
+	desc[2].qw0 = QI_DEV_EIOTLB_PASID(pasid) | QI_DEV_EIOTLB_SID(sid) |
+		QI_DEV_EIOTLB_QDEP(qdep) | QI_DEIOTLB_TYPE |
+		QI_DEV_IOTLB_PFSID(info->pfsid);
+
+	rc = __qi_submit_sync(desc, iommu, 3, QI_OPT_WAIT_DRAIN);
+	if (rc)
+		dev_err(dev, "Failed to drain PRQ\n");
+
+	/*
+	 * If new requests come in while we processing the copy, we should
+	 * process it now, otherwise the new request may be stuck until the
+	 * next IRQ.
+	 */
+	if (dmar_readq(iommu->reg + DMAR_PRS_REG) & DMA_PRS_PPR) {
+		tail = dmar_readq(iommu->reg + DMAR_PQT_REG) & PRQ_RING_MASK;
+		head = dmar_readq(iommu->reg + DMAR_PQH_REG) & PRQ_RING_MASK;
+		intel_svm_process_prq(iommu, iommu->prq, head, tail);
+	}
+
+	/* Allow new pending PRQ to generate interrupts */
+	writel(DMA_PRS_PPR, iommu->reg + DMAR_PRS_REG);
+
+out_free:
+	kfree(prqq);
+
+	return;
+}
+
+int intel_iommu_page_response(struct device *dev,
+			struct iommu_fault_event *evt,
+			struct iommu_page_response *msg)
+{
+	struct intel_iommu *iommu;
+	struct intel_svm_dev *sdev;
+	struct intel_svm *svm = NULL;
+	struct iommu_fault_page_request *prm;
+	u8 bus, devfn;
+	u16 sid;
+	unsigned long flags;
+	bool sdev_found = false;
+	struct qi_desc resp;
+	int ret = 0;
+printk("%s, - 1 \n", __func__);
+	/*
+	 * Yi: here use device_to_iommu() as may need to support
+	 * page response without pasid present.
+	 */
+	iommu = device_to_iommu(dev, &bus, &devfn);
+	if (WARN_ON(!iommu))
+		return -ENODEV;
+
+	if (!msg || !evt)
+		return -EINVAL;
+
+	/* TODO: may add version to struct page_response_msg */
+
+	if (!dev || !dev_is_pci(dev))
+		return -ENODEV;
+	mutex_lock(&pasid_mutex);
+
+printk("%s, - 2 \n", __func__);
+	spin_lock_irqsave(&iommu->lock, flags);
+	prm = &evt->fault.prm;
+	sid = bus << 8 | devfn;
+	if (!(prm->flags & IOMMU_FAULT_PAGE_REQUEST_PASID_VALID))
+		goto submit_qi;
+
+	/* VT-d supports devices with full 20 bit PASIDs only */
+	if (pci_max_pasids(to_pci_dev(dev)) != PASID_MAX) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	if (prm->pasid <= 0 || prm->pasid >= PASID_MAX) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	/* REVISIT:
+	 * Sanity check adddress width and paging mode support
+	 * width matching in two dimensions:
+	 * 1. paging mode CPU <= IOMMU
+	 * 2. address width Guest <= Host.
+	 */
+	svm = ioasid_find(NULL, prm->pasid, NULL);
+	if (IS_ERR(svm)) {
+		ret = PTR_ERR(svm);
+		goto out_unlock;
+	}
+
+	if (!svm)
+		goto out_unlock;
+
+	for_each_svm_dev(sdev, svm, dev) {
+		/* Found a matched sdev, means this response is valide */
+		sdev_found = true;
+		break;
+	}
+
+	if (!sdev_found)
+		goto out_unlock;
+	/*
+	 * Per VT-d spec. v3.0 ch7.7, system software must respond
+	 * with page group response if private data is present (PDP)
+	 * or last page in group (LPIG) bit is set. This is an
+	 * additional VT-d feature beyond PCI ATS spec.
+	 */
+	/* TODO: we should never trust the infos from guest except for the resp code. This is tricky, but better to refer the infos from evt->fault. */
+submit_qi:
+	resp.qw0 = QI_PGRP_PASID(prm->pasid) |
+		QI_PGRP_DID(sid) |
+		QI_PGRP_PASID_P(prm->flags & IOMMU_FAULT_PAGE_REQUEST_PASID_VALID) |
+		QI_PGRP_PDP(prm->flags & IOMMU_FAULT_PAGE_REQUEST_PRIV_DATA) |
+		QI_PGRP_RESP_CODE(msg->code) |
+		QI_PGRP_RESP_TYPE;
+	resp.qw1 = QI_PGRP_IDX(prm->grpid) |
+		QI_PGRP_LPIG(((prm->flags & IOMMU_FAULT_PAGE_REQUEST_LAST_PAGE) >> 1));
+printk("%s, prm->flags: 0x%x\n", __func__, (unsigned) prm->flags);
+	resp.qw2 = 0;
+	resp.qw3 = 0;
+	if (prm->flags & IOMMU_FAULT_PAGE_REQUEST_PRIV_DATA)
+		memcpy(&resp.qw2, prm->private_data,
+			sizeof(prm->private_data));
+
+printk("%s, resp.qw0: 0x%lx, resp.qw1: 0x%lx, resp.qw2: 0x%lx, resp.qw3: 0x%lx\n", __func__, (unsigned long) resp.qw0, (unsigned long) resp.qw1, (unsigned long) resp.qw2, (unsigned long) resp.qw3);
+	qi_submit_sync((struct qi_desc*)&resp, iommu);
+out_unlock:
+	mutex_unlock(&pasid_mutex);
+out:
+	spin_unlock_irqrestore(&iommu->lock, flags);
+	return ret;
+}
+
+int intel_svm_bind_gpasid(struct iommu_domain *domain,
+			struct device *dev,
+			struct iommu_gpasid_bind_data *data)
+{
+	struct intel_iommu *iommu = intel_svm_device_to_iommu(dev);
+	struct intel_svm_dev *sdev;
+	struct intel_svm *svm = NULL;
+	struct dmar_domain *ddomain;
+	int ret = 0;
+
+	if (WARN_ON(!iommu) || !data)
+		return -EINVAL;
+
+	if (data->version > IOMMU_UAPI_VERSION ||
+	    data->format != IOMMU_PASID_FORMAT_INTEL_VTD)
+		return -EINVAL;
+
+	if (dev_is_pci(dev)) {
+		/* VT-d supports devices with full 20 bit PASIDs only */
+		if (pci_max_pasids(to_pci_dev(dev)) != PASID_MAX)
+			return -EINVAL;
+	} else {
+		return -ENOTSUPP;
+	}
+
+	/*
+	 * We only check host PASID range, we have no knowledge to check
+	 * guest PASID range nor do we use the guest PASID.
+	 */
+	if (data->hpasid <= 0 || data->hpasid >= PASID_MAX)
+		return -EINVAL;
+
+	ddomain = to_dmar_domain(domain);
+
+	/* Sanity check paging mode support match between host and guest */
+	if (data->addr_width == ADDR_WIDTH_5LEVEL &&
+	    !cap_5lp_support(iommu->cap)) {
+		pr_err("Cannot support 5 level paging requested by guest!\n");
+		return -EINVAL;
+	}
+
+	mutex_lock(&pasid_mutex);
+	svm = ioasid_find(NULL, data->hpasid, NULL);
+	if (IS_ERR(svm)) {
+		ret = PTR_ERR(svm);
+		goto out;
+	}
+
+	if (svm) {
+		/*
+		 * If we found svm for the PASID, there must be at
+		 * least one device bond, otherwise svm should be freed.
+		 */
+		if (WARN_ON(list_empty(&svm->devs))) {
+			ret = -EINVAL;
+			goto out;
+		}
+
+		if (svm->mm == get_task_mm(current) &&
+		    data->hpasid == svm->pasid &&
+		    data->gpasid == svm->gpasid) {
+			pr_warn("Cannot bind the same guest-host PASID for the same process\n");
+			mmput(svm->mm);
+			ret = -EINVAL;
+			goto out;
+		}
+		mmput(current->mm);
+
+		for_each_svm_dev(sdev, svm, dev) {
+			/* In case of multiple sub-devices of the same pdev
+			 * assigned, we should allow multiple bind calls with
+			 * the same PASID and pdev.
+			 */
+			sdev->users++;
+			goto out;
+		}
+	} else {
+		/* We come here when PASID has never been bond to a device. */
+		svm = kzalloc(sizeof(*svm), GFP_KERNEL);
+		if (!svm) {
+			ret = -ENOMEM;
+			goto out;
+		}
+		/* REVISIT: upper layer/VFIO can track host process that bind the PASID.
+		 * ioasid_set = mm might be sufficient for vfio to check pasid VMM
+		 * ownership.
+		 */
+		svm->mm = get_task_mm(current);
+		svm->pasid = data->hpasid;
+		if (data->flags & IOMMU_SVA_GPASID_VAL) {
+			svm->gpasid = data->gpasid;
+			svm->flags |= SVM_FLAG_GUEST_PASID;
+		}
+		/* Get notified when IOASID is freed by others, e.g. VFIO */
+		ret = ioasid_add_notifier(data->hpasid, &svm_ioasid_notifier);
+		if (ret) {
+			mmput(svm->mm);
+			kfree(svm);
+			goto out;
+		}
+		ioasid_set_data(data->hpasid, svm);
+		INIT_LIST_HEAD_RCU(&svm->devs);
+		mmput(svm->mm);
+	}
+	sdev = kzalloc(sizeof(*sdev), GFP_KERNEL);
+	if (!sdev) {
+		if (list_empty(&svm->devs)) {
+			ioasid_set_data(data->hpasid, NULL);
+			kfree(svm);
+		}
+		ret = -ENOMEM;
+		goto out;
+	}
+	sdev->dev = dev;
+	sdev->users = 1;
+
+	/* Set up device context entry for PASID if not enabled already */
+	ret = intel_iommu_enable_pasid(iommu, sdev->dev);
+	if (ret) {
+		dev_err(dev, "Failed to enable PASID capability\n");
+		kfree(sdev);
+		/*
+		 * If this this a new PASID that never bond to a device, then
+		 * the device list must be empty which indicates struct svm
+		 * was allocated in this function.
+		 */
+		if (list_empty(&svm->devs)) {
+			ioasid_set_data(data->hpasid, NULL);
+			kfree(svm);
+		}
+		goto out;
+	}
+
+	/*
+	 * For guest bind, we need to set up PASID table entry as follows:
+	 * - FLPM matches guest paging mode
+	 * - turn on nested mode
+	 * - SL guest address width matching
+	 */
+	ret = intel_pasid_setup_nested(iommu,
+				       dev,
+				       (pgd_t *)data->gpgd,
+				       data->hpasid,
+				       &data->vtd,
+				       ddomain,
+				       data->addr_width);
+	if (ret) {
+		dev_err(dev, "Failed to set up PASID %llu in nested mode, Err %d\n",
+			data->hpasid, ret);
+		/*
+		 * PASID entry should be in cleared state if nested mode
+		 * set up failed. So we only need to clear IOASID tracking
+		 * data such that free call will succeed.
+		 */
+		kfree(sdev);
+		if (list_empty(&svm->devs)) {
+			ioasid_set_data(data->hpasid, NULL);
+			kfree(svm);
+		}
+		goto out;
+	}
+	svm->flags |= SVM_FLAG_GUEST_MODE;
+
+	init_rcu_head(&sdev->rcu);
+	list_add_rcu(&sdev->list, &svm->devs);
+ out:
+	mutex_unlock(&pasid_mutex);
+	return ret;
+}
+
+int intel_svm_unbind_gpasid(struct device *dev, int pasid)
+{
+	struct intel_iommu *iommu = intel_svm_device_to_iommu(dev);
+	struct intel_svm_dev *sdev;
+	struct intel_svm *svm;
+	int ret = -EINVAL;
+
+	if (WARN_ON(!iommu))
+		return -EINVAL;
+
+	mutex_lock(&pasid_mutex);
+	svm = ioasid_find(NULL, pasid, NULL);
+	if (!svm) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	if (IS_ERR(svm)) {
+		ret = PTR_ERR(svm);
+		goto out;
+	}
+
+	for_each_svm_dev(sdev, svm, dev) {
+		ret = 0;
+		sdev->users--;
+		if (!sdev->users) {
+			list_del_rcu(&sdev->list);
+			/* Drain in flight PRQ for the PASID since it
+			 * may get reused soon, we don't want to
+			 * confuse with its previous life.
+			 * intel_svm_drain_prq(dev, pasid);
+			 */
+			intel_pasid_tear_down_entry(iommu, dev, svm->pasid);
+/* REVISIT: Comment out since it doesn't work on QEMU, tested on Hypersim
+			intel_svm_drain_prq(dev, pasid);
+*/
+			kfree_rcu(sdev, rcu);
+
+			if (list_empty(&svm->devs)) {
+				/*
+				 * We do not free PASID here until explicit call
+				 * from VFIO to free. The PASID life cycle
+				 * management is largely tied to VFIO management
+				 * of assigned device life cycles. In case of
+				 * guest exit without a explicit free PASID call,
+				 * the responsibility lies in VFIO layer to free
+				 * the PASIDs allocated for the guest.
+				 * For security reasons, VFIO has to track the
+				 * PASID ownership per guest anyway to ensure
+				 * that PASID allocated by one guest cannot be
+				 * used by another.
+				 */
+				ioasid_remove_notifier(pasid,
+						       &svm_ioasid_notifier);
+
+				ioasid_set_data(pasid, NULL);
+				kfree(svm);
+			}
+		}
+		break;
+	}
+out:
+	mutex_unlock(&pasid_mutex);
+
+	return ret;
 }
 
 int intel_svm_bind_mm(struct device *dev, int *pasid, int flags, struct svm_dev_ops *ops)
@@ -607,33 +1150,178 @@ static bool is_canonical_address(u64 addr)
 	return (((saddr << shift) >> shift) == saddr);
 }
 
-static irqreturn_t prq_event_thread(int irq, void *d)
+static int prq_to_iommu_prot(struct page_req_dsc *req)
 {
-	struct intel_iommu *iommu = d;
+	int prot = 0;
+
+	if (req->rd_req)
+		prot |= IOMMU_FAULT_READ;
+	if (req->wr_req)
+		prot |= IOMMU_FAULT_WRITE;
+	if (req->exe_req)
+		prot |= IOMMU_FAULT_EXEC;
+	if (req->pm_req)
+		prot |= IOMMU_FAULT_PRIV;
+
+	return prot;
+}
+
+/* REVISIT: use common code if any */
+#define RID_TO_BUS(x) (x) >> 8
+#define RID_TO_DEVFN(x) (x) & 0xFF
+
+/* REVISIT:
+ * SW does explicit TLB flush for each page request completed.
+ * For guest vIOMMU, only send page response back, no TLB flush
+ * send to the host since host will receive page response.
+ * Consider the following timeline going downward.
+ *    Host              vIOMMU                Guest
+ * --------------------------------------------------------
+ *   [PRQ0]->
+ *   <track>
+ *                      inject->
+ *                                            [PRQ0]
+ *                                            handle_mm_fault
+ *                                            [IOTLB flush]*
+ *   [PRQ1]->
+ *   <track>
+ *                      inject->
+ *                                            [PRQ1]
+ *                                            handle_mm_fault
+ *                                            [IOTLB flush]*
+ *   [PRQ2 PDP2]->
+ *   <track>
+ *                      inject->
+ *   [PRQ3 PDP3]->
+ *   <track>
+ *                      inject->
+ *                                            [PRQ2]
+ *                                            handle_mm_fault
+ *                                          <-[IOTLB flush]*
+ *                                          <-[PG RSP PDP2]
+ *                      <-passdown
+ *   < if PDP2 matches >
+ *   [PRQ0 IOTLB flush]
+ *   [PRQ1 IOTLB flush]
+ *   [PRQ2 IOTLB flush]
+ *   [PRQ2 PG RSP PDP2]
+ *                                            [PRQ3]
+ *                                            handle_mm_fault
+ *                                          <-[IOTLB flush]*
+ *                                          <-[PG RSP PDP3]
+ *                      <-passdown
+ *   < if PDP3 matches >
+ *   [PRQ3 IOTLB flush]
+ *   [PRQ3 PG RSP PDP3]
+ *   [PRQ4 LPIG]
+ *   <track>
+ *                      inject->
+ *                                            [PRQ4]
+ *                                            handle_mm_fault
+ *                                          <-[IOTLB flush]*
+ *                                          <-[PG RSP4]
+ *                      <-passdown
+ *   < if LPIG >
+ *   [PRQ4 IOTLB flush]
+ *   [PRQ4 PG RSP]
+ *
+ *  * For optimization in guest, we skip IOTLB flush
+ */
+static int intel_svm_prq_report(struct intel_iommu *iommu,
+				struct page_req_dsc *desc)
+{
+	int ret = 0;
+	u8 bus, devfn;
+	struct device_domain_info *info;
+	struct iommu_fault_event event;
+	struct pci_dev *pdev;
+
+	memset(&event, 0, sizeof(struct iommu_fault_event));
+	bus = RID_TO_BUS(desc->rid);
+	devfn = RID_TO_DEVFN(desc->rid);
+	pdev = pci_get_domain_bus_and_slot(iommu->segment, bus, devfn);
+
+	if (!pdev) {
+		pr_err("No PCI device found for PRQ [%02x:%02x.%d]\n",
+			bus, PCI_SLOT(devfn), PCI_FUNC(devfn));
+		return -ENODEV;
+	}
+	dev_dbg(&pdev->dev, "%s:\n", __func__);
+
+	/* Fill in event data for device specific processing */
+	event.fault.type = IOMMU_FAULT_PAGE_REQ;
+	event.fault.prm.addr = (u64)desc->addr << VTD_PAGE_SHIFT;
+	event.fault.prm.pasid = desc->pasid;
+	event.fault.prm.grpid = desc->prg_index;
+	event.fault.prm.perm = prq_to_iommu_prot(desc);
+
+	/*
+	 * Set last page in group bit if private data is present,
+	 * page response is required as it does for LPIG.
+	 */
+	if (desc->lpig)
+		event.fault.prm.flags |= IOMMU_FAULT_PAGE_REQUEST_LAST_PAGE;
+	if (desc->priv_data_present)
+		event.fault.prm.flags |= IOMMU_FAULT_PAGE_REQUEST_LAST_PAGE;
+
+	event.fault.prm.flags |= IOMMU_FAULT_PAGE_REQUEST_PASID_VALID;
+	/*
+	 * keep track of PRQs with private data such that when the
+	 * response comes back from the guest, we can match them
+	 * and send page response accordingly. Within the page
+	 * request group, private data can be different or the same.
+	 * It is device's responsibility to come up with a scheme
+	 * that works for its internal contexts and PRQ groups.
+	 */
+	if (desc->priv_data_present)
+		memcpy(event.fault.prm.private_data, desc->priv_data,
+			sizeof(desc->priv_data));
+	printk("%s, prm flags: 0x%x grpid: 0x%x addr %llx\n", __func__,
+		(unsigned) event.fault.prm.flags,
+		(unsigned) event.fault.prm.grpid,
+		event.fault.prm.addr);
+	/*
+	 * If the device supports PASID granu scalable mode, reports the
+	 * PASID as vector such that handlers can be dispatched with per
+	 * vector data.
+	 */
+	info = pdev->dev.archdata.iommu;
+	if (!list_empty(&info->auxiliary_domains)) {
+		dev_dbg(&pdev->dev, "Aux domain present, assign vector %d\n", desc->pasid);
+		event.vector = desc->pasid;
+	}
+	ret = iommu_report_device_fault(&pdev->dev, &event);
+	pci_dev_put(pdev);
+
+	return ret;
+}
+
+static int intel_svm_process_prq(struct intel_iommu *iommu,
+				struct page_req_dsc *prq, int head, int tail)
+{
 	struct intel_svm *svm = NULL;
-	int head, tail, handled = 0;
+	struct vm_area_struct *vma;
+	struct intel_svm_dev *sdev;
+	struct page_req_dsc *req;
+	struct qi_desc resp;
+	int ret = 0, result;
+	u64 address;
 
-	/* Clear PPR bit before reading head/tail registers, to
-	 * ensure that we get a new interrupt if needed. */
-	writel(DMA_PRS_PPR, iommu->reg + DMAR_PRS_REG);
-
-	tail = dmar_readq(iommu->reg + DMAR_PQT_REG) & PRQ_RING_MASK;
-	head = dmar_readq(iommu->reg + DMAR_PQH_REG) & PRQ_RING_MASK;
+	pr_debug("%s: desc: %llx, head: %x, tail: %x\n", __func__, (u64)prq, head, tail);
 	while (head != tail) {
-		struct intel_svm_dev *sdev;
-		struct vm_area_struct *vma;
-		struct page_req_dsc *req;
-		struct qi_desc resp;
-		int result;
-		vm_fault_t ret;
-		u64 address;
+		u8 bus, devfn;
 
-		handled = 1;
-
-		req = &iommu->prq[head / sizeof(*req)];
-
-		result = QI_RESP_FAILURE;
+		req = &prq[head / sizeof(*req)];
+		pr_debug("%s: req: %llx, head: %x, tail: %x\n", __func__, (u64)req, head, tail);
+		/*
+		 * Use invalid response instead of failure since this is not
+		 * catastrophic case. We will not disable PRI for the device.
+		 * PCIe ATS spec. 4.2.1.
+		 */
+		result = QI_RESP_INVALID;
 		address = (u64)req->addr << VTD_PAGE_SHIFT;
+		bus = RID_TO_BUS(req->rid);
+		devfn = RID_TO_DEVFN(req->rid);
 		if (!req->pasid_present) {
 			pr_err("%s: Page request without PASID: %08llx %08llx\n",
 			       iommu->name, ((unsigned long long *)req)[0],
@@ -655,15 +1343,26 @@ static irqreturn_t prq_event_thread(int irq, void *d)
 				goto no_pasid;
 			}
 		}
-
+		/* If address is not canonical, return invalid response */
+		if (!is_canonical_address(address))
+			goto bad_req;
+		/* Ignore suspended PASIDs, drop them */
+/* Yi: comment out for debug
+		if (svm->flags & SVM_FLAG_SUSPENDED)
+			goto prq_advance;
+*/
+		/*
+		 * If prq is to be handled outside iommu driver via receiver of
+		 * the fault notifiers, we skip the page response here.
+		 */
+		if (svm->flags & SVM_FLAG_GUEST_MODE && !intel_svm_prq_report(iommu, req)) {
+			pr_debug("%s: report PRQ out\n", __func__);
+			goto prq_advance;
+		}
 		result = QI_RESP_INVALID;
 		/* Since we're using init_mm.pgd directly, we should never take
 		 * any faults on kernel addresses. */
 		if (!svm->mm)
-			goto bad_req;
-
-		/* If address is not canonical, return invalid response */
-		if (!is_canonical_address(address))
 			goto bad_req;
 
 		/* If the mm is already defunct, don't handle faults. */
@@ -691,7 +1390,8 @@ static irqreturn_t prq_event_thread(int irq, void *d)
 		/* Accounting for major/minor faults? */
 		rcu_read_lock();
 		list_for_each_entry_rcu(sdev, &svm->devs, list) {
-			if (sdev->sid == req->rid)
+			/* REVISIT: or use req->rid */
+			if (sdev->sid == PCI_DEVID(bus, devfn))
 				break;
 		}
 		/* Other devices can go away, but the drivers are not permitted
@@ -701,13 +1401,6 @@ static irqreturn_t prq_event_thread(int irq, void *d)
 
 		if (WARN_ON(&sdev->list == &svm->devs))
 			sdev = NULL;
-
-		if (sdev && sdev->ops && sdev->ops->fault_cb) {
-			int rwxp = (req->rd_req << 3) | (req->wr_req << 2) |
-				(req->exe_req << 1) | (req->pm_req);
-			sdev->ops->fault_cb(sdev->dev, req->pasid, req->addr,
-					    req->priv_data, rwxp, result);
-		}
 		/* We get here in the error case where the PASID lookup failed,
 		   and these can be NULL. Do not use them below this point! */
 		sdev = NULL;
@@ -715,16 +1408,15 @@ static irqreturn_t prq_event_thread(int irq, void *d)
 	no_pasid:
 		if (req->lpig || req->priv_data_present) {
 			/*
-			 * Per VT-d spec. v3.0 ch7.7, system software must
-			 * respond with page group response if private data
-			 * is present (PDP) or last page in group (LPIG) bit
-			 * is set. This is an additional VT-d feature beyond
-			 * PCI ATS spec.
+			 * Per VT-d spec. v3.0 ch7.7, system software must respond
+			 * with page group response if private data is present (PDP)
+			 * or last page in group (LPIG) bit is set. This is an
+			 * additional VT-d feature beyond PCI ATS spec.
 			 */
 			resp.qw0 = QI_PGRP_PASID(req->pasid) |
 				QI_PGRP_DID(req->rid) |
 				QI_PGRP_PASID_P(req->pasid_present) |
-				QI_PGRP_PDP(req->pasid_present) |
+				QI_PGRP_PDP(req->priv_data_present) |
 				QI_PGRP_RESP_CODE(result) |
 				QI_PGRP_RESP_TYPE;
 			resp.qw1 = QI_PGRP_IDX(req->prg_index) |
@@ -735,11 +1427,30 @@ static irqreturn_t prq_event_thread(int irq, void *d)
 				       sizeof(req->priv_data));
 			resp.qw2 = 0;
 			resp.qw3 = 0;
-			qi_submit_sync(&resp, iommu);
+			qi_submit_sync((struct qi_desc*)&resp, iommu);
 		}
+	prq_advance:
 		head = (head + sizeof(*req)) & PRQ_RING_MASK;
 	}
 
+	return ret;
+}
+
+static irqreturn_t prq_event_thread(int irq, void *d)
+{
+	struct intel_iommu *iommu = d;
+	int head, tail, handled = 0;
+
+	/* Clear PPR bit before reading head/tail registers, to
+	 * ensure that we get a new interrupt if needed. */
+	writel(DMA_PRS_PPR, iommu->reg + DMAR_PRS_REG);
+
+	tail = dmar_readq(iommu->reg + DMAR_PQT_REG) & PRQ_RING_MASK;
+	head = dmar_readq(iommu->reg + DMAR_PQH_REG) & PRQ_RING_MASK;
+
+	if (!intel_svm_process_prq(iommu, iommu->prq, head, tail))
+		handled = 1;
+	/* make queue empty, head = tail */
 	dmar_writeq(iommu->reg + DMAR_PQH_REG, tail);
 
 	return IRQ_RETVAL(handled);

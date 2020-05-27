@@ -71,6 +71,7 @@ struct vfio_iommu {
 	unsigned int		dma_avail;
 	bool			v2;
 	bool			nesting;
+	struct vfio_mm		*vmm;
 };
 
 struct vfio_domain {
@@ -124,6 +125,35 @@ struct vfio_regions {
 
 #define IS_IOMMU_CAP_DOMAIN_IN_CONTAINER(iommu)	\
 					(!list_empty(&iommu->domain_list))
+
+struct domain_capsule {
+	struct iommu_domain *domain;
+	struct vfio_group *group;
+	void *data;
+};
+
+/* iommu->lock must be held */
+static int vfio_iommu_for_each_dev(struct vfio_iommu *iommu,
+		      int (*fn)(struct device *dev, void *data),
+		      void *data)
+{
+	struct domain_capsule dc = {.data = data};
+	struct vfio_domain *d;
+	struct vfio_group *g;
+	int ret = 0;
+
+	list_for_each_entry(d, &iommu->domain_list, next) {
+		dc.domain = d->domain;
+		list_for_each_entry(g, &d->group_list, next) {
+			dc.group = g;
+			ret = iommu_group_for_each_dev(g->iommu_group,
+						       &dc, fn);
+			if (ret)
+				break;
+		}
+	}
+	return ret;
+}
 
 static int put_pfn(unsigned long pfn, int prot);
 
@@ -1309,20 +1339,62 @@ static struct device *vfio_mdev_get_iommu_device(struct device *dev)
 	return NULL;
 }
 
+static int vfio_mdev_set_domain(struct device *dev, struct iommu_domain *domain)
+{
+	void (*fn)(struct device *dev, void *domain);
+
+	fn = symbol_get(mdev_set_iommu_domain);
+	if (fn) {
+		fn(dev, domain);
+		symbol_put(mdev_set_iommu_domain);
+
+		return 0;
+	}
+
+	return -EINVAL;
+}
+
+static struct iommu_domain *vfio_mdev_get_domain(struct device *dev)
+{
+	void *(*fn)(struct device *dev);
+
+	fn = symbol_get(mdev_get_iommu_domain);
+	if (fn) {
+		struct iommu_domain *domain;
+
+		domain = fn(dev);
+		symbol_put(mdev_get_iommu_domain);
+
+		return domain;
+	}
+
+	return NULL;
+}
+
 static int vfio_mdev_attach_domain(struct device *dev, void *data)
 {
-	struct iommu_domain *domain = data;
+	struct iommu_domain *domain;
 	struct device *iommu_device;
+	int ret = -ENODEV;
+
+	/* Only single domain is allowed to attach to an mdev. */
+	domain = vfio_mdev_get_domain(dev);
+	if (domain)
+		return -EINVAL;
+	domain = data;
 
 	iommu_device = vfio_mdev_get_iommu_device(dev);
 	if (iommu_device) {
 		if (iommu_dev_feature_enabled(iommu_device, IOMMU_DEV_FEAT_AUX))
-			return iommu_aux_attach_device(domain, iommu_device);
+			ret = iommu_aux_attach_device(domain, iommu_device);
 		else
-			return iommu_attach_device(domain, iommu_device);
+			ret = iommu_attach_device(domain, iommu_device);
 	}
 
-	return -EINVAL;
+	if (!ret)
+		vfio_mdev_set_domain(dev, domain);
+
+	return ret;
 }
 
 static int vfio_mdev_detach_domain(struct device *dev, void *data)
@@ -1337,6 +1409,8 @@ static int vfio_mdev_detach_domain(struct device *dev, void *data)
 		else
 			iommu_detach_device(domain, iommu_device);
 	}
+
+	vfio_mdev_set_domain(dev, NULL);
 
 	return 0;
 }
@@ -2019,6 +2093,7 @@ detach_group_done:
 static void *vfio_iommu_type1_open(unsigned long arg)
 {
 	struct vfio_iommu *iommu;
+	struct vfio_mm *vmm = NULL;
 
 	iommu = kzalloc(sizeof(*iommu), GFP_KERNEL);
 	if (!iommu)
@@ -2044,6 +2119,10 @@ static void *vfio_iommu_type1_open(unsigned long arg)
 	iommu->dma_avail = dma_entry_limit;
 	mutex_init(&iommu->lock);
 	BLOCKING_INIT_NOTIFIER_HEAD(&iommu->notifier);
+	vmm = vfio_mm_get_from_task(current);
+	if (!vmm)
+		pr_err("Failed to get vfio_mm track\n");
+	iommu->vmm = vmm;
 
 	return iommu;
 }
@@ -2085,6 +2164,8 @@ static void vfio_iommu_type1_release(void *iommu_data)
 	}
 
 	vfio_iommu_iova_free(&iommu->iova_list);
+	if (iommu->vmm)
+		vfio_mm_put(iommu->vmm);
 
 	kfree(iommu);
 }
@@ -2173,6 +2254,271 @@ out_unlock:
 	return ret;
 }
 
+static int vfio_iommu_type1_pasid_alloc(struct vfio_iommu *iommu,
+					 int min,
+					 int max)
+{
+	struct vfio_mm *vmm = iommu->vmm;
+	int ret = 0;
+
+	mutex_lock(&iommu->lock);
+	if (!IS_IOMMU_CAP_DOMAIN_IN_CONTAINER(iommu)) {
+		ret = -EINVAL;
+		goto out_unlock;
+	}
+	if (vmm)
+		ret = vfio_mm_pasid_alloc(vmm, min, max);
+	else
+		ret = -ENOSPC;
+out_unlock:
+	mutex_unlock(&iommu->lock);
+	return ret;
+}
+
+static int vfio_iommu_type1_pasid_free(struct vfio_iommu *iommu,
+				       unsigned int pasid)
+{
+	struct vfio_mm *vmm = iommu->vmm;
+	int ret = 0;
+
+	mutex_lock(&iommu->lock);
+	if (!IS_IOMMU_CAP_DOMAIN_IN_CONTAINER(iommu)) {
+		ret = -EINVAL;
+		goto out_unlock;
+	}
+
+	if (vmm)
+		ret = vfio_mm_pasid_free(vmm, pasid);
+	else
+		ret = -ENOSPC;
+out_unlock:
+	mutex_unlock(&iommu->lock);
+	return ret;
+}
+
+static int vfio_iommu_get_pasid_format(struct vfio_iommu *iommu,
+					u32 *pasid_format)
+{
+	struct vfio_domain *domain;
+	u32 format = 0, tracker = 0;
+	int ret;
+
+	mutex_lock(&iommu->lock);
+	if (list_empty(&iommu->domain_list)) {
+		mutex_unlock(&iommu->lock);
+		return -EINVAL;
+	}
+
+	list_for_each_entry(domain, &iommu->domain_list, next) {
+		if (iommu_domain_get_attr(domain->domain,
+			DOMAIN_ATTR_PASID_FORMAT, &format)) {
+			ret = -EINVAL;
+			format = 0;
+			goto out_unlock;
+		}
+		/*
+		 * format is always non-zero (the first format is
+		 * IOMMU_PASID_FORMAT_INTEL_VTD which is 1)
+		 */
+		if (tracker && tracker != format) {
+			ret = -EINVAL;
+			format = 0;
+			goto out_unlock;
+		}
+
+		tracker = format;
+	}
+	ret = 0;
+
+out_unlock:
+	if (format)
+		*pasid_format = format;
+	mutex_unlock(&iommu->lock);
+	return ret;
+}
+
+static int vfio_iommu_info_add_nesting_cap(struct vfio_iommu *iommu,
+					 struct vfio_info_cap *caps)
+{
+	struct vfio_info_cap_header *header;
+	struct vfio_iommu_type1_info_cap_nesting *nesting_cap;
+	u32 format = 0;
+	int ret;
+
+	ret = vfio_iommu_get_pasid_format(iommu, &format);
+	if (ret) {
+		pr_warn("Failed to get domain format\n");
+		return ret;
+	}
+
+	header = vfio_info_cap_add(caps, sizeof(*nesting_cap) + sizeof(format),
+				   VFIO_IOMMU_TYPE1_INFO_CAP_NESTING, 1);
+	if (IS_ERR(header))
+		return PTR_ERR(header);
+
+	nesting_cap = container_of(header,
+				struct vfio_iommu_type1_info_cap_nesting,
+				header);
+
+	nesting_cap->pasid_format = format;
+
+	return 0;
+}
+
+static int vfio_iommu_type1_set_pasid_quota(struct vfio_iommu *iommu,
+					    u32 quota)
+{
+	struct vfio_mm *vmm = iommu->vmm;
+	int ret = 0;
+
+	mutex_lock(&iommu->lock);
+	mutex_lock(&vmm->pasid_lock);
+	if (vmm->pasid_count > quota) {
+		ret = -EINVAL;
+		goto out_unlock;
+	}
+	vmm->pasid_quota = quota;
+	ret = quota;
+
+out_unlock:
+	mutex_unlock(&iommu->lock);
+	mutex_unlock(&vmm->pasid_lock);
+	return ret;
+}
+
+static int vfio_bind_gpasid_fn(struct device *dev, void *data)
+{
+	struct domain_capsule *dc = (struct domain_capsule *)data;
+	struct iommu_gpasid_bind_data *gbind_data =
+		(struct iommu_gpasid_bind_data *) dc->data;
+
+	if (dc->group->mdev_group) {
+		dev_dbg(dev, "%s: data: %llx\n", __func__, (u64)data);
+		/* save mdev host PASID for fault reporting */
+		iommu_add_device_fault_data(vfio_mdev_get_iommu_device(dev),
+						gbind_data->hpasid, dev);
+
+		return iommu_sva_bind_gpasid(dc->domain,
+			vfio_mdev_get_iommu_device(dev), gbind_data);
+	} else {
+		return iommu_sva_bind_gpasid(dc->domain,
+						dev, gbind_data);
+	}
+}
+
+static int vfio_unbind_gpasid_fn(struct device *dev, void *data)
+{
+	struct domain_capsule *dc = (struct domain_capsule *)data;
+	struct iommu_gpasid_bind_data *gbind_data =
+		(struct iommu_gpasid_bind_data *) dc->data;
+
+	if (dc->group->mdev_group) {
+		dev_dbg(dev, "%s: data: %llx\n", __func__, (u64)data);
+		iommu_delete_device_fault_data(
+					vfio_mdev_get_iommu_device(dev),
+					gbind_data->hpasid);
+
+		return iommu_sva_unbind_gpasid(dc->domain,
+					vfio_mdev_get_iommu_device(dev),
+					gbind_data->hpasid);
+	} else {
+		return iommu_sva_unbind_gpasid(dc->domain, dev,
+						gbind_data->hpasid);
+	}
+}
+
+/**
+ * Unbind specific gpasid, caller of this function requires hold
+ * vfio_iommu->lock
+ */
+static long vfio_iommu_type1_do_guest_unbind(struct vfio_iommu *iommu,
+						void *gbind_data)
+{
+	return vfio_iommu_for_each_dev(iommu,
+			vfio_unbind_gpasid_fn, gbind_data);
+}
+
+static long vfio_iommu_type1_bind_gpasid(struct vfio_iommu *iommu,
+					  void *gbind_data)
+{
+	int ret = 0;
+
+	mutex_lock(&iommu->lock);
+	if (!IS_IOMMU_CAP_DOMAIN_IN_CONTAINER(iommu)) {
+		ret = -EINVAL;
+		goto out_unlock;
+	}
+
+	ret = vfio_iommu_for_each_dev(iommu,
+			vfio_bind_gpasid_fn, gbind_data);
+	/*
+	 * If bind failed, it may not be a total failure. Some devices
+	 * within the iommu group may have bind successfully. Although
+	 * we don't enable pasid capability for non-singletion iommu
+	 * groups, a unbind operation would be helpful to ensure no
+	 * partial binding for an iommu group.
+	 */
+	if (ret)
+		/*
+		 * Undo all binds that already succeeded, no need to
+		 * check the return value here since some device within
+		 * the group has no successful bind when coming to this
+		 * place switch.
+		 */
+		vfio_iommu_type1_do_guest_unbind(iommu, gbind_data);
+
+out_unlock:
+	mutex_unlock(&iommu->lock);
+	return ret;
+}
+
+static long vfio_iommu_type1_unbind_gpasid(struct vfio_iommu *iommu,
+					    void *gbind_data)
+{
+	int ret = 0;
+
+	mutex_lock(&iommu->lock);
+	if (!IS_IOMMU_CAP_DOMAIN_IN_CONTAINER(iommu)) {
+		ret = -EINVAL;
+		goto out_unlock;
+	}
+
+	ret = vfio_iommu_type1_do_guest_unbind(iommu, gbind_data);
+
+out_unlock:
+	mutex_unlock(&iommu->lock);
+	return ret;
+}
+
+static int vfio_cache_inv_fn(struct device *dev, void *data)
+{
+	struct domain_capsule *dc = (struct domain_capsule *)data;
+	struct iommu_cache_invalidate_info *cache_inv_info =
+		(struct iommu_cache_invalidate_info *) dc->data;
+
+	if (dc->group->mdev_group)
+		return iommu_cache_invalidate(dc->domain,
+			vfio_mdev_get_iommu_device(dev), cache_inv_info);
+	else
+		return iommu_cache_invalidate(dc->domain,
+						dev, cache_inv_info);
+}
+
+static int vfio_page_resp_fn(struct device *dev, void *data)
+{
+	struct domain_capsule *dc = (struct domain_capsule *)data;
+	struct iommu_page_response *pgresp =
+		(struct iommu_page_response *) dc->data;
+
+	if (dc->group->mdev_group)
+		return iommu_page_response(
+			vfio_mdev_get_iommu_device(dev),
+			dc->domain,
+			pgresp);
+	else
+		return iommu_page_response(dev, dc->domain, pgresp);
+}
+
 static long vfio_iommu_type1_ioctl(void *iommu_data,
 				   unsigned int cmd, unsigned long arg)
 {
@@ -2219,6 +2565,10 @@ static long vfio_iommu_type1_ioctl(void *iommu_data,
 		info.iova_pgsizes = vfio_pgsize_bitmap(iommu);
 
 		ret = vfio_iommu_iova_build_caps(iommu, &caps);
+		if (ret)
+			return ret;
+
+		ret = vfio_iommu_info_add_nesting_cap(iommu, &caps);
 		if (ret)
 			return ret;
 
@@ -2277,6 +2627,164 @@ static long vfio_iommu_type1_ioctl(void *iommu_data,
 
 		return copy_to_user((void __user *)arg, &unmap, minsz) ?
 			-EFAULT : 0;
+
+	} else if (cmd == VFIO_IOMMU_PASID_REQUEST) {
+		struct vfio_iommu_type1_pasid_request req;
+		u32 min, max, pasid;
+		int ret, result;
+		unsigned long offset;
+
+		offset = offsetof(struct vfio_iommu_type1_pasid_request,
+				  alloc_pasid.result);
+		minsz = offsetofend(struct vfio_iommu_type1_pasid_request,
+				    flags);
+
+		if (copy_from_user(&req, (void __user *)arg, minsz))
+			return -EFAULT;
+
+		if (req.argsz < minsz)
+			return -EINVAL;
+
+		switch (req.flags & VFIO_PASID_REQUEST_MASK) {
+		case VFIO_IOMMU_PASID_ALLOC:
+			if (copy_from_user(&min,
+				(void __user *)arg + minsz, sizeof(min)))
+				return -EFAULT;
+			if (copy_from_user(&max,
+				(void __user *)arg + minsz + sizeof(min),
+				sizeof(max)))
+				return -EFAULT;
+			ret = 0;
+			result = vfio_iommu_type1_pasid_alloc(iommu, min, max);
+			if (result > 0)
+				ret = copy_to_user(
+					      (void __user *) (arg + offset),
+					      &result, sizeof(result));
+			return ret;
+		case VFIO_IOMMU_PASID_FREE:
+			if (copy_from_user(&pasid,
+				(void __user *)arg + minsz, sizeof(pasid)))
+				return -EFAULT;
+			return vfio_iommu_type1_pasid_free(iommu, pasid);
+		default:
+			return -EINVAL;
+		}
+	} else if (cmd == VFIO_IOMMU_SET_PASID_QUOTA) {
+		struct vfio_iommu_type1_pasid_quota quota;
+
+		minsz = offsetofend(struct vfio_iommu_type1_pasid_quota,
+				    quota);
+
+		if (copy_from_user(&quota, (void __user *)arg, minsz))
+			return -EFAULT;
+
+		if (quota.argsz < minsz)
+			return -EINVAL;
+		return vfio_iommu_type1_set_pasid_quota(iommu, quota.quota);
+
+	} else if (cmd == VFIO_IOMMU_BIND) {
+		struct vfio_iommu_type1_bind bind;
+		u32 version;
+		int data_size;
+		void *gbind_data;
+
+		minsz = offsetofend(struct vfio_iommu_type1_bind, flags);
+
+		if (copy_from_user(&bind, (void __user *)arg, minsz))
+			return -EFAULT;
+
+		if (bind.argsz < minsz)
+			return -EINVAL;
+
+		/* Get the version of struct iommu_gpasid_bind_data */
+		if (copy_from_user(&version,
+			(void __user *) (arg + minsz),
+					sizeof(version)))
+			return -EFAULT;
+
+		data_size = iommu_uapi_get_data_size(
+				IOMMU_UAPI_BIND_GPASID, version);
+		gbind_data = kzalloc(data_size, GFP_KERNEL);
+		if (!gbind_data)
+			return -ENOMEM;
+
+		if (copy_from_user(gbind_data,
+			(void __user *) (arg + minsz), data_size)) {
+			kfree(gbind_data);
+			return -EFAULT;
+		}
+
+		switch (bind.flags & VFIO_IOMMU_BIND_MASK) {
+		case VFIO_IOMMU_BIND_GUEST_PGTBL:
+			return vfio_iommu_type1_bind_gpasid(iommu,
+							gbind_data);
+		case VFIO_IOMMU_UNBIND_GUEST_PGTBL:
+			return vfio_iommu_type1_unbind_gpasid(iommu,
+							gbind_data);
+		default:
+			return -EINVAL;
+		}
+	} else if (cmd == VFIO_IOMMU_CACHE_INVALIDATE) {
+		struct vfio_iommu_type1_cache_invalidate cache_inv;
+		u32 version;
+		int info_size;
+		void *cache_info;
+		int ret;
+
+		minsz = offsetofend(struct vfio_iommu_type1_cache_invalidate,
+				    flags);
+
+		if (copy_from_user(&cache_inv, (void __user *)arg, minsz))
+			return -EFAULT;
+
+		if (cache_inv.argsz < minsz || cache_inv.flags)
+			return -EINVAL;
+
+		/* Get the version of struct iommu_cache_invalidate_info */
+		if (copy_from_user(&version,
+			(void __user *) (arg + minsz), sizeof(version)))
+			return -EFAULT;
+
+		info_size = iommu_uapi_get_data_size(
+					IOMMU_UAPI_CACHE_INVAL, version);
+
+		cache_info = kzalloc(info_size, GFP_KERNEL);
+		if (!cache_info)
+			return -ENOMEM;
+
+		if (copy_from_user(cache_info,
+			(void __user *) (arg + minsz), info_size)) {
+			kfree(cache_info);
+			return -EFAULT;
+		}
+
+		mutex_lock(&iommu->lock);
+		ret = vfio_iommu_for_each_dev(iommu, vfio_cache_inv_fn,
+					    cache_info);
+		mutex_unlock(&iommu->lock);
+		return ret;
+	} else if (cmd == VFIO_IOMMU_PAGE_RESP) {
+		struct vfio_iommu_type1_page_resp resp;
+		int ret;
+printk("%s, resp - 1\n", __func__);
+		minsz = offsetofend(struct vfio_iommu_type1_page_resp,
+				    pgresp);
+
+		if (copy_from_user(&resp, (void __user *)arg, minsz))
+			return -EFAULT;
+
+printk("%s, resp - 2\n", __func__);
+		if (resp.argsz < minsz || resp.flags)
+			return -EINVAL;
+
+printk("%s, resp - 3\n", __func__);
+		mutex_lock(&iommu->lock);
+		ret = vfio_iommu_for_each_dev(iommu, vfio_page_resp_fn,
+					    &resp.pgresp);
+		mutex_unlock(&iommu->lock);
+printk("%s, resp - 4, ret: %d\n", __func__, ret);
+		return ret;
+
 	}
 
 	return -ENOTTY;

@@ -1518,6 +1518,15 @@ struct kvm_pv_cmd {
 /* Available with KVM_CAP_S390_PROTECTED */
 #define KVM_S390_PV_COMMAND		_IOWR(KVMIO, 0xc5, struct kvm_pv_cmd)
 
+struct kvm_user_pasid {
+	__u32 flags;
+	__u32 pasid;
+};
+
+#define KVM_USER_PASID_INVALIDATE       (1 << 0)
+
+#define KVM_SET_USER_PASID        _IOW(KVMIO,  0xc6, struct kvm_user_pasid)
+
 /* Secure Encrypted Virtualization command */
 enum sev_cmd_id {
 	/* Guest initialization commands */

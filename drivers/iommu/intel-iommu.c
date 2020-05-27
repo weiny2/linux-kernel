@@ -446,12 +446,6 @@ static void init_translation_status(struct intel_iommu *iommu)
 		iommu->flags |= VTD_FLAG_TRANS_PRE_ENABLED;
 }
 
-/* Convert generic 'struct iommu_domain to private struct dmar_domain */
-static struct dmar_domain *to_dmar_domain(struct iommu_domain *dom)
-{
-	return container_of(dom, struct dmar_domain, domain);
-}
-
 static int __init intel_iommu_setup(char *str)
 {
 	if (!str)
@@ -794,7 +788,7 @@ is_downstream_to_pci_bridge(struct device *dev, struct device *bridge)
 	return false;
 }
 
-static struct intel_iommu *device_to_iommu(struct device *dev, u8 *bus, u8 *devfn)
+struct intel_iommu *device_to_iommu(struct device *dev, u8 *bus, u8 *devfn)
 {
 	struct dmar_drhd_unit *drhd = NULL;
 	struct intel_iommu *iommu;
@@ -1763,6 +1757,9 @@ static void free_dmar_iommu(struct intel_iommu *iommu)
 		if (ecap_prs(iommu->ecap))
 			intel_svm_finish_prq(iommu);
 	}
+	if (ecap_vcs(iommu->ecap) && vccap_pasid(iommu->vccap))
+		ioasid_unregister_allocator(&iommu->pasid_allocator);
+
 #endif
 }
 
@@ -3297,6 +3294,84 @@ out_unmap:
 	return ret;
 }
 
+#ifdef CONFIG_INTEL_IOMMU_SVM
+static ioasid_t intel_ioasid_alloc(ioasid_t min, ioasid_t max, void *data)
+{
+	struct intel_iommu *iommu = data;
+	ioasid_t ioasid;
+
+	if (!iommu)
+		return INVALID_IOASID;
+	/*
+	 * VT-d virtual command interface always uses the full 20 bit
+	 * PASID range. Host can partition guest PASID range based on
+	 * policies but it is out of guest's control.
+	 */
+	if (min < PASID_MIN || max > intel_pasid_max_id)
+		return INVALID_IOASID;
+
+	if (vcmd_alloc_pasid(iommu, &ioasid))
+		return INVALID_IOASID;
+
+	return ioasid;
+}
+
+static void intel_ioasid_free(ioasid_t ioasid, void *data)
+{
+	struct intel_iommu *iommu = data;
+
+	if (!iommu)
+		return;
+	/*
+	 * Sanity check the ioasid owner is done at upper layer, e.g. VFIO
+	 * We can only free the PASID when all the devices are unbound.
+	 */
+	if (ioasid_find(NULL, ioasid, NULL)) {
+		pr_alert("Cannot free active IOASID %d\n", ioasid);
+		return;
+	}
+	vcmd_free_pasid(iommu, ioasid);
+}
+
+static void register_pasid_allocator(struct intel_iommu *iommu)
+{
+	/*
+	 * If we are running in the host, no need for custom allocator
+	 * in that PASIDs are allocated from the host system-wide.
+	 */
+	if (!cap_caching_mode(iommu->cap))
+		return;
+
+	if (!sm_supported(iommu)) {
+		pr_warn("VT-d Scalable Mode not enabled, no PASID allocation\n");
+		return;
+	}
+
+	/*
+	 * Register a custom PASID allocator if we are running in a guest,
+	 * guest PASID must be obtained via virtual command interface.
+	 * There can be multiple vIOMMUs in each guest but only one allocator
+	 * is active. All vIOMMU allocators will eventually be calling the same
+	 * host allocator.
+	 */
+	if (ecap_vcs(iommu->ecap) && vccap_pasid(iommu->vccap)) {
+		pr_info("Register custom PASID allocator\n");
+		iommu->pasid_allocator.alloc = intel_ioasid_alloc;
+		iommu->pasid_allocator.free = intel_ioasid_free;
+		iommu->pasid_allocator.pdata = (void *)iommu;
+		if (ioasid_register_allocator(&iommu->pasid_allocator)) {
+			pr_warn("Custom PASID allocator failed, scalable mode disabled\n");
+			/*
+			 * Disable scalable mode on this IOMMU if there
+			 * is no custom allocator. Mixing SM capable vIOMMU
+			 * and non-SM vIOMMU are not supported.
+			 */
+			intel_iommu_sm = 0;
+		}
+	}
+}
+#endif
+
 static int __init init_dmars(void)
 {
 	struct dmar_drhd_unit *drhd;
@@ -3414,6 +3489,9 @@ static int __init init_dmars(void)
 	 */
 	for_each_active_iommu(iommu, drhd) {
 		iommu_flush_write_buffer(iommu);
+#ifdef CONFIG_INTEL_IOMMU_SVM
+		register_pasid_allocator(iommu);
+#endif
 		iommu_set_root_entry(iommu);
 		iommu->flush.flush_context(iommu, 0, 0, 0, DMA_CCMD_GLOBAL_INVL);
 		iommu->flush.flush_iotlb(iommu, 0, 0, 0, DMA_TLB_GLOBAL_FLUSH);
@@ -3465,7 +3543,7 @@ static int __init init_dmars(void)
 				goto free_iommu;
 		}
 #endif
-		ret = dmar_set_interrupt(iommu);
+		ret = dmar_set_interrupt(iommu, true);
 		if (ret)
 			goto free_iommu;
 	}
@@ -4658,7 +4736,7 @@ static int intel_iommu_add(struct dmar_drhd_unit *dmaru)
 			goto disable_iommu;
 	}
 #endif
-	ret = dmar_set_interrupt(iommu);
+	ret = dmar_set_interrupt(iommu, true);
 	if (ret)
 		goto disable_iommu;
 
@@ -5410,28 +5488,31 @@ is_aux_domain(struct device *dev, struct iommu_domain *domain)
 }
 
 static void auxiliary_link_device(struct dmar_domain *domain,
-				  struct device *dev)
+				  struct device *dev,
+				  struct device_domain_info *info)
 {
-	struct device_domain_info *info = dev->archdata.iommu;
+	struct device_domain_info *info2 = dev->archdata.iommu;
 
 	assert_spin_locked(&device_domain_lock);
-	if (WARN_ON(!info))
+	if (WARN_ON((!info) | (!info2)))
 		return;
 
 	domain->auxd_refcnt++;
-	list_add(&domain->auxd, &info->auxiliary_domains);
+	list_add(&domain->auxd, &info2->auxiliary_domains);
+	list_add(&info->link, &domain->devices);
 }
 
 static void auxiliary_unlink_device(struct dmar_domain *domain,
-				    struct device *dev)
+				    struct device *dev,
+				    struct device_domain_info *info)
 {
-	struct device_domain_info *info = dev->archdata.iommu;
-
+	struct device_domain_info *info2 = dev->archdata.iommu;
 	assert_spin_locked(&device_domain_lock);
-	if (WARN_ON(!info))
+	if (WARN_ON((!info) | (!info2)))
 		return;
 
 	list_del(&domain->auxd);
+	list_del(&info->link);
 	domain->auxd_refcnt--;
 
 	if (!domain->auxd_refcnt && domain->default_pasid > 0)
@@ -5443,26 +5524,54 @@ static int aux_domain_add_dev(struct dmar_domain *domain,
 {
 	int ret;
 	u8 bus, devfn;
+	struct device_domain_info *info, *info2;
 	unsigned long flags;
 	struct intel_iommu *iommu;
 
 	iommu = device_to_iommu(dev, &bus, &devfn);
 	if (!iommu)
 		return -ENODEV;
+	info = dev->archdata.iommu;
+	if (!info)
+		return -ENODEV;
 
 	if (domain->default_pasid <= 0) {
 		int pasid;
 
-		/* No private data needed for the default pasid */
+		/*
+		 * Yi: FIXME: Private data needed for the default pasid
+		 * when moving IOVA over FLPT as default pasid will be
+		 * used in sva_bind_gpasid(). I've no idea why domain is
+		 * added to ioasid. It's added in a rebase patch.
+		 */
 		pasid = ioasid_alloc(NULL, PASID_MIN,
 				     pci_max_pasids(to_pci_dev(dev)) - 1,
-				     NULL);
+				     domain);
 		if (pasid == INVALID_IOASID) {
 			pr_err("Can't allocate default pasid\n");
 			return -ENODEV;
 		}
 		domain->default_pasid = pasid;
 	}
+
+	info2 = alloc_devinfo_mem();
+	if (!info2)
+		return -ENODEV;
+	info2->bus = bus;
+	info2->devfn = devfn;
+	info2->ats_supported = info->ats_supported;
+	info2->pasid_supported = info->pasid_supported;
+	info2->pri_supported = info->pri_supported;
+	info2->ats_enabled = info->ats_enabled;
+	info2->pasid_enabled = info->pasid_enabled;
+	info2->pri_enabled = info->pri_enabled;
+	info2->ats_qdep = 0;
+	info2->dev = dev;
+	info2->domain = domain;
+	info2->iommu = iommu;
+	info2->pasid_table = info->pasid_table;
+	info2->auxd_enabled = info->auxd_enabled;
+	INIT_LIST_HEAD(&info2->auxiliary_domains);
 
 	spin_lock_irqsave(&device_domain_lock, flags);
 	/*
@@ -5485,7 +5594,7 @@ static int aux_domain_add_dev(struct dmar_domain *domain,
 		goto table_failed;
 	spin_unlock(&iommu->lock);
 
-	auxiliary_link_device(domain, dev);
+	auxiliary_link_device(domain, dev, info2);
 
 	spin_unlock_irqrestore(&device_domain_lock, flags);
 
@@ -5508,15 +5617,25 @@ static void aux_domain_remove_dev(struct dmar_domain *domain,
 	struct device_domain_info *info;
 	struct intel_iommu *iommu;
 	unsigned long flags;
+	u8 bus, devfn;
 
 	if (!is_aux_domain(dev, &domain->domain))
 		return;
 
 	spin_lock_irqsave(&device_domain_lock, flags);
-	info = dev->archdata.iommu;
-	iommu = info->iommu;
 
-	auxiliary_unlink_device(domain, dev);
+	iommu = device_to_iommu(dev, &bus, &devfn);
+	if (!iommu) {
+		pr_warn("BUG: %s, no iommu found for dev: %s\n", __func__, dev_name(dev));
+		return;
+	}
+
+	info = iommu_support_dev_iotlb(domain, iommu, bus, devfn);
+	if (!info) {
+		pr_warn("BUG: %s, no info found for dev: %s\n", __func__, dev_name(dev));
+		return;
+	}
+	auxiliary_unlink_device(domain, dev, info);
 
 	spin_lock(&iommu->lock);
 	intel_pasid_tear_down_entry(iommu, dev, domain->default_pasid);
@@ -5626,6 +5745,188 @@ static void intel_iommu_aux_detach_device(struct iommu_domain *domain,
 	aux_domain_remove_dev(to_dmar_domain(domain), dev);
 }
 
+/*
+ * 2D array for converting and sanitizing IOMMU generic TLB granularity to
+ * VT-d granularity. Invalidation is typically included in the unmap operation
+ * as a result of DMA or VFIO unmap. However, for assigned devices guest
+ * owns the first level page tables. Invalidations of translation caches in the
+ * guest are trapped and passed down to the host.
+ *
+ * vIOMMU in the guest will only expose first level page tables, therefore
+ * we do not include IOTLB granularity for request without PASID (second level).
+ *
+ * For example, to find the VT-d granularity encoding for IOTLB
+ * type and page selective granularity within PASID:
+ * X: indexed by iommu cache type
+ * Y: indexed by enum iommu_inv_granularity
+ * [IOMMU_CACHE_INV_TYPE_IOTLB][IOMMU_INV_GRANU_ADDR]
+ *
+ * Granu_map array indicates validity of the table. 1: valid, 0: invalid
+ *
+ */
+const static int inv_type_granu_map[IOMMU_CACHE_INV_TYPE_NR][IOMMU_INV_GRANU_NR] = {
+	/*
+	 * PASID based IOTLB invalidation: PASID selective (per PASID),
+	 * page selective (address granularity)
+	 */
+	{0, 1, 1},
+	/* PASID based dev TLBs, only support all PASIDs or single PASID */
+	{1, 1, 0},
+	/* PASID cache */
+	{1, 1, 0}
+};
+
+const static int inv_type_granu_table[IOMMU_CACHE_INV_TYPE_NR][IOMMU_INV_GRANU_NR] = {
+	/* PASID based IOTLB */
+	{0, QI_GRAN_NONG_PASID, QI_GRAN_PSI_PASID},
+	/* PASID based dev TLBs */
+	{QI_DEV_IOTLB_GRAN_ALL, QI_DEV_IOTLB_GRAN_PASID_SEL, 0},
+	/* PASID cache */
+	{QI_PC_ALL_PASIDS, QI_PC_PASID_SEL, 0},
+};
+
+static inline int to_vtd_granularity(int type, int granu, int *vtd_granu)
+{
+	if (type >= IOMMU_CACHE_INV_TYPE_NR || granu >= IOMMU_INV_GRANU_NR ||
+		!inv_type_granu_map[type][granu])
+		return -EINVAL;
+
+	*vtd_granu = inv_type_granu_table[type][granu];
+
+	return 0;
+}
+
+static inline u64 to_vtd_size(u64 granu_size, u64 nr_granules)
+{
+	u64 nr_pages = (granu_size * nr_granules) >> VTD_PAGE_SHIFT;
+
+	/* VT-d size is encoded as 2^size of 4K pages, 0 for 4k, 9 for 2MB, etc.
+	 * IOMMU cache invalidate API passes granu_size in bytes, and number of
+	 * granu size in contiguous memory.
+	 */
+	return order_base_2(nr_pages);
+}
+
+#ifdef CONFIG_INTEL_IOMMU_SVM
+static int intel_iommu_sva_invalidate(struct iommu_domain *domain,
+		struct device *dev, struct iommu_cache_invalidate_info *inv_info)
+{
+	struct dmar_domain *dmar_domain = to_dmar_domain(domain);
+	struct device_domain_info *info;
+	struct intel_iommu *iommu;
+	unsigned long flags;
+	int cache_type;
+	u8 bus, devfn;
+	u16 did, sid;
+	int ret = 0;
+	u64 size = 0;
+
+	/* Support current or older UAPI versions */
+	if (!inv_info || !dmar_domain ||
+		inv_info->version > IOMMU_UAPI_VERSION)
+		return -EINVAL;
+
+	if (!dev || !dev_is_pci(dev))
+		return -ENODEV;
+
+	iommu = device_to_iommu(dev, &bus, &devfn);
+	if (!iommu)
+		return -ENODEV;
+
+	spin_lock_irqsave(&device_domain_lock, flags);
+	spin_lock(&iommu->lock);
+	info = iommu_support_dev_iotlb(dmar_domain, iommu, bus, devfn);
+	if (!info) {
+		ret = -EINVAL;
+		goto out_unlock;
+	}
+	did = dmar_domain->iommu_did[iommu->seq_id];
+	sid = PCI_DEVID(bus, devfn);
+
+	/* Size is only valid in non-PASID selective invalidation */
+	if (inv_info->granularity != IOMMU_INV_GRANU_PASID)
+		size = to_vtd_size(inv_info->addr_info.granule_size,
+				   inv_info->addr_info.nb_granules);
+
+	for_each_set_bit(cache_type, (unsigned long *)&inv_info->cache, IOMMU_CACHE_INV_TYPE_NR) {
+		int granu = 0;
+		u64 pasid = 0;
+
+		ret = to_vtd_granularity(cache_type, inv_info->granularity, &granu);
+		if (ret) {
+			pr_err("Invalid cache type and granu combination %d/%d\n", cache_type,
+				inv_info->granularity);
+			break;
+		}
+
+		/* PASID is stored in different locations based on granularity */
+		if (inv_info->granularity == IOMMU_INV_GRANU_PASID &&
+			inv_info->pasid_info.flags & IOMMU_INV_PASID_FLAGS_PASID)
+			pasid = inv_info->pasid_info.pasid;
+		else if (inv_info->granularity == IOMMU_INV_GRANU_ADDR &&
+			inv_info->addr_info.flags & IOMMU_INV_ADDR_FLAGS_PASID)
+			pasid = inv_info->addr_info.pasid;
+		else {
+			pr_err("Cannot find PASID for given cache type and granularity\n");
+			break;
+		}
+
+		switch (BIT(cache_type)) {
+		case IOMMU_CACHE_INV_TYPE_IOTLB:
+			if ((inv_info->granularity != IOMMU_INV_GRANU_PASID) &&
+				size && (inv_info->addr_info.addr & ((BIT(VTD_PAGE_SHIFT + size)) - 1))) {
+				pr_err("Address out of range, 0x%llx, size order %llu\n",
+					inv_info->addr_info.addr, size);
+				ret = -ERANGE;
+				goto out_unlock;
+			}
+
+			qi_flush_piotlb(iommu, did,
+					pasid,
+					mm_to_dma_pfn(inv_info->addr_info.addr),
+					(granu == QI_GRAN_NONG_PASID) ? -1 : 1 << size,
+					inv_info->addr_info.flags & IOMMU_INV_ADDR_FLAGS_LEAF);
+
+			/*
+			 * Always flush device IOTLB if ATS is enabled since guest
+			 * vIOMMU exposes CM = 1, no device IOTLB flush will be passed
+			 * down.
+			 */
+			if (info->ats_enabled) {
+				qi_flush_dev_iotlb_pasid(iommu, sid, info->pfsid,
+						pasid, info->ats_qdep,
+						inv_info->addr_info.addr, size,
+						granu);
+			}
+			break;
+		case IOMMU_CACHE_INV_TYPE_DEV_IOTLB:
+			if (info->ats_enabled) {
+				qi_flush_dev_iotlb_pasid(iommu, sid, info->pfsid,
+						inv_info->addr_info.pasid, info->ats_qdep,
+						inv_info->addr_info.addr, size,
+						granu);
+			} else
+				pr_warn("Passdown device IOTLB flush w/o ATS!\n");
+
+			break;
+		case IOMMU_CACHE_INV_TYPE_PASID:
+			qi_flush_pasid_cache(iommu, did, granu, inv_info->pasid_info.pasid);
+
+			break;
+		default:
+			dev_err(dev, "Unsupported IOMMU invalidation type %d\n",
+				cache_type);
+			ret = -EINVAL;
+		}
+	}
+out_unlock:
+	spin_unlock(&iommu->lock);
+	spin_unlock_irqrestore(&device_domain_lock, flags);
+
+	return ret;
+}
+#endif
+
 static int intel_iommu_map(struct iommu_domain *domain,
 			   unsigned long iova, phys_addr_t hpa,
 			   size_t size, int iommu_prot, gfp_t gfp)
@@ -5731,7 +6032,8 @@ static inline bool scalable_mode_support(void)
 		}
 	}
 	rcu_read_unlock();
-
+	pr_alert("Fake SM enabled on all IOMMUs, testing only\n");
+	ret = true;
 	return ret;
 }
 
@@ -5749,6 +6051,8 @@ static inline bool iommu_pasid_support(void)
 		}
 	}
 	rcu_read_unlock();
+	pr_alert("Fake PASID enabled on all IOMMUs, testing only\n");
+	ret = true;
 
 	return ret;
 }
@@ -5767,7 +6071,8 @@ static inline bool nested_mode_support(void)
 		}
 	}
 	rcu_read_unlock();
-
+	/* fake sm as true since no real platform has all IOMMU support sm */
+	ret = true;
 	return ret;
 }
 
@@ -6185,6 +6490,27 @@ intel_iommu_domain_set_attr(struct iommu_domain *domain,
 	return ret;
 }
 
+static int intel_iommu_domain_get_attr(struct iommu_domain *domain,
+				       enum iommu_attr attr, void *data)
+{
+	/* Only used for guest */
+	switch (domain->type) {
+	case IOMMU_DOMAIN_DMA:
+		return -ENODEV;
+	case IOMMU_DOMAIN_UNMANAGED:
+		switch (attr) {
+		case DOMAIN_ATTR_PASID_FORMAT:
+			*(int *)data = IOMMU_PASID_FORMAT_INTEL_VTD;
+			return 0;
+		default:
+			return -ENODEV;
+		}
+		break;
+	default:
+		return -EINVAL;
+	}
+}
+
 const struct iommu_ops intel_iommu_ops = {
 	.capable		= intel_iommu_capable,
 	.domain_alloc		= intel_iommu_domain_alloc,
@@ -6204,12 +6530,19 @@ const struct iommu_ops intel_iommu_ops = {
 	.put_resv_regions	= generic_iommu_put_resv_regions,
 	.apply_resv_region	= intel_iommu_apply_resv_region,
 	.device_group		= intel_iommu_device_group,
+	.domain_get_attr	= intel_iommu_domain_get_attr,
 	.dev_has_feat		= intel_iommu_dev_has_feat,
 	.dev_feat_enabled	= intel_iommu_dev_feat_enabled,
 	.dev_enable_feat	= intel_iommu_dev_enable_feat,
 	.dev_disable_feat	= intel_iommu_dev_disable_feat,
 	.is_attach_deferred	= intel_iommu_is_attach_deferred,
 	.pgsize_bitmap		= INTEL_IOMMU_PGSIZES,
+#ifdef CONFIG_INTEL_IOMMU_SVM
+	.cache_invalidate	= intel_iommu_sva_invalidate,
+	.sva_bind_gpasid	= intel_svm_bind_gpasid,
+	.sva_unbind_gpasid	= intel_svm_unbind_gpasid,
+	.page_response		= intel_iommu_page_response,
+#endif
 };
 
 static void quirk_iommu_igfx(struct pci_dev *dev)

@@ -26,6 +26,16 @@ int mdev_set_iommu_device(struct device *dev, struct device *iommu_device);
 
 struct device *mdev_get_iommu_device(struct device *dev);
 
+/*
+ * Called by vfio iommu modules to save the iommu domain after a domain being
+ * attached to the mediated device. The vDCM (virtual device control module)
+ * could call mdev_get_iommu_domain() to retrieve an auxiliary domain attached
+ * to an mdev.
+ */
+void mdev_set_iommu_domain(struct device *dev, void *domain);
+
+void *mdev_get_iommu_domain(struct device *dev);
+
 /**
  * struct mdev_parent_ops - Structure to be registered for each parent device to
  * register the device to mdev module.
@@ -144,5 +154,8 @@ void mdev_unregister_driver(struct mdev_driver *drv);
 struct device *mdev_parent_dev(struct mdev_device *mdev);
 struct device *mdev_dev(struct mdev_device *mdev);
 struct mdev_device *mdev_from_dev(struct device *dev);
+struct device *mdev_dev_to_parent_dev(struct device *dev);
+
+#define dev_is_mdev(dev) ((dev)->bus == symbol_get(mdev_bus_type))
 
 #endif /* MDEV_H */

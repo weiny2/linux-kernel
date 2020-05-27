@@ -27,11 +27,13 @@ struct idxd_cdev_context {
  */
 static struct idxd_cdev_context ictx[IDXD_TYPE_MAX] = {
 	{ .name = "dsa" },
+	{ .name = "iax" }
 };
 
 struct idxd_user_context {
 	struct idxd_wq *wq;
 	struct task_struct *task;
+	int pasid;
 	unsigned int flags;
 };
 
@@ -74,6 +76,7 @@ static int idxd_cdev_open(struct inode *inode, struct file *filp)
 	struct idxd_device *idxd;
 	struct idxd_wq *wq;
 	struct device *dev;
+	int rc;
 
 	wq = inode_wq(inode);
 	idxd = wq->idxd;
@@ -90,8 +93,30 @@ static int idxd_cdev_open(struct inode *inode, struct file *filp)
 
 	ctx->wq = wq;
 	filp->private_data = ctx;
+
+	if (idxd->pasid_enabled) {
+		rc = intel_svm_bind_mm(dev, &ctx->pasid, 0, NULL);
+		if (rc < 0) {
+			dev_err(dev, "pasid allocation failed: %d\n", rc);
+			goto failed;
+		}
+
+		if (wq_dedicated(wq)) {
+			rc = idxd_wq_set_pasid(wq, ctx->pasid);
+			if (rc < 0) {
+				intel_svm_unbind_mm(dev, ctx->pasid);
+				dev_err(dev, "wq set pasid failed: %d\n", rc);
+				goto failed;
+			}
+		}
+	}
+
 	idxd_wq_get(wq);
 	return 0;
+
+failed:
+	kfree(ctx);
+	return rc;
 }
 
 static int idxd_cdev_release(struct inode *node, struct file *filep)
@@ -100,9 +125,23 @@ static int idxd_cdev_release(struct inode *node, struct file *filep)
 	struct idxd_wq *wq = ctx->wq;
 	struct idxd_device *idxd = wq->idxd;
 	struct device *dev = &idxd->pdev->dev;
+	int rc;
 
 	dev_dbg(dev, "%s called\n", __func__);
 	filep->private_data = NULL;
+
+	/* Wait for in-flight operations to complete. */
+	if (!wq_dedicated(wq)) {
+		idxd_device_drain_pasid(idxd, ctx->pasid);
+		intel_svm_unbind_mm(&idxd->pdev->dev, ctx->pasid);
+	} else {
+		if (idxd->pasid_enabled) {
+			rc = idxd_wq_disable_pasid(wq);
+			if (rc < 0)
+				dev_err(dev, "wq disable pasid failed.\n");
+		}
+		idxd_wq_drain(wq);
+	}
 
 	kfree(ctx);
 	idxd_wq_put(wq);
@@ -142,7 +181,8 @@ static int idxd_cdev_mmap(struct file *filp, struct vm_area_struct *vma)
 
 	vma->vm_flags |= VM_DONTCOPY;
 	pfn = (base + idxd_get_wq_portal_full_offset(wq->id,
-				IDXD_PORTAL_LIMITED)) >> PAGE_SHIFT;
+				IDXD_PORTAL_LIMITED,
+				IDXD_IRQ_MSIX)) >> PAGE_SHIFT;
 	vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
 	vma->vm_private_data = ctx;
 
