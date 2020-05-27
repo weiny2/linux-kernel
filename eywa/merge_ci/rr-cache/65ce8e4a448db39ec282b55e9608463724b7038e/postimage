@@ -315,10 +315,7 @@ static int irq_process_work_list(struct idxd_irq_entry *irq_entry,
 	unsigned long flags;
 
 	*processed = 0;
-<<<<<<<
-=======
 	spin_lock_irqsave(&irq_entry->list_lock, flags);
->>>>>>>
 	if (list_empty(&irq_entry->work_list))
 		goto out;
 
@@ -374,22 +371,14 @@ static int idxd_desc_process(struct idxd_irq_entry *irq_entry)
 	 * 5. Repeat until no more descriptors.
 	 */
 	do {
-<<<<<<<
-		rc = irq_process_work_list(irq_entry, &processed);
-=======
 		rc = irq_process_work_list(irq_entry, IRQ_WORK_NORMAL,
 					   &processed, 0);
->>>>>>>
 		total += processed;
 		if (rc != 0)
 			continue;
 
-<<<<<<<
-		rc = irq_process_pending_llist(irq_entry, &processed);
-=======
 		rc = irq_process_pending_llist(irq_entry, IRQ_WORK_NORMAL,
 					       &processed, 0);
->>>>>>>
 		total += processed;
 	} while (rc != 0);
 
