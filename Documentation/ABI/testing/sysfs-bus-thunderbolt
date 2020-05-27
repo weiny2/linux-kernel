@@ -73,6 +73,10 @@ Description:	This attribute is used to authorize Thunderbolt devices
 		   the device did not contain a key at all, and
 		   EKEYREJECTED if the challenge response did not match.
 
+		For USB4 capable systems if the platform firmware did
+		not grant PCIe tunneling control to Linux, writing to
+		this attribute fails with errno EOPNOTSUPP.
+
 What: /sys/bus/thunderbolt/devices/.../boot
 Date:		Jun 2018
 KernelVersion:	4.17
@@ -236,3 +240,36 @@ KernelVersion:	4.15
 Contact:	thunderbolt-software@lists.01.org
 Description:	This contains XDomain service specific settings as
 		bitmask. Format: %x
+
+What:		/sys/bus/thunderbolt/devices/<device>:<port>.<index>/device
+Date:		Aug 2020
+KernelVersion:	v5.8
+Contact:	Mika Westerberg <mika.westerberg@linux.intel.com>
+Description:	Retimer device identifier read from the hardware.
+
+What:		/sys/bus/thunderbolt/devices/<device>:<port>.<index>/nvm_authenticate
+Date:		Aug 2020
+KernelVersion:	v5.8
+Contact:	Mika Westerberg <mika.westerberg@linux.intel.com>
+Description:	When new NVM image is written to the non-active NVM
+		area (through non_activeX NVMem device), the
+		authentication procedure is started by writing 1 to
+		this file. If everything goes well, the device is
+		restarted with the new NVM firmware. If the image
+		verification fails an error code is returned instead.
+
+		When read holds status of the last authentication
+		operation if an error occurred during the process.
+		Format: %x.
+
+What:		/sys/bus/thunderbolt/devices/<device>:<port>.<index>/nvm_version
+Date:		Aug 2020
+KernelVersion:	v5.8
+Contact:	Mika Westerberg <mika.westerberg@linux.intel.com>
+Description:	Holds retimer NVM version number. Format: %x.%x, major.minor.
+
+What:		/sys/bus/thunderbolt/devices/<device>:<port>.<index>/vendor
+Date:		Aug 2020
+KernelVersion:	v5.8
+Contact:	Mika Westerberg <mika.westerberg@linux.intel.com>
+Description:	Retimer vendor identifier read from the hardware.
