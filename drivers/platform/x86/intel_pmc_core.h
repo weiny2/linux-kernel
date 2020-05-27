@@ -187,6 +187,7 @@ enum ppfear_regs {
 #define ICL_PMC_LTR_WIGIG			0x1BFC
 
 #define TGL_NUM_IP_IGN_ALLOWED			22
+#define ADL_NUM_IP_IGN_ALLOWED			23
 
 /*
  * Tigerlake Power Management Controller register offsets
@@ -195,8 +196,30 @@ enum ppfear_regs {
 #define TGL_LPM_RESIDENCY_OFFSET		0x1C80
 
 /* Tigerlake Low Power Mode debug registers */
+#define TGL_LPM_ETR3_OFFSET			0x1048
 #define TGL_LPM_STATUS_OFFSET			0x1C3C
+#define TGL_LPM_STATUS_LATCH_OFFSET		0x1C34
 #define TGL_LPM_LIVE_STATUS_OFFSET		0x1C5C
+
+/* LPM Status Latch Enable Register */
+#define LPM_STS_LATCH_MODE_BIT			BIT(31)
+#define LPM_STS_LATCH_EN_GROUP_MASK		GENMASK(7,0)
+#define LPM_LATCH_S0IX_Y			0
+#define LPM_LATCH_C10_ENTRY			1
+#define LPM_LATCH_C10_EXIT			2
+
+/* Extended Test Mode Regiser 3 */
+#define ETR3_LATCH_EVENTS_C10_EXIT_BIT		BIT(30)
+#define ETR3_CLR_LPM_EVENTS_BIT			BIT(28)
+
+/* Alder Lake Power Management Controller register offsets */
+#define ADL_LPM_EN_OFFSET			0x179C
+#define ADL_LPM_RESIDENCY_OFFSET		0x17A4
+
+/* Alder Lake Low Power Mode debug registers */
+#define ADL_LPM_STATUS_OFFSET			0x170C
+#define ADL_LPM_STATUS_LATCH_OFFSET		0x1704
+#define ADL_LPM_LIVE_STATUS_OFFSET		0x1764
 
 const char *tgl_lpm_modes[] = {
 	"S0i2.0",
@@ -207,6 +230,13 @@ const char *tgl_lpm_modes[] = {
 	"S0i3.2",
 	"S0i3.3",
 	"S0i3.4",
+	NULL
+};
+
+const char *latch_modes[] = {
+	[LPM_LATCH_S0IX_Y] = "s0ix_y",
+	[LPM_LATCH_C10_ENTRY] = "c10_entry",
+	[LPM_LATCH_C10_EXIT] = "c10_exit",
 	NULL
 };
 
@@ -257,9 +287,11 @@ struct pmc_reg_map {
 	/* Low Power Mode registers */
 	const char **lpm_modes;
 	const u32 lpm_en_offset;
+	const u32 lpm_sts_latch_offset;
 	const u32 lpm_residency_offset;
 	const u32 lpm_status_offset;
 	const u32 lpm_live_status_offset;
+	const u32 lpm_etr3_offset;
 };
 
 /**
@@ -289,6 +321,7 @@ struct pmc_dev {
 	bool check_counters; /* Check for counter increments on resume */
 	u64 pc10_counter;
 	u64 s0ix_counter;
+	u64 s0ix_y_counter;
 };
 
 #endif /* PMC_CORE_H */
