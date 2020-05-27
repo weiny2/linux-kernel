@@ -837,6 +837,67 @@ out_unlock:
 }
 EXPORT_SYMBOL(handle_edge_irq);
 
+#ifdef CONFIG_SVOS
+extern irqreturn_t handle_irq_event_bcast(struct irq_desc *desc, const struct cpumask *);
+
+void handle_edge_irq_bcast(struct irq_desc *desc)
+{
+	unsigned int cpu = smp_processor_id(); //
+	cpumask_t tmp_mask;  //
+	const struct cpumask *cpu_mask = &tmp_mask;	//
+
+	cpumask_clear(&tmp_mask);    //
+	cpumask_set_cpu(cpu, &tmp_mask);    //
+
+	raw_spin_lock(&desc->lock);     //
+
+	desc->istate &= ~(IRQS_REPLAY | IRQS_WAITING);	//
+	/*
+	* If we're currently running this IRQ, or its disabled,
+	* we shouldn't process the IRQ. Mark it pending, handle
+	* the necessary masking and go out
+	*/
+	if (unlikely(irqd_irq_disabled(&desc->irq_data) ||
+	cpumask_intersects(desc->inprogress, cpu_mask) || !desc->action)) { //
+	if (!irq_check_poll(desc)) { //
+	cpumask_or(desc->pending, desc->pending, cpu_mask); //
+	mask_ack_irq(desc); // also sets IRQS_MASKED
+	goto out_unlock; //
+	}
+	}
+	kstat_incr_irqs_this_cpu(desc); //
+
+	/* Start handling the irq */
+	desc->irq_data.chip->irq_ack(&desc->irq_data); //
+
+	do {
+	if (unlikely(!desc->action)) {
+	mask_irq(desc);
+	goto out_unlock;
+	}
+
+	/*
+	* When another irq arrived while we were handling
+	* one, we could have masked the irq.
+	* Renable it, if it was not disabled in meantime.
+	*/
+	if (unlikely(cpumask_intersects(desc->pending, cpu_mask))) { //
+	if (!irqd_irq_disabled(&desc->irq_data) &&
+	irqd_irq_masked(&desc->irq_data))
+	unmask_irq(desc);	// also clears IRQS_MASKED
+	}
+
+	handle_irq_event_bcast(desc, cpu_mask);
+
+	} while ( (cpumask_intersects(desc->pending, cpu_mask)) &&
+	!irqd_irq_disabled(&desc->irq_data) );
+
+out_unlock:
+	raw_spin_unlock(&desc->lock);
+}
+EXPORT_SYMBOL(handle_edge_irq_bcast);
+#endif
+
 #ifdef CONFIG_IRQ_EDGE_EOI_HANDLER
 /**
  *	handle_edge_eoi_irq - edge eoi type IRQ handler
