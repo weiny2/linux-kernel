@@ -1,0 +1,40 @@
+comment "Intel Dynamic Load Balancer 2.0"
+
+config INTEL_DLB2
+	tristate "Intel(R) Dynamic Load Balancer 2.0 Driver"
+	default m
+	depends on 64BIT && PCI && X86 && PCI_IOV
+	---help---
+	  This driver supports the Intel(R) Dynamic Load Balancer 2.0 (dlb2)
+	  family of devices.
+
+	  To compile this driver as a module, choose M here. The module
+	  will be called dlb.
+
+          More information about the Intel(R) DLB 2.0 family as well as the
+          Linux OS and tools for DLB to use with this driver are available from
+          <TODO>.
+
+config INTEL_DLB2_DATAPATH
+	bool "Intel(R) Dynamic Load Balancer 2.0 kernel datapath support"
+	default y
+	depends on INTEL_DLB2
+	---help---
+	  Say Y if you want to enable the DLB 2.0 kernel datapath support in the
+	  dlb2 driver. This exposes interfaces for kernel software to use the
+	  device.
+
+config INTEL_DLB2_SIOV
+	bool "Intel(R) Dynamic Load Balancer 2.0 Scalable I/O Virtualization"
+	default y
+	depends on INTEL_DLB2
+	depends on INTEL_IOMMU
+	depends on VFIO
+	depends on VFIO_MDEV
+	depends on VFIO_MDEV_DEVICE
+	depends on MSI_IMS
+
+	---help---
+	  Say Y if you want to enable Scalable I/O Virtualization support in
+	  the dlb2 driver. If enabled, the driver is capable of creating
+	  multiple virtual DLBs per physical device.
