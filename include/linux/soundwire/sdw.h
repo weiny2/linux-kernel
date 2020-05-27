@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: (GPL-2.0 OR BSD-3-Clause) */
+/* SPDX-License-Identifier: (GPL-2.0-only OR BSD-3-Clause) */
 /* Copyright(c) 2015-17 Intel Corporation. */
 
 #ifndef __SOUNDWIRE_H
@@ -632,6 +632,55 @@ struct sdw_slave {
 
 #define dev_to_sdw_dev(_dev) container_of(_dev, struct sdw_slave, dev)
 
+struct sdw_link_ops;
+
+/**
+ * struct sdw_master_device - SoundWire 'Master Device' representation
+ * @dev: Linux device for this Master
+ * @bus: Bus handle
+ * @link_ops: link-specific ops, initialized with sdw_master_device_add()
+ * @link_id: link index as defined by MIPI DisCo specification
+ * @pm_runtime_suspended: flag set with the value of pm_runtime_suspended()
+ * during system suspend and checked during system resume.
+ * @pdata: private data typically provided with sdw_master_device_add()
+ *
+ * link_ops can be NULL when link-level initializations and power-management
+ * are not desired.
+ */
+struct sdw_master_device {
+	struct device dev;
+	struct sdw_bus *bus;
+	struct sdw_link_ops *link_ops;
+	int link_id;
+	bool pm_runtime_suspended;
+	void *pdata;
+};
+
+/**
+ * struct sdw_link_ops - SoundWire link-specific ops
+ * @add: initializations and allocation (hardware may not be enabled yet)
+ * @startup: initialization handled after the hardware is enabled, all
+ * clock/power dependencies are available
+ * @del: free all remaining resources
+ * @process_wake_event: handle external wake
+ * @driver: raw structure used for name/PM hooks.
+ *
+ * This optional structure is provided for link specific
+ * operations. All members are optional, but if .add() is supported the
+ * dual .del() function shall be used to release all resources allocated
+ * in .add().
+ */
+struct sdw_link_ops {
+	int (*add)(struct sdw_master_device *md, void *link_ctx);
+	int (*startup)(struct sdw_master_device *md);
+	int (*del)(struct sdw_master_device *md);
+	int (*process_wake_event)(struct sdw_master_device *md);
+	struct device_driver *driver;
+};
+
+#define dev_to_sdw_master_device(d)	\
+	container_of(d, struct sdw_master_device, dev)
+
 struct sdw_driver {
 	const char *name;
 
@@ -809,6 +858,11 @@ struct sdw_master_ops {
  * @multi_link: Store bus property that indicates if multi links
  * are supported. This flag is populated by drivers after reading
  * appropriate firmware (ACPI/DT).
+ * @hw_sync_min_links: Number of links used by a stream above which
+ * hardware-based synchronization is required. This value is only
+ * meaningful if multi_link is set. If set to 1, hardware-based
+ * synchronization will be used even if a stream only uses a single
+ * SoundWire segment.
  */
 struct sdw_bus {
 	struct device *dev;
@@ -830,10 +884,24 @@ struct sdw_bus {
 	unsigned int clk_stop_timeout;
 	u32 bank_switch_timeout;
 	bool multi_link;
+	int hw_sync_min_links;
 };
 
 int sdw_add_bus_master(struct sdw_bus *bus);
 void sdw_delete_bus_master(struct sdw_bus *bus);
+
+struct sdw_master_device
+*sdw_master_device_add(struct device *parent,
+		       struct fwnode_handle *fwnode,
+		       struct sdw_link_ops *master_ops,
+		       int link_id,
+		       void *pdata);
+
+int sdw_master_device_del(struct sdw_master_device *md);
+
+int sdw_master_device_startup(struct sdw_master_device *md);
+
+int sdw_master_device_process_wake_event(struct sdw_master_device *md);
 
 /**
  * sdw_port_config: Master or Slave Port configuration
@@ -920,6 +988,9 @@ struct sdw_stream_runtime {
 
 struct sdw_stream_runtime *sdw_alloc_stream(const char *stream_name);
 void sdw_release_stream(struct sdw_stream_runtime *stream);
+
+int sdw_compute_params(struct sdw_bus *bus);
+
 int sdw_stream_add_master(struct sdw_bus *bus,
 		struct sdw_stream_config *stream_config,
 		struct sdw_port_config *port_config,
@@ -934,10 +1005,12 @@ int sdw_stream_remove_master(struct sdw_bus *bus,
 		struct sdw_stream_runtime *stream);
 int sdw_stream_remove_slave(struct sdw_slave *slave,
 		struct sdw_stream_runtime *stream);
+int sdw_startup_stream(void *sdw_substream);
 int sdw_prepare_stream(struct sdw_stream_runtime *stream);
 int sdw_enable_stream(struct sdw_stream_runtime *stream);
 int sdw_disable_stream(struct sdw_stream_runtime *stream);
 int sdw_deprepare_stream(struct sdw_stream_runtime *stream);
+void sdw_shutdown_stream(void *sdw_substream);
 int sdw_bus_prep_clk_stop(struct sdw_bus *bus);
 int sdw_bus_clk_stop(struct sdw_bus *bus);
 int sdw_bus_exit_clk_stop(struct sdw_bus *bus);

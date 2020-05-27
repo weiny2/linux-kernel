@@ -189,7 +189,8 @@ static const struct sof_dev_desc icl_desc = {
 };
 #endif
 
-#if IS_ENABLED(CONFIG_SND_SOC_SOF_TIGERLAKE)
+#if IS_ENABLED(CONFIG_SND_SOC_SOF_TIGERLAKE) || \
+	IS_ENABLED(CONFIG_SND_SOC_SOF_ALDERLAKE)
 static const struct sof_dev_desc tgl_desc = {
 	.machines               = snd_soc_acpi_intel_tgl_machines,
 	.alt_machines		= snd_soc_acpi_intel_tgl_sdw_machines,
@@ -237,6 +238,24 @@ static const struct sof_dev_desc jsl_desc = {
 	.default_tplg_path = "intel/sof-tplg",
 	.default_fw_filename = "sof-jsl.ri",
 	.nocodec_tplg_filename = "sof-jsl-nocodec.tplg",
+	.ops = &sof_cnl_ops,
+};
+#endif
+
+#if IS_ENABLED(CONFIG_SND_SOC_SOF_ALDERLAKE)
+static const struct sof_dev_desc adls_desc = {
+	.machines               = snd_soc_acpi_intel_adl_machines,
+	.alt_machines           = snd_soc_acpi_intel_adl_sdw_machines,
+	.resindex_lpe_base      = 0,
+	.resindex_pcicfg_base   = -1,
+	.resindex_imr_base      = -1,
+	.irqindex_host_ipc      = -1,
+	.resindex_dma_base      = -1,
+	.chip_info = &adls_chip_info,
+	.default_fw_path = "intel/sof",
+	.default_tplg_path = "intel/sof-tplg",
+	.default_fw_filename = "sof-adls.ri",
+	.nocodec_tplg_filename = "sof-adls-nocodec.tplg",
 	.ops = &sof_cnl_ops,
 };
 #endif
@@ -435,6 +454,12 @@ static const struct pci_device_id sof_pci_ids[] = {
 #if IS_ENABLED(CONFIG_SND_SOC_SOF_ELKHARTLAKE)
 	{ PCI_DEVICE(0x8086, 0x4b55),
 		.driver_data = (unsigned long)&ehl_desc},
+#endif
+#if IS_ENABLED(CONFIG_SND_SOC_SOF_ALDERLAKE)
+	{ PCI_DEVICE(0x8086, 0x7ad0),
+		.driver_data = (unsigned long)&adls_desc},
+	{ PCI_DEVICE(0x8086, 0x51c8),
+		.driver_data = (unsigned long)&tgl_desc},
 #endif
 	{ 0, }
 };
