@@ -1442,6 +1442,38 @@ struct bio *bio_split(struct bio *bio, int sectors,
 {
 	struct bio *split;
 
+	if (sectors <= 0 || sectors >= bio_sectors(bio)) {
+		unsigned i;
+
+		pr_err("%s: %s: invalid parameters: sectors %d bio_sectors %u bi_opf %#x bi_vcnt %u\n",
+		       __func__,
+		       bio->bi_disk ? bio->bi_disk->disk_name : "unknown disk",
+		       sectors, bio_sectors(bio), bio->bi_opf, bio->bi_vcnt);
+		if (bio->bi_disk && bio->bi_disk->queue) {
+			struct request_queue *q = bio->bi_disk->queue;
+
+			pr_err("%s: %s: queue_max_sectors %u queue_max_hw_sectors %u queue_segment_boundary %#lx queue_max_segment_size %u queue_logical_block_size %u queue_physical_block_size %u\n",
+			       __func__,
+			       bio->bi_disk ? bio->bi_disk->disk_name : "unknown disk",
+			       queue_max_sectors(q),
+			       queue_max_hw_sectors(q),
+			       queue_segment_boundary(q),
+			       queue_max_segment_size(q),
+			       queue_logical_block_size(q),
+			       queue_physical_block_size(q));
+		} else {
+			pr_err("%s: %s: unknown queue\n",
+			       __func__,
+			       bio->bi_disk ? bio->bi_disk->disk_name : "unknown disk");
+		}
+		for (i = 0; i < bio->bi_vcnt; i++) {
+			pr_err("%s: %s: bio_vec idx %u len %u offset %u\n",
+			       __func__,
+			       bio->bi_disk ? bio->bi_disk->disk_name : "unknown disk",
+			       i, bio->bi_io_vec[i].bv_len, bio->bi_io_vec[i].bv_offset);
+		}
+	}
+
 	BUG_ON(sectors <= 0);
 	BUG_ON(sectors >= bio_sectors(bio));
 
