@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: GPL-2.0-only
+
+config INTEL_DLB
+	tristate "Intel(R) Dynamic Load Balancer Driver"
+	depends on 64BIT && PCI && X86
+	help
+	  This driver supports the Intel(R) Dynamic Load Balancer (DLB) device.
+
+	  To compile this driver as a module, choose M here. The module
+	  will be called dlb.
+
+	  More information about the Intel(R) DLB as well as the Linux OS and
+	  tools for DLB to use with this driver are available from <TODO>.
