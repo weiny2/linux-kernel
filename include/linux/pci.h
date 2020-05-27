@@ -2387,6 +2387,21 @@ static inline bool pci_is_thunderbolt_attached(struct pci_dev *pdev)
 	return false;
 }
 
+#ifdef CONFIG_ACPI
+/**
+ * pci_acpi_storage_d3 - whether root port requests D3 for idle suspend
+ * @pdev: PCI device to check
+ *
+ * Returns true if the ACPI companion device contains the "StorageD3Enable"
+ * _DSD property and the value is 1. This indicates that the root port is
+ * used by a storage device and the platform is requesting D3 for the
+ * device during suspend to idle in order to support platform pm.
+ */
+bool pci_acpi_storage_d3(struct pci_dev *dev);
+#else
+static inline bool pci_acpi_storage_d3(struct pci_dev *dev) { return false; }
+#endif
+
 #if defined(CONFIG_PCIEPORTBUS) || defined(CONFIG_EEH)
 void pci_uevent_ers(struct pci_dev *pdev, enum  pci_ers_result err_type);
 #endif
