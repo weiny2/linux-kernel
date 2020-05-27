@@ -114,8 +114,19 @@ enum xfeature {
 	XFEATURE_Hi16_ZMM,
 	XFEATURE_PT_UNIMPLEMENTED_SO_FAR,
 	XFEATURE_PKRU,
+	XFEATURE_PASID,
+	XFEATURE_CET_USER,
+	XFEATURE_CET_KERNEL,
+	XFEATURE_RSRVD_COMP_13,
+	XFEATURE_RSRVD_COMP_14,
+	XFEATURE_RSRVD_COMP_15,
+	XFEATURE_RSRVD_COMP_16,
+	XFEATURE_XTILE_CFG,
+	XFEATURE_XTILE_DATA,
+	XFEATURE_BLOB_BEGIN		= 16,
+	XFEATURE_BLOB_END		= 31,
 
-	XFEATURE_MAX,
+	XFEATURE_MAX = XFEATURE_BLOB_END + 1,
 };
 
 #define XFEATURE_MASK_FP		(1 << XFEATURE_FP)
@@ -128,11 +139,24 @@ enum xfeature {
 #define XFEATURE_MASK_Hi16_ZMM		(1 << XFEATURE_Hi16_ZMM)
 #define XFEATURE_MASK_PT		(1 << XFEATURE_PT_UNIMPLEMENTED_SO_FAR)
 #define XFEATURE_MASK_PKRU		(1 << XFEATURE_PKRU)
+#define XFEATURE_MASK_PASID		(1 << XFEATURE_PASID)
+#define XFEATURE_MASK_CET_USER		(1 << XFEATURE_CET_USER)
+#define XFEATURE_MASK_CET_KERNEL	(1 << XFEATURE_CET_KERNEL)
+#define XFEATURE_MASK_XTILE_CFG		(1 << XFEATURE_XTILE_CFG)
+#define XFEATURE_MASK_XTILE_DATA	(1 << XFEATURE_XTILE_DATA)
 
 #define XFEATURE_MASK_FPSSE		(XFEATURE_MASK_FP | XFEATURE_MASK_SSE)
 #define XFEATURE_MASK_AVX512		(XFEATURE_MASK_OPMASK \
 					 | XFEATURE_MASK_ZMM_Hi256 \
 					 | XFEATURE_MASK_Hi16_ZMM)
+#define XFEATURE_MASK_XTILE		(XFEATURE_MASK_XTILE_DATA \
+					 | XFEATURE_MASK_XTILE_CFG)
+
+#define XFEATURE_REGION_MASK(max, min)	\
+	((BIT_ULL(max - min + 1) - 1) << min)
+
+#define XFEATURE_MASK_BLOBS \
+	XFEATURE_REGION_MASK(XFEATURE_BLOB_END, XFEATURE_BLOB_BEGIN)
 
 #define FIRST_EXTENDED_XFEATURE	XFEATURE_YMM
 
@@ -144,6 +168,9 @@ struct reg_256_bit {
 };
 struct reg_512_bit {
 	u8	regbytes[512/8];
+};
+struct reg_1024_byte {
+	u8	regbytes[1024];
 };
 
 struct lbr_entry {
@@ -250,6 +277,46 @@ struct arch_lbr_state {
 	struct lbr_entry		lbr_entry[ARCH_LBR_NR_ENTRIES];
 } __packed;
 
+/*
+ * State component 10 is supervisor state used for context-switching the
+ * PASID state.
+ */
+struct ia32_pasid_state {
+	u64 pasid;
+} __packed;
+
+/*
+ * State component 11 is Control-flow Enforcement user states
+ */
+struct cet_user_state {
+	u64 user_cet;			/* user control-flow settings */
+	u64 user_ssp;			/* user shadow stack pointer */
+};
+
+/*
+ * State component 12 is Control-flow Enforcement kernel states
+ */
+struct cet_kernel_state {
+	u64 kernel_ssp;			/* kernel shadow stack */
+	u64 pl1_ssp;			/* privilege level 1 shadow stack */
+	u64 pl2_ssp;			/* privilege level 2 shadow stack */
+};
+
+/*
+ * State component 17: 64-byte AMX tile control register.
+ */
+struct xtile_cfg {
+	u64				tcfg[8];
+} __packed;
+
+/*
+ * State component 18: eight 1KB tile registers, TMM0-7.
+ * Each register represents 16 64-byte rows of the matrix data.
+ */
+struct xtile_data {
+	struct reg_1024_byte		tmm[8];
+} __packed;
+
 struct xstate_header {
 	u64				xfeatures;
 	u64				xcomp_bv;
@@ -282,9 +349,9 @@ struct xregs_state {
  * put together, so that we can pick the right one runtime.
  *
  * The size of the structure is determined by the largest
- * member - which is the xsave area.  The padding is there
- * to ensure that statically-allocated task_structs (just
- * the init_task today) have enough space.
+ * member - which is the inline-allocated xsave area.
+ * The padding is there to ensure that statically-allocated
+ * task_structs (just the init_task today) have enough space.
  */
 union fpregs_state {
 	struct fregs_state		fsave;
@@ -320,6 +387,34 @@ struct fpu {
 	 * Records the timestamp of AVX512 use during last context switch.
 	 */
 	unsigned long			avx512_timestamp;
+
+	/*
+	 * @firstuse_bv:
+	 *
+	 * Record the first-use detection status for the monitored xfeatures.
+	 *
+	 * Implication of each bit value is following:
+	 *	If a bit is zero, the first-use is not detected, or the
+	 *	correspondent xfeature is not being monitored.
+	 *	If a bit is nonzero, the first-use of the correspondent
+	 *	xfeature was detected.
+	 *
+	 * We can use this bit value as an operand for XSAVE and XRSTOR
+	 * family instructions for saving and restoring the xstates
+	 * dynamically. Note that this bit value is not for the hardware
+	 * configuration directly. A helper function, xfd_get_cfg(),
+	 * converts it for that.
+	 */
+	u64	firstuse_bv;
+
+	/*
+	 * @state_exp:
+	 *
+	 * In-memory copy of some extended register state that takes
+	 * significant space, not fitting in task_struct. This is an
+	 * expanded area.
+	 */
+	union fpregs_state		*state_exp;
 
 	/*
 	 * @state:
