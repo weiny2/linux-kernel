@@ -1,0 +1,9 @@
+Features related to Intel Resource Director Technology (RDT)
+
+Supported platforms: Icelake Server (ICX), Snow Ridge (SNR), Sapphire
+Rapids (SPR).
+
+Changelog:
+- Support wider MBM counters. New feature in ICX and SNR. (LCK-7726)
+- Support MBA2.0 min/max control. New feature in ICX and SNR. (LCK-7725).
+- Recognize and advertise MBA3.0, new architectural feature available starting with SPR.
