@@ -85,6 +85,12 @@
 #define DISABLE_IBT	(1<<(X86_FEATURE_IBT & 31))
 #endif
 
+#ifdef CONFIG_X86_INTEL_RAR
+# define DISABLE_RAR		0
+#else
+# define DISABLE_RAR		(1 << (X86_FEATURE_RAR & 31))
+#endif
+
 /*
  * Make sure to add features to the correct mask
  */
@@ -99,7 +105,7 @@
 #define DISABLED_MASK8	0
 #define DISABLED_MASK9	(DISABLE_SMAP|DISABLE_SGX)
 #define DISABLED_MASK10	0
-#define DISABLED_MASK11	0
+#define DISABLED_MASK11	(DISABLE_RAR)
 #define DISABLED_MASK12	0
 #define DISABLED_MASK13	0
 #define DISABLED_MASK14	0
