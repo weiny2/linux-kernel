@@ -111,8 +111,6 @@ int __arch_override_mprotect_pkey(struct vm_area_struct *vma, int prot, int pkey
 	return vma_pkey(vma);
 }
 
-#define PKRU_AD_KEY(pkey)	(PKRU_AD_BIT << ((pkey) * PKRU_BITS_PER_PKEY))
-
 /*
  * Make the default PKRU value (at execve() time) as restrictive
  * as possible.  This ensures that any threads clone()'d early
@@ -210,3 +208,177 @@ static __init int setup_init_pkru(char *opt)
 	return 1;
 }
 __setup("init_pkru=", setup_init_pkru);
+
+/* The IA32_PKRS MSR is cached per CPU. */
+static DEFINE_PER_CPU(u32, pkrs);
+
+void pks_init_task(struct task_struct *tsk)
+{
+	tsk->thread.pkrs = init_pkrs_value;
+}
+
+/* Update PKRS MSR and its cache on local CPU. */
+static void pkrs_update(u32 pkrs_val)
+{
+	this_cpu_write(pkrs, pkrs_val);
+	wrmsrl(MSR_IA32_PKRS, pkrs_val);
+}
+
+/* Init PKRS MSR to ensure pkey-protection unless pkey is changed. */
+void pks_init(void)
+{
+	pkrs_update(init_pkrs_value);
+}
+
+/* Upload current's pkrs to MSR after switching to current. */
+void pkrs_sched_in(void)
+{
+	u64 current_pkrs = current->thread.pkrs;
+
+	/* Only update the MSR when current's pkrs is different from the MSR. */
+	if (this_cpu_read(pkrs) == current_pkrs)
+		return;
+
+	pkrs_update(current_pkrs);
+}
+
+/* Get new pkru or pkrs value with new protection bits in the key. */
+u32 get_new_pkr(u32 old_pkr, int pkey, unsigned long init_val)
+{
+	int pkey_shift = (pkey * PKRU_BITS_PER_PKEY);
+	u32 new_pkr_bits = 0;
+
+	/* Set the bits we need in PKRU:  */
+	if (init_val & PKEY_DISABLE_ACCESS)
+		new_pkr_bits |= PKRU_AD_BIT;
+	if (init_val & PKEY_DISABLE_WRITE)
+		new_pkr_bits |= PKRU_WD_BIT;
+
+	/* Shift the bits in to the correct place in PKRU for pkey: */
+	new_pkr_bits <<= pkey_shift;
+
+	/* Mask off any old bits in place: */
+	old_pkr &= ~((PKRU_AD_BIT | PKRU_WD_BIT) << pkey_shift);
+
+	/* Return old part along with new part: */
+	return old_pkr | new_pkr_bits;
+}
+
+/*
+ * Check if a PKS key is valid for free/update operations.
+ * Key 0 is reserved for the kernel and always invalid for the operations.
+ */
+static bool pks_key_validate(int pkey)
+{
+	if (!static_cpu_has(X86_FEATURE_PKS))
+		return false;
+
+	if (pkey >= PKS_NUM_KEYS || pkey <= PKS_KERN_DEFAULT_KEY)
+		return false;
+
+	return true;
+}
+
+/* Update current task's pkrs and local PKRS MSR. */
+int update_local_sup_key(int pkey, unsigned long protection)
+{
+	u32 current_pkrs, cpu_pkrs, new_pkrs;
+
+	if (!pks_key_validate(pkey))
+		return -EINVAL;
+
+	/* Get current's pkrs bits for pkey. */
+	current_pkrs = current->thread.pkrs;
+	new_pkrs = get_new_pkr(current_pkrs, pkey, protection);
+
+	current->thread.pkrs = new_pkrs;
+	set_thread_flag(TIF_PKS);
+
+	preempt_disable();
+	cpu_pkrs = this_cpu_read(pkrs);
+	/* Update MSR only when protections are different. */
+	if (cpu_pkrs != new_pkrs)
+		pkrs_update(new_pkrs);
+	preempt_enable();
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(update_local_sup_key);
+
+#undef pr_fmt
+#define pr_fmt(fmt) "x86/PKS: " fmt
+
+static const char pks_key_user0[] = "kernel";
+/*
+ * The array stores names of allocated keys. After a key is allocated, the
+ * pointer indexed by the key points to a key name string. Key 0 is reserved
+ * for the kernel. All other keys can be allocated dynamically.
+ */
+static const char *pks_key_users[PKS_NUM_KEYS] = {
+	pks_key_user0
+};
+
+/*
+ * One bit per protection key says whether the kernel can use it or not.
+ * Protected by atomic bit operations. Bit 0 is set for key 0 initially.
+ * Totally 16 bits for 16 keys. Defined as unsigned long to avoid split
+ * lock in atomic bit ops.
+ */
+static unsigned long pks_key_allocation_map = 1 << PKS_KERN_DEFAULT_KEY;
+
+/*
+ * Allocate a PKS key for a given name. Caller must maintain the name string
+ * in memory during the key's life cycle.
+ */
+int pks_key_alloc(const char * const pkey_user)
+{
+	int nr, old_bit, pkey = -ENOSPC;
+
+	if (!static_cpu_has(X86_FEATURE_PKS))
+		return -EINVAL;
+
+	if (!pkey_user)
+		return -EINVAL;
+
+	/* Find a free bit (0) in the bit map. */
+	while (1) {
+		nr = ffz(pks_key_allocation_map);
+		if (nr > PKS_NUM_KEYS - 1) {
+			int i;
+
+			pr_info("Cannot allocate key for %s. Key users are:\n",
+				pkey_user);
+			for (i = PKS_KERN_DEFAULT_KEY; i < PKS_NUM_KEYS; i++)
+				pr_info("%s\n", pks_key_users[i]);
+
+			return -ENOSPC;
+		}
+
+		old_bit = test_and_set_bit_lock(nr, &pks_key_allocation_map);
+		if (!old_bit)
+			break;
+        }
+	/* Allocate corresponding key. */
+	pkey = nr;
+	pks_key_users[pkey] = pkey_user;
+
+	return pkey;
+}
+EXPORT_SYMBOL_GPL(pks_key_alloc);
+
+/* Free a PKS key. */
+void pks_key_free(int pkey)
+{
+	if (!pks_key_validate(pkey))
+		return;
+
+	clear_bit(pkey, &pks_key_allocation_map);
+
+	if (pks_key_users[pkey]) {
+		pks_key_users[pkey] = NULL;
+		/* Restore to default AD=1 and WD=0. */
+		update_local_sup_key(pkey,
+				     PKEY_DISABLE_ACCESS | ~PKEY_DISABLE_WRITE);
+	}
+}
+EXPORT_SYMBOL_GPL(pks_key_free);
