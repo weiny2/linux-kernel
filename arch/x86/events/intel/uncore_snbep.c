@@ -4888,6 +4888,9 @@ static void snr_uncore_mmio_enable_event(struct intel_uncore_box *box,
 	if (!box->io_addr)
 		return;
 
+	if (!is_vaild_mmio_offset(box, hwc->config_base))
+		return;
+
 	writel(hwc->config | SNBEP_PMON_CTL_EN,
 	       box->io_addr + hwc->config_base);
 }
@@ -4898,6 +4901,9 @@ static void snr_uncore_mmio_disable_event(struct intel_uncore_box *box,
 	struct hw_perf_event *hwc = &event->hw;
 
 	if (!box->io_addr)
+		return;
+
+	if (!is_vaild_mmio_offset(box, hwc->config_base))
 		return;
 
 	writel(hwc->config, box->io_addr + hwc->config_base);
@@ -6128,6 +6134,9 @@ static void spr_uncore_mmio_enable_event(struct intel_uncore_box *box,
 	if (!box->io_addr)
 		return;
 
+	if (!is_vaild_mmio_offset(box, hwc->config_base))
+		return;
+
 	writel(hwc->config, box->io_addr + hwc->config_base);
 }
 
@@ -6137,6 +6146,9 @@ static void spr_uncore_mmio_disable_event(struct intel_uncore_box *box,
 	struct hw_perf_event *hwc = &event->hw;
 
 	if (!box->io_addr)
+		return;
+
+	if (!is_vaild_mmio_offset(box, hwc->config_base))
 		return;
 
 	writel(0, box->io_addr + hwc->config_base);

@@ -164,6 +164,9 @@ u64 uncore_mmio_read_counter(struct intel_uncore_box *box,
 	if (!box->io_addr)
 		return 0;
 
+	if (!is_vaild_mmio_offset(box, event->hw.event_base))
+		return 0;
+
 	return readq(box->io_addr + event->hw.event_base);
 }
 

@@ -291,6 +291,18 @@ static inline bool uncore_pmc_freerunning(int idx)
 	return idx == UNCORE_PMC_IDX_FREERUNNING;
 }
 
+static inline bool is_vaild_mmio_offset(struct intel_uncore_box *box,
+					unsigned long offset)
+{
+	if (box->pmu->type->mmio_map_size > offset)
+		return true;
+
+	pr_warn_once("perf uncore: Access invalid address of %s.\n",
+		     box->pmu->type->name);
+
+	return false;
+}
+
 static inline
 unsigned int uncore_mmio_box_ctl(struct intel_uncore_box *box)
 {
