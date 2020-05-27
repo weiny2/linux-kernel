@@ -4413,6 +4413,7 @@ static unsigned int basic_uncore_mmio_box_ctl(struct intel_uncore_box *box)
 static void basic_uncore_mmio_init_box(struct intel_uncore_box *box)
 {
 	unsigned int box_ctl = basic_uncore_mmio_box_ctl(box);
+	struct intel_uncore_type *type = box->pmu->type;
 	resource_size_t addr;
 
 	if (!box_ctl) {
@@ -4422,7 +4423,13 @@ static void basic_uncore_mmio_init_box(struct intel_uncore_box *box)
 
 	addr = box_ctl;
 
-	box->io_addr = ioremap(addr, UNCORE_BASIC_MMIO_SIZE);
+	if (!type->mmio_map_size) {
+		pr_warn("perf uncore: Cannot ioremap for %s. Map size is 0.\n",
+			type->name);
+		return;
+	}
+
+	box->io_addr = ioremap(addr, type->mmio_map_size);
 	if (!box->io_addr) {
 		pr_info("failed to ioremap IMC box\n");
 		return;
@@ -4450,6 +4457,7 @@ static struct intel_uncore_ops basic_uncore_mmio_ops = {
 
 static struct intel_uncore_type basic_uncore_mmio_box = {
 	.event_mask		= SNBEP_PMON_RAW_EVENT_MASK,
+	.mmio_map_size		= UNCORE_BASIC_MMIO_SIZE,
 	.ops			= &basic_uncore_mmio_ops,
 	.format_group		= &skx_uncore_format_group,
 };
@@ -4814,6 +4822,7 @@ static void __snr_uncore_mmio_init_box(struct intel_uncore_box *box,
 				       unsigned int box_ctl, int mem_offset)
 {
 	struct pci_dev *pdev = snr_uncore_get_mc_dev(box->dieid);
+	struct intel_uncore_type *type = box->pmu->type;
 	resource_size_t addr;
 	u32 pci_dword;
 
@@ -4828,7 +4837,13 @@ static void __snr_uncore_mmio_init_box(struct intel_uncore_box *box,
 
 	addr += box_ctl;
 
-	box->io_addr = ioremap(addr, SNR_IMC_MMIO_SIZE);
+	if (!type->mmio_map_size) {
+		pr_warn("perf uncore: Cannot ioremap for %s. Map size is 0.\n",
+			type->name);
+		return;
+	}
+
+	box->io_addr = ioremap(addr, type->mmio_map_size);
 	if (!box->io_addr)
 		return;
 
@@ -4923,6 +4938,7 @@ static struct intel_uncore_type snr_uncore_imc = {
 	.event_mask	= SNBEP_PMON_RAW_EVENT_MASK,
 	.box_ctl	= SNR_IMC_MMIO_PMON_BOX_CTL,
 	.mmio_offset	= SNR_IMC_MMIO_OFFSET,
+	.mmio_map_size	= SNR_IMC_MMIO_SIZE,
 	.ops		= &snr_uncore_mmio_ops,
 	.format_group	= &skx_uncore_format_group,
 };
@@ -4963,6 +4979,7 @@ static struct intel_uncore_type snr_uncore_imc_free_running = {
 	.num_counters		= 3,
 	.num_boxes		= 1,
 	.num_freerunning_types	= SNR_IMC_FREERUNNING_TYPE_MAX,
+	.mmio_map_size		= SNR_IMC_MMIO_SIZE,
 	.freerunning		= snr_imc_freerunning,
 	.ops			= &snr_uncore_imc_freerunning_ops,
 	.event_descs		= snr_uncore_imc_freerunning_events,
@@ -5384,6 +5401,7 @@ static struct intel_uncore_type icx_uncore_imc = {
 	.event_mask	= SNBEP_PMON_RAW_EVENT_MASK,
 	.box_ctl	= SNR_IMC_MMIO_PMON_BOX_CTL,
 	.mmio_offset	= SNR_IMC_MMIO_OFFSET,
+	.mmio_map_size	= SNR_IMC_MMIO_SIZE,
 	.ops		= &icx_uncore_mmio_ops,
 	.format_group	= &skx_uncore_format_group,
 };
@@ -5441,6 +5459,7 @@ static struct intel_uncore_type icx_uncore_imc_free_running = {
 	.num_counters		= 5,
 	.num_boxes		= 4,
 	.num_freerunning_types	= ICX_IMC_FREERUNNING_TYPE_MAX,
+	.mmio_map_size		= SNR_IMC_MMIO_SIZE,
 	.freerunning		= icx_imc_freerunning,
 	.ops			= &icx_uncore_imc_freerunning_ops,
 	.event_descs		= icx_uncore_imc_freerunning_events,
@@ -6035,6 +6054,7 @@ static void spr_uncore_mmio_init_box(struct intel_uncore_box *box,
 				     int mem_offset, unsigned int box_ctl)
 {
 	struct pci_dev *pdev = spr_uncore_get_mc_dev(box->dieid);
+	struct intel_uncore_type *type = box->pmu->type;
 	resource_size_t addr;
 	u32 pci_dword;
 
@@ -6049,7 +6069,13 @@ static void spr_uncore_mmio_init_box(struct intel_uncore_box *box,
 
 	addr += box_ctl;
 
-	box->io_addr = ioremap(addr, SNR_IMC_MMIO_SIZE);
+	if (!type->mmio_map_size) {
+		pr_warn("perf uncore: Cannot ioremap for %s. Map size is 0.\n",
+			type->name);
+		return;
+	}
+
+	box->io_addr = ioremap(addr, type->mmio_map_size);
 	if (!box->io_addr)
 		return;
 	writel(SPR_PMON_BOX_CTL_INT, box->io_addr);
@@ -6141,6 +6167,7 @@ static struct intel_uncore_type spr_uncore_imc = {
 	.event_mask	= SNBEP_PMON_RAW_EVENT_MASK,
 	.box_ctl	= SNR_IMC_MMIO_PMON_BOX_CTL,
 	.mmio_offset	= SPR_IMC_MMIO_OFFSET,
+	.mmio_map_size	= SNR_IMC_MMIO_SIZE,
 	.ops		= &spr_uncore_mmio_ops,
 	.format_group	= &skx_uncore_format_group,
 };
@@ -6205,6 +6232,7 @@ static struct intel_uncore_type spr_uncore_imc_free_running = {
 	.num_counters		= 7,
 	.num_boxes		= 4,
 	.num_freerunning_types	= SPR_IMC_FREERUNNING_TYPE_MAX,
+	.mmio_map_size          = SNR_IMC_MMIO_SIZE,
 	.freerunning		= spr_imc_freerunning,
 	.ops			= &spr_uncore_imc_freerunning_ops,
 	.event_descs		= spr_uncore_imc_freerunning_events,
@@ -6327,6 +6355,7 @@ static struct intel_uncore_type spr_uncore_ial_unit0 = {
 	.event_mask	= SNBEP_PMON_RAW_EVENT_MASK,
 	.box_ctl	= SPR_IAL_U0_MMIO_PMON_BOX_CTL,
 	.mmio_offset	= SPR_IAL_MEMBAR0_OFFSET,
+	.mmio_map_size  = 0x100,
 	.ops		= &spr_uncore_ial_mmio_ops,
 	.format_group	= &skx_uncore_format_group,
 };
@@ -6341,6 +6370,7 @@ static struct intel_uncore_type spr_uncore_ial_unit1 = {
 	.event_mask	= SNBEP_PMON_RAW_EVENT_MASK,
 	.box_ctl	= SPR_IAL_U1_MMIO_PMON_BOX_CTL,
 	.mmio_offset	= SPR_IAL_MEMBAR0_OFFSET,
+	.mmio_map_size	= 0x100,
 	.ops		= &spr_uncore_ial_mmio_ops,
 	.format_group	= &skx_uncore_format_group,
 };
