@@ -1,0 +1,95 @@
+./uintr_syscall
+Starting uintr syscall test
+[  168.396426] uintr: recv: task=1345 attr size 16 flags 1 handler 4016fd
+[  168.396437] uintr: recv: register handler for task=1345 upid.l=20000eb0000 puir=0
+[  168.412877] uintr: recv: handler=4016fd PD=ffff897b31a65880 NV=eb
+[  168.420089] uintr: recv: UINT_MISC_MSR=eb00000000
+[  168.425677] uintr: recv: handler registered. uipd ffff897b31a65880, phy_add = 0x1031a65880
+[  168.435577] uintr: recv: registering first user vector for task=1345
+[  168.443087] uintr: recv: use uvec=0, mask 1
+[  168.462803] uintr: recv: recv_task=ffff897b31a64500 task=1345 fd private data ffff897adf08baa0
+[  168.472977] uintr: recv: assigned Uvecfd=3
+recv: Syscall ui[  168.474970] uintr: debug: UITT for task=1345 entries=64 at address=ffff897b31a658c0
+ntr_receiver RECEIVER_REGISTER r[  168.488879] uintr: debug: task=1345 upid.l=20000eb0000 puir=0 uirr=0 misc=eb00000000 pd=ffff897b31a65880 handler=4016fd uitt=0
+eturned 0 with errno 0
+recv: uvecfd 3
+recv: uvecfd read 0
+recv: Syscall ui[  168.505603] uintr: debug: UITT for task=1345 entries=64 at address=ffff897b31a658c0
+ntr_receiver RECEIVER_DEBUG retu[  168.514779] uintr: debug: task=1345 upid.l=20000eb0000 puir=0 uirr=0 misc=eb00000000 pd=ffff897b31a65880 handler=4016fd uitt=0
+rned 0 with errno 0
+main: creating sender thread
+recv: Syscall uintr_receiver RECEIVER_DEBUG returned 0 with errno 0
+recv: waiting for User interrupt to get delivered
+[  168.530348] uintr: debug: UITT for task=1347 entries=64 at address=ffff897b31a613c0
+[  168.532366] uintr: debug: task=1347 upid.l=0 puir=0 uirr=0 misc=0 pd=0 handler=0 uitt=0
+send: Syscall uintr_sender SENDER_DEBUG returned 0 with errno 0
+send: receiver uvecfd 3
+[  168.540395] uintr: send: task=1347 attr size 8 flags 1 attr 7fe426c7bda8
+[  168.540407] uintr: send: recv_task_addr=ffff897b31a64500 and recv_task_id=1345 fd private data=ffff897adf08baa0
+[  168.554800] uintr: send: use UITT entry 0, mask 1
+[  168.556032] uintr: debug: UITT for task=1347 entries=64 at address=ffff897b31a613c0
+[  168.558006] uintr: 0: 1 ffff897b31a65880
+[  168.559106] uintr: send: set UITT address for task=1347
+[  168.560469] uintr: send: old UINT_MISC MSR=0
+[  168.561592] uintr: send: new UINT_MISC MSR=40
+[  168.562800] uintr: send: UITT index=0
+[  168.566816] uintr: send: registered successfully
+send: Syscall uintr_sender SENDER_REGISTER returned 0 with errno 0
+send: sender uipifd 4
+send: uipi_id read 0
+send: Sending IPI using sendipi(0)
+[  168.575649] uintr: debug: UITT for task=1347 entries=64 at address=ffff897b31a613c0
+[  168.577624] uintr: 0: 1 ffff897b31a65880
+[  168.578671] uintr: debug: task=1347 upid.l=0 puir=0 uirr=0 misc=40 pd=0 handler=0 uitt=ffff897b31a613c1
+	 UI handler vector 0
+send: Syscall uintr_sender SENDER_DEBUG returned 0 with errno 0
+send: Sending IPI through kernel
+send: Syscall uintr_sender SET_PUIR returned 0 with errno 0
+	 UI handler vector 4
+[  168.588425] uintr: send: task=1347 attr size 8 flags 1048576 attr 7fe426c7bda8
+[  170.521681] uintr: debug: UITT for task=1345 entries=64 at address=ffff897b31a658c0
+[  170.543179] uintr: debug: task=1345 upid.l=20000eb0000 puir=0 uirr=0 misc=eb00000000 pd=ffff897b31a65880 handler=4016fd uitt=0
+[  170.610802] uintr: recv: task=1345 called poll for uvec no=0
+recv: Syscall uintr_receiver RECEIVER_DEBUG returned 0 with errno 0
+[  170.622632] uintr: recv: task=1345 uvec=0 sender uitte=0
+[  171.416555] device virbr0-nic left promiscuous mode
+[  171.426388] virbr0: port 1(virbr0-nic) entered disabled state
+send: Sending IPI again using sendipi(0)
+send: waiting for receiver exit using poll..
+[  175.613889] uintr: recv: task=1345 called poll for uvec no=0
+[  175.624600] uintr: recv: task=1345 uvec=0 sender uitte=0
+	 UI handler vector 0
+recv: Poll syscall returned 0
+[  176.702892] uintr: recv: releasing uvec=0 for task=1345
+[  176.712977] uintr: recv: waking up sender task=1347 uitte 0
+[  176.723525] uintr: recv: task=1345 unregistered all user vectors
+[  176.723606] uintr: debug: UITT for task=1347 entries=64 at address=ffff897b31a613c0
+[  176.734829] uintr: debug: UITT for task=1345 entries=64 at address=ffff897b31a658c0
+[  176.740370] uintr: 0: 1 ffffffff8ccda2c0
+recv: Syscall uintr_receiver RECEIVER_DEBUG returned 0 with errno 0
+recv: waiting for pthread join
+[  176.753079] uintr: debug: task=1345 upid.l=0 puir=0 uirr=0 misc=0 pd=0 handler=0 uitt=0
+[  176.763687] uintr: debug: task=1347 upid.l=0 puir=0 uirr=0 misc=40 pd=0 handler=0 uitt=ffff897b31a613c1
+[  176.773392] uintr: send: releasing UITT index 0 for task=1347
+send: Syscall uintr_sender SENDER_DEBUG returned 0 with errno 0
+send: Exiting sender thread
+[  176.778511] uintr: debug: UITT for task=1347 entries=64 at address=ffff897b31a613c0
+[  176.784120] uintr: debug: task=1347 upid.l=0 puir=0 uirr=0 misc=0 pd=0 handler=0 uitt=0
+send: Syscall uintr_sender SENDER_DEBUG returned 0 with errno 0
+recv: pthread join finished
+[  176.791416] uintr: debug: UITT for task=1345 entries=64 at address=ffff897b31a658c0
+[  176.803991] uintr: debug: task=1345 upid.l=0 puir=0 uirr=0 misc=0 pd=0 handler=0 uitt=0
+recv: Syscall uintr_receiver RECEIVER_DEBUG returned 0 with errno 0
+UI count 3
+Ending uintr syscall test
+
+Old information: Add support for similar info
+chroot-ubuntu: cat /sys/class/uintr/connection-?/conn_info
+Type    Rcvr(TID)       Sndr(TID)       UV      UISR    NV      NDST    UITT    T-UPID                  R-UPID
+UIPI    uipi_test(332)  uipi_test(335)  5       4009e7  1f      1       0       ffff961078fc4680        ffff961078fc4680
+Type    Rcvr(TID)       Sndr(TID)       UV      UISR    NV      NDST    UITT    T-UPID                  R-UPID
+UIPI    uipi_test(332)  uipi_test(335)  6       4009e7  1f      1       1       ffff961078fc4680        ffff961078fc4680
+Type    Rcvr(TID)       Sndr(TID)       UV      UISR    NV      NDST    UITT    T-UPID                  R-UPID
+UIPI    uipi_test(338)  uipi_test(341)  5       4009e7  1f      1       0       ffff961078fc0b00        ffff961078fc0b00
+Type    Rcvr(TID)       Sndr(TID)       UV      UISR    NV      NDST    UITT    T-UPID                  R-UPID
+UIPI    uipi_test(338)      None(-1)    6       4009e7  1f      1       0       0       ffff961078fc0b00
