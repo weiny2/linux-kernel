@@ -952,6 +952,8 @@ EXPORT_SYMBOL_GPL(kvm_set_xcr);
 		__reserved_bits |= X86_CR4_LA57;	\
 	if (!__cpu_has(__c, X86_FEATURE_UMIP))		\
 		__reserved_bits |= X86_CR4_UMIP;	\
+	if (!__cpu_has(__c, X86_FEATURE_PKS))		\
+		__reserved_bits |= X86_CR4_PKS;		\
 	__reserved_bits;				\
 })
 
@@ -970,7 +972,7 @@ int kvm_set_cr4(struct kvm_vcpu *vcpu, unsigned long cr4)
 {
 	unsigned long old_cr4 = kvm_read_cr4(vcpu);
 	unsigned long pdptr_bits = X86_CR4_PGE | X86_CR4_PSE | X86_CR4_PAE |
-				   X86_CR4_SMEP | X86_CR4_SMAP | X86_CR4_PKE;
+				   X86_CR4_SMEP | X86_CR4_SMAP | X86_CR4_PKE | X86_CR4_PKS;
 
 	if (kvm_valid_cr4(vcpu, cr4))
 		return 1;
@@ -1202,7 +1204,7 @@ static const u32 msrs_to_save_all[] = {
 	MSR_IA32_RTIT_ADDR1_A, MSR_IA32_RTIT_ADDR1_B,
 	MSR_IA32_RTIT_ADDR2_A, MSR_IA32_RTIT_ADDR2_B,
 	MSR_IA32_RTIT_ADDR3_A, MSR_IA32_RTIT_ADDR3_B,
-	MSR_IA32_UMWAIT_CONTROL,
+	MSR_IA32_UMWAIT_CONTROL, MSR_IA32_PKRS,
 
 	MSR_ARCH_PERFMON_FIXED_CTR0, MSR_ARCH_PERFMON_FIXED_CTR1,
 	MSR_ARCH_PERFMON_FIXED_CTR0 + 2, MSR_ARCH_PERFMON_FIXED_CTR0 + 3,
@@ -9602,6 +9604,8 @@ void kvm_vcpu_reset(struct kvm_vcpu *vcpu, bool init_event)
 	vcpu->arch.regs_dirty = ~0;
 
 	vcpu->arch.ia32_xss = 0;
+
+	vcpu->arch.pkrs = 0;
 
 	kvm_x86_ops.vcpu_reset(vcpu, init_event);
 }
