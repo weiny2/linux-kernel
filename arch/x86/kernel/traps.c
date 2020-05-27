@@ -880,6 +880,14 @@ dotraplinkage void do_debug(struct pt_regs *regs, long error_code)
 		goto exit;
 #endif
 
+	if (!(dr6 & DR_BUS_LOCK)) {
+		if (user_mode(regs))
+			handle_user_bus_lock(regs);
+		else
+			handle_kernel_bus_lock(regs);
+		goto exit;
+	}
+
 	if (notify_die(DIE_DEBUG, "debug", regs, (long)&dr6, error_code,
 							SIGTRAP) == NOTIFY_STOP)
 		goto exit;
