@@ -783,6 +783,7 @@ static int msc_configure(struct msc *msc)
 	if (msc->mode == MSC_MODE_SINGLE) {
 		reg = msc->nr_pages;
 		iowrite32(reg, msc->reg_base + REG_MSU_MSC0SIZE);
+		iowrite32(0, msc->reg_base + REG_MSU_MSC0MWP);
 	}
 
 	reg = ioread32(msc->reg_base + REG_MSU_MSC0CTL);
@@ -939,6 +940,9 @@ static int msc_buffer_contig_alloc(struct msc *msc, unsigned long size)
 	msc->nr_pages = nr_pages;
 	msc->base = page_address(page);
 	msc->base_addr = sg_dma_address(msc->single_sgt.sgl);
+#ifdef CONFIG_X86
+	set_memory_uc((unsigned long)msc->base, nr_pages);
+#endif /* X86 */
 
 	return 0;
 
@@ -960,6 +964,9 @@ static void msc_buffer_contig_free(struct msc *msc)
 {
 	unsigned long off;
 
+#ifdef CONFIG_X86
+	set_memory_wb((unsigned long)msc->base, msc->nr_pages);
+#endif /* X86 */
 	dma_unmap_sg(msc_dev(msc)->parent->parent, msc->single_sgt.sgl,
 		     1, DMA_FROM_DEVICE);
 	sg_free_table(&msc->single_sgt);
@@ -1934,6 +1941,29 @@ unlock:
 static DEVICE_ATTR_RW(mode);
 
 static ssize_t
+modes_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct msu_buffer_entry *mbe;
+	ssize_t ret = 0;
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(msc_mode); i++)
+		ret += scnprintf(buf + ret, PAGE_SIZE - ret, "%s\n",
+				 msc_mode[i]);
+
+	mutex_lock(&msu_buffer_mutex);
+	list_for_each_entry(mbe, &msu_buffer_list, entry) {
+		ret += scnprintf(buf + ret, PAGE_SIZE - ret, "%s\n",
+				 mbe->mbuf->name);
+	}
+	mutex_unlock(&msu_buffer_mutex);
+
+	return ret;
+}
+
+static DEVICE_ATTR_RO(modes);
+
+static ssize_t
 nr_pages_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	struct msc *msc = dev_get_drvdata(dev);
@@ -2089,6 +2119,7 @@ static DEVICE_ATTR_RW(stop_on_full);
 static struct attribute *msc_output_attrs[] = {
 	&dev_attr_wrap.attr,
 	&dev_attr_mode.attr,
+	&dev_attr_modes.attr,
 	&dev_attr_nr_pages.attr,
 	&dev_attr_win_switch.attr,
 	&dev_attr_stop_on_full.attr,

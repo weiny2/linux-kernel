@@ -161,7 +161,6 @@ static int intel_th_remove(struct device *dev)
 
 	pm_runtime_disable(dev);
 	pm_runtime_set_active(dev);
-	pm_runtime_enable(dev);
 
 	return 0;
 }
@@ -276,6 +275,34 @@ static void intel_th_output_deactivate(struct intel_th_device *thdev)
 	pm_runtime_put(&thdev->dev);
 	module_put(thdrv->driver.owner);
 }
+
+void intel_th_suspend(struct intel_th *th)
+{
+	int i;
+
+	for (i = 0; i < th->num_thdevs; i++) {
+		struct intel_th_device *thdev = th->thdev[i];
+
+		if (thdev->type == INTEL_TH_OUTPUT && thdev->output.active) {
+			intel_th_output_deactivate(thdev);
+			th->suspended |= BIT(i);
+		}
+	}
+}
+EXPORT_SYMBOL_GPL(intel_th_suspend);
+
+void intel_th_resume(struct intel_th *th)
+{
+	int i;
+
+	for_each_set_bit(i, &th->suspended, th->num_thdevs) {
+		struct intel_th_device *thdev = th->thdev[i];
+
+		intel_th_output_activate(thdev);
+		th->suspended ^= BIT(i);
+	}
+}
+EXPORT_SYMBOL_GPL(intel_th_resume);
 
 static ssize_t active_show(struct device *dev, struct device_attribute *attr,
 			   char *buf)
@@ -560,6 +587,10 @@ static const struct intel_th_subdevice {
 		.id	= -1,
 		.name	= "dcih",
 		.type	= INTEL_TH_OUTPUT,
+		.scrpd	= SCRPD_DBC_IS_PRIM_DEST |
+			  SCRPD_MSC0_IS_ENABLED  |
+			  SCRPD_MSC1_IS_ENABLED  |
+			  SCRPD_DCIH_IS_ENABLED,
 	},
 };
 
@@ -1021,15 +1052,26 @@ int intel_th_set_output(struct intel_th_device *thdev,
 {
 	struct intel_th_device *hub = to_intel_th_hub(thdev);
 	struct intel_th_driver *hubdrv = to_intel_th_driver(hub->dev.driver);
+	int ret;
 
 	/* In host mode, this is up to the external debugger, do nothing. */
 	if (hub->host_mode)
 		return 0;
 
-	if (!hubdrv->set_output)
-		return -ENOTSUPP;
+	hubdrv = to_intel_th_driver(hub->dev.driver);
+	if (!hubdrv || !try_module_get(hubdrv->driver.owner))
+		return -EINVAL;
 
-	return hubdrv->set_output(hub, master);
+	if (!hubdrv->set_output) {
+		ret = -ENOTSUPP;
+		goto out;
+	}
+
+	ret = hubdrv->set_output(hub, master);
+
+out:
+	module_put(hubdrv->driver.owner);
+	return ret;
 }
 EXPORT_SYMBOL_GPL(intel_th_set_output);
 
