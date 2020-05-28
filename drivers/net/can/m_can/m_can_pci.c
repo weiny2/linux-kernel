@@ -19,9 +19,6 @@
 
 #include "m_can.h"
 
-#define PCI_DEVICE_ID_INTEL_EHL_1	 0x4bc1
-#define PCI_DEVICE_ID_INTEL_EHL_2	 0x4bc2
-
 #define M_CAN_PCI_MMIO_BAR		0
 #define M_CAN_MRAM_OFFSET		0x800
 
@@ -182,28 +179,12 @@ static __maybe_unused int m_can_pci_resume(struct device *dev)
 	return m_can_class_resume(dev);
 }
 
-static int __maybe_unused m_can_pci_runtime_suspend(struct device *dev)
-{
-	return 0;
-}
-
-static int __maybe_unused m_can_pci_runtime_resume(struct device *dev)
-{
-	return 0;
-}
-
-static const struct dev_pm_ops m_can_pci_pm_ops = {
-	SET_RUNTIME_PM_OPS(m_can_pci_runtime_suspend,
-			   m_can_pci_runtime_resume, NULL)
-	SET_SYSTEM_SLEEP_PM_OPS(m_can_pci_suspend, m_can_pci_resume)
-};
+static SIMPLE_DEV_PM_OPS(m_can_pci_pm_ops,
+			 m_can_pci_suspend, m_can_pci_resume);
 
 static const struct pci_device_id m_can_pci_id_table[] = {
-	{ PCI_VDEVICE(INTEL, PCI_DEVICE_ID_INTEL_EHL_1),
-	  M_CAN_CLOCK_FREQ_EHL, },
-
-	{ PCI_VDEVICE(INTEL, PCI_DEVICE_ID_INTEL_EHL_2),
-	  M_CAN_CLOCK_FREQ_EHL, },
+	{ PCI_VDEVICE(INTEL, 0x4bc1), M_CAN_CLOCK_FREQ_EHL, },
+	{ PCI_VDEVICE(INTEL, 0x4bc2), M_CAN_CLOCK_FREQ_EHL, },
 	{  }	/* Terminating Entry */
 };
 MODULE_DEVICE_TABLE(pci, m_can_pci_id_table);
@@ -219,7 +200,7 @@ static struct pci_driver m_can_pci_driver = {
 };
 
 MODULE_AUTHOR("Felipe Balbi <felipe.balbi@linux.intel.com>");
-MODULE_LICENSE("GPL v2");
+MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("CAN bus driver for Bosch M_CAN controller on PCI bus");
 
 module_pci_driver(m_can_pci_driver);
