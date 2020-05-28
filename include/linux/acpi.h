@@ -527,6 +527,8 @@ acpi_status acpi_run_osc(acpi_handle handle, struct acpi_osc_context *context);
 #define OSC_QUERY_DWORD				0	/* DWORD 1 */
 #define OSC_SUPPORT_DWORD			1	/* DWORD 2 */
 #define OSC_CONTROL_DWORD			2	/* DWORD 3 */
+#define CXL_OSC_SUPPORT_DWORD			3	/* DWORD 4 */
+#define CXL_OSC_CONTROL_DWORD			4	/* DWORD 5 */
 
 /* _OSC Capabilities DWORD 1: Query/Control and Error Returns (generic) */
 #define OSC_QUERY_ENABLE			0x00000001  /* input */
@@ -570,6 +572,20 @@ extern bool osc_pc_lpi_support_confirmed;
 #define OSC_PCI_EXPRESS_DPC_CONTROL		0x00000080
 #define OSC_PCI_CONTROL_MASKS			0x000000bf
 
+/* CXL Host Bridge _OSC: Capabilities DWORD 4: Support Field */
+#define OSC_CXL_PORT_REG_ACCESS_SUPPORT		0x00000001
+#define OSC_CXL_PORT_DEV_REG_ACCESS_SUPPORT	0x00000002
+#define OSC_CXL_PER_SUPPORT			0x00000004
+#define OSC_CXL_NATIVE_HP_SUPPORT		0x00000008
+#define OSC_CXL_SUPPORT_MASKS			0x0000000f
+
+/* CXL Host Bridge _OSC: Capabilities DWORD 5: Control Field */
+#define OSC_CXL_MEM_PER_CONTROL			0x00000001
+#define OSC_CXL_CONTROL_MASKS			0x00000001
+
+/* CXL Host Bridge _OSC: Capabilities DWORD 6: Query/Returns Field */
+#define OSC_CXL_MEM_EXPANDER_PER_CONTROL	0x00000001
+
 #define ACPI_GSB_ACCESS_ATTRIB_QUICK		0x00000002
 #define ACPI_GSB_ACCESS_ATTRIB_SEND_RCV         0x00000004
 #define ACPI_GSB_ACCESS_ATTRIB_BYTE		0x00000006
@@ -581,6 +597,8 @@ extern bool osc_pc_lpi_support_confirmed;
 #define ACPI_GSB_ACCESS_ATTRIB_RAW_BYTES	0x0000000E
 #define ACPI_GSB_ACCESS_ATTRIB_RAW_PROCESS	0x0000000F
 
+extern acpi_status acpi_cxl_osc_control_set(acpi_handle handle,
+					     u32 *mask, u32 req);
 extern acpi_status acpi_pci_osc_control_set(acpi_handle handle,
 					     u32 *mask, u32 req);
 
