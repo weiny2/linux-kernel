@@ -27,6 +27,7 @@
 #include <trace/events/power.h>
 #include <linux/hw_breakpoint.h>
 #include <linux/uintr.h>
+#include <linux/pkeys.h>
 #include <asm/cpu.h>
 #include <asm/apic.h>
 #include <linux/uaccess.h>
@@ -690,6 +691,11 @@ void __switch_to_xtra(struct task_struct *prev_p, struct task_struct *next_p)
 
 	if ((tifp ^ tifn) & _TIF_SLD)
 		switch_to_sld(tifn);
+
+#ifdef CONFIG_ARCH_HAS_PKEYS
+	if (tifn & _TIF_PKS)
+		pkrs_sched_in();
+#endif
 }
 
 /*
