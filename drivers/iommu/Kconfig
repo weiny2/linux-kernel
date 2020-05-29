@@ -209,6 +209,14 @@ config INTEL_IOMMU_DEBUGFS
 	  This option is -NOT- intended for production environments, and should
 	  only be enabled for debugging Intel IOMMU.
 
+config INTEL_IOMMU_WORKAROUND
+	bool "Enable Intel IOMMU workarounds for pre-production testing"
+	depends on INTEL_IOMMU && X86
+	help
+	  Enable this for platforms that have IOMMU issues in the
+	  pre-production environment.
+	  NOT FOR EXTERNAL CUSTOMERS
+
 config INTEL_IOMMU_SVM
 	bool "Support for Shared Virtual Memory with Intel IOMMU"
 	depends on INTEL_IOMMU && X86
