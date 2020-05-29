@@ -31,7 +31,8 @@ extern void fpu__save(struct fpu *fpu);
 extern int  fpu__restore_sig(void __user *buf, int ia32_frame);
 extern void fpu__drop(struct fpu *fpu);
 extern int  fpu__copy(struct task_struct *dst, struct task_struct *src);
-extern void fpu__clear(struct fpu *fpu);
+extern void fpu__clear_user_states(struct fpu *fpu);
+extern void fpu__clear_all(struct fpu *fpu);
 extern int  fpu__exception_code(struct fpu *fpu, int trap_nr);
 extern int  dump_fpu(struct pt_regs *ptregs, struct user_i387_struct *fpstate);
 
@@ -79,20 +80,20 @@ static __always_inline __pure bool use_fxsr(void)
 
 extern union fpregs_state init_fpstate;
 
-extern void fpstate_init(union fpregs_state *state);
+extern void fpstate_init(struct fpu *fpu);
 #ifdef CONFIG_MATH_EMULATION
 extern void fpstate_init_soft(struct swregs_state *soft);
 #else
 static inline void fpstate_init_soft(struct swregs_state *soft) {}
 #endif
 
-static inline void fpstate_init_xstate(struct xregs_state *xsave)
+static inline void fpstate_init_xstate(struct xregs_state *xsave, u64 mask)
 {
 	/*
 	 * XRSTORS requires these bits set in xcomp_bv, or it will
 	 * trigger #GP:
 	 */
-	xsave->header.xcomp_bv = XCOMP_BV_COMPACTED_FORMAT | xfeatures_mask;
+	xsave->header.xcomp_bv = XCOMP_BV_COMPACTED_FORMAT | mask;
 }
 
 static inline void fpstate_init_fxstate(struct fxregs_state *fx)
@@ -273,7 +274,7 @@ static inline void copy_fxregs_to_kernel(struct fpu *fpu)
  */
 static inline void copy_xregs_to_kernel_booting(struct xregs_state *xstate)
 {
-	u64 mask = -1;
+	u64 mask = xstate_area_mask;
 	u32 lmask = mask;
 	u32 hmask = mask >> 32;
 	int err;
@@ -295,7 +296,7 @@ static inline void copy_xregs_to_kernel_booting(struct xregs_state *xstate)
  */
 static inline void copy_kernel_to_xregs_booting(struct xregs_state *xstate)
 {
-	u64 mask = -1;
+	u64 mask = xstate_area_mask;
 	u32 lmask = mask;
 	u32 hmask = mask >> 32;
 	int err;
@@ -317,9 +318,8 @@ static inline void copy_kernel_to_xregs_booting(struct xregs_state *xstate)
 /*
  * Save processor xstate to xsave area.
  */
-static inline void copy_xregs_to_kernel(struct xregs_state *xstate)
+static inline void __copy_xregs_to_kernel(struct xregs_state *xstate, u64 mask)
 {
-	u64 mask = -1;
 	u32 lmask = mask;
 	u32 hmask = mask >> 32;
 	int err;
@@ -335,7 +335,7 @@ static inline void copy_xregs_to_kernel(struct xregs_state *xstate)
 /*
  * Restore processor xstate from xsave area.
  */
-static inline void copy_kernel_to_xregs(struct xregs_state *xstate, u64 mask)
+static inline void __copy_kernel_to_xregs(struct xregs_state *xstate, u64 mask)
 {
 	u32 lmask = mask;
 	u32 hmask = mask >> 32;
@@ -393,15 +393,44 @@ static inline int copy_user_to_xregs(struct xregs_state __user *buf, u64 mask)
  * Restore xstate from kernel space xsave area, return an error code instead of
  * an exception.
  */
-static inline int copy_kernel_to_xregs_err(struct xregs_state *xstate, u64 mask)
+static inline int __copy_kernel_to_xregs_err(struct xregs_state *xstate,
+					     u64 mask)
 {
 	u32 lmask = mask;
 	u32 hmask = mask >> 32;
 	int err;
 
-	XSTATE_OP(XRSTOR, xstate, lmask, hmask, err);
+	if (static_cpu_has(X86_FEATURE_XSAVES))
+		XSTATE_OP(XRSTORS, xstate, lmask, hmask, err);
+	else
+		XSTATE_OP(XRSTOR, xstate, lmask, hmask, err);
 
 	return err;
+}
+
+/*
+ * Intermediate wrapper function to access all FPU states. This is useful
+ * when supporting multiple state buffers.
+ */
+static inline int copy_kernel_to_xregs_err(struct fpu *fpu, u64 mask)
+{
+	int ret;
+
+	/*
+	 * If the bits for features belong to the expanded area
+	 * are set, then it will initialize registers.
+	 */
+	ret = __copy_kernel_to_xregs_err(&fpu->state.xsave, mask);
+	if (ret)
+		return ret;
+
+	if (unlikely(fpu->state_exp)) {
+		u64 bv = mask & fpu->firstuse_bv;
+
+		ret = __copy_kernel_to_xregs_err(&fpu->state_exp->xsave, bv);
+	}
+
+	return ret;
 }
 
 /*
@@ -417,7 +446,11 @@ static inline int copy_kernel_to_xregs_err(struct xregs_state *xstate, u64 mask)
 static inline int copy_fpregs_to_fpstate(struct fpu *fpu)
 {
 	if (likely(use_xsave())) {
-		copy_xregs_to_kernel(&fpu->state.xsave);
+		if (unlikely(fpu->state_exp))
+			__copy_xregs_to_kernel(&fpu->state_exp->xsave,
+					       fpu->firstuse_bv);
+		__copy_xregs_to_kernel(&fpu->state.xsave,
+				       xstate_area_mask);
 
 		/*
 		 * AVX512 state is tracked here because its use is
@@ -445,7 +478,7 @@ static inline int copy_fpregs_to_fpstate(struct fpu *fpu)
 static inline void __copy_kernel_to_fpregs(union fpregs_state *fpstate, u64 mask)
 {
 	if (use_xsave()) {
-		copy_kernel_to_xregs(&fpstate->xsave, mask);
+		__copy_kernel_to_xregs(&fpstate->xsave, mask);
 	} else {
 		if (use_fxsr())
 			copy_kernel_to_fxregs(&fpstate->fxsave);
@@ -454,8 +487,10 @@ static inline void __copy_kernel_to_fpregs(union fpregs_state *fpstate, u64 mask
 	}
 }
 
-static inline void copy_kernel_to_fpregs(union fpregs_state *fpstate)
+static inline void copy_kernel_to_fpregs(struct fpu *fpu)
 {
+	union fpregs_state *fpstate = &fpu->state;
+
 	/*
 	 * AMD K7/K8 CPUs don't save/restore FDP/FIP/FOP unless an exception is
 	 * pending. Clear the x87 state here by setting it to fixed values.
@@ -469,9 +504,27 @@ static inline void copy_kernel_to_fpregs(union fpregs_state *fpstate)
 			: : [addr] "m" (fpstate));
 	}
 
+	/*
+	 * Initialize states in the expanded area as the state-component bitmap
+	 * values are zero.
+	 */
 	__copy_kernel_to_fpregs(fpstate, -1);
+
+	if (unlikely(fpu->state_exp))
+		__copy_kernel_to_xregs(&fpu->state_exp->xsave,
+				       fpu->firstuse_bv);
 }
 
+#ifdef CONFIG_X86_INTEL_CET
+extern int save_cet_to_sigframe(void __user *fp, unsigned long restorer,
+				int is_ia32);
+#else
+static inline int save_cet_to_sigframe(void __user *fp, unsigned long restorer,
+				int is_ia32)
+{
+	return 0;
+}
+#endif
 extern int copy_fpstate_to_sigframe(void __user *buf, void __user *fp, int size);
 
 /*
@@ -540,7 +593,7 @@ static inline void __fpregs_load_activate(void)
 		return;
 
 	if (!fpregs_state_valid(fpu, cpu)) {
-		copy_kernel_to_fpregs(&fpu->state);
+		copy_kernel_to_fpregs(fpu);
 		fpregs_activate(fpu);
 		fpu->last_cpu = cpu;
 	}
@@ -587,10 +640,114 @@ static inline void switch_fpu_prepare(struct fpu *old_fpu, int cpu)
  */
 
 /*
+ * The first-use detection helpers:
+ */
+
+static inline void xfd_set_bits(u64 value)
+{
+	wrmsrl_safe(MSR_IA32_XFD, value);
+}
+
+static inline u64 xfd_get_bits(void)
+{
+	u64 value;
+
+	rdmsrl_safe(MSR_IA32_XFD, &value);
+	return value;
+}
+
+/*
+ * Return bit value, where each feature bit represents whether the
+ * first-use detection is needed or not.
+ *
+ * The whole bit value serves to determine whether the first-use
+ * detection related code to be executed or not. It will be also
+ * the default for the hardware configuration, while the first-
+ * use detection status in FPU context will have zero by default.
+ */
+static inline u64 xfirstuse_mask(void)
+{
+	/*
+	 * All the xfeatures in the expanded area, in the current
+	 * kernel, rely on the first-use detection mechanism.
+	 * And any xfeature in the default area does not require
+	 * this mechanism. So, the default bit value for first-use
+	 * detection is this.
+	 *
+	 * The bit value is a combination of feature bit values
+	 * that the kernel chose and the hardware supports for the
+	 * first-use detection.
+	 */
+	return xstate_exp_area_mask;
+}
+
+/*
+ * Convert first-use status to hardware configuration bit value
+ */
+static inline u64 xfd_get_cfg(struct fpu *fpu)
+{
+	/*
+	 * In the first-use bit value of each FPU context, a bit is on
+	 * when the first-use detection happens. The superset of this is
+	 * the combination of what the kernel chooses, and the hardware
+	 * supports for the XFD.
+	 *
+	 * If an xfeature is being monitored but not detected for its
+	 * first-use, set the feature bit in the XFD configuration bit
+	 * value to keep the monitoring.
+	 *
+	 * If not monitored, the task's first-use status bit is always
+	 * zero.
+	 *
+	 * So, make the following conversion:
+	 */
+	return xfirstuse_mask() ^ fpu->firstuse_bv;
+}
+
+/*
+ * Check whether the CPU supports the first-use detection mechanism and it
+ * is configured to use.
+ */
+static inline bool xfirstuse_availability(void)
+{
+	if (static_cpu_has(X86_FEATURE_XFD) && xfirstuse_mask())
+		return true;
+	return false;
+}
+
+/*
+ * Initialize the status for detecting the first-use of xfeatures.
+ */
+static inline void xfirstuse_init(struct fpu *fpu)
+{
+	if (!xfirstuse_availability())
+		return;
+
+	fpu->firstuse_bv = 0;
+}
+
+/*
+ * Compare the first-use status in the two FPU contexts and perform
+ * updating hardware configuration for the first-use detection.
+ */
+static inline void xfirstuse_switch(struct fpu *prev, struct fpu *next)
+{
+	if (!xfirstuse_availability())
+		return;
+
+	if (unlikely(prev->firstuse_bv != next->firstuse_bv))
+		xfd_set_bits(xfd_get_cfg(next));
+}
+
+int xfirstuse_trap(struct fpu *fpu);
+
+/*
  * Load PKRU from the FPU context if available. Delay loading of the
  * complete FPU state until the return to userland.
+ *
+ * Also, update the XFD configuration when needed.
  */
-static inline void switch_fpu_finish(struct fpu *new_fpu)
+static inline void switch_fpu_finish(struct fpu *old_fpu, struct fpu *new_fpu)
 {
 	u32 pkru_val = init_pkru_value;
 	struct pkru_state *pk;
@@ -600,6 +757,8 @@ static inline void switch_fpu_finish(struct fpu *new_fpu)
 
 	set_thread_flag(TIF_NEED_FPU_LOAD);
 
+	xfirstuse_switch(old_fpu, new_fpu);
+
 	if (!cpu_feature_enabled(X86_FEATURE_OSPKE))
 		return;
 
@@ -608,7 +767,7 @@ static inline void switch_fpu_finish(struct fpu *new_fpu)
 	 * return to userland e.g. for a copy_to_user() operation.
 	 */
 	if (current->mm) {
-		pk = get_xsave_addr(&new_fpu->state.xsave, XFEATURE_PKRU);
+		pk = get_xsave_addr(new_fpu, XFEATURE_PKRU);
 		if (pk)
 			pkru_val = pk->pkru;
 	}

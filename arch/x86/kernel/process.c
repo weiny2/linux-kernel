@@ -42,6 +42,7 @@
 #include <asm/spec-ctrl.h>
 #include <asm/io_bitmap.h>
 #include <asm/proto.h>
+#include <asm/cet.h>
 
 #include "process.h"
 
@@ -96,6 +97,14 @@ int arch_dup_task_struct(struct task_struct *dst, struct task_struct *src)
 }
 
 /*
+ * Clean up some bloated areas before freeing up task_struct
+ */
+void arch_release_task_struct(struct task_struct *tsk)
+{
+	free_xstate_exp(&tsk->thread.fpu);
+}
+
+/*
  * Free current thread data structures etc..
  */
 void exit_thread(struct task_struct *tsk)
@@ -108,6 +117,7 @@ void exit_thread(struct task_struct *tsk)
 
 	free_vm86(t);
 
+	cet_disable_free_shstk(tsk);
 	fpu__drop(fpu);
 }
 
@@ -119,6 +129,16 @@ static int set_new_tls(struct task_struct *p, unsigned long tls)
 		return do_set_thread_area(p, -1, utls, 0);
 	else
 		return do_set_thread_area_64(p, ARCH_SET_FS, tls);
+}
+
+/* Clear PASID MSR/state for the forked/cloned thread. */
+static void clear_task_pasid(struct task_struct *task)
+{
+	/*
+	 * Clear the xfeatures bit in the PASID state so that the MSR will be
+	 * initialized to its init state (0) by XRSTORS.
+	 */
+	task->thread.fpu.state.xsave.header.xfeatures &= ~XFEATURE_MASK_PASID;
 }
 
 int copy_thread_tls(unsigned long clone_flags, unsigned long sp,
@@ -174,9 +194,18 @@ int copy_thread_tls(unsigned long clone_flags, unsigned long sp,
 	task_user_gs(p) = get_user_gs(current_pt_regs());
 #endif
 
+	if (static_cpu_has(X86_FEATURE_ENQCMD))
+		clear_task_pasid(p);
+
 	/* Set a new TLS for the child thread? */
 	if (clone_flags & CLONE_SETTLS)
 		ret = set_new_tls(p, tls);
+
+#ifdef CONFIG_X86_64
+	/* Allocate a new shadow stack for pthread */
+	if (!ret && (clone_flags & (CLONE_VFORK | CLONE_VM)) == CLONE_VM)
+		ret = cet_setup_thread_shstk(p);
+#endif
 
 	if (!ret && unlikely(test_tsk_thread_flag(current, TIF_IO_BITMAP)))
 		io_bitmap_share(p);
@@ -191,7 +220,7 @@ void flush_thread(void)
 	flush_ptrace_hw_breakpoint(tsk);
 	memset(tsk->thread.tls_array, 0, sizeof(tsk->thread.tls_array));
 
-	fpu__clear(&tsk->thread.fpu);
+	fpu__clear_all(&tsk->thread.fpu);
 }
 
 void disable_TSC(void)
@@ -988,7 +1017,7 @@ long do_arch_prctl_common(struct task_struct *task, int option,
 		return get_cpuid_mode();
 	case ARCH_SET_CPUID:
 		return set_cpuid_mode(task, cpuid_enabled);
+	default:
+		return prctl_cet(option, cpuid_enabled);
 	}
-
-	return -EINVAL;
 }

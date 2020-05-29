@@ -15,6 +15,7 @@
 
 #include <linux/hardirq.h>
 #include <linux/pkeys.h>
+#include <linux/delay.h>
 
 #define CREATE_TRACE_POINTS
 #include <asm/trace/fpu.h>
@@ -127,7 +128,7 @@ void fpu__save(struct fpu *fpu)
 
 	if (!test_thread_flag(TIF_NEED_FPU_LOAD)) {
 		if (!copy_fpregs_to_fpstate(fpu)) {
-			copy_kernel_to_fpregs(&fpu->state);
+			copy_kernel_to_fpregs(fpu);
 		}
 	}
 
@@ -146,17 +147,38 @@ static inline void fpstate_init_fstate(struct fregs_state *fp)
 	fp->fos = 0xffff0000u;
 }
 
-void fpstate_init(union fpregs_state *state)
+/*
+ * If a null pointer is given, assume to take the initial FPU state,
+ * init_fpstate.
+ */
+void fpstate_init(struct fpu *fpu)
 {
+	union fpregs_state *state;
+	bool area_expanded = false;
+
+	if (fpu) {
+		state = &fpu->state;
+		if (fpu->state_exp)
+			area_expanded = true;
+	} else {
+		state = &init_fpstate;
+	}
+
 	if (!static_cpu_has(X86_FEATURE_FPU)) {
 		fpstate_init_soft(&state->soft);
 		return;
 	}
 
 	memset(state, 0, fpu_kernel_xstate_size);
+	if (area_expanded)
+		memset(fpu->state_exp, 0, fpu_kernel_xstate_exp_size);
 
-	if (static_cpu_has(X86_FEATURE_XSAVES))
-		fpstate_init_xstate(&state->xsave);
+	if (static_cpu_has(X86_FEATURE_XSAVES)) {
+		fpstate_init_xstate(&state->xsave, xstate_area_mask);
+		if (area_expanded)
+			fpstate_init_xstate(&fpu->state_exp->xsave,
+					    xstate_exp_area_mask);
+	}
 	if (static_cpu_has(X86_FEATURE_FXSR))
 		fpstate_init_fxstate(&state->fxsave);
 	else
@@ -182,6 +204,8 @@ int fpu__copy(struct task_struct *dst, struct task_struct *src)
 	 */
 	memset(&dst_fpu->state.xsave, 0, fpu_kernel_xstate_size);
 
+	dst_fpu->state_exp = NULL;
+
 	/*
 	 * If the FPU registers are not current just memcpy() the state.
 	 * Otherwise save current FPU registers directly into the child's FPU
@@ -195,9 +219,11 @@ int fpu__copy(struct task_struct *dst, struct task_struct *src)
 		memcpy(&dst_fpu->state, &src_fpu->state, fpu_kernel_xstate_size);
 
 	else if (!copy_fpregs_to_fpstate(dst_fpu))
-		copy_kernel_to_fpregs(&dst_fpu->state);
+		copy_kernel_to_fpregs(dst_fpu);
 
 	fpregs_unlock();
+
+	xfirstuse_init(dst_fpu);
 
 	set_tsk_thread_flag(dst, TIF_NEED_FPU_LOAD);
 
@@ -216,7 +242,7 @@ static void fpu__initialize(struct fpu *fpu)
 	WARN_ON_FPU(fpu != &current->thread.fpu);
 
 	set_thread_flag(TIF_NEED_FPU_LOAD);
-	fpstate_init(&fpu->state);
+	fpstate_init(fpu);
 	trace_x86_fpu_init_state(fpu);
 }
 
@@ -294,12 +320,10 @@ void fpu__drop(struct fpu *fpu)
  * Clear FPU registers by setting them up from
  * the init fpstate:
  */
-static inline void copy_init_fpstate_to_fpregs(void)
+static inline void copy_init_fpstate_to_fpregs(u64 features_mask)
 {
-	fpregs_lock();
-
 	if (use_xsave())
-		copy_kernel_to_xregs(&init_fpstate.xsave, -1);
+		__copy_kernel_to_xregs(&init_fpstate.xsave, features_mask);
 	else if (static_cpu_has(X86_FEATURE_FXSR))
 		copy_kernel_to_fxregs(&init_fpstate.fxsave);
 	else
@@ -307,9 +331,6 @@ static inline void copy_init_fpstate_to_fpregs(void)
 
 	if (boot_cpu_has(X86_FEATURE_OSPKE))
 		copy_init_pkru_to_fpregs();
-
-	fpregs_mark_activate();
-	fpregs_unlock();
 }
 
 /*
@@ -318,18 +339,40 @@ static inline void copy_init_fpstate_to_fpregs(void)
  * Called by sys_execve(), by the signal handler code and by various
  * error paths.
  */
-void fpu__clear(struct fpu *fpu)
+static void fpu__clear(struct fpu *fpu, int clear_user_only)
 {
-	WARN_ON_FPU(fpu != &current->thread.fpu); /* Almost certainly an anomaly */
+	if (static_cpu_has(X86_FEATURE_FPU)) {
+		fpregs_lock();
 
-	fpu__drop(fpu);
+		if (clear_user_only) {
+			if (!fpregs_state_valid(fpu, smp_processor_id()) &&
+			    xfeatures_mask_supervisor())
+				__copy_kernel_to_xregs(&fpu->state.xsave,
+						       xfeatures_mask_supervisor());
+			copy_init_fpstate_to_fpregs(xfeatures_mask_user());
+		} else {
+			copy_init_fpstate_to_fpregs(xfeatures_mask_all);
+		}
 
-	/*
-	 * Make sure fpstate is cleared and initialized.
-	 */
-	fpu__initialize(fpu);
-	if (static_cpu_has(X86_FEATURE_FPU))
-		copy_init_fpstate_to_fpregs();
+		fpregs_mark_activate();
+		fpregs_unlock();
+		return;
+	} else {
+		fpu__drop(fpu);
+		fpu__initialize(fpu);
+	}
+}
+
+void fpu__clear_user_states(struct fpu *fpu)
+{
+	WARN_ON_FPU(fpu != &current->thread.fpu);
+	fpu__clear(fpu, 1);
+}
+
+void fpu__clear_all(struct fpu *fpu)
+{
+	WARN_ON_FPU(fpu != &current->thread.fpu);
+	fpu__clear(fpu, 0);
 }
 
 /*
@@ -438,5 +481,63 @@ int fpu__exception_code(struct fpu *fpu, int trap_nr)
 	 * X86_TRAP_MF implementations, it's possible
 	 * we get a spurious trap, which is not an error.
 	 */
+	return 0;
+}
+
+#define XSTATE_EXPAND_RETRY_DELAY	10
+
+int xfirstuse_trap(struct fpu *fpu)
+{
+	u64 event;
+
+	/*
+	 * Check the condition whether the first-use detection is
+	 * running. If not, return with nonzero, implying the trap
+	 * not handled yet.
+	 */
+	if (!xfirstuse_availability())
+		return 1;
+
+	rdmsrl_safe(MSR_IA32_XFD_ERR, &event);
+	/*
+	 * This should not happen because the kernel writes the
+	 * first-use mask value in the first place. With a trap, the
+	 * the following code resets the relevant feature bits
+	 * incrementally. So, this trap record bit value should be a
+	 * subset of the first-use mask.
+	 */
+	WARN_ON(!(event & xfirstuse_mask()));
+	/*
+	 * If the faulting feature is empty, return with nonzero, implying
+	 * implying the trap not handled yet.
+	 */
+	if (!event)
+		return 1;
+
+	/*
+	 * The first-use event is presumed to be from userspace, so it
+	 * should have nothing to do with interrupt context.
+	 */
+	if (WARN_ON(in_interrupt()))
+		return 1;
+
+	/*
+	 * While the allocation failure is most likely a risky condition,
+	 * retrials after a long sleep perhaps are smoother than an
+	 * immediate return to die.
+	 */
+	while (alloc_xstate_exp(fpu))
+		msleep(XSTATE_EXPAND_RETRY_DELAY);
+
+	/*
+	 * Any first-use of the xfeature in the expanded area triggers
+	 * the entire expansion, not in an incremental way. So, stop the
+	 * monitoring and update the hardware configuration accordingly.
+	 */
+	fpu->firstuse_bv |= xstate_exp_area_mask;
+	xfd_set_bits(xfd_get_cfg(fpu));
+
+	/* Clear the trap record. */
+	wrmsrl_safe(MSR_IA32_XFD_ERR, 0);
 	return 0;
 }
