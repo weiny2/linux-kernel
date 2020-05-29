@@ -14,6 +14,7 @@
 #include <linux/io-64-nonatomic-lo-hi.h>
 #include <linux/device.h>
 #include <linux/idr.h>
+#include <linux/intel-svm.h>
 #include <uapi/linux/idxd.h>
 #include <linux/dmaengine.h>
 #include "../dmaengine.h"
@@ -32,12 +33,16 @@ static struct mutex idxd_idr_lock;
 static struct pci_device_id idxd_pci_tbl[] = {
 	/* DSA ver 1.0 platforms */
 	{ PCI_VDEVICE(INTEL, PCI_DEVICE_ID_INTEL_DSA_SPR0) },
+
+	/* IAX ver 1.0 platforms */
+	{ PCI_VDEVICE(INTEL, PCI_DEVICE_ID_INTEL_IAX_SPR0) },
 	{ 0, }
 };
 MODULE_DEVICE_TABLE(pci, idxd_pci_tbl);
 
 static char *idxd_name[] = {
 	"dsa",
+	"iax"
 };
 
 const char *idxd_get_dev_name(struct idxd_device *idxd)
@@ -53,6 +58,7 @@ static int idxd_setup_interrupts(struct idxd_device *idxd)
 	struct idxd_irq_entry *irq_entry;
 	int i, msixcnt;
 	int rc = 0;
+	union msix_perm mperm;
 
 	msixcnt = pci_msix_vec_count(pdev);
 	if (msixcnt < 0) {
@@ -92,6 +98,7 @@ static int idxd_setup_interrupts(struct idxd_device *idxd)
 	for (i = 0; i < msixcnt; i++) {
 		idxd->irq_entries[i].id = i;
 		idxd->irq_entries[i].idxd = idxd;
+		spin_lock_init(&idxd->irq_entries[i].list_lock);
 	}
 
 	msix = &idxd->msix_entries[0];
@@ -127,9 +134,26 @@ static int idxd_setup_interrupts(struct idxd_device *idxd)
 		}
 		dev_dbg(dev, "Allocated idxd-msix %d for vector %d\n",
 			i, msix->vector);
+
+		if (idxd->hw.gen_cap.int_handle_req) {
+			rc = idxd_device_request_int_handle(idxd, i,
+							    &idxd->int_handles[i]);
+			if (rc < 0)
+				goto err_no_irq;
+			dev_dbg(dev, "int handle requested: %u\n",
+				idxd->int_handles[i]);
+		}
 	}
 
 	idxd_unmask_error_interrupts(idxd);
+
+	/* Setup MSIX permission table */
+	mperm.bits = 0;
+	mperm.pasid = idxd->pasid;
+	mperm.pasid_en = idxd->pasid_enabled;
+	for (i = 1; i < msixcnt; i++)
+		iowrite32(mperm.bits, idxd->reg_base +
+				idxd->msix_perm_offset + i * 8);
 
 	return 0;
 
@@ -141,21 +165,19 @@ static int idxd_setup_interrupts(struct idxd_device *idxd)
 	return rc;
 }
 
-static void idxd_wqs_free_lock(struct idxd_device *idxd)
-{
-	int i;
-
-	for (i = 0; i < idxd->max_wqs; i++) {
-		struct idxd_wq *wq = &idxd->wqs[i];
-
-		percpu_free_rwsem(&wq->submit_lock);
-	}
-}
-
 static int idxd_setup_internals(struct idxd_device *idxd)
 {
 	struct device *dev = &idxd->pdev->dev;
 	int i;
+
+	init_waitqueue_head(&idxd->cmd_waitq);
+
+	if (idxd->hw.gen_cap.int_handle_req) {
+		idxd->int_handles = devm_kcalloc(dev, idxd->max_wqs,
+						 sizeof(int), GFP_KERNEL);
+		if (!idxd->int_handles)
+			return -ENOMEM;
+	}
 
 	idxd->groups = devm_kcalloc(dev, idxd->max_groups,
 				    sizeof(struct idxd_group), GFP_KERNEL);
@@ -181,25 +203,23 @@ static int idxd_setup_internals(struct idxd_device *idxd)
 
 	for (i = 0; i < idxd->max_wqs; i++) {
 		struct idxd_wq *wq = &idxd->wqs[i];
-		int rc;
 
 		wq->id = i;
 		wq->idxd = idxd;
 		mutex_init(&wq->wq_lock);
-		atomic_set(&wq->dq_count, 0);
-		init_waitqueue_head(&wq->submit_waitq);
+		INIT_LIST_HEAD(&wq->uuid_list);
+		INIT_LIST_HEAD(&wq->vdcm_list);
 		wq->idxd_cdev.minor = -1;
-		rc = percpu_init_rwsem(&wq->submit_lock);
-		if (rc < 0) {
-			idxd_wqs_free_lock(idxd);
-			return rc;
-		}
 	}
 
 	for (i = 0; i < idxd->max_engines; i++) {
 		idxd->engines[i].idxd = idxd;
 		idxd->engines[i].id = i;
 	}
+
+	idxd->wq = create_workqueue(dev_name(dev));
+	if (!idxd->wq)
+		return -ENOMEM;
 
 	return 0;
 }
@@ -220,8 +240,40 @@ static void idxd_read_table_offsets(struct idxd_device *idxd)
 	idxd->msix_perm_offset = offsets.msix_perm * 0x100;
 	dev_dbg(dev, "IDXD MSIX Permission Offset: %#x\n",
 		idxd->msix_perm_offset);
+	idxd->ims_offset = offsets.ims * 0x100;
+	dev_dbg(dev, "IDXD IMS Offset: %#x\n", idxd->ims_offset);
 	idxd->perfmon_offset = offsets.perfmon * 0x100;
 	dev_dbg(dev, "IDXD Perfmon Offset: %#x\n", idxd->perfmon_offset);
+}
+
+static int device_supports_ims(struct pci_dev *pdev)
+{
+	int dvsec;
+	u16 val16;
+	u32 val32;
+
+	dvsec = pci_find_ext_capability(pdev, 0x23);
+	pci_read_config_word(pdev, dvsec + 0x4, &val16);
+	if (val16 != 0x8086) {
+		dev_dbg(&pdev->dev, "DVSEC vendor id is not Intel\n");
+		return -EOPNOTSUPP;
+	}
+
+	pci_read_config_word(pdev, dvsec + 0x8, &val16);
+	if (val16 != 0x5) {
+		dev_dbg(&pdev->dev, "DVSEC ID is not SIOV\n");
+		return -EOPNOTSUPP;
+	}
+
+	pci_read_config_dword(pdev, dvsec + 0x14, &val32);
+	if (val32 & 0x1) {
+		dev_dbg(&pdev->dev, "IMS supported for device\n");
+		return 0;
+	}
+
+	dev_dbg(&pdev->dev, "IMS unsupported for device\n");
+
+	return -EOPNOTSUPP;
 }
 
 static void idxd_read_caps(struct idxd_device *idxd)
@@ -236,9 +288,11 @@ static void idxd_read_caps(struct idxd_device *idxd)
 	dev_dbg(dev, "max xfer size: %llu bytes\n", idxd->max_xfer_bytes);
 	idxd->max_batch_size = 1U << idxd->hw.gen_cap.max_batch_shift;
 	dev_dbg(dev, "max batch size: %u\n", idxd->max_batch_size);
+	if (device_supports_ims(idxd->pdev) == 0)
+		idxd->ims_size = idxd->hw.gen_cap.max_ims_mult * 256ULL;
+	dev_dbg(dev, "IMS size: %u\n", idxd->ims_size);
 	if (idxd->hw.gen_cap.config_en)
 		set_bit(IDXD_FLAG_CONFIGURABLE, &idxd->flags);
-
 	/* reading group capabilities */
 	idxd->hw.group_cap.bits =
 		ioread64(idxd->reg_base + IDXD_GRPCAP_OFFSET);
@@ -272,8 +326,7 @@ static void idxd_read_caps(struct idxd_device *idxd)
 	}
 }
 
-static struct idxd_device *idxd_alloc(struct pci_dev *pdev,
-				      void __iomem * const *iomap)
+static struct idxd_device *idxd_alloc(struct pci_dev *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct idxd_device *idxd;
@@ -283,10 +336,43 @@ static struct idxd_device *idxd_alloc(struct pci_dev *pdev,
 		return NULL;
 
 	idxd->pdev = pdev;
-	idxd->reg_base = iomap[IDXD_MMIO_BAR];
 	spin_lock_init(&idxd->dev_lock);
+	mutex_init(&idxd->mdev_lock);
+	atomic_set(&idxd->num_allocated_ims, 0);
 
 	return idxd;
+}
+
+static int idxd_enable_system_pasid(struct idxd_device *idxd)
+{
+	int rc, flags, pasid;
+
+	flags = SVM_FLAG_SUPERVISOR_MODE;
+
+	rc = intel_svm_bind_mm(&idxd->pdev->dev, &pasid, flags, NULL);
+	if (rc < 0) {
+		dev_warn(&idxd->pdev->dev,
+			 "system pasid allocation failed: %d\n", rc);
+		return rc;
+	}
+
+	idxd->pasid = pasid;
+	dev_dbg(&idxd->pdev->dev, "system pasid: %d\n", pasid);
+	return 0;
+}
+
+static int idxd_disable_system_pasid(struct idxd_device *idxd)
+{
+	int rc;
+
+	rc = intel_svm_unbind_mm(&idxd->pdev->dev, idxd->pasid);
+	if (rc < 0) {
+		dev_warn(&idxd->pdev->dev,
+			 "system pasid unbind failed: %d\n", rc);
+		return rc;
+	}
+
+	return 0;
 }
 
 static int idxd_probe(struct idxd_device *idxd)
@@ -296,10 +382,16 @@ static int idxd_probe(struct idxd_device *idxd)
 	int rc;
 
 	dev_dbg(dev, "%s entered and resetting device\n", __func__);
-	rc = idxd_device_reset(idxd);
-	if (rc < 0)
-		return rc;
+	idxd_device_init_reset(idxd);
 	dev_dbg(dev, "IDXD reset complete\n");
+
+	if (IS_ENABLED(CONFIG_INTEL_IDXD_SVM)) {
+		rc = idxd_enable_system_pasid(idxd);
+		if (rc < 0)
+			dev_warn(dev, "Failed to enable PASID. No SVA support.\n");
+		else
+			idxd->pasid_enabled = true;
+	}
 
 	idxd_read_caps(idxd);
 	idxd_read_table_offsets(idxd);
@@ -307,6 +399,12 @@ static int idxd_probe(struct idxd_device *idxd)
 	rc = idxd_setup_internals(idxd);
 	if (rc)
 		goto err_setup;
+
+	/* If the configs are readonly, then load them from device */
+	if (!test_bit(IDXD_FLAG_CONFIGURABLE, &idxd->flags)) {
+		dev_dbg(dev, "Loading RO device config\n");
+		idxd_device_load_config(idxd);
+	}
 
 	rc = idxd_setup_interrupts(idxd);
 	if (rc)
@@ -324,36 +422,53 @@ static int idxd_probe(struct idxd_device *idxd)
 
 	idxd->major = idxd_cdev_get_major(idxd);
 
+	rc = sbitmap_init_node(&idxd->ims_sbmap, idxd->ims_size, -1,
+			       GFP_KERNEL, dev_to_node(dev));
+	if (rc < 0)
+		goto sbitmap_fail;
+
 	dev_dbg(dev, "IDXD device %d probed successfully\n", idxd->id);
 	return 0;
 
+ sbitmap_fail:
+	mutex_lock(&idxd_idr_lock);
+	idr_remove(&idxd_idrs[idxd->type], idxd->id);
+	mutex_unlock(&idxd_idr_lock);
  err_idr_fail:
 	idxd_mask_error_interrupts(idxd);
 	idxd_mask_msix_vectors(idxd);
  err_setup:
+	if (idxd->pasid_enabled)
+		idxd_disable_system_pasid(idxd);
 	return rc;
+}
+
+static void idxd_type_init(struct idxd_device *idxd)
+{
+	if (idxd->type == IDXD_TYPE_DSA)
+		idxd->compl_size = sizeof(struct dsa_completion_record);
+	else if (idxd->type == IDXD_TYPE_IAX)
+		idxd->compl_size = sizeof(struct iax_completion_record);
 }
 
 static int idxd_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 {
-	void __iomem * const *iomap;
 	struct device *dev = &pdev->dev;
 	struct idxd_device *idxd;
 	int rc;
-	unsigned int mask;
 
 	rc = pcim_enable_device(pdev);
 	if (rc)
 		return rc;
 
-	dev_dbg(dev, "Mapping BARs\n");
-	mask = (1 << IDXD_MMIO_BAR);
-	rc = pcim_iomap_regions(pdev, mask, DRV_NAME);
-	if (rc)
-		return rc;
+	dev_dbg(dev, "Alloc IDXD context\n");
+	idxd = idxd_alloc(pdev);
+	if (!idxd)
+		return -ENOMEM;
 
-	iomap = pcim_iomap_table(pdev);
-	if (!iomap)
+	dev_dbg(dev, "Mapping BARs\n");
+	idxd->reg_base = pcim_iomap(pdev, IDXD_MMIO_BAR, 0);
+	if (!idxd->reg_base)
 		return -ENOMEM;
 
 	dev_dbg(dev, "Set DMA masks\n");
@@ -369,12 +484,9 @@ static int idxd_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	if (rc)
 		return rc;
 
-	dev_dbg(dev, "Alloc IDXD context\n");
-	idxd = idxd_alloc(pdev, iomap);
-	if (!idxd)
-		return -ENOMEM;
-
 	idxd_set_type(idxd);
+
+	idxd_type_init(idxd);
 
 	dev_dbg(dev, "Set PCI master\n");
 	pci_set_master(pdev);
@@ -385,6 +497,12 @@ static int idxd_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	if (rc) {
 		dev_err(dev, "Intel(R) IDXD DMA Engine init failed\n");
 		return -ENODEV;
+	}
+
+	rc = idxd_mdev_host_init(idxd);
+	if (rc < 0) {
+		dev_err(dev, "VFIO mdev init failed\n");
+		return rc;
 	}
 
 	rc = idxd_setup_sysfs(idxd);
@@ -433,11 +551,8 @@ static void idxd_shutdown(struct pci_dev *pdev)
 	int rc, i;
 	struct idxd_irq_entry *irq_entry;
 	int msixcnt = pci_msix_vec_count(pdev);
-	unsigned long flags;
 
-	spin_lock_irqsave(&idxd->dev_lock, flags);
 	rc = idxd_device_disable(idxd);
-	spin_unlock_irqrestore(&idxd->dev_lock, flags);
 	if (rc)
 		dev_err(&pdev->dev, "Disabling device failed\n");
 
@@ -453,6 +568,8 @@ static void idxd_shutdown(struct pci_dev *pdev)
 		idxd_flush_pending_llist(irq_entry);
 		idxd_flush_work_list(irq_entry);
 	}
+
+	destroy_workqueue(idxd->wq);
 }
 
 static void idxd_remove(struct pci_dev *pdev)
@@ -462,7 +579,9 @@ static void idxd_remove(struct pci_dev *pdev)
 	dev_dbg(&pdev->dev, "%s called\n", __func__);
 	idxd_cleanup_sysfs(idxd);
 	idxd_shutdown(pdev);
-	idxd_wqs_free_lock(idxd);
+	idxd_mdev_host_release(idxd);
+	if (idxd->pasid_enabled)
+		idxd_disable_system_pasid(idxd);
 	mutex_lock(&idxd_idr_lock);
 	idr_remove(&idxd_idrs[idxd->type], idxd->id);
 	mutex_unlock(&idxd_idr_lock);
@@ -481,11 +600,16 @@ static int __init idxd_init_module(void)
 	int err, i;
 
 	/*
-	 * If the CPU does not support write512, there's no point in
+	 * If the CPU does not support MOVDIR64B or ENQCMDS, there's no point in
 	 * enumerating the device. We can not utilize it.
 	 */
 	if (!boot_cpu_has(X86_FEATURE_MOVDIR64B)) {
 		pr_warn("idxd driver failed to load without MOVDIR64B.\n");
+		return -ENODEV;
+	}
+
+	if (!boot_cpu_has(X86_FEATURE_ENQCMD)) {
+		pr_warn("Platform does not have ENQCMD(S) support.\n");
 		return -ENODEV;
 	}
 

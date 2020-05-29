@@ -46,10 +46,11 @@
 /* Custom MSRs falls in the range 0x4b564d00-0x4b564dff */
 #define MSR_KVM_WALL_CLOCK_NEW  0x4b564d00
 #define MSR_KVM_SYSTEM_TIME_NEW 0x4b564d01
-#define MSR_KVM_ASYNC_PF_EN 0x4b564d02
-#define MSR_KVM_STEAL_TIME  0x4b564d03
-#define MSR_KVM_PV_EOI_EN      0x4b564d04
+#define MSR_KVM_ASYNC_PF_EN     0x4b564d02
+#define MSR_KVM_STEAL_TIME      0x4b564d03
+#define MSR_KVM_PV_EOI_EN       0x4b564d04
 #define MSR_KVM_POLL_CONTROL	0x4b564d05
+#define MSR_KVM_GUEST_SSP       0x4b564d06
 
 struct kvm_steal_time {
 	__u64 steal;

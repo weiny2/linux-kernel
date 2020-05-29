@@ -1776,6 +1776,94 @@ static int vmx_get_msr_feature(struct kvm_msr_entry *msr)
 	}
 }
 
+static void vmx_get_xsave_msr(struct msr_data *msr_info)
+{
+	local_irq_disable();
+	if (test_thread_flag(TIF_NEED_FPU_LOAD))
+		switch_fpu_return();
+	rdmsrl(msr_info->index, msr_info->data);
+	local_irq_enable();
+}
+
+static void vmx_set_xsave_msr(struct msr_data *msr_info)
+{
+	local_irq_disable();
+	if (test_thread_flag(TIF_NEED_FPU_LOAD))
+		switch_fpu_return();
+	wrmsrl(msr_info->index, msr_info->data);
+	local_irq_enable();
+}
+
+#define CET_MSR_RSVD_BITS_1  GENMASK(2, 0)
+#define CET_MSR_RSVD_BITS_2  GENMASK(9, 6)
+
+static bool cet_check_msr_valid(struct kvm_vcpu *vcpu,
+				struct msr_data *msr, u64 rsvd_bits)
+{
+	u64 data = msr->data;
+	u32 index = msr->index;
+
+	if ((index == MSR_IA32_PL0_SSP || index == MSR_IA32_PL1_SSP ||
+	    index == MSR_IA32_PL2_SSP || index == MSR_IA32_PL3_SSP ||
+	    index == MSR_IA32_INT_SSP_TAB || index == MSR_KVM_GUEST_SSP) &&
+	    is_noncanonical_address(data, vcpu))
+		return false;
+
+	if ((index  == MSR_IA32_S_CET || index == MSR_IA32_U_CET) &&
+	    data & MSR_IA32_CET_ENDBR_EN) {
+		u64 bitmap_base = data >> 12;
+
+		if (is_noncanonical_address(bitmap_base, vcpu))
+			return false;
+	}
+
+	return !(data & rsvd_bits);
+}
+
+static bool cet_check_ssp_msr_accessible(struct kvm_vcpu *vcpu,
+					 struct msr_data *msr)
+{
+	u32 index = msr->index;
+
+	if (!boot_cpu_has(X86_FEATURE_SHSTK))
+		return false;
+
+	if (!msr->host_initiated &&
+	    !guest_cpuid_has(vcpu, X86_FEATURE_SHSTK))
+		return false;
+
+	if (index == MSR_KVM_GUEST_SSP)
+		return msr->host_initiated &&
+		       guest_cpuid_has(vcpu, X86_FEATURE_SHSTK);
+
+	if (index == MSR_IA32_INT_SSP_TAB)
+		return true;
+
+	if (index == MSR_IA32_PL3_SSP)
+		return supported_xss & XFEATURE_MASK_CET_USER;
+
+	return supported_xss & XFEATURE_MASK_CET_KERNEL;
+}
+
+static bool cet_check_ctl_msr_accessible(struct kvm_vcpu *vcpu,
+					 struct msr_data *msr)
+{
+	u32 index = msr->index;
+
+	if (!boot_cpu_has(X86_FEATURE_SHSTK) &&
+	    !boot_cpu_has(X86_FEATURE_IBT))
+		return false;
+
+	if (!msr->host_initiated &&
+	    !guest_cpuid_has(vcpu, X86_FEATURE_SHSTK) &&
+	    !guest_cpuid_has(vcpu, X86_FEATURE_IBT))
+		return false;
+
+	if (index == MSR_IA32_U_CET)
+		return supported_xss & XFEATURE_MASK_CET_USER;
+
+	return supported_xss & XFEATURE_MASK_CET_KERNEL;
+}
 /*
  * Reads an msr value (of 'msr_index') into 'pdata'.
  * Returns 0 on success, non-0 otherwise.
@@ -1907,6 +1995,31 @@ static int vmx_get_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 			msr_info->data = vmx->pt_desc.guest.addr_b[index / 2];
 		else
 			msr_info->data = vmx->pt_desc.guest.addr_a[index / 2];
+		break;
+	case MSR_KVM_GUEST_SSP:
+		if (!cet_check_ssp_msr_accessible(vcpu, msr_info))
+			return 1;
+		msr_info->data = vmcs_readl(GUEST_SSP);
+		break;
+	case MSR_IA32_S_CET:
+		if (!cet_check_ctl_msr_accessible(vcpu, msr_info))
+			return 1;
+		msr_info->data = vmcs_readl(GUEST_S_CET);
+		break;
+	case MSR_IA32_INT_SSP_TAB:
+		if (!cet_check_ssp_msr_accessible(vcpu, msr_info))
+			return 1;
+		msr_info->data = vmcs_readl(GUEST_INTR_SSP_TABLE);
+		break;
+	case MSR_IA32_U_CET:
+		if (!cet_check_ctl_msr_accessible(vcpu, msr_info))
+			return 1;
+		vmx_get_xsave_msr(msr_info);
+		break;
+	case MSR_IA32_PL0_SSP ... MSR_IA32_PL3_SSP:
+		if (!cet_check_ssp_msr_accessible(vcpu, msr_info))
+			return 1;
+		vmx_get_xsave_msr(msr_info);
 		break;
 	case MSR_TSC_AUX:
 		if (!msr_info->host_initiated &&
@@ -2164,6 +2277,41 @@ static int vmx_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 		else
 			vmx->pt_desc.guest.addr_a[index / 2] = data;
 		break;
+	case MSR_KVM_GUEST_SSP:
+		if (!cet_check_ssp_msr_accessible(vcpu, msr_info))
+			return 1;
+		if (!cet_check_msr_valid(vcpu, msr_info, CET_MSR_RSVD_BITS_1))
+			return 1;
+		vmcs_writel(GUEST_SSP, data);
+		break;
+	case MSR_IA32_S_CET:
+		if (!cet_check_ctl_msr_accessible(vcpu, msr_info))
+			return 1;
+		if (!cet_check_msr_valid(vcpu, msr_info, CET_MSR_RSVD_BITS_2))
+			return 1;
+		vmcs_writel(GUEST_S_CET, data);
+		break;
+	case MSR_IA32_INT_SSP_TAB:
+		if (!cet_check_ctl_msr_accessible(vcpu, msr_info))
+			return 1;
+		if (!cet_check_msr_valid(vcpu, msr_info, 0))
+			return 1;
+		vmcs_writel(GUEST_INTR_SSP_TABLE, data);
+		break;
+	case MSR_IA32_U_CET:
+		if (!cet_check_ctl_msr_accessible(vcpu, msr_info))
+			return 1;
+		if (!cet_check_msr_valid(vcpu, msr_info, CET_MSR_RSVD_BITS_2))
+			return 1;
+		vmx_set_xsave_msr(msr_info);
+		break;
+	case MSR_IA32_PL0_SSP ... MSR_IA32_PL3_SSP:
+		if (!cet_check_ssp_msr_accessible(vcpu, msr_info))
+			return 1;
+		if (!cet_check_msr_valid(vcpu, msr_info, CET_MSR_RSVD_BITS_1))
+			return 1;
+		vmx_set_xsave_msr(msr_info);
+		break;
 	case MSR_TSC_AUX:
 		if (!msr_info->host_initiated &&
 		    !guest_cpuid_has(vcpu, X86_FEATURE_RDTSCP))
@@ -2389,7 +2537,8 @@ static __init int setup_vmcs_config(struct vmcs_config *vmcs_conf,
 			SECONDARY_EXEC_ENABLE_USR_WAIT_PAUSE |
 			SECONDARY_EXEC_PT_USE_GPA |
 			SECONDARY_EXEC_PT_CONCEAL_VMX |
-			SECONDARY_EXEC_ENABLE_VMFUNC;
+			SECONDARY_EXEC_ENABLE_VMFUNC |
+			SECONDARY_EXEC_PASID_TRANS;
 		if (cpu_has_sgx())
 			opt2 |= SECONDARY_EXEC_ENCLS_EXITING;
 		if (adjust_vmx_controls(min2, opt2,
@@ -2440,7 +2589,8 @@ static __init int setup_vmcs_config(struct vmcs_config *vmcs_conf,
 	      VM_EXIT_CLEAR_BNDCFGS |
 	      VM_EXIT_PT_CONCEAL_PIP |
 	      VM_EXIT_CLEAR_IA32_RTIT_CTL |
-	      VM_EXIT_CLEAR_IA32_LBR_CTL;
+	      VM_EXIT_CLEAR_IA32_LBR_CTL |
+	      VM_EXIT_LOAD_CET_STATE;
 	if (adjust_vmx_controls(min, opt, MSR_IA32_VMX_EXIT_CTLS,
 				&_vmexit_control) < 0)
 		return -EIO;
@@ -2465,7 +2615,8 @@ static __init int setup_vmcs_config(struct vmcs_config *vmcs_conf,
 	      VM_ENTRY_LOAD_BNDCFGS |
 	      VM_ENTRY_PT_CONCEAL_PIP |
 	      VM_ENTRY_LOAD_IA32_RTIT_CTL |
-	      VM_ENTRY_LOAD_IA32_LBR_CTL;
+	      VM_ENTRY_LOAD_IA32_LBR_CTL |
+	      VM_ENTRY_LOAD_CET_STATE;
 	if (adjust_vmx_controls(min, opt, MSR_IA32_VMX_ENTRY_CTLS,
 				&_vmentry_control) < 0)
 		return -EIO;
@@ -3021,6 +3172,19 @@ void vmx_load_mmu_pgd(struct kvm_vcpu *vcpu, unsigned long cr3)
 		vmcs_writel(GUEST_CR3, guest_cr3);
 }
 
+static bool is_cet_state_supported(struct kvm_vcpu *vcpu, u32 xss_states)
+{
+	return ((supported_xss & xss_states) &&
+		(guest_cpuid_has(vcpu, X86_FEATURE_SHSTK) ||
+		guest_cpuid_has(vcpu, X86_FEATURE_IBT)));
+}
+
+static bool is_cet_supported(struct kvm_vcpu *vcpu)
+{
+	return is_cet_state_supported(vcpu, XFEATURE_MASK_CET_USER |
+				      XFEATURE_MASK_CET_KERNEL);
+}
+
 int vmx_set_cr4(struct kvm_vcpu *vcpu, unsigned long cr4)
 {
 	struct vcpu_vmx *vmx = to_vmx(vcpu);
@@ -3061,6 +3225,10 @@ int vmx_set_cr4(struct kvm_vcpu *vcpu, unsigned long cr4)
 			return 1;
 	}
 
+	if ((cr4 & X86_CR4_CET) && (!is_cet_supported(vcpu) ||
+	    !(kvm_read_cr0(vcpu) & X86_CR0_WP)))
+		return 1;
+
 	if (vmx->nested.vmxon && !nested_cr4_valid(vcpu, cr4))
 		return 1;
 
@@ -3089,6 +3257,20 @@ int vmx_set_cr4(struct kvm_vcpu *vcpu, unsigned long cr4)
 		 */
 		if (!is_paging(vcpu))
 			hw_cr4 &= ~(X86_CR4_SMEP | X86_CR4_SMAP | X86_CR4_PKE);
+	}
+
+	if (cpu_has_load_cet_ctrl()) {
+		if ((hw_cr4 & X86_CR4_CET) && is_cet_supported(vcpu)) {
+			vm_entry_controls_setbit(to_vmx(vcpu),
+						 VM_ENTRY_LOAD_CET_STATE);
+			vm_exit_controls_setbit(to_vmx(vcpu),
+						VM_EXIT_LOAD_CET_STATE);
+		} else {
+			vm_entry_controls_clearbit(to_vmx(vcpu),
+						   VM_ENTRY_LOAD_CET_STATE);
+			vm_exit_controls_clearbit(to_vmx(vcpu),
+						  VM_EXIT_LOAD_CET_STATE);
+		}
 	}
 
 	vmcs_writel(CR4_READ_SHADOW, cr4);
@@ -4035,6 +4217,9 @@ static void vmx_compute_secondary_exec_control(struct vcpu_vmx *vmx)
 	if (!enable_pml)
 		exec_control &= ~SECONDARY_EXEC_ENABLE_PML;
 
+	if (!enable_pasid_trans)
+		exec_control &= ~SECONDARY_EXEC_PASID_TRANS;
+
 	if (vmx_xsaves_supported()) {
 		/* Exposing XSAVES only when XSAVE is exposed */
 		bool xsaves_enabled =
@@ -4248,6 +4433,13 @@ static void init_vmcs(struct vcpu_vmx *vmx)
 		/* Bit[6~0] are forced to 1, writes are ignored. */
 		vmx->pt_desc.guest.output_mask = 0x7F;
 		vmcs_write64(GUEST_IA32_RTIT_CTL, 0);
+	}
+
+	if (enable_pasid_trans && cpu_has_vmx_pasid_trans()) {
+		struct kvm_vmx *kvm_vmx = to_kvm_vmx(vmx->vcpu.kvm);
+
+		vmcs_write64(PASID_DIR0, page_to_phys(kvm_vmx->pasid_dir0));
+		vmcs_write64(PASID_DIR1, page_to_phys(kvm_vmx->pasid_dir1));
 	}
 }
 
@@ -5533,6 +5725,44 @@ static int handle_encls(struct kvm_vcpu *vcpu)
 	return 1;
 }
 
+static int handle_enqcmd_pasid(struct kvm_vcpu *vcpu)
+{
+	unsigned long flags;
+
+	kvm_debug_ratelimited("[%s] VM exit_qualification=0x%lx\n", __func__,
+			      vmcs_readl(EXIT_QUALIFICATION));
+
+	/*
+	 * it's required to setup PASID translation table using ioctl
+	 * KVM_SET_USER_PASID before using ENQCMD with that PASID in Guest.
+	 * So translation failure is not expected with any valid guest PASID.
+	 *
+	 * One possible case of translation failure is that people are using
+	 * some invalid guest PASIDs. For safety, we have to skip this ENQCMD
+	 * instruction and set ZF flag to 1.
+	 */
+	flags = vmx_get_rflags(vcpu);
+	flags |= X86_EFLAGS_ZF;
+	vmx_set_rflags(vcpu, flags);
+
+	return kvm_skip_emulated_instruction(vcpu);
+}
+
+static int handle_enqcmds_pasid(struct kvm_vcpu *vcpu)
+{
+	unsigned long flags;
+
+	kvm_debug_ratelimited("[%s] VM exit_qualification=0x%lx\n", __func__,
+			      vmcs_readl(EXIT_QUALIFICATION));
+
+	/* Same case as ENQCMD for ENQCMDS */
+	flags = vmx_get_rflags(vcpu);
+	flags |= X86_EFLAGS_ZF;
+	vmx_set_rflags(vcpu, flags);
+
+	return kvm_skip_emulated_instruction(vcpu);
+}
+
 /*
  * The exit handlers return 1 if the exit was handled fully and guest execution
  * may resume.  Otherwise they set the kvm_run parameter to indicate what needs
@@ -5589,6 +5819,8 @@ static int (*kvm_vmx_exit_handlers[])(struct kvm_vcpu *vcpu) = {
 	[EXIT_REASON_VMFUNC]		      = handle_vmx_instruction,
 	[EXIT_REASON_PREEMPTION_TIMER]	      = handle_preemption_timer,
 	[EXIT_REASON_ENCLS]		      = handle_encls,
+	[EXIT_REASON_ENQCMD_PASID]            = handle_enqcmd_pasid,
+	[EXIT_REASON_ENQCMDS_PASID]           = handle_enqcmds_pasid,
 };
 
 static const int kvm_vmx_max_exit_handlers =
@@ -5748,6 +5980,12 @@ void dump_vmcs(void)
 		pr_err("InterruptStatus = %04x\n",
 		       vmcs_read16(GUEST_INTR_STATUS));
 
+	if (vmentry_ctl & VM_ENTRY_LOAD_CET_STATE) {
+		pr_err("S_CET = 0x%016lx\n", vmcs_readl(GUEST_S_CET));
+		pr_err("SSP = 0x%016lx\n", vmcs_readl(GUEST_SSP));
+		pr_err("SSP TABLE = 0x%016lx\n",
+		       vmcs_readl(GUEST_INTR_SSP_TABLE));
+	}
 	pr_err("*** Host State ***\n");
 	pr_err("RIP = 0x%016lx  RSP = 0x%016lx\n",
 	       vmcs_readl(HOST_RIP), vmcs_readl(HOST_RSP));
@@ -5830,6 +6068,12 @@ void dump_vmcs(void)
 	if (secondary_exec_control & SECONDARY_EXEC_ENABLE_VPID)
 		pr_err("Virtual processor ID = 0x%04x\n",
 		       vmcs_read16(VIRTUAL_PROCESSOR_ID));
+	if (vmexit_ctl & VM_EXIT_LOAD_CET_STATE) {
+		pr_err("S_CET = 0x%016lx\n", vmcs_readl(HOST_S_CET));
+		pr_err("SSP = 0x%016lx\n", vmcs_readl(HOST_SSP));
+		pr_err("SSP TABLE = 0x%016lx\n",
+		       vmcs_readl(HOST_INTR_SSP_TABLE));
+	}
 }
 
 /*
@@ -6578,6 +6822,12 @@ static void vmx_vcpu_run(struct kvm_vcpu *vcpu)
 		vcpu->arch.apic->lapic_timer.timer_advance_ns)
 		kvm_wait_lapic_expire(vcpu);
 
+	if (enable_pasid_trans && cpu_has_vmx_pasid_trans()) {
+		rdmsrl(MSR_IA32_PASID, vmx->host_pasid);
+		if (vmx->host_pasid != vcpu->arch.ia32_pasid)
+			wrmsrl(MSR_IA32_PASID, vcpu->arch.ia32_pasid);
+	}
+
 	/*
 	 * If this vCPU has touched SPEC_CTRL, restore the guest's value if
 	 * it's non-zero. Since vmentry is serialising on affected CPUs, there
@@ -6599,6 +6849,12 @@ static void vmx_vcpu_run(struct kvm_vcpu *vcpu)
 				   vmx->loaded_vmcs->launched);
 
 	vcpu->arch.cr2 = read_cr2();
+
+	if (enable_pasid_trans && cpu_has_vmx_pasid_trans()) {
+		rdmsrl(MSR_IA32_PASID, vcpu->arch.ia32_pasid);
+		if (vcpu->arch.ia32_pasid != vmx->host_pasid)
+			wrmsrl(MSR_IA32_PASID, vmx->host_pasid);
+	}
 
 	/*
 	 * We do not use IBRS in the kernel. If this vCPU has used the
@@ -6757,6 +7013,8 @@ static int vmx_create_vcpu(struct kvm_vcpu *vcpu)
 		vmx_disable_intercept_for_msr(msr_bitmap, MSR_CORE_C6_RESIDENCY, MSR_TYPE_R);
 		vmx_disable_intercept_for_msr(msr_bitmap, MSR_CORE_C7_RESIDENCY, MSR_TYPE_R);
 	}
+	if (enable_pasid_trans && cpu_has_vmx_pasid_trans())
+		vmx_disable_intercept_for_msr(msr_bitmap, MSR_IA32_PASID, MSR_TYPE_RW);
 	vmx->msr_bitmap_mode = 0;
 
 	vmx->loaded_vmcs = &vmx->vmcs01;
@@ -6813,9 +7071,91 @@ free_vpid:
 #define L1TF_MSG_SMT "L1TF CPU bug present and SMT on, data leak possible. See CVE-2018-3646 and https://www.kernel.org/doc/html/latest/admin-guide/hw-vuln/l1tf.html for details.\n"
 #define L1TF_MSG_L1D "L1TF CPU bug present and virtualization mitigation disabled, data leak possible. See CVE-2018-3646 and https://www.kernel.org/doc/html/latest/admin-guide/hw-vuln/l1tf.html for details.\n"
 
+static int vmx_pasid_trans_conf(struct kvm_vmx *kvm_vmx,
+				unsigned int gpasid, u32 table_entry)
+{
+	struct page *pasid_dir, *new_table;
+	unsigned int de_idx, te_idx;
+	u32 *table_base;
+	u64 *dir_base;
+	int ret = 0;
+
+	spin_lock(&kvm_vmx->pasid_trans_lock);
+
+	pasid_dir = PASID_HIGH_DIR(gpasid) ?
+			kvm_vmx->pasid_dir1 : kvm_vmx->pasid_dir0;
+	dir_base = page_address(pasid_dir);
+
+	de_idx = PASID_DIR_ENTRY_IDX(gpasid);
+	te_idx = PASID_TAB_ENTRY_IDX(gpasid);
+
+	if (dir_base[de_idx] & PASID_DIR_ENTRY_PRESENT) {
+		table_base = __va(dir_base[de_idx] & PAGE_MASK);
+	} else {
+		new_table = alloc_page(GFP_ATOMIC | __GFP_ZERO);
+		if (!new_table) {
+			pr_err("PASID translation: fail to alloc table page\n");
+			ret = -ENOMEM;
+			goto done;
+		}
+
+		table_base = page_address(new_table);
+		dir_base[de_idx] = (u64)page_to_phys(new_table) |
+					PASID_DIR_ENTRY_PRESENT;
+	}
+
+	table_base[te_idx] = table_entry;
+
+	pr_debug("%s: Guest PASID=0x%x Table Entry=0x%x\n", __func__,
+		 gpasid, table_entry);
+done:
+	spin_unlock(&kvm_vmx->pasid_trans_lock);
+	return ret;
+}
+
+#define vmx_pasid_trans_clear(kvm_vmx, gpasid) \
+	vmx_pasid_trans_conf(kvm_vmx, gpasid, 0)
+#define vmx_pasid_trans_set(kvm_vmx, gpasid, hpasid) \
+	vmx_pasid_trans_conf(kvm_vmx, gpasid, (hpasid) | PASID_TAB_ENTRY_VALID)
+
+static void vmx_pasid_trans_free(struct page *pasid_dir)
+{
+	u64 *dir_base = page_address(pasid_dir);
+	void *table_base;
+	int de_idx;
+
+	for (de_idx = 0; de_idx < PASID_DIR_ENTRY_NUM; de_idx++) {
+		if (dir_base[de_idx] & PASID_DIR_ENTRY_PRESENT) {
+			table_base = __va(dir_base[de_idx] & PAGE_MASK);
+
+			free_page((unsigned long)table_base);
+		}
+		dir_base[de_idx] = 0;
+	}
+	__free_page(pasid_dir);
+}
+
+static void vmx_vm_alloc_pasid_dirs(struct kvm_vmx *kvm_vmx)
+{
+	kvm_vmx->pasid_dir0 = alloc_page(GFP_KERNEL | __GFP_ZERO);
+	kvm_vmx->pasid_dir1 = alloc_page(GFP_KERNEL | __GFP_ZERO);
+
+	WARN_ON(!kvm_vmx->pasid_dir0 || !kvm_vmx->pasid_dir1);
+}
+
+static void vmx_vm_free_pasid_dirs(struct kvm_vmx *kvm_vmx)
+{
+	vmx_pasid_trans_free(kvm_vmx->pasid_dir0);
+	vmx_pasid_trans_free(kvm_vmx->pasid_dir1);
+}
+
 static int vmx_vm_init(struct kvm *kvm)
 {
 	spin_lock_init(&to_kvm_vmx(kvm)->ept_pointer_lock);
+	spin_lock_init(&to_kvm_vmx(kvm)->pasid_trans_lock);
+
+	if (enable_pasid_trans && cpu_has_vmx_pasid_trans())
+		vmx_vm_alloc_pasid_dirs(to_kvm_vmx(kvm));
 
 	if (!ple_gap)
 		kvm->arch.pause_in_guest = true;
@@ -6845,6 +7185,12 @@ static int vmx_vm_init(struct kvm *kvm)
 	}
 	kvm_apicv_init(kvm, enable_apicv);
 	return 0;
+}
+
+static void vmx_vm_destroy(struct kvm *kvm)
+{
+	if (enable_pasid_trans && cpu_has_vmx_pasid_trans())
+		vmx_vm_free_pasid_dirs(to_kvm_vmx(kvm));
 }
 
 static int __init vmx_check_processor_compat(void)
@@ -6979,6 +7325,7 @@ static void nested_vmx_cr_fixed1_bits_update(struct kvm_vcpu *vcpu)
 	cr4_fixed1_update(X86_CR4_PKE,        ecx, feature_bit(PKU));
 	cr4_fixed1_update(X86_CR4_UMIP,       ecx, feature_bit(UMIP));
 	cr4_fixed1_update(X86_CR4_LA57,       ecx, feature_bit(LA57));
+	cr4_fixed1_update(X86_CR4_CET,	      ecx, feature_bit(SHSTK));
 
 #undef cr4_fixed1_update
 }
@@ -6997,6 +7344,15 @@ static void nested_vmx_entry_exit_ctls_update(struct kvm_vcpu *vcpu)
 			vmx->nested.msrs.entry_ctls_high &= ~VM_ENTRY_LOAD_BNDCFGS;
 			vmx->nested.msrs.exit_ctls_high &= ~VM_EXIT_CLEAR_BNDCFGS;
 		}
+	}
+
+	if (is_cet_state_supported(vcpu, XFEATURE_MASK_CET_USER |
+	    XFEATURE_MASK_CET_KERNEL)) {
+		vmx->nested.msrs.entry_ctls_high |= VM_ENTRY_LOAD_CET_STATE;
+		vmx->nested.msrs.exit_ctls_high |= VM_EXIT_LOAD_CET_STATE;
+	} else {
+		vmx->nested.msrs.entry_ctls_high &= ~VM_ENTRY_LOAD_CET_STATE;
+		vmx->nested.msrs.exit_ctls_high &= ~VM_EXIT_LOAD_CET_STATE;
 	}
 }
 
@@ -7069,6 +7425,42 @@ static void update_intel_pt_cfg(struct kvm_vcpu *vcpu)
 		vmx->pt_desc.ctl_bitmask &= ~(0xfULL << (32 + i * 4));
 }
 
+static void vmx_update_intercept_for_cet_msr(struct kvm_vcpu *vcpu)
+{
+	struct vcpu_vmx *vmx = to_vmx(vcpu);
+	unsigned long *msr_bitmap = vmx->vmcs01.msr_bitmap;
+	bool incpt;
+
+	incpt = !is_cet_state_supported(vcpu, XFEATURE_MASK_CET_USER);
+	/*
+	 * U_CET is required for USER CET, and U_CET, PL3_SPP are bound as
+	 * one component and controlled by IA32_XSS[bit 11].
+	 */
+	vmx_set_intercept_for_msr(msr_bitmap, MSR_IA32_U_CET, MSR_TYPE_RW,
+				  incpt);
+	vmx_set_intercept_for_msr(msr_bitmap, MSR_IA32_PL3_SSP, MSR_TYPE_RW,
+				  incpt);
+
+	incpt = !is_cet_state_supported(vcpu, XFEATURE_MASK_CET_KERNEL);
+	/*
+	 * S_CET is required for KERNEL CET, and PL0_SSP ... PL2_SSP are
+	 * bound as one component and controlled by IA32_XSS[bit 12].
+	 */
+	vmx_set_intercept_for_msr(msr_bitmap, MSR_IA32_S_CET, MSR_TYPE_RW,
+				  incpt);
+	vmx_set_intercept_for_msr(msr_bitmap, MSR_IA32_PL0_SSP, MSR_TYPE_RW,
+				  incpt);
+	vmx_set_intercept_for_msr(msr_bitmap, MSR_IA32_PL1_SSP, MSR_TYPE_RW,
+				  incpt);
+	vmx_set_intercept_for_msr(msr_bitmap, MSR_IA32_PL2_SSP, MSR_TYPE_RW,
+				  incpt);
+
+	incpt |= !guest_cpuid_has(vcpu, X86_FEATURE_SHSTK);
+	/* SSP_TAB is only available for KERNEL SHSTK.*/
+	vmx_set_intercept_for_msr(msr_bitmap, MSR_IA32_INT_SSP_TAB, MSR_TYPE_RW,
+				  incpt);
+}
+
 static void vmx_cpuid_update(struct kvm_vcpu *vcpu)
 {
 	struct vcpu_vmx *vmx = to_vmx(vcpu);
@@ -7107,6 +7499,9 @@ static void vmx_cpuid_update(struct kvm_vcpu *vcpu)
 			vmx_set_guest_msr(vmx, msr, enabled ? 0 : TSX_CTRL_RTM_DISABLE);
 		}
 	}
+
+	if (supported_xss & (XFEATURE_MASK_CET_KERNEL | XFEATURE_MASK_CET_USER))
+		vmx_update_intercept_for_cet_msr(vcpu);
 }
 
 static __init void vmx_set_cpu_caps(void)
@@ -7658,6 +8053,40 @@ static bool vmx_apic_init_signal_blocked(struct kvm_vcpu *vcpu)
 	return to_vmx(vcpu)->nested.vmxon;
 }
 
+static bool vmx_pasid_trans_supported(void)
+{
+	return cpu_has_vmx_pasid_trans();
+}
+
+static int vmx_set_user_pasid(struct kvm *kvm, struct kvm_user_pasid *pasid)
+{
+	struct kvm_vmx *kvm_vmx = to_kvm_vmx(kvm);
+	unsigned int gpasid = pasid->pasid;
+
+	if (!gpasid || gpasid >= (1 << 20))
+		return -EINVAL;
+
+	if (pasid->flags == KVM_USER_PASID_INVALIDATE) {
+		/*
+		 * TODO: ideally it needs to query Host PASID from ioasid using
+		 * Guest PASID + mm information. Compare it with related entry
+		 * value for double confirmation. And finally put Host PASID
+		 * (ioasid) refcount.
+		 */
+		return vmx_pasid_trans_clear(kvm_vmx, gpasid);
+	} else if (!pasid->flags) {
+		/*
+		 * TODO: ideally it needs to query Host PASID from ioasid using
+		 * Guest PASID + mm information. Increase Host PASID (ioasid)
+		 * refcount.
+		 * Currently it only supports 1:1 Host vs Guest PASID mapping.
+		 */
+		return vmx_pasid_trans_set(kvm_vmx, gpasid, gpasid);
+	}
+
+	return -EINVAL;
+}
+
 static void hardware_unsetup(void)
 {
 	if (nested)
@@ -7684,6 +8113,7 @@ static struct kvm_x86_ops vmx_x86_ops __initdata = {
 
 	.vm_size = sizeof(struct kvm_vmx),
 	.vm_init = vmx_vm_init,
+	.vm_destroy = vmx_vm_destroy,
 
 	.vcpu_create = vmx_create_vcpu,
 	.vcpu_free = vmx_free_vcpu,
@@ -7807,6 +8237,9 @@ static struct kvm_x86_ops vmx_x86_ops __initdata = {
 	.nested_get_evmcs_version = NULL,
 	.need_emulation_on_page_fault = vmx_need_emulation_on_page_fault,
 	.apic_init_signal_blocked = vmx_apic_init_signal_blocked,
+
+	.pasid_trans_supported = vmx_pasid_trans_supported,
+	.set_user_pasid = vmx_set_user_pasid,
 };
 
 static __init int hardware_setup(void)
@@ -7814,6 +8247,7 @@ static __init int hardware_setup(void)
 	unsigned long host_bndcfgs;
 	struct desc_ptr dt;
 	int r, i, ept_lpage_level;
+	u64 cet_msr;
 
 	store_idt(&dt);
 	host_idt_base = dt.address;
@@ -7973,6 +8407,16 @@ static __init int hardware_setup(void)
 					      kvm_vmx_exit_handlers);
 		if (r)
 			return r;
+	}
+
+	if (boot_cpu_has(X86_FEATURE_IBT) || boot_cpu_has(X86_FEATURE_SHSTK)) {
+		rdmsrl(MSR_IA32_S_CET, cet_msr);
+		WARN_ONCE(cet_msr, "KVM: CET S_CET in host will be lost!\n");
+	}
+
+	if (boot_cpu_has(X86_FEATURE_SHSTK)) {
+		rdmsrl(MSR_IA32_PL0_SSP, cet_msr);
+		WARN_ONCE(cet_msr, "KVM: CET PL0_SSP in host will be lost!\n");
 	}
 
 	vmx_set_cpu_caps();

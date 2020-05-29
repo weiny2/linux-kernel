@@ -39,6 +39,7 @@ enum dma_status {
 	DMA_IN_PROGRESS,
 	DMA_PAUSED,
 	DMA_ERROR,
+	DMA_OUT_OF_ORDER,
 };
 
 /**
@@ -61,6 +62,8 @@ enum dma_transaction_type {
 	DMA_SLAVE,
 	DMA_CYCLIC,
 	DMA_INTERLEAVE,
+	DMA_COMPLETION_NO_ORDER,
+	DMA_DIRECT,
 /* last transaction type for creation of the capabilities mask */
 	DMA_TX_TYPE_END,
 };
@@ -743,6 +746,30 @@ struct dma_filter {
 	const struct dma_slave_map *map;
 };
 
+enum dma_chan_info_op {
+	DMA_CHAN_INFO_DEPTH,
+	DMA_CHAN_INFO_NUMA,
+	DMA_CHAN_INFO_MAX,
+};
+
+/**
+ * struct dma_kernel_direct_ops - functions for kernel direct submission
+ * @device_get_errors - get errors from device
+ * @device_get_desc - get allocated descriptor form driver
+ * @device_free_desc - free allocated descriptor back to driver
+ * @device_submit_and_wait - submit descriptor and wait on completion
+ * @device_get_info - retrieve specific information from the device
+ */
+struct dma_kernel_direct_ops {
+	int (*device_get_errors)(struct dma_chan *chan, void *data);
+	void * (*device_get_desc)(struct dma_chan *chan, unsigned long flags);
+	void (*device_free_desc)(struct dma_chan *chan, void *desc);
+	int (*device_submit_and_wait)(struct dma_chan *chan, void *desc,
+				      unsigned long flags, int timeout);
+	int (*device_get_info)(struct dma_chan *chan, unsigned int op,
+			       u64 *data);
+};
+
 /**
  * struct dma_device - info on the entity supplying DMA services
  * @chancnt: how many DMA channels are supported
@@ -904,6 +931,7 @@ struct dma_device {
 	void (*dbg_summary_show)(struct seq_file *s, struct dma_device *dev);
 	struct dentry *dbg_dev_root;
 #endif
+	struct dma_kernel_direct_ops kdops;
 };
 
 static inline int dmaengine_slave_config(struct dma_chan *chan,
@@ -1427,6 +1455,54 @@ dma_set_tx_state(struct dma_tx_state *st, dma_cookie_t last, dma_cookie_t used, 
 	st->last = last;
 	st->used = used;
 	st->residue = residue;
+}
+
+static inline int
+dmaengine_kd_get_device_errors(struct dma_chan *chan, void *data)
+{
+	if (!chan || !chan->device || !chan->device->kdops.device_get_errors)
+		return -EOPNOTSUPP;
+
+	return chan->device->kdops.device_get_errors(chan, data);
+}
+
+static inline void *
+dmaengine_kd_get_desc(struct dma_chan *chan, unsigned long flags)
+{
+	if (!chan || !chan->device || !chan->device->kdops.device_get_desc)
+		return NULL;
+
+	return chan->device->kdops.device_get_desc(chan, flags);
+}
+
+static inline void dmaengine_kd_free_desc(struct dma_chan *chan, void *desc)
+{
+	if (!chan || !chan->device || !chan->device->kdops.device_free_desc)
+		return;
+
+	return chan->device->kdops.device_free_desc(chan, desc);
+}
+
+static inline int
+dmaengine_kd_submit_and_wait(struct dma_chan *chan, void *desc,
+			     unsigned long flags, int timeout)
+{
+	if (!chan || !chan->device ||
+	    !chan->device->kdops.device_submit_and_wait)
+		return -EOPNOTSUPP;
+
+	return chan->device->kdops.device_submit_and_wait(chan, desc, flags,
+							  timeout);
+}
+
+static inline u64
+dmaengine_kd_device_get_info(struct dma_chan *chan, unsigned int op, u64 *data)
+{
+	if (!chan || !chan->device ||
+	    !chan->device->kdops.device_get_info)
+		return -EOPNOTSUPP;
+
+	return chan->device->kdops.device_get_info(chan, op, data);
 }
 
 #ifdef CONFIG_DMA_ENGINE

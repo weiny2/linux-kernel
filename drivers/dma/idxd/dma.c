@@ -12,11 +12,6 @@
 #include "registers.h"
 #include "idxd.h"
 
-static inline struct idxd_wq *to_idxd_wq(struct dma_chan *c)
-{
-	return container_of(c, struct idxd_wq, dma_chan);
-}
-
 void idxd_dma_complete_txd(struct idxd_desc *desc,
 			   enum idxd_complete_type comp_type)
 {
@@ -40,6 +35,7 @@ void idxd_dma_complete_txd(struct idxd_desc *desc,
 		dmaengine_desc_get_callback_invoke(tx, &res);
 		tx->callback = NULL;
 		tx->callback_result = NULL;
+		idxd_free_desc(desc->wq, desc);
 	}
 }
 
@@ -61,8 +57,6 @@ static inline void idxd_prep_desc_common(struct idxd_wq *wq,
 					 u64 addr_f1, u64 addr_f2, u64 len,
 					 u64 compl, u32 flags)
 {
-	struct idxd_device *idxd = wq->idxd;
-
 	hw->flags = flags;
 	hw->opcode = opcode;
 	hw->src_addr = addr_f1;
@@ -70,13 +64,6 @@ static inline void idxd_prep_desc_common(struct idxd_wq *wq,
 	hw->xfer_size = len;
 	hw->priv = !!(wq->type == IDXD_WQT_KERNEL);
 	hw->completion_addr = compl;
-
-	/*
-	 * Descriptor completion vectors are 1-8 for MSIX. We will round
-	 * robin through the 8 vectors.
-	 */
-	wq->vec_ptr = (wq->vec_ptr % idxd->num_wq_irqs) + 1;
-	hw->int_handle =  wq->vec_ptr;
 }
 
 static struct dma_async_tx_descriptor *
@@ -133,7 +120,7 @@ static enum dma_status idxd_dma_tx_status(struct dma_chan *dma_chan,
 					  dma_cookie_t cookie,
 					  struct dma_tx_state *txstate)
 {
-	return dma_cookie_status(dma_chan, cookie, txstate);
+	return DMA_OUT_OF_ORDER;
 }
 
 /*
@@ -167,15 +154,11 @@ static void idxd_dma_release(struct dma_device *device)
 {
 }
 
-int idxd_register_dma_device(struct idxd_device *idxd)
+static void idxd_setup_dma_legacy(struct idxd_device *idxd)
 {
 	struct dma_device *dma = &idxd->dma_dev;
 
-	INIT_LIST_HEAD(&dma->channels);
-	dma->dev = &idxd->pdev->dev;
-
-	dma->device_release = idxd_dma_release;
-
+	dma_cap_set(DMA_COMPLETION_NO_ORDER, dma->cap_mask);
 	if (idxd->hw.opcap.bits[0] & IDXD_OPCAP_MEMMOVE) {
 		dma_cap_set(DMA_MEMCPY, dma->cap_mask);
 		dma->device_prep_dma_memcpy = idxd_dma_submit_memcpy;
@@ -183,6 +166,21 @@ int idxd_register_dma_device(struct idxd_device *idxd)
 
 	dma->device_tx_status = idxd_dma_tx_status;
 	dma->device_issue_pending = idxd_dma_issue_pending;
+}
+
+int idxd_register_dma_device(struct idxd_device *idxd)
+{
+	struct dma_device *dma = &idxd->dma_dev;
+
+	INIT_LIST_HEAD(&dma->channels);
+	dma->dev = &idxd->pdev->dev;
+	dma->device_release = idxd_dma_release;
+
+	if (idxd->pasid_enabled)
+		idxd_setup_dma_kdirect(idxd);
+	else
+		idxd_setup_dma_legacy(idxd);
+
 	dma->device_alloc_chan_resources = idxd_dma_alloc_chan_resources;
 	dma->device_free_chan_resources = idxd_dma_free_chan_resources;
 
