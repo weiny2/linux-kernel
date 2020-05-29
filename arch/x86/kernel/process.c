@@ -231,6 +231,16 @@ void flush_thread(void)
 	memset(tsk->thread.tls_array, 0, sizeof(tsk->thread.tls_array));
 
 	fpu__clear_all(&tsk->thread.fpu);
+
+#ifdef CONFIG_ARCH_HAS_PKEYS
+	/*
+	 * Still init task's pkrs here. Debug or speculation MSRs have some
+	 * bits in thread->flags and init as 0. But thread->pkrs is non-zero.
+	 * And fpu__clear() just initialized pkru.
+	 * Please advice me on where to init pkrs if this is not a right place.
+	 */
+	pks_init_task(tsk);
+#endif
 }
 
 void disable_TSC(void)

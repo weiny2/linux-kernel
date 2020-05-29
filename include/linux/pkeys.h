@@ -66,6 +66,11 @@ static inline bool pks_test_armed(void)
 {
 	return false;
 }
+
+static inline u64 get_ia32_pkrs_cached(void)
+{
+	return 0;
+}
 #endif /* ! CONFIG_ARCH_HAS_PKEYS */
 
 #endif /* _LINUX_PKEYS_H */

@@ -1310,6 +1310,7 @@ void vmx_vcpu_load_vmcs(struct kvm_vcpu *vcpu, int cpu)
 {
 	struct vcpu_vmx *vmx = to_vmx(vcpu);
 	bool already_loaded = vmx->loaded_vmcs->cpu == cpu;
+	u64 host_pkrs;
 
 	if (!already_loaded) {
 		loaded_vmcs_clear(vmx->loaded_vmcs);
@@ -1358,6 +1359,13 @@ void vmx_vcpu_load_vmcs(struct kvm_vcpu *vcpu, int cpu)
 	if (kvm_has_tsc_control &&
 	    vmx->current_tsc_ratio != vcpu->arch.tsc_scaling_ratio)
 		decache_tsc_multiplier(vmx);
+
+	host_pkrs = get_ia32_pkrs_cached();
+	if (cpu_has_load_ia32_pkrs() &&
+            host_pkrs != vmx->host_cached_pkrs) {
+		vmcs_write64(HOST_IA32_PKRS, host_pkrs);
+		vmx->host_cached_pkrs = host_pkrs;
+	}
 }
 
 /*
@@ -2021,6 +2029,12 @@ static int vmx_get_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 			return 1;
 		vmx_get_xsave_msr(msr_info);
 		break;
+	case MSR_IA32_PKRS:
+		if (!msr_info->host_initiated &&
+		    !guest_cpuid_has(vcpu, X86_FEATURE_PKS))
+			return 1;
+		msr_info->data = vmcs_read64(GUEST_IA32_PKRS);
+		break;
 	case MSR_TSC_AUX:
 		if (!msr_info->host_initiated &&
 		    !guest_cpuid_has(vcpu, X86_FEATURE_RDTSCP))
@@ -2312,6 +2326,14 @@ static int vmx_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 			return 1;
 		vmx_set_xsave_msr(msr_info);
 		break;
+	case MSR_IA32_PKRS:
+		if ((!msr_info->host_initiated &&
+		     !guest_cpuid_has(vcpu, X86_FEATURE_PKS)) ||
+		     !kvm_pkrs_valid(data)) /* bit[63,32] must be zero */
+			return 1;
+		vmcs_write64(GUEST_IA32_PKRS, data);
+		vcpu->arch.pkrs = data;
+		break;
 	case MSR_TSC_AUX:
 		if (!msr_info->host_initiated &&
 		    !guest_cpuid_has(vcpu, X86_FEATURE_RDTSCP))
@@ -2590,7 +2612,8 @@ static __init int setup_vmcs_config(struct vmcs_config *vmcs_conf,
 	      VM_EXIT_PT_CONCEAL_PIP |
 	      VM_EXIT_CLEAR_IA32_RTIT_CTL |
 	      VM_EXIT_CLEAR_IA32_LBR_CTL |
-	      VM_EXIT_LOAD_CET_STATE;
+	      VM_EXIT_LOAD_CET_STATE |
+	      VM_EXIT_LOAD_IA32_PKRS;
 	if (adjust_vmx_controls(min, opt, MSR_IA32_VMX_EXIT_CTLS,
 				&_vmexit_control) < 0)
 		return -EIO;
@@ -2616,7 +2639,8 @@ static __init int setup_vmcs_config(struct vmcs_config *vmcs_conf,
 	      VM_ENTRY_PT_CONCEAL_PIP |
 	      VM_ENTRY_LOAD_IA32_RTIT_CTL |
 	      VM_ENTRY_LOAD_IA32_LBR_CTL |
-	      VM_ENTRY_LOAD_CET_STATE;
+	      VM_ENTRY_LOAD_CET_STATE |
+	      VM_ENTRY_LOAD_IA32_PKRS;
 	if (adjust_vmx_controls(min, opt, MSR_IA32_VMX_ENTRY_CTLS,
 				&_vmentry_control) < 0)
 		return -EIO;
@@ -3245,7 +3269,7 @@ int vmx_set_cr4(struct kvm_vcpu *vcpu, unsigned long cr4)
 		}
 
 		/*
-		 * SMEP/SMAP/PKU is disabled if CPU is in non-paging mode in
+		 * SMEP/SMAP/PKU/PKS is disabled if CPU is in non-paging mode in
 		 * hardware.  To emulate this behavior, SMEP/SMAP/PKU needs
 		 * to be manually disabled when guest switches to non-paging
 		 * mode.
@@ -3253,10 +3277,10 @@ int vmx_set_cr4(struct kvm_vcpu *vcpu, unsigned long cr4)
 		 * If !enable_unrestricted_guest, the CPU is always running
 		 * with CR0.PG=1 and CR4 needs to be modified.
 		 * If enable_unrestricted_guest, the CPU automatically
-		 * disables SMEP/SMAP/PKU when the guest sets CR0.PG=0.
+		 * disables SMEP/SMAP/PKU/PKS when the guest sets CR0.PG=0.
 		 */
 		if (!is_paging(vcpu))
-			hw_cr4 &= ~(X86_CR4_SMEP | X86_CR4_SMAP | X86_CR4_PKE);
+			hw_cr4 &= ~(X86_CR4_SMEP | X86_CR4_SMAP | X86_CR4_PKE | X86_CR4_PKS);
 	}
 
 	if (cpu_has_load_cet_ctrl()) {
@@ -4454,6 +4478,8 @@ static void vmx_vcpu_reset(struct kvm_vcpu *vcpu, bool init_event)
 
 	vmx->msr_ia32_umwait_control = 0;
 
+	vmx->host_cached_pkrs = 0;
+
 	vmx->vcpu.arch.regs[VCPU_REGS_RDX] = get_rdx_init_val();
 	vmx->hv_deadline_tsc = -1;
 	kvm_set_cr8(vcpu, 0);
@@ -4510,6 +4536,9 @@ static void vmx_vcpu_reset(struct kvm_vcpu *vcpu, bool init_event)
 	vmcs_writel(GUEST_PENDING_DBG_EXCEPTIONS, 0);
 	if (kvm_mpx_supported())
 		vmcs_write64(GUEST_BNDCFGS, 0);
+
+        if (cpu_has_load_ia32_pkrs())
+                vmcs_write64(GUEST_IA32_PKRS, vcpu->arch.pkrs);
 
 	setup_msrs(vmx);
 
@@ -5973,6 +6002,8 @@ void dump_vmcs(void)
 		       vmcs_read64(GUEST_IA32_PERF_GLOBAL_CTRL));
 	if (vmentry_ctl & VM_ENTRY_LOAD_BNDCFGS)
 		pr_err("BndCfgS = 0x%016llx\n", vmcs_read64(GUEST_BNDCFGS));
+    if (vmentry_ctl & VM_ENTRY_LOAD_IA32_PKRS)
+        pr_err("PKRS = 0x%016llx\n", vmcs_read64(GUEST_IA32_PKRS));
 	pr_err("Interruptibility = %08x  ActivityState = %08x\n",
 	       vmcs_read32(GUEST_INTERRUPTIBILITY_INFO),
 	       vmcs_read32(GUEST_ACTIVITY_STATE));
@@ -6014,6 +6045,8 @@ void dump_vmcs(void)
 	    vmexit_ctl & VM_EXIT_LOAD_IA32_PERF_GLOBAL_CTRL)
 		pr_err("PerfGlobCtl = 0x%016llx\n",
 		       vmcs_read64(HOST_IA32_PERF_GLOBAL_CTRL));
+    if (vmexit_ctl & VM_EXIT_LOAD_IA32_PKRS)
+	    pr_err("PKRS = 0x%016llx\n", vmcs_read64(HOST_IA32_PKRS));
 
 	pr_err("*** Control State ***\n");
 	pr_err("PinBased=%08x CPUBased=%08x SecondaryExec=%08x\n",
@@ -6910,6 +6943,22 @@ static void vmx_vcpu_run(struct kvm_vcpu *vcpu)
 
 	pt_guest_exit(vmx);
 
+	/*
+	 * eager fpu is enabled if PKEY is supported and CR4 is switched
+	 * back on host, so it is safe to read guest PKRU from current
+	 * XSAVE.
+	 */
+	if (static_cpu_has(X86_FEATURE_PKU) &&
+	    kvm_read_cr4_bits(vcpu, X86_CR4_PKE)) {
+		vcpu->arch.pkru = rdpkru();
+		if (vcpu->arch.pkru != vmx->host_pkru)
+			__write_pkru(vmx->host_pkru);
+	}
+
+	if (static_cpu_has(X86_FEATURE_PKS) &&
+	    guest_cpuid_has(vcpu, X86_FEATURE_PKS))
+		vcpu->arch.pkrs = vmcs_read64(GUEST_IA32_PKRS);
+
 	kvm_load_host_xsave_state(vcpu);
 
 	vmx->nested.nested_run_pending = 0;
@@ -7326,6 +7375,7 @@ static void nested_vmx_cr_fixed1_bits_update(struct kvm_vcpu *vcpu)
 	cr4_fixed1_update(X86_CR4_UMIP,       ecx, feature_bit(UMIP));
 	cr4_fixed1_update(X86_CR4_LA57,       ecx, feature_bit(LA57));
 	cr4_fixed1_update(X86_CR4_CET,	      ecx, feature_bit(SHSTK));
+	cr4_fixed1_update(X86_CR4_PKS,        ecx, feature_bit(PKS));
 
 #undef cr4_fixed1_update
 }
@@ -7461,6 +7511,25 @@ static void vmx_update_intercept_for_cet_msr(struct kvm_vcpu *vcpu)
 				  incpt);
 }
 
+static void vmx_update_pkrs_cfg(struct kvm_vcpu *vcpu)
+{
+	struct vcpu_vmx *vmx = to_vmx(vcpu);
+	unsigned long *msr_bitmap = vmx->vmcs01.msr_bitmap;
+	bool flag = !(boot_cpu_has(X86_FEATURE_PKS) &&
+				  guest_cpuid_has(vcpu, X86_FEATURE_PKS));
+
+	vmx_set_intercept_for_msr(msr_bitmap, MSR_IA32_PKRS, MSR_TYPE_RW, flag);
+
+	if (cpu_has_load_ia32_pkrs() && boot_cpu_has(X86_FEATURE_PKS)) {
+		vm_entry_controls_setbit(vmx, VM_ENTRY_LOAD_IA32_PKRS);
+		vm_exit_controls_setbit(vmx, VM_EXIT_LOAD_IA32_PKRS);
+	}
+	else {
+		vm_entry_controls_clearbit(vmx, VM_ENTRY_LOAD_IA32_PKRS);
+		vm_exit_controls_clearbit(vmx, VM_EXIT_LOAD_IA32_PKRS);
+	}
+}
+
 static void vmx_cpuid_update(struct kvm_vcpu *vcpu)
 {
 	struct vcpu_vmx *vmx = to_vmx(vcpu);
@@ -7502,6 +7571,8 @@ static void vmx_cpuid_update(struct kvm_vcpu *vcpu)
 
 	if (supported_xss & (XFEATURE_MASK_CET_KERNEL | XFEATURE_MASK_CET_USER))
 		vmx_update_intercept_for_cet_msr(vcpu);
+
+	vmx_update_pkrs_cfg(vcpu);
 }
 
 static __init void vmx_set_cpu_caps(void)
@@ -7523,6 +7594,10 @@ static __init void vmx_set_cpu_caps(void)
 	/* PKU is not yet implemented for shadow paging. */
 	if (enable_ept && boot_cpu_has(X86_FEATURE_OSPKE))
 		kvm_cpu_cap_check_and_set(X86_FEATURE_PKU);
+
+	/* PKS is not yet implemented for shadow paging. */
+	if (enable_ept)
+		kvm_cpu_cap_check_and_set(X86_FEATURE_PKS);
 
 	if (vmx_umip_emulated())
 		kvm_cpu_cap_set(X86_FEATURE_UMIP);
