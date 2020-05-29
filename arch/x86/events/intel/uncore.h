@@ -50,6 +50,8 @@ struct intel_uncore_type {
 	int perf_ctr_bits;
 	int fixed_ctr_bits;
 	int num_freerunning_types;
+	int type_id;
+	int *box_ids;
 	unsigned perf_ctr;
 	unsigned event_ctl;
 	unsigned event_mask;
@@ -57,14 +59,20 @@ struct intel_uncore_type {
 	unsigned fixed_ctr;
 	unsigned fixed_ctl;
 	unsigned box_ctl;
+	unsigned *box_ctls;		/* first box ctl of each die */
 	union {
 		unsigned msr_offset;
 		unsigned mmio_offset;
 	};
+	unsigned mmio_map_size;
 	unsigned num_shared_regs:8;
 	unsigned single_fixed:1;
 	unsigned pair_ctr_ctl:1;
-	unsigned *msr_offsets;
+	union {
+		unsigned *msr_offsets;
+		unsigned *pci_offsets;
+	};
+	struct rb_node type_node;
 	struct event_constraint unconstrainted;
 	struct event_constraint *constraints;
 	struct intel_uncore_pmu *pmus;
@@ -133,6 +141,30 @@ struct intel_uncore_box {
 	struct intel_uncore_extra_reg shared_regs[0];
 };
 
+/* Capability ID for discovery table */
+#define UNCORE_EXT_CAP_ID_DISCOVERY		0x23
+/* first DVSEC offset */
+#define UNCORE_DISCOVERY_DVSEC_OFFSET		0x8
+/* MASK of supported discovery entry type */
+#define UNCORE_DISCOVERY_DVSEC_ID_MASK		0xffff
+/* PMON discovery entry type ID */
+#define UNCORE_DISCOVERY_DVSEC_ID_PMON		0x1
+/* second DVSEC offset */
+#define UNCORE_DISCOVERY_DVSEC2_OFFSET		0xc
+/* MASK of discovery table offset */
+#define UNCORE_DISCOVERY_DVSEC2_BIR_MASK	0x7
+/* discovery table size */
+#define UNCORE_DISCOVERY_MAP_SIZE		0x80000
+
+struct uncore_discovery_table {
+	struct list_head list;
+	int domain;
+	unsigned int bus;
+	unsigned int devfn;
+	u32 bar_offset;		/* BAR offset of discovery table */
+	int die;		/* Logical Die ID */
+};
+
 /* CFL uncore 8th cbox MSRs */
 #define CFL_UNC_CBO_7_PERFEVTSEL0		0xf70
 #define CFL_UNC_CBO_7_PER_CTR0			0xf76
@@ -165,6 +197,69 @@ struct pci2phy_map {
 
 struct pci2phy_map *__find_pci2phy_map(int segment);
 int uncore_pcibus_to_physid(struct pci_bus *bus);
+void fill_up_pbus_to_physid_mapping(bool reverse);
+
+enum uncore_access_type {
+	UNCORE_ACCESS_MSR	= 0,
+	UNCORE_ACCESS_MMIO,
+	UNCORE_ACCESS_CFG,
+
+	UNCORE_ACCESS_MAX,
+};
+
+struct uncore_global_discovery {
+	union {
+		u64	table1;
+		struct {
+			u64	type : 8,
+				stride : 8,
+				max_units : 10,
+				__reserved_1 : 36,
+				access_type : 2;
+		};
+	};
+	union {
+		u64	table2;
+		u64	global_ctl;
+	};
+	union {
+		u64	table3;
+		struct {
+			u64	status_offset : 8,
+				num_status : 16,
+				__reserved_2 : 40;
+		};
+	};
+};
+
+struct uncore_unit_discovery {
+	union {
+		u64	table1;
+		struct {
+			u64	num_regs : 8,
+				ctl_offset : 8,
+				bit_width : 8,
+				ctr_offset : 8,
+				status_offset : 8,
+				__reserved_1 : 22,
+				access_type : 2;
+		};
+	};
+	union {
+		u64	table2;
+		u64	box_ctl;
+	};
+	union {
+		u64	table3;
+		struct {
+			u64	box_type : 16,
+				box_id : 16,
+				__reserved_2 : 32;
+		};
+	};
+};
+
+#define UNCORE_CFG_BOX_CTL_MASK		0xfff
 
 ssize_t uncore_event_show(struct kobject *kobj,
 			  struct kobj_attribute *attr, char *buf);
@@ -194,6 +289,18 @@ static inline bool uncore_pmc_fixed(int idx)
 static inline bool uncore_pmc_freerunning(int idx)
 {
 	return idx == UNCORE_PMC_IDX_FREERUNNING;
+}
+
+static inline bool is_vaild_mmio_offset(struct intel_uncore_box *box,
+					unsigned long offset)
+{
+	if (box->pmu->type->mmio_map_size > offset)
+		return true;
+
+	pr_warn_once("perf uncore: Access invalid address of %s.\n",
+		     box->pmu->type->name);
+
+	return false;
 }
 
 static inline
@@ -510,15 +617,25 @@ struct event_constraint *
 uncore_get_constraint(struct intel_uncore_box *box, struct perf_event *event);
 void uncore_put_constraint(struct intel_uncore_box *box, struct perf_event *event);
 u64 uncore_shared_reg_config(struct intel_uncore_box *box, int idx);
+bool check_discovery_table(void);
+void uncore_type_insert(struct rb_root *root, struct intel_uncore_type *type);
+struct intel_uncore_type *uncore_type_search(struct rb_root *root, int value);
+void uncore_generate_types_rb_tree(struct rb_root *root,
+				   struct intel_uncore_type **types);
+int uncore_save_box_info(struct intel_uncore_type *type,
+			 int id, unsigned int box_ctl, int die);
+int uncore_save_box_ctl(struct intel_uncore_type *type,
+			unsigned int box_ctl, int die);
 
-extern struct intel_uncore_type **uncore_msr_uncores;
-extern struct intel_uncore_type **uncore_pci_uncores;
-extern struct intel_uncore_type **uncore_mmio_uncores;
+extern struct rb_root uncore_msr_uncores;
+extern struct rb_root uncore_pci_uncores;
+extern struct rb_root uncore_mmio_uncores;
 extern struct pci_driver *uncore_pci_driver;
 extern raw_spinlock_t pci2phy_map_lock;
 extern struct list_head pci2phy_map_head;
 extern struct pci_extra_dev *uncore_extra_pci_dev;
 extern struct event_constraint uncore_constraint_empty;
+extern struct list_head discovery_table;
 
 /* uncore_snb.c */
 int snb_uncore_pci_init(void);
@@ -547,12 +664,19 @@ int knl_uncore_pci_init(void);
 void knl_uncore_cpu_init(void);
 int skx_uncore_pci_init(void);
 void skx_uncore_cpu_init(void);
+int basic_uncore_discovery(void);
+void basic_uncore_cpu_init(void);
+int basic_uncore_pci_init(void);
+void basic_uncore_mmio_init(void);
 int snr_uncore_pci_init(void);
 void snr_uncore_cpu_init(void);
 void snr_uncore_mmio_init(void);
 int icx_uncore_pci_init(void);
 void icx_uncore_cpu_init(void);
 void icx_uncore_mmio_init(void);
+int spr_uncore_pci_init(void);
+void spr_uncore_cpu_init(void);
+void spr_uncore_mmio_init(void);
 
 /* uncore_nhmex.c */
 void nhmex_uncore_cpu_init(void);

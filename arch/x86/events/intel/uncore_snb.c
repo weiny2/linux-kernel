@@ -42,8 +42,17 @@
 #define PCI_DEVICE_ID_INTEL_WHL_UQ_IMC		0x3ed0
 #define PCI_DEVICE_ID_INTEL_WHL_4_UQ_IMC	0x3e34
 #define PCI_DEVICE_ID_INTEL_WHL_UD_IMC		0x3e35
+#define PCI_DEVICE_ID_INTEL_CML_U1_IMC		0x9b51
+#define PCI_DEVICE_ID_INTEL_CML_U2_IMC		0x9b61
+#define PCI_DEVICE_ID_INTEL_CML_U3_IMC		0x9b71
+#define PCI_DEVICE_ID_INTEL_CML_S1_IMC		0x9b33
+#define PCI_DEVICE_ID_INTEL_CML_S2_IMC		0x9b53
+#define PCI_DEVICE_ID_INTEL_RKL_U_IMC		0x4c51
+#define PCI_DEVICE_ID_INTEL_RKL_S_IMC		0x4c44
+#define PCI_DEVICE_ID_INTEL_CNL_U_IMC		0x5a04
 #define PCI_DEVICE_ID_INTEL_ICL_U_IMC		0x8a02
 #define PCI_DEVICE_ID_INTEL_ICL_U2_IMC		0x8a12
+#define PCI_DEVICE_ID_INTEL_JSL_IMC		0x4e22
 #define PCI_DEVICE_ID_INTEL_TGL_U1_IMC		0x9a02
 #define PCI_DEVICE_ID_INTEL_TGL_U2_IMC		0x9a04
 #define PCI_DEVICE_ID_INTEL_TGL_U3_IMC		0x9a12
@@ -232,9 +241,10 @@ static struct intel_uncore_type *snb_msr_uncores[] = {
 
 void snb_uncore_cpu_init(void)
 {
-	uncore_msr_uncores = snb_msr_uncores;
 	if (snb_uncore_cbox.num_boxes > boot_cpu_data.x86_max_cores)
 		snb_uncore_cbox.num_boxes = boot_cpu_data.x86_max_cores;
+	uncore_generate_types_rb_tree(&uncore_msr_uncores,
+				      snb_msr_uncores);
 }
 
 static void skl_uncore_msr_init_box(struct intel_uncore_box *box)
@@ -296,10 +306,11 @@ static struct intel_uncore_type *skl_msr_uncores[] = {
 
 void skl_uncore_cpu_init(void)
 {
-	uncore_msr_uncores = skl_msr_uncores;
 	if (skl_uncore_cbox.num_boxes > boot_cpu_data.x86_max_cores)
 		skl_uncore_cbox.num_boxes = boot_cpu_data.x86_max_cores;
 	snb_uncore_arb.ops = &skl_uncore_msr_ops;
+	uncore_generate_types_rb_tree(&uncore_msr_uncores,
+				      skl_msr_uncores);
 }
 
 static struct intel_uncore_type icl_uncore_cbox = {
@@ -361,9 +372,10 @@ static int icl_get_cbox_num(void)
 
 void icl_uncore_cpu_init(void)
 {
-	uncore_msr_uncores = icl_msr_uncores;
 	icl_uncore_cbox.num_boxes = icl_get_cbox_num();
 	snb_uncore_arb.ops = &skl_uncore_msr_ops;
+	uncore_generate_types_rb_tree(&uncore_msr_uncores,
+				      icl_msr_uncores);
 }
 
 enum {
@@ -415,6 +427,7 @@ static const struct attribute_group snb_uncore_imc_format_group = {
 
 static void snb_uncore_imc_init_box(struct intel_uncore_box *box)
 {
+	struct intel_uncore_type *type = box->pmu->type;
 	struct pci_dev *pdev = box->pci_dev;
 	int where = SNB_UNCORE_PCI_IMC_BAR_OFFSET;
 	resource_size_t addr;
@@ -430,7 +443,13 @@ static void snb_uncore_imc_init_box(struct intel_uncore_box *box)
 
 	addr &= ~(PAGE_SIZE - 1);
 
-	box->io_addr = ioremap(addr, SNB_UNCORE_PCI_IMC_MAP_SIZE);
+	if (!type->mmio_map_size) {
+		pr_warn("perf uncore: Cannot ioremap for %s. Map size is 0.\n",
+			type->name);
+		return;
+	}
+
+	box->io_addr = ioremap(addr, type->mmio_map_size);
 	box->hrtimer_duration = UNCORE_SNB_IMC_HRTIMER_INTERVAL;
 }
 
@@ -586,6 +605,7 @@ static struct intel_uncore_type snb_uncore_imc = {
 	.num_counters   = 2,
 	.num_boxes	= 1,
 	.num_freerunning_types	= SNB_PCI_UNCORE_IMC_FREERUNNING_TYPE_MAX,
+	.mmio_map_size	= SNB_UNCORE_PCI_IMC_MAP_SIZE,
 	.freerunning	= snb_uncore_imc_freerunning,
 	.event_descs	= snb_uncore_imc_events,
 	.format_group	= &snb_uncore_imc_format_group,
@@ -771,6 +791,34 @@ static const struct pci_device_id skl_uncore_pci_ids[] = {
 		PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_WHL_UD_IMC),
 		.driver_data = UNCORE_PCI_DEV_DATA(SNB_PCI_UNCORE_IMC, 0),
 	},
+	{ /* IMC */
+		PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_CML_U1_IMC),
+		.driver_data = UNCORE_PCI_DEV_DATA(SNB_PCI_UNCORE_IMC, 0),
+	},
+	{ /* IMC */
+		PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_CML_U2_IMC),
+		.driver_data = UNCORE_PCI_DEV_DATA(SNB_PCI_UNCORE_IMC, 0),
+	},
+	{ /* IMC */
+		PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_CML_U3_IMC),
+		.driver_data = UNCORE_PCI_DEV_DATA(SNB_PCI_UNCORE_IMC, 0),
+	},
+	{ /* IMC */
+		PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_CML_S1_IMC),
+		.driver_data = UNCORE_PCI_DEV_DATA(SNB_PCI_UNCORE_IMC, 0),
+	},
+	{ /* IMC */
+		PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_CML_S2_IMC),
+		.driver_data = UNCORE_PCI_DEV_DATA(SNB_PCI_UNCORE_IMC, 0),
+	},
+	{ /* end: all zeroes */ },
+};
+
+static const struct pci_device_id cnl_uncore_pci_ids[] = {
+	{ /* IMC */
+		PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_CNL_U_IMC),
+		.driver_data = UNCORE_PCI_DEV_DATA(SNB_PCI_UNCORE_IMC, 0),
+	},
 	{ /* end: all zeroes */ },
 };
 
@@ -781,6 +829,18 @@ static const struct pci_device_id icl_uncore_pci_ids[] = {
 	},
 	{ /* IMC */
 		PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_ICL_U2_IMC),
+		.driver_data = UNCORE_PCI_DEV_DATA(SNB_PCI_UNCORE_IMC, 0),
+	},
+	{ /* IMC */
+		PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_JSL_IMC),
+		.driver_data = UNCORE_PCI_DEV_DATA(SNB_PCI_UNCORE_IMC, 0),
+	},
+	{ /* IMC */
+		PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_RKL_U_IMC),
+		.driver_data = UNCORE_PCI_DEV_DATA(SNB_PCI_UNCORE_IMC, 0),
+	},
+	{ /* IMC */
+		PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_RKL_S_IMC),
 		.driver_data = UNCORE_PCI_DEV_DATA(SNB_PCI_UNCORE_IMC, 0),
 	},
 	{ /* end: all zeroes */ },
@@ -809,6 +869,11 @@ static struct pci_driver bdw_uncore_pci_driver = {
 static struct pci_driver skl_uncore_pci_driver = {
 	.name		= "skl_uncore",
 	.id_table	= skl_uncore_pci_ids,
+};
+
+static struct pci_driver cnl_uncore_pci_driver = {
+	.name		= "cnl_uncore",
+	.id_table	= cnl_uncore_pci_ids,
 };
 
 static struct pci_driver icl_uncore_pci_driver = {
@@ -863,8 +928,17 @@ static const struct imc_uncore_pci_dev desktop_imc_pci_ids[] = {
 	IMC_DEV(WHL_UQ_IMC, &skl_uncore_pci_driver),	/* 8th Gen Core U Mobile Quad Core */
 	IMC_DEV(WHL_4_UQ_IMC, &skl_uncore_pci_driver),	/* 8th Gen Core U Mobile Quad Core */
 	IMC_DEV(WHL_UD_IMC, &skl_uncore_pci_driver),	/* 8th Gen Core U Mobile Dual Core */
+	IMC_DEV(CML_U1_IMC, &skl_uncore_pci_driver),	/* 10th Gen Core Mobile */
+	IMC_DEV(CML_U2_IMC, &skl_uncore_pci_driver),	/* 10th Gen Core Mobile */
+	IMC_DEV(CML_U3_IMC, &skl_uncore_pci_driver),	/* 10th Gen Core Mobile */
+	IMC_DEV(CML_S1_IMC, &skl_uncore_pci_driver),	/* 10th Gen Core Mobile */
+	IMC_DEV(CML_S2_IMC, &skl_uncore_pci_driver),	/* 10th Gen Core Mobile */
+	IMC_DEV(RKL_U_IMC, &icl_uncore_pci_driver),
+	IMC_DEV(RKL_S_IMC, &icl_uncore_pci_driver),
+	IMC_DEV(CNL_U_IMC, &cnl_uncore_pci_driver),
 	IMC_DEV(ICL_U_IMC, &icl_uncore_pci_driver),	/* 10th Gen Core Mobile */
 	IMC_DEV(ICL_U2_IMC, &icl_uncore_pci_driver),	/* 10th Gen Core Mobile */
+	IMC_DEV(JSL_IMC, &icl_uncore_pci_driver),
 	{  /* end marker */ }
 };
 
@@ -892,7 +966,8 @@ static int imc_uncore_pci_init(void)
 	if (!imc_drv)
 		return -ENODEV;
 
-	uncore_pci_uncores = snb_pci_uncores;
+	uncore_generate_types_rb_tree(&uncore_pci_uncores,
+				      snb_pci_uncores);
 	uncore_pci_driver = imc_drv;
 
 	return 0;
@@ -1003,7 +1078,8 @@ static struct intel_uncore_type *nhm_msr_uncores[] = {
 
 void nhm_uncore_cpu_init(void)
 {
-	uncore_msr_uncores = nhm_msr_uncores;
+	uncore_generate_types_rb_tree(&uncore_msr_uncores,
+				      nhm_msr_uncores);
 }
 
 /* end of Nehalem uncore support */
@@ -1085,11 +1161,13 @@ static struct pci_dev *tgl_uncore_get_mc_dev(void)
 }
 
 #define TGL_UNCORE_MMIO_IMC_MEM_OFFSET		0x10000
+#define TGL_UNCORE_PCI_IMC_MAP_SIZE		0xe000
 
 static void tgl_uncore_imc_freerunning_init_box(struct intel_uncore_box *box)
 {
 	struct pci_dev *pdev = tgl_uncore_get_mc_dev();
 	struct intel_uncore_pmu *pmu = box->pmu;
+	struct intel_uncore_type *type = pmu->type;
 	resource_size_t addr;
 	u32 mch_bar;
 
@@ -1112,7 +1190,13 @@ static void tgl_uncore_imc_freerunning_init_box(struct intel_uncore_box *box)
 	addr |= ((resource_size_t)mch_bar << 32);
 #endif
 
-	box->io_addr = ioremap(addr, SNB_UNCORE_PCI_IMC_MAP_SIZE);
+	if (!type->mmio_map_size) {
+		pr_warn("perf uncore: Cannot ioremap for %s. Map size is 0.\n",
+			type->name);
+		return;
+	}
+
+	box->io_addr = ioremap(addr, type->mmio_map_size);
 }
 
 static struct intel_uncore_ops tgl_uncore_imc_freerunning_ops = {
@@ -1138,6 +1222,7 @@ static struct intel_uncore_type tgl_uncore_imc_free_running = {
 	.num_counters		= 3,
 	.num_boxes		= 2,
 	.num_freerunning_types	= TGL_MMIO_UNCORE_IMC_FREERUNNING_TYPE_MAX,
+	.mmio_map_size		= TGL_UNCORE_PCI_IMC_MAP_SIZE,
 	.freerunning		= tgl_uncore_imc_freerunning,
 	.ops			= &tgl_uncore_imc_freerunning_ops,
 	.event_descs		= tgl_uncore_imc_events,
@@ -1152,12 +1237,14 @@ static struct intel_uncore_type *tgl_mmio_uncores[] = {
 void tgl_l_uncore_mmio_init(void)
 {
 	tgl_uncore_imc_free_running.freerunning = tgl_l_uncore_imc_freerunning;
-	uncore_mmio_uncores = tgl_mmio_uncores;
+	uncore_generate_types_rb_tree(&uncore_mmio_uncores,
+				      tgl_mmio_uncores);
 }
 
 void tgl_uncore_mmio_init(void)
 {
-	uncore_mmio_uncores = tgl_mmio_uncores;
+	uncore_generate_types_rb_tree(&uncore_mmio_uncores,
+				      tgl_mmio_uncores);
 }
 
 /* end of Tiger Lake MMIO uncore support */
