@@ -484,6 +484,14 @@ static const struct attribute_group nvdimm_bus_attribute_group = {
 	.is_visible = nvdimm_bus_visible,
 };
 
+int nvdimm_bus_update_sysfs(struct nvdimm_bus *nvdimm_bus)
+{
+	struct device *dev = &nvdimm_bus->dev;
+
+	return sysfs_update_group(&dev->kobj, &nvdimm_bus_attribute_group);
+}
+EXPORT_SYMBOL_GPL(nvdimm_bus_update_sysfs);
+
 const struct attribute_group *nvdimm_bus_attribute_groups[] = {
 	&nvdimm_bus_attribute_group,
 	NULL,
