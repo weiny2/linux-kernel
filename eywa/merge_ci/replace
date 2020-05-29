@@ -1,0 +1,3 @@
+####Replacement branches
+#format is <branch> #what to replace with
+#sample:git://git.infradead.org/users/jjs/linux-tpmdd.git next #git://git.infradead.org/users/jjs/linux-tpmdd.git next 5812f97c0a225958a34b5af3888f55bdd8cdaf29
