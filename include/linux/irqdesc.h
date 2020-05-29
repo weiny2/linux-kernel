@@ -91,6 +91,10 @@ struct irq_desc {
 	unsigned int		cond_suspend_depth;
 	unsigned int		force_resume_depth;
 #endif
+#ifdef CONFIG_SVOS
+	 cpumask_var_t	inprogress;
+	 cpumask_var_t	pending;
+#endif
 #ifdef CONFIG_PROC_FS
 	struct proc_dir_entry	*dir;
 #endif
