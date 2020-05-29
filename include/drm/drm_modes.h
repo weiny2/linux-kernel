@@ -256,7 +256,8 @@ struct drm_display_mode {
 	 *  - DRM_MODE_TYPE_DRIVER: Mode created by the driver, which is all of
 	 *    them really. Drivers must set this bit for all modes they create
 	 *    and expose to userspace.
-	 *  - DRM_MODE_TYPE_USERDEF: Mode defined via kernel command line
+	 *  - DRM_MODE_TYPE_USERDEF: Mode defined or selected via the kernel
+	 *    command line.
 	 *
 	 * Plus a big list of flags which shouldn't be used at all, but are
 	 * still around since these flags are also used in the userspace ABI.
@@ -391,16 +392,6 @@ struct drm_display_mode {
 	int vrefresh;
 
 	/**
-	 * @hsync:
-	 *
-	 * Horizontal refresh rate, for debug output in human readable form. Not
-	 * used in a functional way.
-	 *
-	 * This value is in kHz.
-	 */
-	int hsync;
-
-	/**
 	 * @picture_aspect_ratio:
 	 *
 	 * Field for setting the HDMI picture aspect ratio of a mode.
@@ -493,7 +484,6 @@ int of_get_drm_display_mode(struct device_node *np,
 			    int index);
 
 void drm_mode_set_name(struct drm_display_mode *mode);
-int drm_mode_hsync(const struct drm_display_mode *mode);
 int drm_mode_vrefresh(const struct drm_display_mode *mode);
 void drm_mode_get_hv_timing(const struct drm_display_mode *mode,
 			    int *hdisplay, int *vdisplay);
