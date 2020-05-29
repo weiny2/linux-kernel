@@ -4,31 +4,47 @@
 Memory Protection Keys
 ======================
 
-Memory Protection Keys for Userspace (PKU aka PKEYs) is a feature
-which is found on Intel's Skylake (and later) "Scalable Processor"
-Server CPUs. It will be available in future non-server Intel parts
+Memory Protection Keys provides a mechanism for enforcing page-based
+protections, but without requiring modification of the page tables
+when an application changes protection domains.
+
+Pkeys are separated into user space and kernel space keys which affect user and
+supervisor pages separately.  Kernel space pkeys (PKeys Supervisor, PKS) are a
+feature found on Intel's Granite Rapids processors and newer.
+                 ^^^^^^^^^^^^^^^^^^^^^^
+                 FIXME this is probalby not ok to say???
+
+PKeys Userspace (PKU) is a feature which is found on Intel's Skylake "Scalable
+Processor" Server CPUs.  It will be avalable in future non-server Intel parts
 and future AMD processors.
+
+FIXME: this is going to conflict with the new AMD patches...   But this patch
+at least is a good place holder for the need to update the documentation.
 
 For anyone wishing to test or use this feature, it is available in
 Amazon's EC2 C5 instances and is known to work there using an Ubuntu
 17.04 image.
 
-Memory Protection Keys provides a mechanism for enforcing page-based
-protections, but without requiring modification of the page tables
-when an application changes protection domains.  It works by
-dedicating 4 previously ignored bits in each page table entry to a
-"protection key", giving 16 possible keys.
+Pkeys work by dedicating 4 previously ignored bits in each page table entry to
+a "protection key", giving 16 possible keys.
 
-There is also a new user-accessible register (PKRU) with two separate
-bits (Access Disable and Write Disable) for each key.  Being a CPU
-register, PKRU is inherently thread-local, potentially giving each
-thread a different set of protections from every other thread.
+Protections for each page are controlled with per CPU registers.  The 32 bit
+register stores two separate bits (Access Disable and Write Disable) for each
+key.
+
+For PKRU (Userspace) the register is user-accessible.  For PKRS the register is
+accessible only to the kernel.
+
+Being a CPU register, Pkeys are inherently thread-local, potentially giving
+each thread a different set of protections from every other thread.
 
 There are two new instructions (RDPKRU/WRPKRU) for reading and writing
 to the new register.  The feature is only available in 64-bit mode,
 even though there is theoretically space in the PAE PTEs.  These
 permissions are enforced on data access only and have no effect on
 instruction fetches.
+
+For kernel space rdmsr/wrmsr are used to access the kernel MSR.
 
 Syscalls
 ========
@@ -98,3 +114,14 @@ with a read()::
 The kernel will send a SIGSEGV in both cases, but si_code will be set
 to SEGV_PKERR when violating protection keys versus SEGV_ACCERR when
 the plain mprotect() permissions are violated.
+
+Kernel API
+==========
+
+FIXME discuss the internal kernel API...
+
+WIP I've got a few patches which need to be squashed or added to the original
+series now that pmem is working with pks...
+
+Discuss the final API here when we have fully reviewed the patches.
+
