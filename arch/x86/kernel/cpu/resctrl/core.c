@@ -22,7 +22,7 @@
 #include <linux/cpuhotplug.h>
 
 #include <asm/intel-family.h>
-#include <asm/resctrl_sched.h>
+#include <asm/resctrl.h>
 #include "internal.h"
 
 /* Mutex to protect rdtgroup access. */
@@ -250,6 +250,40 @@ static inline bool rdt_get_mb_table(struct rdt_resource *r)
 	return false;
 }
 
+/*
+ * Restore the MBA configuration from the cached configuration. Used for
+ * the case when an entire package was offline at the time the user made
+ * the configuration change.
+ */
+static void mba_cfg_reconfigure_throttle_mode(struct rdt_resource *r)
+{
+	if (r->alloc_capable && r == &rdt_resources_all[RDT_RESOURCE_MBA] &&
+	    r->membw.arch_throttle_mode == THREAD_THROTTLE_MIN_MAX)
+		wrmsrl(MSR_MBA_CFG, mba_cfg_msr);
+}
+
+/*
+ * Model-specific test to determine if platform where memory bandwidth
+ * control is applied to a core can be configured to apply either the
+ * maximum or minimum of the per-thread delay values.
+ * By default, platforms where memory bandwidth control is applied to a
+ * core will select the maximum delay value of the per-thread CLOS.
+ *
+ * NOTE: delay value programmed to hardware is inverse of bandwidth
+ * percentage configured via user interface.
+ */
+static bool mba_cfg_supports_min_max_intel(void)
+{
+	switch (boot_cpu_data.x86_model) {
+	case INTEL_FAM6_ATOM_TREMONT_D:
+	case INTEL_FAM6_ICELAKE_X:
+	case INTEL_FAM6_ICELAKE_D:
+		return true;
+	default:
+		return false;
+	}
+}
+
 static bool __get_mem_config_intel(struct rdt_resource *r)
 {
 	union cpuid_0x10_3_eax eax;
@@ -270,6 +304,17 @@ static bool __get_mem_config_intel(struct rdt_resource *r)
 	}
 	r->data_width = 3;
 
+	if (boot_cpu_has(X86_FEATURE_PER_THREAD_MBA)) {
+		r->membw.arch_throttle_mode = THREAD_THROTTLE_PER_THREAD;
+		thread_throttle_mode_init_ro();
+	} else if (mba_cfg_supports_min_max_intel()) {
+		r->membw.arch_throttle_mode = THREAD_THROTTLE_MIN_MAX;
+		thread_throttle_mode_init_rw();
+	} else {
+		r->membw.arch_throttle_mode = THREAD_THROTTLE_MAX_ONLY;
+		thread_throttle_mode_init_ro();
+	}
+
 	r->alloc_capable = true;
 	r->alloc_enabled = true;
 
@@ -289,6 +334,11 @@ static bool __rdt_get_mem_config_amd(struct rdt_resource *r)
 	/* AMD does not use delay */
 	r->membw.delay_linear = false;
 
+	/*
+	 * AMD does not use memory delay throttle model to control
+	 * the allocation like Intel does.
+	 */
+	r->membw.arch_throttle_mode = THREAD_THROTTLE_UNDEFINED;
 	r->membw.min_bw = 0;
 	r->membw.bw_gran = 1;
 	/* Max value is 2048, Data width should be 4 in decimal */
@@ -579,6 +629,8 @@ static void domain_add_cpu(int cpu, struct rdt_resource *r)
 	cpumask_set_cpu(cpu, &d->cpu_mask);
 
 	rdt_domain_reconfigure_cdp(r);
+
+	mba_cfg_reconfigure_throttle_mode(r);
 
 	if (r->alloc_capable && domain_setup_ctrlval(r, d)) {
 		kfree(d);
@@ -957,6 +1009,36 @@ static __init void rdt_init_res_defs(void)
 }
 
 static enum cpuhp_state rdt_online;
+
+/* Runs once on the BSP during boot. */
+void resctrl_cpu_detect(struct cpuinfo_x86 *c)
+{
+	if (!cpu_has(c, X86_FEATURE_CQM_LLC)) {
+		c->x86_cache_max_rmid  = -1;
+		c->x86_cache_occ_scale = -1;
+		c->x86_cache_mbm_width_offset = -1;
+		return;
+	}
+
+	/* will be overridden if occupancy monitoring exists */
+	c->x86_cache_max_rmid = cpuid_ebx(0xf);
+
+	if (cpu_has(c, X86_FEATURE_CQM_OCCUP_LLC) ||
+	    cpu_has(c, X86_FEATURE_CQM_MBM_TOTAL) ||
+	    cpu_has(c, X86_FEATURE_CQM_MBM_LOCAL)) {
+		u32 eax, ebx, ecx, edx;
+
+		/* QoS sub-leaf, EAX=0Fh, ECX=1 */
+		cpuid_count(0xf, 1, &eax, &ebx, &ecx, &edx);
+
+		c->x86_cache_max_rmid  = ecx;
+		c->x86_cache_occ_scale = ebx;
+		if (c->x86_vendor == X86_VENDOR_INTEL)
+			c->x86_cache_mbm_width_offset = eax & 0xff;
+		else
+			c->x86_cache_mbm_width_offset = -1;
+	}
+}
 
 static int __init resctrl_late_init(void)
 {
