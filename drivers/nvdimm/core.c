@@ -378,15 +378,69 @@ static ssize_t wait_probe_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(wait_probe);
 
+static ssize_t firmware_activate_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct nvdimm_bus *nvdimm_bus = to_nvdimm_bus(dev);
+	struct nvdimm_bus_descriptor *nd_desc = nvdimm_bus->nd_desc;
+	enum nvdimm_fwa_state state;
+
+	if (!nd_desc->fw_ops)
+		return -EOPNOTSUPP;
+
+	nvdimm_bus_lock(dev);
+	state = nd_desc->fw_ops->activate_state(nd_desc);
+	nvdimm_bus_unlock(dev);
+
+	switch (state) {
+	case NVDIMM_FWA_IDLE:
+		return sprintf(buf, "idle\n");
+	case NVDIMM_FWA_BUSY:
+		return sprintf(buf, "busy\n");
+	case NVDIMM_FWA_ARMED:
+		return sprintf(buf, "armed\n");
+	case NVDIMM_FWA_ARM_OVERFLOW:
+		return sprintf(buf, "overflow\n");
+	default:
+		return -ENXIO;
+	}
+}
+
+static DEVICE_ATTR_ADMIN_RO(firmware_activate);
+
+static umode_t nvdimm_bus_visible(struct kobject *kobj, struct attribute *a, int n)
+{
+	struct device *dev = container_of(kobj, typeof(*dev), kobj);
+	struct nvdimm_bus *nvdimm_bus = to_nvdimm_bus(dev);
+	struct nvdimm_bus_descriptor *nd_desc = nvdimm_bus->nd_desc;
+
+	if (a == &dev_attr_firmware_activate.attr) {
+		enum nvdimm_fwa_capability cap;
+
+		if (!nd_desc->fw_ops)
+			return 0;
+
+		nvdimm_bus_lock(dev);
+		cap = nd_desc->fw_ops->capability(nd_desc);
+		nvdimm_bus_unlock(dev);
+
+		if (cap < NVDIMM_FWA_CAP_QUIESCE)
+			return 0;
+	}
+	return a->mode;
+}
+
 static struct attribute *nvdimm_bus_attributes[] = {
 	&dev_attr_commands.attr,
 	&dev_attr_wait_probe.attr,
 	&dev_attr_provider.attr,
+	&dev_attr_firmware_activate.attr,
 	NULL,
 };
 
 static const struct attribute_group nvdimm_bus_attribute_group = {
 	.attrs = nvdimm_bus_attributes,
+	.is_visible = nvdimm_bus_visible,
 };
 
 const struct attribute_group *nvdimm_bus_attribute_groups[] = {
