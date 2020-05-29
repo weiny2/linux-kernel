@@ -555,6 +555,7 @@ struct thread_struct {
 #ifdef CONFIG_X86_INTEL_CET
 	struct cet_status	cet;
 #endif
+
 #ifdef	CONFIG_X86_INTEL_MEMORY_PROTECTION_KEYS
 	/* Protection key register for supervisor (lower 32 bits). */
 	u32			pkrs;
@@ -564,11 +565,6 @@ struct thread_struct {
 	/* User Interrupt state*/
 	struct uintr_receiver	*ui_recv;
 	struct uintr_sender	*ui_send;
-#endif
-
-#ifdef	CONFIG_X86_INTEL_MEMORY_PROTECTION_KEYS
-	/* Protection key register for supervisor (lower 32 bits). */
-	u32			pkrs;
 #endif
 
 	/* Floating point and extended processor state */
