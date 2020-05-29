@@ -197,12 +197,11 @@ static int get_width(u32 mtr)
 }
 
 /*
- * We use the per-socket device @did to count how many sockets are present,
+ * We use the per-socket device @cfg->did to count how many sockets are present,
  * and to detemine which PCI buses are associated with each socket. Allocate
  * and build the full list of all the skx_dev structures that we need here.
  */
-int skx_get_all_bus_mappings(unsigned int did, int off, enum type type,
-			     struct list_head **list)
+int skx_get_all_bus_mappings(struct res_config *cfg, struct list_head **list)
 {
 	struct pci_dev *pdev, *prev;
 	struct skx_dev *d;
@@ -211,7 +210,7 @@ int skx_get_all_bus_mappings(unsigned int did, int off, enum type type,
 
 	prev = NULL;
 	for (;;) {
-		pdev = pci_get_device(PCI_VENDOR_ID_INTEL, did, prev);
+		pdev = pci_get_device(PCI_VENDOR_ID_INTEL, cfg->decs_did, prev);
 		if (!pdev)
 			break;
 		ndev++;
@@ -221,7 +220,7 @@ int skx_get_all_bus_mappings(unsigned int did, int off, enum type type,
 			return -ENOMEM;
 		}
 
-		if (pci_read_config_dword(pdev, off, &reg)) {
+		if (pci_read_config_dword(pdev, cfg->busno_cfg_offset, &reg)) {
 			kfree(d);
 			pci_dev_put(pdev);
 			skx_printk(KERN_ERR, "Failed to read bus idx\n");
@@ -230,7 +229,7 @@ int skx_get_all_bus_mappings(unsigned int did, int off, enum type type,
 
 		d->bus[0] = GET_BITFIELD(reg, 0, 7);
 		d->bus[1] = GET_BITFIELD(reg, 8, 15);
-		if (type == SKX) {
+		if (cfg->type == SKX) {
 			d->seg = pci_domain_nr(pdev->bus);
 			d->bus[2] = GET_BITFIELD(reg, 16, 23);
 			d->bus[3] = GET_BITFIELD(reg, 24, 31);
@@ -305,14 +304,24 @@ static int skx_get_dimm_attr(u32 reg, int lobit, int hibit, int add,
 #define numcol(reg)	skx_get_dimm_attr(reg, 0, 1, 10, 0, 2, "cols")
 
 int skx_get_dimm_info(u32 mtr, u32 amap, struct dimm_info *dimm,
-		      struct skx_imc *imc, int chan, int dimmno)
+		      struct skx_imc *imc, int chan, int dimmno,
+		      struct res_config *cfg)
 {
-	int  banks = 16, ranks, rows, cols, npages;
+	int  banks, ranks, rows, cols, npages;
+	enum mem_type mtype;
 	u64 size;
 
 	ranks = numrank(mtr);
 	rows = numrow(mtr);
 	cols = numcol(mtr);
+
+	if (cfg->support_ddr5 && (amap & 0x8)) {
+		banks = 32;
+		mtype = MEM_DDR5;
+	} else {
+		banks = 16;
+		mtype = MEM_DDR4;
+	}
 
 	/*
 	 * Compute size in 8-byte (2^3) words, then shift to MiB (2^20)
@@ -333,7 +342,7 @@ int skx_get_dimm_info(u32 mtr, u32 amap, struct dimm_info *dimm,
 	dimm->nr_pages = npages;
 	dimm->grain = 32;
 	dimm->dtype = get_width(mtr);
-	dimm->mtype = MEM_DDR4;
+	dimm->mtype = mtype;
 	dimm->edac_mode = EDAC_SECDED; /* likely better than this */
 	snprintf(dimm->label, sizeof(dimm->label), "CPU_SrcID#%u_MC#%u_Chan#%u_DIMM#%u",
 		 imc->src_id, imc->lmc, chan, dimmno);
@@ -391,7 +400,8 @@ unknown_size:
 
 int skx_register_mci(struct skx_imc *imc, struct pci_dev *pdev,
 		     const char *ctl_name, const char *mod_str,
-		     get_dimm_config_f get_dimm_config)
+		     get_dimm_config_f get_dimm_config,
+		     struct res_config *cfg)
 {
 	struct mem_ctl_info *mci;
 	struct edac_mc_layer layers[2];
@@ -426,13 +436,15 @@ int skx_register_mci(struct skx_imc *imc, struct pci_dev *pdev,
 	}
 
 	mci->mtype_cap = MEM_FLAG_DDR4 | MEM_FLAG_NVDIMM;
+	if (cfg->support_ddr5)
+		mci->mtype_cap |= MEM_FLAG_DDR5;
 	mci->edac_ctl_cap = EDAC_FLAG_NONE;
 	mci->edac_cap = EDAC_FLAG_NONE;
 	mci->mod_name = mod_str;
 	mci->dev_name = pci_name(pdev);
 	mci->ctl_page_to_phys = NULL;
 
-	rc = get_dimm_config(mci);
+	rc = get_dimm_config(mci, cfg);
 	if (rc < 0)
 		goto fail;
 
