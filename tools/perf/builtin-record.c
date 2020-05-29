@@ -723,6 +723,43 @@ static int record__auxtrace_init(struct record *rec __maybe_unused)
 
 #endif
 
+static int record__config_text_poke(struct evlist *evlist)
+{
+	struct evsel *evsel;
+	int err;
+
+	/* Nothing to do if text poke is already configured */
+	evlist__for_each_entry(evlist, evsel) {
+		if (evsel->core.attr.text_poke)
+			return 0;
+	}
+
+	err = parse_events(evlist, "dummy:u", NULL);
+	if (err)
+		return err;
+
+	evsel = evlist__last(evlist);
+
+	evsel->core.attr.freq = 0;
+	evsel->core.attr.sample_period = 1;
+	evsel->core.attr.text_poke = 1;
+	evsel->core.attr.ksymbol = 1;
+
+	evsel->core.system_wide = true;
+	evsel->no_aux_samples = true;
+	evsel->immediate = true;
+
+	/* Text poke must be collected on all CPUs */
+	perf_cpu_map__put(evsel->core.own_cpus);
+	evsel->core.own_cpus = perf_cpu_map__new(NULL);
+	perf_cpu_map__put(evsel->core.cpus);
+	evsel->core.cpus = perf_cpu_map__get(evsel->core.own_cpus);
+
+	perf_evsel__set_sample_bit(evsel, TIME);
+
+	return 0;
+}
+
 static bool record__kcore_readable(struct machine *machine)
 {
 	char kcore[PATH_MAX];
@@ -2374,8 +2411,9 @@ static struct option __record_options[] = {
 		    "Record namespaces events"),
 	OPT_BOOLEAN(0, "all-cgroups", &record.opts.record_cgroup,
 		    "Record cgroup events"),
-	OPT_BOOLEAN(0, "switch-events", &record.opts.record_switch_events,
-		    "Record context switch events"),
+	OPT_BOOLEAN_SET(0, "switch-events", &record.opts.record_switch_events,
+			&record.opts.record_switch_events_set,
+			"Record context switch events"),
 	OPT_BOOLEAN_FLAG(0, "all-kernel", &record.opts.all_kernel,
 			 "Configure all used events to run in kernel space.",
 			 PARSE_OPT_EXCLUSIVE),
@@ -2625,6 +2663,14 @@ int cmd_record(int argc, const char **argv)
 	 */
 	if (rec->opts.full_auxtrace)
 		rec->buildid_all = true;
+
+	if (rec->opts.text_poke) {
+		err = record__config_text_poke(rec->evlist);
+		if (err) {
+			pr_err("record__config_text_poke failed, error %d\n", err);
+			goto out;
+		}
+	}
 
 	if (record_opts__config(&rec->opts)) {
 		err = -EINVAL;

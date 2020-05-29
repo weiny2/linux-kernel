@@ -779,7 +779,8 @@ static int intel_pt_recording_options(struct auxtrace_record *itr,
 	 * Per-cpu recording needs sched_switch events to distinguish different
 	 * threads.
 	 */
-	if (have_timing_info && !perf_cpu_map__empty(cpus)) {
+	if (have_timing_info && !perf_cpu_map__empty(cpus) &&
+	    !record_opts__no_switch_events(opts)) {
 		if (perf_can_record_switch_events()) {
 			bool cpu_wide = !target__none(&opts->target) &&
 					!target__has_task(&opts->target);
@@ -826,6 +827,10 @@ static int intel_pt_recording_options(struct auxtrace_record *itr,
 				ptr->have_sched_switch = 1;
 		}
 	}
+
+	if (have_timing_info && !intel_pt_evsel->core.attr.exclude_kernel &&
+	    perf_can_record_text_poke_events() && perf_can_record_cpu_wide())
+		opts->text_poke = true;
 
 	if (intel_pt_evsel) {
 		/*
@@ -874,7 +879,8 @@ static int intel_pt_recording_options(struct auxtrace_record *itr,
 	 * per-cpu with no sched_switch (except workload-only).
 	 */
 	if (!ptr->have_sched_switch && !perf_cpu_map__empty(cpus) &&
-	    !target__none(&opts->target))
+	    !target__none(&opts->target) &&
+	    !intel_pt_evsel->core.attr.exclude_user)
 		ui__warning("Intel Processor Trace decoding will not be possible except for kernel tracing!\n");
 
 	return 0;
