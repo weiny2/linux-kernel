@@ -26,9 +26,15 @@ extern bool dw_dma_filter(struct dma_chan *chan, void *param);
 #ifdef CONFIG_ACPI
 void dw_dma_acpi_controller_register(struct dw_dma *dw);
 void dw_dma_acpi_controller_free(struct dw_dma *dw);
+
+void xbar_acpi_controller_register(struct dw_dma *dw);
+void xbar_acpi_controller_free(struct dw_dma *dw);
 #else /* !CONFIG_ACPI */
 static inline void dw_dma_acpi_controller_register(struct dw_dma *dw) {}
 static inline void dw_dma_acpi_controller_free(struct dw_dma *dw) {}
+
+static inline void xbar_acpi_controller_register(struct dw_dma *dw) {}
+static inline void xbar_acpi_controller_free(struct dw_dma *dw) {}
 #endif /* !CONFIG_ACPI */
 
 struct platform_device;
@@ -51,11 +57,15 @@ struct dw_dma_chip_pdata {
 	int (*probe)(struct dw_dma_chip *chip);
 	int (*remove)(struct dw_dma_chip *chip);
 	struct dw_dma_chip *chip;
+	void (*acpi_controller_register)(struct dw_dma *dw);
+	void (*acpi_controller_free)(struct dw_dma *dw);
 };
 
 static __maybe_unused const struct dw_dma_chip_pdata dw_dma_chip_pdata = {
 	.probe = dw_dma_probe,
 	.remove = dw_dma_remove,
+	.acpi_controller_register = dw_dma_acpi_controller_register,
+	.acpi_controller_free = dw_dma_acpi_controller_free,
 };
 
 static const struct dw_dma_platform_data idma32_pdata = {
@@ -72,6 +82,16 @@ static __maybe_unused const struct dw_dma_chip_pdata idma32_chip_pdata = {
 	.pdata = &idma32_pdata,
 	.probe = idma32_dma_probe,
 	.remove = idma32_dma_remove,
+	.acpi_controller_register = dw_dma_acpi_controller_register,
+	.acpi_controller_free = dw_dma_acpi_controller_free,
+};
+
+static __maybe_unused const struct dw_dma_chip_pdata xbar_chip_pdata = {
+	.pdata = &idma32_pdata,
+	.probe = idma32_dma_probe,
+	.remove = idma32_dma_remove,
+	.acpi_controller_register = xbar_acpi_controller_register,
+	.acpi_controller_free = xbar_acpi_controller_free,
 };
 
 #endif /* _DMA_DW_INTERNAL_H */
