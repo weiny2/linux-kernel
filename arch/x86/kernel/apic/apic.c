@@ -899,6 +899,15 @@ static int __init calibrate_APIC_clock(void)
 	 */
 	__setup_APIC_LVTT(0xffffffff, 0, 0);
 
+#ifdef CONFIG_X86_SLE_SUPPORT
+	printk("SLE EMUL: Bypassing APIC clock calibration\n");
+	printk("CPU freq:%d",cpu_khz);
+	//kdp:Value below taken from simics calibration
+	lapic_timer_period = 199374;
+	printk("Setting lapic freq:%d",lapic_timer_period);
+	local_irq_enable();
+	return 0;
+#endif
 	/*
 	 * Methods to terminate the calibration loop:
 	 *  1) Global clockevent if available (jiffies)
