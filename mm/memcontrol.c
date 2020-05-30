@@ -2648,6 +2648,7 @@ done_restock:
 	return 0;
 }
 
+#if defined(CONFIG_MEMCG_KMEM) || defined(CONFIG_MMU)
 static void cancel_charge(struct mem_cgroup *memcg, unsigned int nr_pages)
 {
 	if (mem_cgroup_is_root(memcg))
@@ -2659,6 +2660,7 @@ static void cancel_charge(struct mem_cgroup *memcg, unsigned int nr_pages)
 
 	css_put_many(&memcg->css, nr_pages);
 }
+#endif
 
 static void lock_page_lru(struct page *page, int *isolated)
 {
