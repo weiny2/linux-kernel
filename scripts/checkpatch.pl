@@ -1063,6 +1063,10 @@ for my $filename (@ARGV) {
 	}
 	while (<$FILE>) {
 		chomp;
+		if ($vname eq 'Your patch') {
+			my ($subject) = $_ =~ /^Subject:\s*(.*)/;
+			$vname = '"' . $subject . '"' if $subject;
+		}
 		push(@rawlines, $_);
 	}
 	close($FILE);
