@@ -1013,20 +1013,12 @@ static inline unsigned long pgd_index(unsigned long address)
 	return (address >> PGDIR_SHIFT) & (PTRS_PER_PGD - 1);
 }
 
-static inline unsigned long pud_index(unsigned long address)
-{
-	return (address >> PUD_SHIFT) & (PTRS_PER_PUD - 1);
-}
-
 /*
  * Find an entry in a page-table-directory.  We combine the address region
  * (the high order N bits) and the pgd portion of the address.
  */
 
 #define pgd_offset(mm, address)	 ((mm)->pgd + pgd_index(address))
-
-#define pud_offset(p4dp, addr)	\
-	(((pud_t *) p4d_page_vaddr(*(p4dp))) + pud_index(addr))
 
 /* to find an entry in a kernel page-table-directory */
 /* This now only contains the vmalloc pages */
