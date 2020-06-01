@@ -1535,13 +1535,22 @@ static blk_status_t crypt_convert(struct crypt_config *cc,
 
 		crypt_alloc_req(cc, ctx);
 		atomic_inc(&ctx->cc_pending);
-
+retry:
 		if (crypt_integrity_aead(cc))
 			r = crypt_convert_block_aead(cc, ctx, ctx->r.req_aead, tag_offset);
 		else
 			r = crypt_convert_block_skcipher(cc, ctx, ctx->r.req, tag_offset);
 
 		switch (r) {
+		/*
+		 * Some hardware crypto drivers use GFP_ATOMIC allocations in
+		 * the request routine. These allocations can randomly fail.
+		 * Propagating the failure up the I/O stack would cause I/O errors
+		 * and potential data corruption.  So, instead sleep and retry.
+		 */
+		case -ENOMEM:
+			msleep(1);
+			goto retry;
 		/*
 		 * The request was queued by a crypto driver
 		 * but the driver request queue is full, let's wait.
