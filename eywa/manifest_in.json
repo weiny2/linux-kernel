@@ -2190,14 +2190,14 @@
                 }
             ],
             "description": "IOMMU workarounds/fixes for upcoming affected platforms.",
-            "enabled": false,
+            "enabled": true,
             "ip_owner": [
                 {
                     "name": "Ashok Raj",
                     "email": "ashok.raj@intel.com"
                 }
             ],
-            "jira": "",
+            "jira": "NEXT-1999",
             "name": "iommu-workarounds",
             "repourl": "ssh://git-amr-4.devtools.intel.com:29418/linux_iommu-iommu.git",
             "sdl_contact": [
@@ -2207,7 +2207,8 @@
                 }
             ],
             "status": "intel confidential",
-            "stuck_at_ref": ""
+            "stuck_at_ref": "",
+            "last_enabled": "v5.7"
         },
         {
             "branch": "cta_arch_5.7",
