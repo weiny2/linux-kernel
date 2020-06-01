@@ -1847,7 +1847,7 @@
                 }
             ],
             "description": "Advanced Matrix Extension (AMX/TMUL), including cet, xsaves and pasid code",
-            "enabled": true,
+            "enabled": false,
             "ip_owner": [
                 {
                     "name": "Bob Valentine",
