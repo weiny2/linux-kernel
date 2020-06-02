@@ -72,11 +72,12 @@ static inline struct idxd_wq *inode_wq(struct inode *inode)
 
 static int idxd_cdev_open(struct inode *inode, struct file *filp)
 {
-	struct idxd_user_context *ctx;
+	struct idxd_user_context *ctx = NULL;
 	struct idxd_device *idxd;
 	struct idxd_wq *wq;
 	struct device *dev;
 	int rc;
+	unsigned long flags;
 
 	wq = inode_wq(inode);
 	idxd = wq->idxd;
@@ -84,12 +85,18 @@ static int idxd_cdev_open(struct inode *inode, struct file *filp)
 
 	dev_dbg(dev, "%s called: %d\n", __func__, idxd_wq_refcount(wq));
 
-	if (idxd_wq_refcount(wq) > 0 && wq_dedicated(wq))
-		return -EBUSY;
+	mutex_lock(&wq->wq_lock);
+
+	if (idxd_wq_refcount(wq) > 0 && wq_dedicated(wq)) {
+		rc = -EBUSY;
+		goto failed;
+	}
 
 	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
-	if (!ctx)
-		return -ENOMEM;
+	if (!ctx) {
+		rc = -ENOMEM;
+		goto failed;
+	}
 
 	ctx->wq = wq;
 	filp->private_data = ctx;
@@ -102,7 +109,9 @@ static int idxd_cdev_open(struct inode *inode, struct file *filp)
 		}
 
 		if (wq_dedicated(wq)) {
+			spin_lock_irqsave(&idxd->dev_lock, flags);
 			rc = idxd_wq_set_pasid(wq, ctx->pasid);
+			spin_unlock_irqrestore(&idxd->dev_lock, flags);
 			if (rc < 0) {
 				intel_svm_unbind_mm(dev, ctx->pasid);
 				dev_err(dev, "wq set pasid failed: %d\n", rc);
@@ -112,9 +121,11 @@ static int idxd_cdev_open(struct inode *inode, struct file *filp)
 	}
 
 	idxd_wq_get(wq);
+	mutex_unlock(&wq->wq_lock);
 	return 0;
 
 failed:
+	mutex_unlock(&wq->wq_lock);
 	kfree(ctx);
 	return rc;
 }
@@ -144,7 +155,9 @@ static int idxd_cdev_release(struct inode *node, struct file *filep)
 	}
 
 	kfree(ctx);
+	mutex_lock(&wq->wq_lock);
 	idxd_wq_put(wq);
+	mutex_unlock(&wq->wq_lock);
 	return 0;
 }
 
