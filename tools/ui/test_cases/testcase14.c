@@ -7,9 +7,11 @@
 
 int receiver_flag = 0;
 int sender_flag = 0;
+int loop = 5;
 
 void *sender_thread()
 {
+	int i;
 	errno = 0;
 
         cpu_set_t my_set;
@@ -22,8 +24,15 @@ void *sender_thread()
 		if(receiver_flag)
 			break;
 	}
-
-	sender_registration(&sender);
+	sender.receiver_uvec_fd = receiver.uvec_fd;
+	sender.target_fd = 0;
+        sender_register_syscall(&sender);
+        sender_read_target_id(&sender);
+        printf("send: Sending User IPI using senduipi(%d)\n", sender.target_id);
+	for(i=0; i< loop; i++) {
+		_senduipi(sender.target_id);
+		sleep(3);
+	}
 	sender_flag = 1;
 
         return NULL;
@@ -39,11 +48,9 @@ void *receiver_thread()
         sched_setaffinity(0, sizeof(cpu_set_t), &my_set);
 
 	receiver_registration(&receiver);
-	_clui();
-        printf(" Clearing the ui bit before sending the _senduipi\n");
-	receiver_flag = 1;
-
+	receiver_flag = 1;	
 	while(1) {
+		_clui();
 		sleep(1);
 		if(sender_flag)
 			break;

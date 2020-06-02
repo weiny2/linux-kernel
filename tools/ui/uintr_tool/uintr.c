@@ -17,6 +17,7 @@
 #include <sched.h>
 #include <stdlib.h>
 #include <sys/sysinfo.h>
+#include <stdint.h>
 
 #define MAX_CONN (2 << 14)
 
@@ -210,6 +211,8 @@ static void *receiver_thread()
 		num_recv[m].recv.handler = generic_handler;
 		receiver_register_syscall(&num_recv[m].recv);
 		num_recv[k].recv_status_flag = 1;
+		_clui();
+		_stui();
 		while(1) {
 			sleep(1);
 			if(num_recv[n].send_th_exit_flag)

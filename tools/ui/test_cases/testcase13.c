@@ -6,7 +6,7 @@
 #include <sys/socket.h>
 #include "testcases.h"
 
-void child(int sock)
+void child_1(int sock)
 {
     int fd;
     char buf[16];
@@ -31,7 +31,7 @@ void child(int sock)
     }
 }
 
-void parent(int sock)
+void child_2(int sock)
 {
     ssize_t size;
     int i;
@@ -47,25 +47,28 @@ void parent(int sock)
 int main()
 {
     int sv[2];
-    int pid;
+    int n1, n2;
 
     if (socketpair(AF_LOCAL, SOCK_STREAM, 0, sv) < 0) {
         perror("socketpair");
         exit(1);
     }
-    switch ((pid = fork())) {
-    case 0:
+
+    n1 = fork();
+    n2 = fork();
+
+    if (n1 == 0 && n2 > 0)
+    {
         close(sv[0]);
-        child(sv[1]);
-        break;
-    case -1:
-        perror("fork");
-        exit(1);
-    default:
-        close(sv[1]);
-        parent(sv[0]);
-        break;
-    }
+        child_1(sv[1]);
+     } else if (n1 > 0 && n2 == 0) {
+	close(sv[1]);
+        child_2(sv[0]);
+     } else if (n1 > 0 && n2 > 0) { 
+        printf("parent\n");
+	sleep(5);
+     } else
+     	printf("third child\n"); 	     
 
     return 0;
 }
