@@ -859,6 +859,7 @@ static void complete_journal_encrypt(struct crypto_async_request *req, int err)
 static bool do_crypt(bool encrypt, struct skcipher_request *req, struct journal_completion *comp)
 {
 	int r;
+retry:
 	skcipher_request_set_callback(req, CRYPTO_TFM_REQ_MAY_BACKLOG,
 				      complete_journal_encrypt, comp);
 	if (likely(encrypt))
@@ -873,6 +874,10 @@ static bool do_crypt(bool encrypt, struct skcipher_request *req, struct journal_
 		wait_for_completion(&comp->ic->crypto_backoff);
 		reinit_completion(&comp->ic->crypto_backoff);
 		return true;
+	}
+	if (r == -ENOMEM) {
+		msleep(1);
+		goto retry;
 	}
 	dm_integrity_io_error(comp->ic, "encrypt", r);
 	return false;
