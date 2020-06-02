@@ -56,6 +56,9 @@ arm/soc
 		power: reset: vexpress: fix build issue
 		ARM: davinci: fix build failure without I2C
 		clk: versatile: Fix kconfig dependency on COMMON_CLK_VERSATILE
+		ARM: OMAP2+: Fix regression for using local timer on non-SMP SoCs
+		ARM: zynq: Don't select CONFIG_ICST
+		ARM: omap2: fix omap5_realtime_timer_init definition
 
 arm/dt
 	patch
@@ -154,6 +157,10 @@ arm/dt
 		git://git.kernel.org/pub/scm/linux/kernel/git/matthias.bgg/linux tags/v5.7-next-dts64.2
 	keystone/dts
 		git://git.kernel.org/pub/scm/linux/kernel/git/ssantosh/linux-keystone tags/keystone_dts_for_5.8
+	<no branch> (7856488bd83b0182548a84d05c07326321ae6138)
+		git://git.kernel.org/pub/scm/linux/kernel/git/ssantosh/linux-keystone tags/keystone_dts_for_5.7
+	zynq/dt
+		https://github.com/Xilinx/linux-xlnx tags/zynqmp-dt-for-v5.8
 
 arm/drivers
 	drivers/scmi
@@ -205,6 +212,8 @@ arm/drivers
 		staging: tegra-video: fix V4L2 dependency
 	ti/k3-chipid
 		git://git.kernel.org/pub/scm/linux/kernel/git/ssantosh/linux-keystone tags/drivers_soc_for_5.8
+	<no branch> (83ca8b3e8f213f49cc68b5c1fbcf88ebb24671eb)
+		Merge branch 'baikal/drivers' into arm/drivers
 	baikal/drivers
 		Merge branch 'baikal/drivers' into arm/drivers
 
