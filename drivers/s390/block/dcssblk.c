@@ -62,13 +62,20 @@ static int dcssblk_dax_zero_page_range(struct dax_device *dax_dev,
 {
 	long rc;
 	void *kaddr;
+	int id;
 
+	id = dax_read_lock();
 	rc = dax_direct_access(dax_dev, pgoff, nr_pages, &kaddr, NULL);
 	if (rc < 0)
-		return rc;
+		goto unlock;
+
 	memset(kaddr, 0, nr_pages << PAGE_SHIFT);
 	dax_flush(dax_dev, kaddr, nr_pages << PAGE_SHIFT);
-	return 0;
+	rc = 0;
+
+unlock:
+	dax_read_unlock(id);
+	return rc;
 }
 
 static const struct dax_operations dcssblk_dax_ops = {
