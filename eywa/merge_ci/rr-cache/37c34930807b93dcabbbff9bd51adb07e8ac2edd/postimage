@@ -55,12 +55,8 @@
 #include <asm/microcode_intel.h>
 #include <asm/intel-family.h>
 #include <asm/cpu_device_id.h>
-<<<<<<<
-#include <asm/cet.h>
-=======
 #include <asm/keylocker.h>
-
->>>>>>>
+#include <asm/cet.h>
 #include <asm/uv/uv.h>
 
 #include "cpu.h"

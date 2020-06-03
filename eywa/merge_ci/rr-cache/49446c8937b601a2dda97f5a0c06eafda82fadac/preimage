@@ -58,10 +58,10 @@
 #include <asm/insn.h>
 #include <asm/insn-eval.h>
 <<<<<<<
-#include <asm/iommu.h>
 =======
 #include <asm/vdso.h>
 >>>>>>>
+#include <asm/iommu.h>
 
 #ifdef CONFIG_X86_64
 #include <asm/x86_init.h>
