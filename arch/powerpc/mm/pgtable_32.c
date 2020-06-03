@@ -40,7 +40,7 @@ notrace void __init early_ioremap_init(void)
 {
 	unsigned long addr = ALIGN_DOWN(FIXADDR_START, PGDIR_SIZE);
 	pte_t *ptep = (pte_t *)early_fixmap_pagetable;
-	pmd_t *pmdp = pmd_ptr_k(addr);
+	pmd_t *pmdp = pmd_off_k(addr);
 
 	for (; (s32)(FIXADDR_TOP - addr) > 0;
 	     addr += PGDIR_SIZE, ptep += PTRS_PER_PTE, pmdp++)
