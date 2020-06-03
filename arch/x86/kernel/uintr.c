@@ -34,7 +34,7 @@ struct uintr_uitte {
 		user_vec_zero:2,
 		reserved2:48;
 	u64	target_upid_addr;
-} __packed __aligned(64);
+} __packed __aligned(16);
 
 struct uintr_receiver {
 	u64 handler;
@@ -345,6 +345,9 @@ int uintr_register_sender(struct task_struct *recv_task, int uvec_no)
 		 ui_send->uitt_mask);
 
 	uitte = &ui_send->uitt_kaddr[entry];
+
+	pr_debug("send: UITTE entry %d address %llx\n", entry, (u64)uitte);
+
 	uitte->valid = 1;
 	uitte->user_vec = uvec_no;
 	uitte->target_upid_addr = (u64)recv_task->thread.ui_recv->upid_uaddr;
@@ -362,7 +365,7 @@ static void uintr_free_upid(struct uintr_receiver	*ui_recv, struct task_struct *
 	ui_recv->upid_uaddr = NULL;
 }
 
-static void *uintr_alloc_upid(struct task_struct *task)
+static int uintr_alloc_upid(struct task_struct *task)
 {
 	//void *addr = kzalloc(sizeof(struct uintr_upid_struct), GFP_KERNEL);
 	void *addr = kzalloc(PAGE_SIZE, GFP_KERNEL);
