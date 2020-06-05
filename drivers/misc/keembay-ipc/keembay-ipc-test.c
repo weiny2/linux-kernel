@@ -272,7 +272,7 @@ err_open:
 }
 
 /* Parse channel from user buffer. */
-int parse_chan(const char __user *buf, size_t count, unsigned long *chan_id)
+static int parse_chan(const char __user *buf, size_t count, unsigned long *chan_id)
 {
 	char *args;
 	int rc;
