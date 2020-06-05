@@ -64,7 +64,8 @@ struct endpoint {
 
 struct endpoint sender_ep;
 struct endpoint receiver_ep;
-
+int receiver_flag = 0;
+int sender_flag = 0;
 static pthread_mutex_t event_param_lock = PTHREAD_MUTEX_INITIALIZER;
 typedef void* (*thread_f)(void* param);
 
@@ -76,8 +77,12 @@ struct event_param {
 	unsigned long long stat;
 	unsigned long long ctrl;
 	thread_f isr;
-	uint64_t ts_tx;	
-	uint64_t ts_rx;
+	uint64_t pi_tx;
+	uint64_t pi_rx;
+	uint64_t sig_rx;
+	uint64_t sig_tx;
+	uint64_t efd_rx;
+	uint64_t efd_tx;
 	uint64_t tsc;
 	enum ep_type type;
 	enum en_type notify;
@@ -117,11 +122,11 @@ void __attribute__ ((interrupt)) generic_handler(struct __uli_frame *ui_frame,
                                                  unsigned long vector)
 {
         uint64_t tsc_stop;
+        tsc_stop = rdtsc();
 
         printf("\n*****************************************\n");
         printf("UIPI sent using uvec %d with UITT index %d\n",
                recv.uvec_fd, sender.target_id);
-	tsc_stop = rdtsc();
         printf("UISR-UIPI:latency %lu cycles\n", tsc_stop - par.tsc);
         printf("*****************************************\n\n");
 }
@@ -188,11 +193,21 @@ static void *sender_thread_func(void *param)
 	stat = pthread_setaffinity_np(thread, sizeof(cpu_set_t), &cpuset);
 	if (stat)
 		perror("Failed to set thread affinity\n");
-	//sleep(10);
+
 	printf("TX thread on:");
 	print_cpu(&cpuset);
 	receiver_ep.pid = getpid();
 
+	while(1) {
+		sleep(1);
+		if(receiver_flag)
+			break;
+	}
+	sender.receiver_uvec_fd = recv.uvec_fd;
+        sender_register_syscall(&sender);
+        sender_read_target_id(&sender);
+
+	sender_flag = 1;
 	while (repetitions) {
 		int delay = 10000;
 		usleep(1);
@@ -207,34 +222,26 @@ static void *sender_thread_func(void *param)
 		pthread_mutex_lock(&event_param_lock);
 		par.stat = 0xfafa;
 		pthread_mutex_unlock(&event_param_lock);
-		sender.receiver_uvec_fd = recv.uvec_fd;
-		sender_register_syscall(&sender);
-		sender_read_target_id(&sender);
 		par.tsc = rdtsc();
 		_senduipi(sender.target_id);
 
-		sleep(5);
-		par.ts_tx = rdtsc();
 		switch(receiver_ep.type) {
 		case EP_PIPE:
+			par.pi_tx = rdtsc();
 			write(receiver_ep.pfd[1], &p, sizeof(void*));
 			break;
 		case EP_EFD:
+			par.efd_tx = rdtsc();
 			write(receiver_ep.pfd[0], &p, sizeof(void*));
 			break;
 		case EP_SIG:
+			par.sig_tx = rdtsc();
 			kill(receiver_ep.pid, SIGUSR1);
 			break;
 		default:
 			perror("Invalid IPC type\n");
 		}
 	}
-
-/*	sender.receiver_uvec_fd = recv.uvec_fd;
-	sender_register_syscall(&sender);
-        sender_read_target_id(&sender);
-	par.tsc = rdtsc();
-	_senduipi(sender.target_id);*/
 
 	return NULL;
 }
@@ -244,10 +251,13 @@ static void *sender_thread_func(void *param)
 /* TODO: wait on fd set */
 static int epoll_wait_fd(int fd)
 {
+	par.efd_rx = rdtsc();
+
 	int epfd;
 	struct epoll_event event;
 	struct epoll_event *events;
 	int status;
+	uint64_t diff;
 	
 	epfd = epoll_create1 (0);
 	if (epfd == -1) {
@@ -262,6 +272,7 @@ static int epoll_wait_fd(int fd)
 		perror ("epoll_ctl");
 	status = epoll_wait (epfd, events, MAXEVENTS, -1);
 	printf("epoll received %d events\n", status);
+	diff = cal_latency(par.efd_rx, par.efd_tx);
 
 	free(events);
 	return 0;
@@ -273,8 +284,8 @@ static void sig_handler(int signum)
 	static uint64_t total;
 	static int loops = 0;
 
-	par.ts_rx = rdtsc();	
-	diff = cal_latency(par.ts_rx, par.ts_tx);	
+	par.sig_rx = rdtsc();
+	diff = cal_latency(par.sig_rx, par.sig_tx);
 	if (signum == SIGUSR1) {
 		total += diff;
 		loops++;
@@ -334,7 +345,16 @@ static void *receiver_thread_func(void *param)
 	recv.handler = generic_handler;
 	receiver_register_syscall(&recv);
 	receiver_read_uvec(&recv);
-//	sleep(10);
+	_stui();
+	receiver_flag = 1;
+
+	while(1) {
+		sleep(1);
+		if(sender_flag)
+			break;
+	}
+
+	par.sig_rx = rdtsc();
 	signal(SIGUSR1, sig_handler);
 	while (repetitions--) {
 		pthread_mutex_lock(&event_param_lock);
@@ -342,8 +362,10 @@ static void *receiver_thread_func(void *param)
 		pthread_mutex_unlock(&event_param_lock);
 		switch (p->notify) {
 		case EN_EPOLL:
+			par.efd_rx = rdtsc();
 			epoll_wait_fd(receiver_ep.pfd[0]);
 		case EN_READ:
+			par.pi_rx = rdtsc();
 			if (read(receiver_ep.pfd[0], &idata, 8) != 8)
 				perror("ERR: read IPC\n");
 			break;
@@ -354,8 +376,7 @@ static void *receiver_thread_func(void *param)
 		pthread_mutex_lock(&event_param_lock);
 		par.rx_ready = 0;
 		pthread_mutex_unlock(&event_param_lock);
-		par.ts_rx = rdtsc();		
-		diff = cal_latency(par.ts_rx, par.ts_tx);		
+		diff = cal_latency(par.pi_rx, par.pi_tx);
 		total += diff;
 	}
 	fprintf(stderr, "Average Latency of %s: %llu cycles.\n",

@@ -5,7 +5,7 @@ LDFLAGS = $(PTHREAD_LIBS)
 
 all: uintr_ipc
 %: %.c
-        $(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 clean:
 	$(RM) uintr_ipc
