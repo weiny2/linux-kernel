@@ -786,6 +786,7 @@ config ZONE_DEVICE_ACCESS_PROTECTION
 	depends on ARCH_HAS_SUPERVISOR_PKEYS
 	depends on !FS_DAX_LIMITED
 	depends on !HIGHMEM
+	depends on !DM_WRITECACHE
 
 	help
 	  Enable extra protections on device memory.  This protects against

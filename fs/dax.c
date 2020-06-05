@@ -718,6 +718,7 @@ static int copy_cow_page_dax(struct block_device *bdev, struct dax_device *dax_d
 	vto = kmap_atomic(to);
 	copy_user_page(vto, (void __force *)kaddr, vaddr, to);
 	kunmap_atomic(vto);
+	dax_release_direct_access(dax_dev, kaddr);
 	dax_read_unlock(id);
 	return 0;
 }
@@ -1085,6 +1086,7 @@ s64 dax_iomap_zero(loff_t pos, u64 length, struct iomap *iomap)
 
 	if (!page_aligned) {
 		memset(kaddr + offset, 0, size);
+		dax_release_direct_access(iomap->dax_dev, kaddr);
 		dax_flush(iomap->dax_dev, kaddr + offset, size);
 	}
 	dax_read_unlock(id);
@@ -1134,6 +1136,7 @@ dax_iomap_actor(struct inode *inode, loff_t pos, loff_t length, void *data,
 		ssize_t map_len;
 		pgoff_t pgoff;
 		void *kaddr;
+		struct page *pmem_page;
 
 		if (fatal_signal_pending(current)) {
 			ret = -EINTR;
@@ -1151,6 +1154,7 @@ dax_iomap_actor(struct inode *inode, loff_t pos, loff_t length, void *data,
 			break;
 		}
 
+		pmem_page = virt_to_page(kaddr);
 		map_len = PFN_PHYS(map_len);
 		kaddr += offset;
 		map_len -= offset;
@@ -1168,6 +1172,8 @@ dax_iomap_actor(struct inode *inode, loff_t pos, loff_t length, void *data,
 		else
 			xfer = dax_copy_to_iter(dax_dev, pgoff, kaddr,
 					map_len, iter);
+
+		dax_release_direct_access(dax_dev, kaddr);
 
 		pos += xfer;
 		length -= xfer;

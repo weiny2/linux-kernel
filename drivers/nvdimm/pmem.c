@@ -256,6 +256,7 @@ static int pmem_rw_page(struct block_device *bdev, sector_t sector,
 __weak long __pmem_direct_access(struct pmem_device *pmem, pgoff_t pgoff,
 		long nr_pages, void **kaddr, pfn_t *pfn)
 {
+	long ret;
 	resource_size_t offset = PFN_PHYS(pgoff) + pmem->data_offset;
 
 	if (unlikely(is_bad_pmem(&pmem->bb, PFN_PHYS(pgoff) / 512,
@@ -272,8 +273,14 @@ __weak long __pmem_direct_access(struct pmem_device *pmem, pgoff_t pgoff,
 	 * requested range.
 	 */
 	if (unlikely(pmem->bb.count))
-		return nr_pages;
-	return PHYS_PFN(pmem->size - pmem->pfn_pad - offset);
+		ret = nr_pages;
+	else
+		ret = PHYS_PFN(pmem->size - pmem->pfn_pad - offset);
+
+	if (kaddr && ret > 0)
+		pgmap_mk_readwrite(virt_to_page(*kaddr), false);
+
+	return ret;
 }
 
 static const struct block_device_operations pmem_fops = {
@@ -300,6 +307,11 @@ static long pmem_dax_direct_access(struct dax_device *dax_dev,
 	return __pmem_direct_access(pmem, pgoff, nr_pages, kaddr, pfn);
 }
 
+static void pmem_dax_release_direct_access(void *kaddr)
+{
+	pgmap_mk_noaccess(virt_to_page(kaddr), false);
+}
+
 /*
  * Use the 'no check' versions of copy_from_iter_flushcache() and
  * copy_mc_to_iter() to bypass HARDENED_USERCOPY overhead. Bounds
@@ -320,6 +332,7 @@ static size_t pmem_copy_to_iter(struct dax_device *dax_dev, pgoff_t pgoff,
 
 static const struct dax_operations pmem_dax_ops = {
 	.direct_access = pmem_dax_direct_access,
+	.release_direct_access = pmem_dax_release_direct_access,
 	.dax_supported = generic_fsdax_supported,
 	.copy_from_iter = pmem_copy_from_iter,
 	.copy_to_iter = pmem_copy_to_iter,

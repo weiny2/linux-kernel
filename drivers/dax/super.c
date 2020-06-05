@@ -109,13 +109,17 @@ bool __generic_fsdax_supported(struct dax_device *dax_dev,
 
 	id = dax_read_lock();
 	len = dax_direct_access(dax_dev, pgoff, 1, &kaddr, &pfn);
-	len2 = dax_direct_access(dax_dev, pgoff_end, 1, &end_kaddr, &end_pfn);
-
-	if (len < 1 || len2 < 1) {
+	if (len < 1) {
 		pr_info("%s: error: dax access failed (%ld)\n",
-				bdevname(bdev, buf), len < 1 ? len : len2);
-		dax_read_unlock(id);
-		return false;
+				bdevname(bdev, buf), len);
+		goto unlock;
+	}
+
+	len2 = dax_direct_access(dax_dev, pgoff_end, 1, &end_kaddr, &end_pfn);
+	if (len2 < 1) {
+		pr_info("%s: error: dax access failed (%ld)\n",
+				bdevname(bdev, buf), len2);
+		goto release_start;
 	}
 
 	if (IS_ENABLED(CONFIG_FS_DAX_LIMITED) && pfn_t_special(pfn)) {
@@ -144,6 +148,13 @@ bool __generic_fsdax_supported(struct dax_device *dax_dev,
 		put_dev_pagemap(end_pgmap);
 
 	}
+
+	dax_release_direct_access(dax_dev, end_kaddr);
+
+release_start:
+	dax_release_direct_access(dax_dev, kaddr);
+
+unlock:
 	dax_read_unlock(id);
 
 	if (!dax_enabled) {
@@ -296,7 +307,12 @@ EXPORT_SYMBOL_GPL(dax_attribute_group);
  * @pgoff: offset in pages from the start of the device to translate
  * @nr_pages: number of consecutive pages caller can handle relative to @pfn
  * @kaddr: output parameter that returns a virtual address mapping of pfn
+ *         If the call is successful and kaddr is requested
+ *         dax_release_direct_access() must be called with kaddr when kaddr is
+ *         no longer needed.
+ *
  * @pfn: output parameter that returns an absolute pfn translation of @pgoff
+ *
  *
  * Return: negative errno if an error occurs, otherwise the number of
  * pages accessible at the device relative @pgoff.
@@ -322,6 +338,24 @@ long dax_direct_access(struct dax_device *dax_dev, pgoff_t pgoff, long nr_pages,
 	return min(avail, nr_pages);
 }
 EXPORT_SYMBOL_GPL(dax_direct_access);
+
+/**
+ * dax_release_direct_access() - translate a device pgoff to an absolute pfn
+ *
+ * @dax_dev: a dax_device instance representing the logical memory range
+ * @kaddr: virtual address returned from dax_direct_access()
+ */
+void dax_release_direct_access(struct dax_device *dax_dev, void *kaddr)
+{
+	long avail;
+
+	if (!dax_dev || !dax_alive(dax_dev))
+		return;
+
+	if (dax_dev->ops->release_direct_access)
+		dax_dev->ops->release_direct_access(kaddr);
+}
+EXPORT_SYMBOL_GPL(dax_release_direct_access);
 
 bool dax_supported(struct dax_device *dax_dev, struct block_device *bdev,
 		int blocksize, sector_t start, sector_t len)

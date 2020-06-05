@@ -22,6 +22,13 @@ struct dax_operations {
 	 */
 	long (*direct_access)(struct dax_device *, pgoff_t, long,
 			void **, pfn_t *);
+
+	/*
+	 * If an address is requested in direct_access this must be called to
+	 * release that address.
+	 */
+	void (*release_direct_access)(void *addr);
+
 	/*
 	 * Validate whether this device is usable as an fsdax backing
 	 * device.
@@ -220,6 +227,7 @@ bool dax_alive(struct dax_device *dax_dev);
 void *dax_get_private(struct dax_device *dax_dev);
 long dax_direct_access(struct dax_device *dax_dev, pgoff_t pgoff, long nr_pages,
 		void **kaddr, pfn_t *pfn);
+void dax_release_direct_access(struct dax_device *dax_dev, void *kaddr);
 size_t dax_copy_from_iter(struct dax_device *dax_dev, pgoff_t pgoff, void *addr,
 		size_t bytes, struct iov_iter *i);
 size_t dax_copy_to_iter(struct dax_device *dax_dev, pgoff_t pgoff, void *addr,

@@ -334,6 +334,7 @@ static int persistent_memory_claim(struct dm_writecache *wc)
 
 static void persistent_memory_release(struct dm_writecache *wc)
 {
+	dax_release_direct_access(wc->ssd_dev->dax_dev, wc->memory_map);
 	if (wc->memory_vmapped)
 		vunmap(wc->memory_map - ((size_t)wc->start_sector << SECTOR_SHIFT));
 }
