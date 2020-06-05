@@ -77,9 +77,9 @@ static void *receiver_thread()
 		receiver_flag = 1;
 		break;
 	case EN_READ:
-		par.pi_rx = rdtsc();
 		if (read(par.pfd[0], &data, sizeof(data)) != 8)
 			perror("ERR: read IPC\n");
+		par.pi_rx = rdtsc();
 		total = cal_latency(par.pi_rx, par.pi_tx);
 		fprintf(stderr, "*************************************************\n");
 		fprintf(stderr, "Average Latency of pipe: %llu cycles.\n",

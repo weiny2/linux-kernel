@@ -228,11 +228,11 @@ void write_to_eventfd()
 void read_from_eventfd()
 {
 	uint64_t total;
-	uint64_t event_fd;
+	uint64_t event_fd = 0;
 	ssize_t s;
 
-	par.efd_rx = rdtsc();
 	s = read(event_fd, &par.event_fd, sizeof(uint64_t));
+	par.efd_rx = rdtsc();
 	if (s != sizeof(uint64_t))
 		perror("ERR: read eventfd\n");
 	total = cal_latency(par.efd_rx, par.efd_tx);
