@@ -6032,8 +6032,14 @@ static inline bool scalable_mode_support(void)
 		}
 	}
 	rcu_read_unlock();
-	pr_alert("Fake SM enabled on all IOMMUs, testing only\n");
-	ret = true;
+	if((boot_cpu_data.x86_vendor == X86_VENDOR_INTEL) &&
+		(boot_cpu_data.x86_model == 0x8F) &&
+		(boot_cpu_data.x86_stepping == 0x0)) {
+		pr_info("%s: Detected Intel SPR A0\n", __func__);
+	} else {
+		pr_alert("Fake SM enabled on all IOMMUs, testing only\n");
+		ret = true;
+	}
 	return ret;
 }
 
@@ -6051,8 +6057,14 @@ static inline bool iommu_pasid_support(void)
 		}
 	}
 	rcu_read_unlock();
-	pr_alert("Fake PASID enabled on all IOMMUs, testing only\n");
-	ret = true;
+	if((boot_cpu_data.x86_vendor == X86_VENDOR_INTEL) &&
+		(boot_cpu_data.x86_model == 0x8F) &&
+		(boot_cpu_data.x86_stepping == 0x0)) {
+		pr_info("%s: Detected Intel SPR A0\n", __func__);
+	} else {
+		pr_alert("Fake PASID enabled on all IOMMUs, testing only\n");
+		ret = true;
+	}
 
 	return ret;
 }

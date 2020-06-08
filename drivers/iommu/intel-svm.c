@@ -96,6 +96,16 @@ static inline bool intel_svm_capable(struct intel_iommu *iommu)
 
 void intel_svm_check(struct intel_iommu *iommu)
 {
+	if((boot_cpu_data.x86_vendor == X86_VENDOR_INTEL) &&
+		(boot_cpu_data.x86_model == 0x8F) &&
+		(boot_cpu_data.x86_stepping == 0x0)) {
+		pr_info("%s: Detected Intel SPR A0\n", __func__);
+	} else {
+		pr_warn("Fake SVM check pass for Hypersim or non-SPR platform\n");
+		iommu->flags |= VTD_FLAG_SVM_CAPABLE;
+		return;
+	}
+
 	if (!pasid_supported(iommu))
 		return;
 
