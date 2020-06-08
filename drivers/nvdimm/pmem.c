@@ -148,8 +148,10 @@ static blk_status_t pmem_do_read(struct pmem_device *pmem,
 	if (unlikely(is_bad_pmem(&pmem->bb, sector, len)))
 		return BLK_STS_IOERR;
 
+	dev_page_protection_disable();
 	rc = read_pmem(page, page_off, pmem_addr, len);
 	flush_dcache_page(page);
+	dev_page_protection_enable();
 	return rc;
 }
 
@@ -165,6 +167,7 @@ static blk_status_t pmem_do_write(struct pmem_device *pmem,
 	if (unlikely(is_bad_pmem(&pmem->bb, sector, len)))
 		bad_pmem = true;
 
+	dev_page_protection_disable();
 	/*
 	 * Note that we write the data both before and after
 	 * clearing poison.  The write before clear poison
@@ -185,6 +188,7 @@ static blk_status_t pmem_do_write(struct pmem_device *pmem,
 		rc = pmem_clear_poison(pmem, pmem_off, len);
 		write_pmem(pmem_addr, page, page_off, len);
 	}
+	dev_page_protection_enable();
 
 	return rc;
 }
