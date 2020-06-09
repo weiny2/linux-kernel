@@ -144,7 +144,6 @@ static int idxd_cdev_release(struct inode *node, struct file *filep)
 	/* Wait for in-flight operations to complete. */
 	if (!wq_dedicated(wq)) {
 		idxd_device_drain_pasid(idxd, ctx->pasid);
-		intel_svm_unbind_mm(&idxd->pdev->dev, ctx->pasid);
 	} else {
 		if (idxd->pasid_enabled) {
 			rc = idxd_wq_disable_pasid(wq);
@@ -153,6 +152,9 @@ static int idxd_cdev_release(struct inode *node, struct file *filep)
 		}
 		idxd_wq_drain(wq);
 	}
+
+	if (idxd->pasid_enabled)
+		intel_svm_unbind_mm(&idxd->pdev->dev, ctx->pasid);
 
 	kfree(ctx);
 	mutex_lock(&wq->wq_lock);
