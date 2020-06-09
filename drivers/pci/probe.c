@@ -107,9 +107,65 @@ static int __init pcibus_class_init(void)
 }
 postcore_initcall(pcibus_class_init);
 
-static u64 pci_size(u64 base, u64 maxbase, u64 mask)
+struct pci_size_quirk {
+	u16 vendor;
+	u16 device;
+	unsigned int bar;
+	u64 size;
+};
+
+static const struct pci_size_quirk spr_a0_quirks[] = {
+	/* OOB-MSM BAR0 */
+	{ PCI_VENDOR_ID_INTEL, 0x09a6, 0, 0x200 },
+	/* PMON OOB-MSM BAR0 */
+	{ PCI_VENDOR_ID_INTEL, 0x09a7, 0, 0x4000 },
+	/* PMON OOB-MSM BAR1 */
+	{ PCI_VENDOR_ID_INTEL, 0x09a7, 1, 0x100000 },
+	/* DFX OOB-MSM BAR0 */
+	{ PCI_VENDOR_ID_INTEL, 0x09a8, 0, 0x100000 },
+};
+
+#ifdef CONFIG_X86
+#include <asm/cpu_device_id.h>
+
+static const struct x86_cpu_desc spr_a0[] = {
+	/* Should be SPR A0 stepping */
+	INTEL_CPU_DESC(0x6f, 0, 0),
+	{}
+};
+
+static inline bool cpu_is_spr_a0(void)
 {
-	u64 size = mask & maxbase;	/* Find the significant bits */
+	return !!x86_match_cpu_with_stepping(spr_a0);
+}
+#else
+static inline bool cpu_is_spr_a0(void) { return false; };
+#endif
+
+static u64 pci_size(const struct pci_dev *dev, unsigned short bar, u64 base,
+		    u64 maxbase, u64 mask)
+{
+	u64 size;
+	int i;
+
+	/*
+	 * Temporary hack for certain SPR A0 devices that report BAR
+	 * sizes incorrectly.
+	 */
+	if (cpu_is_spr_a0()) {
+		for (i = 0; i < ARRAY_SIZE(spr_a0_quirks); i++) {
+			const struct pci_size_quirk *quirk = &spr_a0_quirks[i];
+
+			if (dev->vendor == quirk->vendor &&
+			    dev->device == quirk->device && bar == quirk->bar) {
+				pci_info(dev, "BAR%u: using hard-coded size %llx\n",
+					 bar, quirk->size);
+				return quirk->size;
+			}
+		}
+	}
+
+	size = mask & maxbase;	/* Find the significant bits */
 	if (!size)
 		return 0;
 
@@ -252,7 +308,7 @@ int __pci_read_base(struct pci_dev *dev, enum pci_bar_type type,
 	if (!sz64)
 		goto fail;
 
-	sz64 = pci_size(l64, sz64, mask64);
+	sz64 = pci_size(dev, (pos - PCI_BASE_ADDRESS_0) >> 2, l64, sz64, mask64);
 	if (!sz64) {
 		pci_info(dev, FW_BUG "reg 0x%x: invalid BAR (can't size)\n",
 			 pos);
