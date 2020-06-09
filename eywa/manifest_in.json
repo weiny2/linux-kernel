@@ -3734,6 +3734,37 @@
             "status": "intel confidential",
             "stuck_at_ref": "",
             "last_enabled": "v5.7"
+        },
+        {
+            "branch": "crypto",
+            "branch_type": "expiring",
+            "config_options": [],
+            "contributor": [
+                {
+                    "name": "Kyung Min Park",
+                    "email": "kyung.min.park@intel.com"
+                }
+            ],
+            "description": "Crct10dif implementation",
+            "enabled": true,
+            "ip_owner": [
+                {
+                    "name": "Greg Tucker",
+                    "email": "greg.b.tucker@intel.com"
+                }
+            ],
+            "jira": "NEXT-2002",
+            "name": "crypto",
+            "repourl": "ssh://git@gitlab.devtools.intel.com:29418/kyungmin/iommu",
+            "sdl_contact": [
+                {
+                    "name": "Ravi Shankar",
+                    "email": "ravi.v.shankar@intel.com"
+                }
+            ],
+            "status": "intel confidential",
+            "stuck_at_ref": "",
+            "last_enabled": "v5.7"
         }
     ]
 }
