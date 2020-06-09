@@ -281,6 +281,12 @@ bool osc_sb_apei_support_acked;
 bool osc_pc_lpi_support_confirmed;
 EXPORT_SYMBOL_GPL(osc_pc_lpi_support_confirmed);
 
+/*
+ * ACPI 6.4 Operating System Capabilities for USB.
+ */
+bool osc_sb_native_usb4_support_confirmed;
+EXPORT_SYMBOL_GPL(osc_sb_native_usb4_support_confirmed);
+
 static u8 sb_uuid_str[] = "0811B06E-4A27-44F9-8D60-3CBBC22E7B48";
 static void acpi_bus_osc_support(void)
 {
@@ -313,6 +319,9 @@ static void acpi_bus_osc_support(void)
 	if (IS_ENABLED(CONFIG_SCHED_MC_PRIO))
 		capbuf[OSC_SUPPORT_DWORD] |= OSC_SB_CPC_DIVERSE_HIGH_SUPPORT;
 
+	if (IS_ENABLED(CONFIG_USB4))
+		capbuf[OSC_SUPPORT_DWORD] |= OSC_SB_NATIVE_USB4_SUPPORT;
+
 	if (!ghes_disable)
 		capbuf[OSC_SUPPORT_DWORD] |= OSC_SB_APEI_SUPPORT;
 	if (ACPI_FAILURE(acpi_get_handle(NULL, "\\_SB", &handle)))
@@ -324,10 +333,90 @@ static void acpi_bus_osc_support(void)
 				capbuf_ret[OSC_SUPPORT_DWORD] & OSC_SB_APEI_SUPPORT;
 			osc_pc_lpi_support_confirmed =
 				capbuf_ret[OSC_SUPPORT_DWORD] & OSC_SB_PCLPI_SUPPORT;
+			osc_sb_native_usb4_support_confirmed =
+				capbuf_ret[OSC_SUPPORT_DWORD] & OSC_SB_NATIVE_USB4_SUPPORT;
 		}
 		kfree(context.ret.pointer);
 	}
 	/* do we need to check other returned cap? Sounds no */
+}
+
+/*
+ * Native control of USB4 capabilities. If any of the tunneling bits is
+ * set it means OS is in control and we use software based connection
+ * manager.
+ */
+u32 osc_sb_native_usb4_control;
+EXPORT_SYMBOL_GPL(osc_sb_native_usb4_control);
+
+static void acpi_bus_decode_usb_osc(const char *msg, u32 bits)
+{
+	size_t len = 0, previous = 0;
+	char buf[64] = "";
+
+	if (bits & OSC_USB_USB3_TUNNELING)
+		len += snprintf(buf + len, sizeof(buf) - len, "%sUSB3",
+				previous++ ? " " : "");
+	if (bits & OSC_USB_DP_TUNNELING)
+		len += snprintf(buf + len, sizeof(buf) - len, "%sDP",
+				previous++ ? " " : "");
+	if (bits & OSC_USB_PCIE_TUNNELING)
+		len += snprintf(buf + len, sizeof(buf) - len, "%sPCIe",
+				previous++ ? " " : "");
+	if (bits & OSC_USB_USB4_NET)
+		snprintf(buf + len, sizeof(buf) - len, "%snetwork",
+			 previous++ ? " " : "");
+
+	printk(KERN_INFO PREFIX "%s [%s] tunnels\n", msg, buf);
+}
+
+static char sb_usb_uuid_str[] = "23A0D13A-26AB-486C-9C5F-0FFA525A575A";
+static void acpi_bus_osc_negotiate_usb_control(void)
+{
+	u32 capbuf[3];
+	struct acpi_osc_context context = {
+		.uuid_str = sb_usb_uuid_str,
+		.rev = 1,
+		.cap.length = sizeof(capbuf),
+		.cap.pointer = capbuf,
+	};
+	acpi_handle handle;
+	acpi_status status;
+	u32 control;
+
+	if (!osc_sb_native_usb4_support_confirmed)
+		return;
+
+	if (ACPI_FAILURE(acpi_get_handle(NULL, "\\_SB", &handle)))
+		return;
+
+	control = OSC_USB_USB3_TUNNELING | OSC_USB_DP_TUNNELING |
+		  OSC_USB_PCIE_TUNNELING;
+	if (IS_ENABLED(CONFIG_USB4_NET))
+		control |= OSC_USB_USB4_NET;
+
+	capbuf[OSC_QUERY_DWORD] = 0;
+	capbuf[OSC_SUPPORT_DWORD] = 0;
+	capbuf[OSC_CONTROL_DWORD] = control;
+
+	status = acpi_run_osc(handle, &context);
+	if (ACPI_FAILURE(status))
+		return;
+
+	if (context.ret.length != sizeof(capbuf)) {
+		printk(KERN_INFO PREFIX "USB4 _OSC: returned invalid length buffer\n");
+		goto out_free;
+	}
+
+	osc_sb_native_usb4_control =
+		control & ((u32 *)context.ret.pointer)[OSC_CONTROL_DWORD];
+
+	acpi_bus_decode_usb_osc("USB4 _OSC: OS supports", control);
+	acpi_bus_decode_usb_osc("USB4 _OSC: OS now controls",
+				osc_sb_native_usb4_control);
+
+out_free:
+	kfree(context.ret.pointer);
 }
 
 /* --------------------------------------------------------------------------
@@ -551,6 +640,7 @@ struct device *acpi_get_first_physical_node(struct acpi_device *adev)
 	mutex_unlock(physical_node_lock);
 	return phys_dev;
 }
+EXPORT_SYMBOL_GPL(acpi_get_first_physical_node);
 
 static struct acpi_device *acpi_primary_dev_companion(struct acpi_device *adev,
 						      const struct device *dev)
@@ -1164,6 +1254,7 @@ static int __init acpi_bus_init(void)
 	 * so it must be run after ACPI_FULL_INITIALIZATION
 	 */
 	acpi_bus_osc_support();
+	acpi_bus_osc_negotiate_usb_control();
 
 	/*
 	 * _PDC control method may load dynamic SSDT tables,

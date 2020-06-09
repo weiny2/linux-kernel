@@ -17,6 +17,7 @@
 #include <linux/module.h>
 #include <linux/delay.h>
 #include <linux/property.h>
+#include <linux/platform_data/x86/apple.h>
 
 #include "nhi.h"
 #include "nhi_regs.h"
@@ -24,12 +25,7 @@
 
 #define RING_TYPE(ring) ((ring)->is_tx ? "TX ring" : "RX ring")
 
-/*
- * Used to enable end-to-end workaround for missing RX packets. Do not
- * use this ring for anything else.
- */
-#define RING_E2E_UNUSED_HOPID	2
-#define RING_FIRST_USABLE_HOPID	TB_PATH_MIN_HOPID
+#define RING_FIRST_USABLE_HOPID	1
 
 /*
  * Minimal number of vectors when we use MSI-X. Two for control channel
@@ -440,7 +436,7 @@ static int nhi_alloc_hop(struct tb_nhi *nhi, struct tb_ring *ring)
 
 		/*
 		 * Automatically allocate HopID from the non-reserved
-		 * range 8 .. hop_count - 1.
+		 * range 1 .. hop_count - 1.
 		 */
 		for (i = RING_FIRST_USABLE_HOPID; i < nhi->hop_count; i++) {
 			if (ring->is_tx) {
@@ -495,10 +491,6 @@ static struct tb_ring *tb_ring_alloc(struct tb_nhi *nhi, u32 hop, int size,
 
 	dev_dbg(&nhi->pdev->dev, "allocating %s ring %d of size %d\n",
 		transmit ? "TX" : "RX", hop, size);
-
-	/* Tx Ring 2 is reserved for E2E workaround */
-	if (transmit && hop == RING_E2E_UNUSED_HOPID)
-		return NULL;
 
 	ring = kzalloc(sizeof(*ring), GFP_KERNEL);
 	if (!ring)
@@ -612,19 +604,6 @@ void tb_ring_start(struct tb_ring *ring)
 	} else {
 		frame_size = TB_FRAME_SIZE;
 		flags = RING_FLAG_ENABLE | RING_FLAG_RAW;
-	}
-
-	if (ring->flags & RING_FLAG_E2E && !ring->is_tx) {
-		u32 hop;
-
-		/*
-		 * In order not to lose Rx packets we enable end-to-end
-		 * workaround which transfers Rx credits to an unused Tx
-		 * HopID.
-		 */
-		hop = RING_E2E_UNUSED_HOPID << REG_RX_OPTIONS_E2E_HOP_SHIFT;
-		hop &= REG_RX_OPTIONS_E2E_HOP_MASK;
-		flags |= hop | RING_FLAG_E2E_FLOW_CONTROL;
 	}
 
 	ring_iowrite64desc(ring, ring->descriptors_dma, 0);
@@ -1091,6 +1070,92 @@ static bool nhi_imr_valid(struct pci_dev *pdev)
 	return true;
 }
 
+/*
+ * During suspend the Thunderbolt controller is reset and all PCIe
+ * tunnels are lost. The NHI driver will try to reestablish all tunnels
+ * during resume. This adds device links between the tunneled PCIe
+ * downstream ports and the NHI so that the device core will make sure
+ * NHI is resumed first before the rest.
+ */
+static void tb_apple_add_links(struct tb_nhi *nhi)
+{
+	struct pci_dev *upstream, *pdev;
+
+	if (!x86_apple_machine)
+		return;
+
+	switch (nhi->pdev->device) {
+	case PCI_DEVICE_ID_INTEL_LIGHT_RIDGE:
+	case PCI_DEVICE_ID_INTEL_CACTUS_RIDGE_4C:
+	case PCI_DEVICE_ID_INTEL_FALCON_RIDGE_2C_NHI:
+	case PCI_DEVICE_ID_INTEL_FALCON_RIDGE_4C_NHI:
+		break;
+	default:
+		return;
+	}
+
+	upstream = pci_upstream_bridge(nhi->pdev);
+	while (upstream) {
+		if (!pci_is_pcie(upstream))
+			return;
+		if (pci_pcie_type(upstream) == PCI_EXP_TYPE_UPSTREAM)
+			break;
+		upstream = pci_upstream_bridge(upstream);
+	}
+
+	if (!upstream)
+		return;
+
+	/*
+	 * For each hotplug downstream port, create add device link
+	 * back to NHI so that PCIe tunnels can be re-established after
+	 * sleep.
+	 */
+	for_each_pci_bridge(pdev, upstream->subordinate) {
+		struct device_link *link;
+
+		if (!pci_is_pcie(pdev))
+			continue;
+		if (pci_pcie_type(pdev) != PCI_EXP_TYPE_DOWNSTREAM ||
+		    !pdev->is_hotplug_bridge)
+			continue;
+
+		link = device_link_add(&pdev->dev, &nhi->pdev->dev,
+				       DL_FLAG_AUTOREMOVE_SUPPLIER |
+				       DL_FLAG_PM_RUNTIME);
+		if (link) {
+			dev_dbg(&nhi->pdev->dev, "created link from %s\n",
+				dev_name(&pdev->dev));
+		} else {
+			dev_warn(&nhi->pdev->dev, "device link creation from %s failed\n",
+				 dev_name(&pdev->dev));
+		}
+	}
+}
+
+static struct tb *nhi_select_cm(struct tb_nhi *nhi)
+{
+	struct tb *tb;
+
+	/*
+	 * USB4 case is simple. If we got control of any of the
+	 * capabilities, we use software CM.
+	 */
+	if (tb_acpi_is_native())
+		return tb_probe(nhi);
+
+	/*
+	 * Either firmware based CM is running (we did not get control
+	 * from the firmware) or this is pre-USB4 PC so try first
+	 * firmware CM and then fallback to software CM.
+	 */
+	tb = icm_probe(nhi);
+	if (!tb)
+		tb = tb_probe(nhi);
+
+	return tb;
+}
+
 static int nhi_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 {
 	struct tb_nhi *nhi;
@@ -1123,9 +1188,7 @@ static int nhi_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	/* cannot fail - table is allocated bin pcim_iomap_regions */
 	nhi->iobase = pcim_iomap_table(pdev)[0];
 	nhi->hop_count = ioread32(nhi->iobase + REG_HOP_COUNT) & 0x3ff;
-	if (nhi->hop_count != 12 && nhi->hop_count != 32)
-		dev_warn(&pdev->dev, "unexpected hop count: %d\n",
-			 nhi->hop_count);
+	dev_dbg(&pdev->dev, "total paths: %d\n", nhi->hop_count);
 
 	nhi->tx_rings = devm_kcalloc(&pdev->dev, nhi->hop_count,
 				     sizeof(*nhi->tx_rings), GFP_KERNEL);
@@ -1158,9 +1221,10 @@ static int nhi_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 			return res;
 	}
 
-	tb = icm_probe(nhi);
-	if (!tb)
-		tb = tb_probe(nhi);
+	tb_apple_add_links(nhi);
+	tb_acpi_add_links(nhi);
+
+	tb = nhi_select_cm(nhi);
 	if (!tb) {
 		dev_err(&nhi->pdev->dev,
 			"failed to determine connection manager, aborting\n");
@@ -1181,10 +1245,14 @@ static int nhi_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	}
 	pci_set_drvdata(pdev, tb);
 
+	device_wakeup_enable(&pdev->dev);
+
 	pm_runtime_allow(&pdev->dev);
 	pm_runtime_set_autosuspend_delay(&pdev->dev, TB_AUTOSUSPEND_DELAY);
 	pm_runtime_use_autosuspend(&pdev->dev);
 	pm_runtime_put_autosuspend(&pdev->dev);
+
+	tb_dbg_register_domain(tb);
 
 	return 0;
 }
@@ -1193,6 +1261,8 @@ static void nhi_remove(struct pci_dev *pdev)
 {
 	struct tb *tb = pci_get_drvdata(pdev);
 	struct tb_nhi *nhi = tb->nhi;
+
+	tb_dbg_unregister_domain(tb);
 
 	pm_runtime_get_sync(&pdev->dev);
 	pm_runtime_dont_use_autosuspend(&pdev->dev);
@@ -1274,6 +1344,10 @@ static struct pci_device_id nhi_ids[] = {
 	  .driver_data = (kernel_ulong_t)&icl_nhi_ops },
 	{ PCI_VDEVICE(INTEL, PCI_DEVICE_ID_INTEL_TGL_NHI1),
 	  .driver_data = (kernel_ulong_t)&icl_nhi_ops },
+	{ PCI_VDEVICE(INTEL, PCI_DEVICE_ID_INTEL_TGL_H_NHI0),
+	  .driver_data = (kernel_ulong_t)&icl_nhi_ops },
+	{ PCI_VDEVICE(INTEL, PCI_DEVICE_ID_INTEL_TGL_H_NHI1),
+	  .driver_data = (kernel_ulong_t)&icl_nhi_ops },
 
 	/* Any USB4 compliant host */
 	{ PCI_DEVICE_CLASS(PCI_CLASS_SERIAL_USB_USB4, ~0) },
@@ -1300,15 +1374,22 @@ static int __init nhi_init(void)
 	ret = tb_domain_init();
 	if (ret)
 		return ret;
+
+	tb_dbg_init();
+
 	ret = pci_register_driver(&nhi_driver);
-	if (ret)
+	if (ret) {
+		tb_dbg_exit();
 		tb_domain_exit();
+	}
+
 	return ret;
 }
 
 static void __exit nhi_unload(void)
 {
 	pci_unregister_driver(&nhi_driver);
+	tb_dbg_exit();
 	tb_domain_exit();
 }
 
