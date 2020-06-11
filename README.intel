@@ -1,0 +1,297 @@
+INTEL CONFIDENTIAL. FOR INTERNAL USE ONLY.
+------------------------------------------------------------------------
+README.intel.perf-cnl:
+
+- Linux perf support for Cannonlake
+This implements Linux perf PMU support for Cannonlake Client.
+Include both core and uncore support.
+For core support, add a new PEBS event constraint table, update the event for topdown recovery_bubbles.
+For uncore support, add new pci id for IMC, add new MSR address for CBOX, get CBOX# from CNL_UNC_CBO_CONFIG MSR directly, and move clocktick event to its own PMU.
+
+Event list is internal only
+
+Open issues:
+- kernel driver event list is not final
+
+Owner: Kan Liang
+
+README.intel.cxl:
+
+Compute eXpress Link
+
+What IP features are eanbled by this code?
+  CXL enumeration for Devices and Ports
+  Basic PCIe UUID string identification for CXL hardware when running OSC
+  Requires CXL hardware (PCIe card)
+  Will dmesg provide output (dev_info) for success or failure
+
+This patch series implements basic Designated Vendor-Specific Extended
+Capabilities (DVSEC) decode for Compute eXpress Link devices, a new CPU
+interconnect building upon PCIe. As a basis for the CXL support it provides
+PCI init handling for detection, decode, and caching of CXL device
+capabilities.  Moreover, it makes use of the DVSEC Vendor ID and DVSEC ID so
+as to identify a CXL capable device. (PCIe r5.0, sec 7.9.6.2)
+
+DocLink: https://www.computeexpresslink.org/
+
+For your reference, a parallel series of patches have been submitted to enable
+lspci decode of CXL DVSEC and may be tracked.
+
+Link: https://lore.kernel.org/linux-pci/20200511174618.10589-1-sean.v.kelley@linux.intel.com/
+
+This patch makes use of pending DVSEC related header additions and the
+first patch of that series is included here. It can be sorted out when the
+upstream merge is done.
+
+Link: https://lore.kernel.org/linux-pci/20200508021844.6911-2-david.e.box@linux.intel.com/
+
+Sample dmesg output of a CXL Type 3 device (CXL.io, CXL.mem):
+[    2.997177] pci 0000:6b:00.0: CXL: Cache- IO+ Mem+ Viral- HDMCount 1
+[    2.997188] pci 0000:6b:00.0: CXL: cap ctrl status ctrl2 status2 lock
+[    2.997201] pci 0000:6b:00.0: CXL: 001e 0002 0000 0000 0000 0000
+
+Which Platforms are affected by this code?
+  SPR
+Are any bugs fixed or introduced by this code?
+  Third release, validated on Simics.
+  Still essentially a "hello world" in the absence of a CXL card.
+
+README.intel.sbl-fw-update:
+
+Slim Bootloader firmware update driver
+
+Slim Bootloader(SBL) [1] is a small open-source boot
+firmware, designed for running on certain Intel platforms. SBL can be
+thought-of as fulfilling the role of a minimal BIOS
+implementation, i.e initializing the hardware and booting
+Operating System.
+
+This driver creates sysfs interfaces which allows user space entities
+to trigger update of SBL firmware. See the included file
+"Documentation/ABI/testing/sysfs-platform-intel-wmi-sbl-fw-update" which
+explains the interface options.
+
+[1] https://slimbootloader.github.io
+
+Configuration option
+---------------------
+
+CONFIG_INTEL_WMI_SBL_FW_UPDATE=y|m
+
+Which platform(s) are affected by this code?
+--------------------------------------------
+
+To exercise this path the platform needs to have Slim Bootloader firmware
+
+
+Code Classification:	Public
+SDL Contact:		Cindy Johnson <cindy.r.johnson@intel.com>
+IP Owners:		Maurice Ma <maurice.ma@intel.com>
+
+README.intel.rdt:
+
+Features related to Intel Resource Director Technology (RDT)
+
+Supported platforms: Icelake Server (ICX), Snow Ridge (SNR), Sapphire
+Rapids (SPR).
+
+Changelog:
+- Support wider MBM counters. New feature in ICX and SNR. (LCK-7726)
+- Support MBA2.0 min/max control. New feature in ICX and SNR. (LCK-7725).
+- Recognize and advertise MBA3.0, new architectural feature available starting with SPR.
+
+README.intel.sof:
+
+IP Block: Sound Open Firmware driver
+Platform Affect: BYT, BDW, APL, GLK, CNL, CFL, ICL, CML, TGL, JSL, EHL, ADL
+BugFix: None
+
+Sound Open Firmware (SOF) is a host and DSP architecture agnostic
+audio DSP firmware. SOF is not tied to any specific host architecture
+or any specific physical IO communication type (it will work with on
+SoC DSPs, or DSP connected via SPI/I2C).
+
+SOF is also not coupled to any particular DSP architecture and has
+abstraction similar to Linux to allow porting to other DSP
+architectures.
+
+This branch include the support for ADL-S RVP in HDA and SDW mode,
+support for ADL to the legacy snd-hda-intel driver, and a backport
+of latest soundwire stack from upstream sound and drivers/soundwire
+subsystems.
+
+Code base and other platform support is in Linux 5.7-rc4
+
+The follow defconfig must be enabled for driver to compile
+
+# Generic SOF selections
+CONFIG_SND_SOC_SOF_TOPLEVEL=y
+CONFIG_SND_SOC_SOF_PCI=m
+CONFIG_SND_SOC_SOF_ACPI=m
+CONFIG_SND_SOC_SOF_HDA_LINK=y
+CONFIG_SND_SOC_SOF_HDA_AUDIO_CODEC=y
+
+# debug options
+CONFIG_SND_SOC_SOF_DEBUG=y
+CONFIG_SND_SOC_SOF_DEBUG_VERBOSE_IPC=y
+CONFIG_SND_SOC_SOF_DEBUG_ENABLE_DEBUGFS_CACHE=y
+CONFIG_SND_SOC_SOF_DEBUG_ENABLE_FIRMWARE_TRACE=y
+
+# SOF Intel platform drivers
+CONFIG_SND_SOC_SOF_INTEL_TOPLEVEL=y
+CONFIG_SND_SOC_SOF_TIGERLAKE_SUPPORT=y
+CONFIG_SND_SOC_SOF_JASPERLAKE_SUPPORT=y
+CONFIG_SND_SOC_SOF_ELKHARTLAKE_SUPPORT=y
+CONFIG_SND_SOC_SOF_ALDERLAKE_SUPPORT=y
+
+# Disable HDAudio legacy
+# CONFIG_SND_HDA_INTEL is not set
+
+# Intel machine drivers
+CONFIG_SND_SOC_INTEL_TGL_RT1308_MACH=m
+CONFIG_SND_SOC_SOF_ELKHARTLAKE_SUPPORT=y
+
+README.intel_th:
+
+# Intel Trace Hub
+# Contains support for Tiger Lake, Tiger Lake PCH-H, Emmitsburg, Alder Lake.
+# Classification: IC
+# SDL contact: Kai Svahn <kai.svahn@intel.com>
+# IP owner: Marcus Winston <marcus.winston@intel.com>
+# Maintained by Alexander Shishkin <alexander.shishkin@linux.intel.com>
+# Authorized use contact: Alexander Shishkin <alexander.shishkin@linux.intel.com>
+# Config options: CONFIG_STM*=m CONFIG_INTEL_TH*=m
+# Supplementary tool: https://git-amr-1.devtools.intel.com/gerrit/gitweb?p=linux-npk-npktool.git;tflink=projects.linux-npk/scm.npktool
+# Intel-Next branch: intel_th-for-intel-next
+# Public subset: intel_th-pub
+# Fixes subset: intel_th-fixes
+
+
+README.intel.tbh-mvds:
+
+Ingredient Summary
+==================
+
+What part(s)/IP block(s)/feature(s) are enabled by this code?
+-------------------------------------------------------------
+
+This code adds supports for the following features to the Keem Bay and Thunder
+Bay Harbor SoCs:
+* IPC communication
+* VPU firmware loading and booting
+
+Which platform(s) are affected by this code?
+--------------------------------------------
+
+The Keem Bay and Thunder Bay Harbor platforms.
+
+
+Are any bugs fixed or introduced by this code?
+----------------------------------------------
+
+None
+
+Configuration options
+---------------------
+
+CONFIG_KEEMBAY_IPC=y|m
+CONFIG_KEEMBAY_VPU_IPC=y|m
+
+(They depend on ARM64)
+
+README.intel.svos:
+
+================
+SVOS
+================
+
+Intel SVOS kernel extensions.  Extensions to the Intel Next kernel used for
+silicon validation.  Intel Next + SVOS extensions = svos-next.
+
+All of the SVOS extensions are demarcated with CONFIG_SVOS, which is disabled by
+default.  The SVOS extensions are intended to be used only in the kernels
+included in the SVOS distros.
+
+SVOS (System Validation Operating System) is Intel's OS foundation for silicon
+validation test software. SVOS consists of a modified kernel (included here)
+plus (not included) a logical filesystem (svfs), IP validation drivers,
+libraries and test applications that work together to expose registers,
+allocate system resources, program test devices and perform highly concurrent
+system-harassing test cases.
+
+http://goto/svos
+
+Classification: Intel Confidential.  SVOS is for Intel internal use only.
+
+================
+
+README.intel.mei:
+
+======================
+CSE post v5.6 changes
+======================
+
+Affected IP: CSE/CSME
+----------------------
+
+Embargoed Supported MEI Devices
+===============================
+
+Cedar Falls
+------------
+0x18D3  /* Cedar Falls */
+
+Tiger Lake Point
+-----------------
+0x42E0  /* Tiger Lake K */
+0x43E0  /* Tiger Lake H */
+
+Lake Field
+-----------
+0x98E0  /* Lake Field */
+
+Inovation Engine
+-----------------
+0xA1F8  /* Lewisburg IE (SPT) */
+0xA278  /* Lewisburg IE SSX (SPT) */
+
+Jasper Lake
+-----------
+0x38E0  /* Jasper Point - testing only */
+
+Eagle Stream
+------------
+0x18E0 /* Eagle Stream WS */
+
+Ader Lake
+
+0x7AE8  /* Alder Lake Point S */
+0x7A60  /* Alder Lake Point LP */
+
+New Features:
+=============
+
+ * Virtio HW layer.
+ * ACRN SOS code
+ * Bump driver to support HBM 2.2
+ * KDI - support for 3K signatures
+ * Disable MEI on SPS firmware on
+    * Mehlow (CNP) 0xA360
+    * Tatlow (TGP) 0x43E0
+    * Eaglestream (EBG) 0x1BE0
+
+
+New Drivers:
+============
+KDI - Kernel DAL API module
+
+Bug Fixes:
+==========
+Fix ref count in clinet handling.
+
+Known Issues:
+=============
+
+
+------------------------------------------------------------------------
+Intel Next Maintainers <intel-next-maintainers@eclists.intel.com>
