@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0
-/**
- * m_can_pci.c - PCI Specific M_CAN Glue
+/*
+ * PCI Specific M_CAN Glue
  *
- * Copyright (C) 2018 Intel Corporation - https://www.intel.com
- * Author: Felipe Balbi <felipe.balbi@linux.intel.com>
+ * Copyright (C) 2018-2020 Intel Corporation
+ * Author: Felipe Balbi (Intel)
  */
 
 #include <linux/bitops.h>
@@ -107,7 +107,8 @@ static int m_can_pci_probe(struct pci_dev *pci,
 		return -ENOMEM;
 
 	/*
-	 * "bosch,mram-cfg" has been parsed and updated the mcfg[] in m_can_class_allocate_dev
+	 * "bosch,mram-cfg" has been parsed and updated the mcfg[] in
+	 * m_can_class_allocate_dev.
 	 * Due to dby_can_wrapper design in EHL, we need to accommodate
 	 * for the mram base from PCI MMIO BAR base + 0x800
 	 */
@@ -190,16 +191,16 @@ static const struct pci_device_id m_can_pci_id_table[] = {
 MODULE_DEVICE_TABLE(pci, m_can_pci_id_table);
 
 static struct pci_driver m_can_pci_driver = {
-	.name		= "m_can_pci",
-	.probe		= m_can_pci_probe,
-	.remove		= m_can_pci_remove,
-	.id_table	= m_can_pci_id_table,
+	.name = "m_can_pci",
+	.probe = m_can_pci_probe,
+	.remove = m_can_pci_remove,
+	.id_table = m_can_pci_id_table,
 	.driver = {
 		.pm = &m_can_pci_pm_ops,
 	}
 };
 
-MODULE_AUTHOR("Felipe Balbi <felipe.balbi@linux.intel.com>");
+MODULE_AUTHOR("Felipe Balbi (Intel)");
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("CAN bus driver for Bosch M_CAN controller on PCI bus");
 
