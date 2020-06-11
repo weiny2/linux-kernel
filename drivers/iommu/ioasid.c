@@ -15,6 +15,7 @@ struct ioasid_data {
 	struct ioasid_set *set;
 	void *private;
 	struct rcu_head rcu;
+	struct atomic_notifier_head notifications;
 };
 
 /*
@@ -141,6 +142,7 @@ int ioasid_register_allocator(struct ioasid_allocator_ops *ops)
 	struct ioasid_allocator_data *pallocator;
 	int ret = 0;
 
+	pr_debug("%s: ops %llx\n", __func__, (u64)ops);
 	spin_lock(&ioasid_allocator_lock);
 
 	ia_data = ioasid_alloc_allocator(ops);
@@ -158,6 +160,7 @@ int ioasid_register_allocator(struct ioasid_allocator_ops *ops)
 		WARN_ON(active_allocator != &default_allocator);
 		/* Use this new allocator if default is not active */
 		if (xa_empty(&active_allocator->xa)) {
+			pr_debug("%s: Use this new allocator %llx\n", __func__, (u64)ia_data);
 			rcu_assign_pointer(active_allocator, ia_data);
 			list_add_tail(&ia_data->list, &allocators_list);
 			goto out_unlock;
@@ -270,6 +273,7 @@ int ioasid_set_data(ioasid_t ioasid, void *data)
 	struct ioasid_data *ioasid_data;
 	int ret = 0;
 
+	pr_debug("%s: ops %llx\n", __func__, (u64)data);
 	spin_lock(&ioasid_allocator_lock);
 	ioasid_data = xa_load(&active_allocator->xa, ioasid);
 	if (ioasid_data)
@@ -308,12 +312,14 @@ ioasid_t ioasid_alloc(struct ioasid_set *set, ioasid_t min, ioasid_t max,
 	void *adata;
 	ioasid_t id;
 
+	pr_debug("%s: %d - %d\n", __func__, min, max);
 	data = kzalloc(sizeof(*data), GFP_ATOMIC);
 	if (!data)
 		return INVALID_IOASID;
 
 	data->set = set;
 	data->private = private;
+	ATOMIC_INIT_NOTIFIER_HEAD(&data->notifications);
 
 	/*
 	 * Custom allocator needs allocator data to perform platform specific
@@ -335,12 +341,14 @@ ioasid_t ioasid_alloc(struct ioasid_set *set, ioasid_t min, ioasid_t max,
 		goto exit_free;
 	}
 	data->id = id;
+	pr_debug("%s: Got IOASID %d\n", __func__, id);
 
 	spin_unlock(&ioasid_allocator_lock);
 	return id;
 exit_free:
 	spin_unlock(&ioasid_allocator_lock);
 	kfree(data);
+	pr_debug("%s: Invalid IOASID\n", __func__);
 	return INVALID_IOASID;
 }
 EXPORT_SYMBOL_GPL(ioasid_alloc);
@@ -353,6 +361,7 @@ void ioasid_free(ioasid_t ioasid)
 {
 	struct ioasid_data *ioasid_data;
 
+	pr_debug("%s: IOASID %d\n", __func__, ioasid);
 	spin_lock(&ioasid_allocator_lock);
 	ioasid_data = xa_load(&active_allocator->xa, ioasid);
 	if (!ioasid_data) {
@@ -360,6 +369,9 @@ void ioasid_free(ioasid_t ioasid)
 		goto exit_unlock;
 	}
 
+	/* Notify all users that this IOASID is being freed */
+	atomic_notifier_call_chain(&ioasid_data->notifications, IOASID_FREE,
+				     &ioasid);
 	active_allocator->ops->free(ioasid, active_allocator->ops->pdata);
 	/* Custom allocator needs additional steps to free the xa element */
 	if (active_allocator->flags & IOASID_ALLOCATOR_CUSTOM) {
@@ -409,12 +421,51 @@ void *ioasid_find(struct ioasid_set *set, ioasid_t ioasid,
 	priv = rcu_dereference(ioasid_data->private);
 	if (getter && !getter(priv))
 		priv = NULL;
+	pr_debug("%s: Found IOASID %d data %llx\n", __func__, ioasid, (u64)priv);
 unlock:
 	rcu_read_unlock();
 
 	return priv;
 }
 EXPORT_SYMBOL_GPL(ioasid_find);
+
+int ioasid_add_notifier(ioasid_t ioasid, struct notifier_block *nb)
+{
+	struct ioasid_allocator_data *idata;
+	struct ioasid_data *data;
+	int ret = 0;
+
+	rcu_read_lock();
+	idata = rcu_dereference(active_allocator);
+	data = xa_load(&idata->xa, ioasid);
+	if (!data) {
+		ret = -ENOENT;
+		goto unlock;
+	}
+	ret = atomic_notifier_chain_register(&data->notifications, nb);
+unlock:
+	rcu_read_unlock();
+	return ret;
+}
+EXPORT_SYMBOL_GPL(ioasid_add_notifier);
+
+void ioasid_remove_notifier(ioasid_t ioasid, struct notifier_block *nb)
+{
+	struct ioasid_allocator_data *idata;
+	struct ioasid_data *data;
+
+	rcu_read_lock();
+	idata = rcu_dereference(active_allocator);
+	data = xa_load(&idata->xa, ioasid);
+	rcu_read_unlock();
+	if (!data) {
+		pr_err("IOASID %d not found\n", ioasid);
+		return;
+	}
+	/* Unregister can sleep, called outside RCU critical section. */
+	atomic_notifier_chain_unregister(&data->notifications, nb);
+}
+EXPORT_SYMBOL_GPL(ioasid_remove_notifier);
 
 MODULE_AUTHOR("Jean-Philippe Brucker <jean-philippe.brucker@arm.com>");
 MODULE_AUTHOR("Jacob Pan <jacob.jun.pan@linux.intel.com>");

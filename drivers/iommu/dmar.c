@@ -963,6 +963,7 @@ static int map_iommu(struct intel_iommu *iommu, u64 phys_addr)
 		warn_invalid_dmar(phys_addr, " returns all ones");
 		goto unmap;
 	}
+	iommu->vccap = dmar_readq(iommu->reg + DMAR_VCCAP_REG);
 
 	/* the registers might be more than one page */
 	map_size = max_t(int, ecap_max_iotlb_offset(iommu->ecap),
@@ -1112,6 +1113,12 @@ error:
 	return err;
 }
 
+static inline void dmar_free_fault_wq(struct intel_iommu *iommu)
+{
+	if (iommu->fault_wq)
+		destroy_workqueue(iommu->fault_wq);
+}
+
 static void free_iommu(struct intel_iommu *iommu)
 {
 	if (intel_iommu_enabled) {
@@ -1128,6 +1135,7 @@ static void free_iommu(struct intel_iommu *iommu)
 		free_irq(iommu->irq, iommu);
 		dmar_free_hwirq(iommu->irq);
 		iommu->irq = 0;
+		dmar_free_fault_wq(iommu);
 	}
 
 	if (iommu->qi) {
@@ -1156,12 +1164,11 @@ static inline void reclaim_free_desc(struct q_inval *qi)
 	}
 }
 
-static int qi_check_fault(struct intel_iommu *iommu, int index)
+static int qi_check_fault(struct intel_iommu *iommu, int index, int wait_index)
 {
 	u32 fault;
 	int head, tail;
 	struct q_inval *qi = iommu->qi;
-	int wait_index = (index + 1) % QI_LENGTH;
 	int shift = qi_shift(iommu);
 
 	if (qi->desc_status[wait_index] == QI_ABORT)
@@ -1224,17 +1231,23 @@ static int qi_check_fault(struct intel_iommu *iommu, int index)
 }
 
 /*
- * Submit the queued invalidation descriptor to the remapping
- * hardware unit and wait for its completion.
+ * Function to submit invalidation descriptors of all types to the queued
+ * invalidation interface (QI). Multiple descriptors can be submitted at a
+ * time, wait descriptors will be appended to each submission to ensure HW
+ * has completed the invalidation.
+ * Wait descriptors can be part of the submission but it will not be polled
+ * for completion check.
  */
-int qi_submit_sync(struct qi_desc *desc, struct intel_iommu *iommu)
+int __qi_submit_sync(struct qi_desc *desc, struct intel_iommu *iommu,
+			int count, unsigned long options)
 {
-	int rc;
 	struct q_inval *qi = iommu->qi;
 	int offset, shift, length;
 	struct qi_desc wait_desc;
 	int wait_index, index;
 	unsigned long flags;
+	int rc;
+	int i;
 
 	if (!qi)
 		return 0;
@@ -1243,32 +1256,43 @@ restart:
 	rc = 0;
 
 	raw_spin_lock_irqsave(&qi->q_lock, flags);
-	while (qi->free_cnt < 3) {
+	pr_debug_ratelimited("%s: %s: nr desc %d, nr_free %d\n",
+			__func__, iommu->name, count, qi->free_cnt);
+	/*
+	 * Check if we have enough empty slots in the queue to submit,
+	 * the calculation is based on:
+	 * # of desc + 1 wait desc + 1 space between head and tail
+	 */
+	while (qi->free_cnt < count + 2) {
 		raw_spin_unlock_irqrestore(&qi->q_lock, flags);
 		cpu_relax();
 		raw_spin_lock_irqsave(&qi->q_lock, flags);
 	}
 
 	index = qi->free_head;
-	wait_index = (index + 1) % QI_LENGTH;
+	wait_index = (index + count) % QI_LENGTH;
 	shift = qi_shift(iommu);
-	length = 1 << shift;
+	length = count << shift;
 
-	qi->desc_status[index] = qi->desc_status[wait_index] = QI_IN_USE;
+	/* Mark all desc and wait desc status in use */
+	for (i = 0; i < count + 1; i++)
+		qi->desc_status[(index + i) % QI_LENGTH] = QI_IN_USE;
 
 	offset = index << shift;
 	memcpy(qi->desc + offset, desc, length);
 	wait_desc.qw0 = QI_IWD_STATUS_DATA(QI_DONE) |
 			QI_IWD_STATUS_WRITE | QI_IWD_TYPE;
+	if (options & QI_OPT_WAIT_DRAIN)
+		wait_desc.qw0 |= QI_IWD_PRQ_DRAIN;
 	wait_desc.qw1 = virt_to_phys(&qi->desc_status[wait_index]);
 	wait_desc.qw2 = 0;
 	wait_desc.qw3 = 0;
 
 	offset = wait_index << shift;
-	memcpy(qi->desc + offset, &wait_desc, length);
+	memcpy(qi->desc + offset, &wait_desc, 1 << shift);
 
-	qi->free_head = (qi->free_head + 2) % QI_LENGTH;
-	qi->free_cnt -= 2;
+	qi->free_head = (qi->free_head + count + 1) % QI_LENGTH;
+	qi->free_cnt -= count + 1;
 
 	/*
 	 * update the HW tail register indicating the presence of
@@ -1284,7 +1308,7 @@ restart:
 		 * a deadlock where the interrupt context can wait indefinitely
 		 * for free slots in the queue.
 		 */
-		rc = qi_check_fault(iommu, index);
+		rc = qi_check_fault(iommu, index, wait_index);
 		if (rc)
 			break;
 
@@ -1302,6 +1326,15 @@ restart:
 		goto restart;
 
 	return rc;
+}
+
+/*
+ * Submit the queued invalidation descriptor to the remapping
+ * hardware unit and wait for its completion.
+ */
+int qi_submit_sync(struct qi_desc *desc, struct intel_iommu *iommu)
+{
+	return __qi_submit_sync(desc, iommu, 1, 0);
 }
 
 /*
@@ -1418,6 +1451,42 @@ void qi_flush_piotlb(struct intel_iommu *iommu, u16 did, u32 pasid, u64 addr,
 				QI_EIOTLB_AM(mask);
 	}
 
+	qi_submit_sync(&desc, iommu);
+}
+
+/* PASID-based device IOTLB Invalidate */
+void qi_flush_dev_iotlb_pasid(struct intel_iommu *iommu, u16 sid, u16 pfsid,
+		u32 pasid,  u16 qdep, u64 addr, unsigned size_order, u64 granu)
+{
+	unsigned long mask = 1UL << (VTD_PAGE_SHIFT + size_order - 1);
+	struct qi_desc desc = {.qw2 = 0, .qw3 = 0};
+
+	desc.qw0 = QI_DEV_EIOTLB_PASID(pasid) | QI_DEV_EIOTLB_SID(sid) |
+		QI_DEV_EIOTLB_QDEP(qdep) | QI_DEIOTLB_TYPE |
+		QI_DEV_IOTLB_PFSID(pfsid);
+	desc.qw1 = QI_DEV_EIOTLB_GLOB(granu);
+
+	/*
+	 * If S bit is 0, we only flush a single page. If S bit is set,
+	 * The least significant zero bit indicates the invalidation address
+	 * range. VT-d spec 6.5.2.6.
+	 * e.g. address bit 12[0] indicates 8KB, 13[0] indicates 16KB.
+	 * size order = 0 is PAGE_SIZE 4KB
+	 * Max Invs Pending (MIP) is set to 0 for now until we have DIT in
+	 * ECAP.
+	 */
+	desc.qw1 |= addr & ~mask;
+	if (size_order)
+		desc.qw1 |= QI_DEV_EIOTLB_SIZE;
+
+	qi_submit_sync(&desc, iommu);
+}
+
+void qi_flush_pasid_cache(struct intel_iommu *iommu, u16 did, u64 granu, int pasid)
+{
+	struct qi_desc desc = {.qw1 = 0, .qw2 = 0, .qw3 = 0};
+
+	desc.qw0 = QI_PC_PASID(pasid) | QI_PC_DID(did) | QI_PC_GRAN(granu) | QI_PC_TYPE;
 	qi_submit_sync(&desc, iommu);
 }
 
@@ -1641,6 +1710,31 @@ static const char *irq_remap_fault_reasons[] =
 	"Blocked an interrupt request due to source-id verification failure",
 };
 
+/* fault data and status */
+enum intel_iommu_fault_reason {
+	INTEL_IOMMU_FAULT_REASON_SW,
+	INTEL_IOMMU_FAULT_REASON_ROOT_NOT_PRESENT,
+	INTEL_IOMMU_FAULT_REASON_CONTEXT_NOT_PRESENT,
+	INTEL_IOMMU_FAULT_REASON_CONTEXT_INVALID,
+	INTEL_IOMMU_FAULT_REASON_BEYOND_ADDR_WIDTH,
+	INTEL_IOMMU_FAULT_REASON_PTE_WRITE_ACCESS,
+	INTEL_IOMMU_FAULT_REASON_PTE_READ_ACCESS,
+	INTEL_IOMMU_FAULT_REASON_NEXT_PT_INVALID,
+	INTEL_IOMMU_FAULT_REASON_ROOT_ADDR_INVALID,
+	INTEL_IOMMU_FAULT_REASON_CONTEXT_PTR_INVALID,
+	INTEL_IOMMU_FAULT_REASON_NONE_ZERO_RTP,
+	INTEL_IOMMU_FAULT_REASON_NONE_ZERO_CTP,
+	INTEL_IOMMU_FAULT_REASON_NONE_ZERO_PTE,
+	NR_INTEL_IOMMU_FAULT_REASON,
+};
+
+/* fault reasons that are allowed to be reported outside IOMMU subsystem */
+#define INTEL_IOMMU_FAULT_REASON_ALLOWED			\
+	((1ULL << INTEL_IOMMU_FAULT_REASON_BEYOND_ADDR_WIDTH) |	\
+		(1ULL << INTEL_IOMMU_FAULT_REASON_PTE_WRITE_ACCESS) |	\
+		(1ULL << INTEL_IOMMU_FAULT_REASON_PTE_READ_ACCESS))
+
+
 static const char *dmar_get_fault_reason(u8 fault_reason, int *fault_type)
 {
 	if (fault_reason >= 0x20 && (fault_reason - 0x20 <
@@ -1725,12 +1819,85 @@ void dmar_msi_read(int irq, struct msi_msg *msg)
 	raw_spin_unlock_irqrestore(&iommu->register_lock, flag);
 }
 
+static enum iommu_fault_reason to_iommu_fault_reason(u8 reason)
+{
+	if (reason >= NR_INTEL_IOMMU_FAULT_REASON) {
+		pr_warn("unknown DMAR fault reason %d\n", reason);
+		return IOMMU_FAULT_REASON_UNKNOWN;
+	}
+	switch (reason) {
+	case INTEL_IOMMU_FAULT_REASON_BEYOND_ADDR_WIDTH:
+		return 	IOMMU_FAULT_REASON_OOR_ADDRESS;
+	case INTEL_IOMMU_FAULT_REASON_NEXT_PT_INVALID:
+	case INTEL_IOMMU_FAULT_REASON_PTE_WRITE_ACCESS:
+	case INTEL_IOMMU_FAULT_REASON_PTE_READ_ACCESS:
+		return IOMMU_FAULT_REASON_PERMISSION;
+		/* REVISIT: Internal IOMMU fault reasons are reported as
+		 * unknown to the device. Need to sort throuh all SM reasons.
+		 */
+	case INTEL_IOMMU_FAULT_REASON_SW:
+	case INTEL_IOMMU_FAULT_REASON_ROOT_NOT_PRESENT:
+	case INTEL_IOMMU_FAULT_REASON_CONTEXT_NOT_PRESENT:
+	case INTEL_IOMMU_FAULT_REASON_CONTEXT_INVALID:
+	case INTEL_IOMMU_FAULT_REASON_ROOT_ADDR_INVALID:
+	case INTEL_IOMMU_FAULT_REASON_CONTEXT_PTR_INVALID:
+	default:
+		return IOMMU_FAULT_REASON_UNKNOWN;
+	}
+}
+
+struct dmar_fault_work {
+	struct work_struct fault_work;
+	struct intel_iommu *iommu;
+	u64 addr;
+	int type;
+	int fault_type;
+	enum intel_iommu_fault_reason reason;
+	u16 sid;
+};
+
+static void report_fault_to_device(struct work_struct *work)
+{
+	struct dmar_fault_work *dfw = container_of(work, struct dmar_fault_work,
+						fault_work);
+	struct iommu_fault_event event;
+	struct pci_dev *pdev;
+	u8 bus, devfn;
+
+	memset(&event, 0, sizeof(struct iommu_fault_event));
+	bus = PCI_BUS_NUM(dfw->sid);
+	devfn = PCI_DEVFN(PCI_SLOT(dfw->sid), PCI_FUNC(dfw->sid));
+	/*
+	 * we need to check if the fault reporting is requested for the
+	 * offending device.
+	 */
+	pdev = pci_get_domain_bus_and_slot(dfw->iommu->segment, bus, devfn);
+	if (!pdev) {
+		pr_warn("No PCI device found for source ID %x\n", dfw->sid);
+		goto free_work;
+	}
+	/*
+	 * unrecoverable fault is reported per IOMMU, notifier handler can
+	 * resolve PCI device based on source ID.
+	 */
+	event.fault.event.reason = to_iommu_fault_reason(dfw->reason);
+	event.fault.event.addr = dfw->addr;
+	event.fault.type = IOMMU_FAULT_DMA_UNRECOV;
+	event.fault.event.perm = dfw->type ? IOMMU_READ : IOMMU_WRITE;
+	iommu_report_device_fault(&pdev->dev, &event);
+	pci_dev_put(pdev);
+
+free_work:
+	kfree(dfw);
+}
+
 static int dmar_fault_do_one(struct intel_iommu *iommu, int type,
 		u8 fault_reason, int pasid, u16 source_id,
 		unsigned long long addr)
 {
 	const char *reason;
 	int fault_type;
+	struct dmar_fault_work *dfw;
 
 	reason = dmar_get_fault_reason(fault_reason, &fault_type);
 
@@ -1745,6 +1912,27 @@ static int dmar_fault_do_one(struct intel_iommu *iommu, int type,
 		       source_id >> 8, PCI_SLOT(source_id & 0xFF),
 		       PCI_FUNC(source_id & 0xFF), pasid, addr,
 		       fault_reason, reason);
+
+	/* check if fault reason is permitted to report outside IOMMU */
+	if (!((1 << fault_reason) & INTEL_IOMMU_FAULT_REASON_ALLOWED))
+		return 0;
+
+	dfw = kmalloc(sizeof(*dfw), GFP_ATOMIC);
+	if (!dfw)
+		return -ENOMEM;
+
+	INIT_WORK(&dfw->fault_work, report_fault_to_device);
+	dfw->addr = addr;
+	dfw->type = type;
+	dfw->fault_type = fault_type;
+	dfw->reason = fault_reason;
+	dfw->sid = source_id;
+	dfw->iommu = iommu;
+	if (!queue_work(iommu->fault_wq, &dfw->fault_work)) {
+		kfree(dfw);
+		return -EBUSY;
+	}
+
 	return 0;
 }
 
@@ -1827,10 +2015,28 @@ unlock_exit:
 	return IRQ_HANDLED;
 }
 
-int dmar_set_interrupt(struct intel_iommu *iommu)
+static int dmar_set_fault_wq(struct intel_iommu *iommu)
+{
+	if (iommu->fault_wq)
+		return 0;
+
+	iommu->fault_wq = alloc_ordered_workqueue(iommu->name, 0);
+	if (!iommu->fault_wq)
+		return -ENOMEM;
+
+	return 0;
+}
+
+int dmar_set_interrupt(struct intel_iommu *iommu, bool queue_fault)
 {
 	int irq, ret;
 
+	/* fault can be reported back to device drivers via a wq */
+	if (queue_fault) {
+		ret = dmar_set_fault_wq(iommu);
+		if (ret)
+			pr_err("Failed to create fault handling workqueue\n");
+	}
 	/*
 	 * Check if the fault interrupt is already initialized.
 	 */
@@ -1846,8 +2052,10 @@ int dmar_set_interrupt(struct intel_iommu *iommu)
 	}
 
 	ret = request_irq(irq, dmar_fault, IRQF_NO_THREAD, iommu->name, iommu);
-	if (ret)
+	if (ret) {
 		pr_err("Can't request irq\n");
+		dmar_free_fault_wq(iommu);
+	}
 	return ret;
 }
 
@@ -1861,7 +2069,7 @@ int __init enable_drhd_fault_handling(void)
 	 */
 	for_each_iommu(iommu, drhd) {
 		u32 fault_status;
-		int ret = dmar_set_interrupt(iommu);
+		int ret = dmar_set_interrupt(iommu, false);
 
 		if (ret) {
 			pr_err("DRHD %Lx: failed to enable fault, interrupt, ret %d\n",

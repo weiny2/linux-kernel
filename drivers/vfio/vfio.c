@@ -32,6 +32,7 @@
 #include <linux/vfio.h>
 #include <linux/wait.h>
 #include <linux/sched/signal.h>
+#include <linux/sched/mm.h>
 
 #define DRIVER_VERSION	"0.3"
 #define DRIVER_AUTHOR	"Alex Williamson <alex.williamson@redhat.com>"
@@ -46,6 +47,8 @@ static struct vfio {
 	struct mutex			group_lock;
 	struct cdev			group_cdev;
 	dev_t				group_devt;
+	struct list_head		vfio_mm_list;
+	struct mutex			vfio_mm_lock;
 	wait_queue_head_t		release_q;
 } vfio;
 
@@ -1178,6 +1181,10 @@ static long vfio_fops_unl_ioctl(struct file *filep,
 	switch (cmd) {
 	case VFIO_GET_API_VERSION:
 		ret = VFIO_API_VERSION;
+		break;
+	case VFIO_NESTING_GET_IOMMU_UAPI_VERSION:
+		ret = iommu_get_uapi_version();
+		pr_debug("IOMMU UAPI version: %ld\n", ret);
 		break;
 	case VFIO_CHECK_EXTENSION:
 		ret = vfio_ioctl_check_extension(container, arg);
@@ -2319,6 +2326,190 @@ int vfio_unregister_notifier(struct device *dev, enum vfio_notify_type type,
 EXPORT_SYMBOL(vfio_unregister_notifier);
 
 /**
+ * VFIO_MM objects - create, release, get, put, search
+ */
+static struct vfio_mm *vfio_create_mm(struct mm_struct *mm)
+{
+	struct vfio_mm *vmm;
+
+	vmm = kzalloc(sizeof(*vmm), GFP_KERNEL);
+	if (!vmm)
+		return ERR_PTR(-ENOMEM);
+
+	kref_init(&vmm->kref);
+	vmm->mm = mm;
+	vmm->pasid_quota = VFIO_DEFAULT_PASID_QUOTA;
+	vmm->pasid_count = 0;
+	mutex_init(&vmm->pasid_lock);
+	INIT_LIST_HEAD(&vmm->pasid_list);
+
+	mutex_lock(&vfio.vfio_mm_lock);
+	list_add(&vmm->vfio_next, &vfio.vfio_mm_list);
+	mutex_unlock(&vfio.vfio_mm_lock);
+
+	return vmm;
+}
+
+static void vfio_mm_reclaim_pasid(struct vfio_mm *vmm)
+{
+	struct pasid_node *pnode, *tmp;
+
+	mutex_lock(&vmm->pasid_lock);
+	list_for_each_entry_safe(pnode, tmp, &vmm->pasid_list, next) {
+		pr_info("%s, reclaim pasid: %u\n", __func__, pnode->pasid);
+		list_del(&pnode->next);
+		ioasid_free(pnode->pasid);
+		kfree(pnode);
+	}
+	mutex_unlock(&vmm->pasid_lock);
+}
+
+static void vfio_mm_unlock_and_free(struct vfio_mm *vmm)
+{
+	mutex_unlock(&vfio.vfio_mm_lock);
+	vfio_mm_reclaim_pasid(vmm);
+	kfree(vmm);
+}
+
+/* called with vfio.vfio_mm_lock held */
+static void vfio_mm_release(struct kref *kref)
+{
+	struct vfio_mm *vmm = container_of(kref, struct vfio_mm, kref);
+
+	list_del(&vmm->vfio_next);
+	vfio_mm_unlock_and_free(vmm);
+}
+
+void vfio_mm_put(struct vfio_mm *vmm)
+{
+	kref_put_mutex(&vmm->kref, vfio_mm_release, &vfio.vfio_mm_lock);
+}
+EXPORT_SYMBOL_GPL(vfio_mm_put);
+
+/* Assume vfio_mm_lock or vfio_mm reference is held */
+static void vfio_mm_get(struct vfio_mm *vmm)
+{
+	kref_get(&vmm->kref);
+}
+
+/**
+ * Caller should have held struct mm_struct *mm
+ */
+struct vfio_mm *vfio_mm_get_from_task(struct task_struct *task)
+{
+	struct mm_struct *mm = get_task_mm(task);
+	struct vfio_mm *vmm;
+
+	mutex_lock(&vfio.vfio_mm_lock);
+	list_for_each_entry(vmm, &vfio.vfio_mm_list, vfio_next) {
+		if (vmm->mm == mm) {
+			vfio_mm_get(vmm);
+			mmput(mm);
+			mutex_unlock(&vfio.vfio_mm_lock);
+			return vmm;
+		}
+	}
+	mutex_unlock(&vfio.vfio_mm_lock);
+
+	vmm = vfio_create_mm(mm);
+	if (IS_ERR(vmm))
+		vmm = NULL;
+
+	mmput(mm);
+	return vmm;
+}
+EXPORT_SYMBOL_GPL(vfio_mm_get_from_task);
+
+/**
+ * Caller should hold vmm->pasid_lock
+ */
+static int vfio_mm_insert_pasid_node(struct vfio_mm *vmm, u32 pasid)
+{
+	struct pasid_node *pnode;
+
+	pnode = kzalloc(sizeof(*pnode), GFP_KERNEL);
+	if (!pnode)
+		return -ENOMEM;
+	pnode->pasid = pasid;
+	list_add(&pnode->next, &vmm->pasid_list);
+
+	return 0;
+}
+
+/**
+ * Caller should hold vmm->pasid_lock
+ */
+static void vfio_mm_remove_pasid_node(struct vfio_mm *vmm, u32 pasid)
+{
+	struct pasid_node *pnode;
+	bool found = false;
+
+	list_for_each_entry(pnode, &vmm->pasid_list, next) {
+		if (pnode->pasid == pasid) {
+			found = true;
+			break;
+		}
+	}
+
+	if (found) {
+		list_del(&pnode->next);
+		kfree(pnode);
+	}
+}
+
+int vfio_mm_pasid_alloc(struct vfio_mm *vmm, int min, int max)
+{
+	ioasid_t pasid;
+	int ret = 0;
+
+	mutex_lock(&vmm->pasid_lock);
+	if (vmm->pasid_count >= vmm->pasid_quota) {
+		ret = -ENOSPC;
+		goto out_unlock;
+	}
+	/* Track ioasid allocation owner by mm */
+	pasid = ioasid_alloc((struct ioasid_set *)vmm->mm, min,
+				max, NULL);
+	if (pasid == INVALID_IOASID) {
+		ret = -ENOSPC;
+		goto out_unlock;
+	}
+
+	if (vfio_mm_insert_pasid_node(vmm, pasid)) {
+		ret = -ENOSPC;
+		ioasid_free(pasid);
+	} else {
+		ret = pasid;
+		vmm->pasid_count++;
+	}
+
+out_unlock:
+	mutex_unlock(&vmm->pasid_lock);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(vfio_mm_pasid_alloc);
+
+int vfio_mm_pasid_free(struct vfio_mm *vmm, ioasid_t pasid)
+{
+	void *pdata;
+	int ret = 0;
+
+	mutex_lock(&vmm->pasid_lock);
+	pdata = ioasid_find((struct ioasid_set *)vmm->mm, pasid, NULL);
+	if (IS_ERR(pdata)) {
+		ret = PTR_ERR(pdata);
+		goto out_unlock;
+	}
+	ioasid_free(pasid);
+	vfio_mm_remove_pasid_node(vmm, pasid);
+	vmm->pasid_count--;
+out_unlock:
+	mutex_unlock(&vmm->pasid_lock);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(vfio_mm_pasid_free);
+
+/**
  * Module/class support
  */
 static char *vfio_devnode(struct device *dev, umode_t *mode)
@@ -2341,8 +2532,10 @@ static int __init vfio_init(void)
 	idr_init(&vfio.group_idr);
 	mutex_init(&vfio.group_lock);
 	mutex_init(&vfio.iommu_drivers_lock);
+	mutex_init(&vfio.vfio_mm_lock);
 	INIT_LIST_HEAD(&vfio.group_list);
 	INIT_LIST_HEAD(&vfio.iommu_drivers_list);
+	INIT_LIST_HEAD(&vfio.vfio_mm_list);
 	init_waitqueue_head(&vfio.release_q);
 
 	ret = misc_register(&vfio_dev);

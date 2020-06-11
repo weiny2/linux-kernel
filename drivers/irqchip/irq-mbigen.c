@@ -232,6 +232,10 @@ static const struct irq_domain_ops mbigen_domain_ops = {
 	.free		= mbigen_irq_domain_free,
 };
 
+static const struct platform_msi_ops mbigen_msi_ops = {
+	.write_msg	= mbigen_write_msg,
+};
+
 static int mbigen_of_create_domain(struct platform_device *pdev,
 				   struct mbigen_device *mgn_chip)
 {
@@ -260,7 +264,7 @@ static int mbigen_of_create_domain(struct platform_device *pdev,
 		}
 
 		domain = platform_msi_create_device_domain(&child->dev, num_pins,
-							   mbigen_write_msg,
+							   &mbigen_msi_ops,
 							   &mbigen_domain_ops,
 							   mgn_chip);
 		if (!domain) {
@@ -308,7 +312,7 @@ static int mbigen_acpi_create_domain(struct platform_device *pdev,
 		return -EINVAL;
 
 	domain = platform_msi_create_device_domain(&pdev->dev, num_pins,
-						   mbigen_write_msg,
+						   &mbigen_msi_ops,
 						   &mbigen_domain_ops,
 						   mgn_chip);
 	if (!domain)

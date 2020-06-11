@@ -21,17 +21,17 @@
 #define OPREGION_SIZE		(8 * 1024)
 #define OPREGION_PCI_ADDR	0xfc
 
-static size_t vfio_pci_igd_rw(struct vfio_pci_device *vdev, char __user *buf,
-			      size_t count, loff_t *ppos, bool iswrite)
+static size_t vfio_pci_igd_rw(struct vfio_pci_common_dev *cdev,
+		char __user *buf, size_t count, loff_t *ppos, bool iswrite)
 {
 	unsigned int i = VFIO_PCI_OFFSET_TO_INDEX(*ppos) - VFIO_PCI_NUM_REGIONS;
-	void *base = vdev->region[i].data;
+	void *base = cdev->region[i].data;
 	loff_t pos = *ppos & VFIO_PCI_OFFSET_MASK;
 
-	if (pos >= vdev->region[i].size || iswrite)
+	if (pos >= cdev->region[i].size || iswrite)
 		return -EINVAL;
 
-	count = min(count, (size_t)(vdev->region[i].size - pos));
+	count = min(count, (size_t)(cdev->region[i].size - pos));
 
 	if (copy_to_user(buf, base + pos, count))
 		return -EFAULT;
@@ -41,7 +41,7 @@ static size_t vfio_pci_igd_rw(struct vfio_pci_device *vdev, char __user *buf,
 	return count;
 }
 
-static void vfio_pci_igd_release(struct vfio_pci_device *vdev,
+static void vfio_pci_igd_release(struct vfio_pci_common_dev *cdev,
 				 struct vfio_pci_region *region)
 {
 	memunmap(region->data);
@@ -90,7 +90,7 @@ static int vfio_pci_igd_opregion_init(struct vfio_pci_device *vdev)
 			return -ENOMEM;
 	}
 
-	ret = vfio_pci_register_dev_region(vdev,
+	ret = vfio_pci_register_dev_region(&vdev->cdev,
 		PCI_VENDOR_ID_INTEL | VFIO_REGION_TYPE_PCI_VENDOR_TYPE,
 		VFIO_REGION_SUBTYPE_INTEL_IGD_OPREGION,
 		&vfio_pci_igd_regops, size, VFIO_REGION_INFO_FLAG_READ, base);
@@ -107,20 +107,20 @@ static int vfio_pci_igd_opregion_init(struct vfio_pci_device *vdev)
 	return ret;
 }
 
-static size_t vfio_pci_igd_cfg_rw(struct vfio_pci_device *vdev,
+static size_t vfio_pci_igd_cfg_rw(struct vfio_pci_common_dev *cdev,
 				  char __user *buf, size_t count, loff_t *ppos,
 				  bool iswrite)
 {
 	unsigned int i = VFIO_PCI_OFFSET_TO_INDEX(*ppos) - VFIO_PCI_NUM_REGIONS;
-	struct pci_dev *pdev = vdev->region[i].data;
+	struct pci_dev *pdev = cdev->region[i].data;
 	loff_t pos = *ppos & VFIO_PCI_OFFSET_MASK;
 	size_t size;
 	int ret;
 
-	if (pos >= vdev->region[i].size || iswrite)
+	if (pos >= cdev->region[i].size || iswrite)
 		return -EINVAL;
 
-	size = count = min(count, (size_t)(vdev->region[i].size - pos));
+	size = count = min(count, (size_t)(cdev->region[i].size - pos));
 
 	if ((pos & 1) && size) {
 		u8 val;
@@ -200,7 +200,7 @@ static size_t vfio_pci_igd_cfg_rw(struct vfio_pci_device *vdev,
 	return count;
 }
 
-static void vfio_pci_igd_cfg_release(struct vfio_pci_device *vdev,
+static void vfio_pci_igd_cfg_release(struct vfio_pci_common_dev *cdev,
 				     struct vfio_pci_region *region)
 {
 	struct pci_dev *pdev = region->data;
@@ -228,7 +228,7 @@ static int vfio_pci_igd_cfg_init(struct vfio_pci_device *vdev)
 		return -EINVAL;
 	}
 
-	ret = vfio_pci_register_dev_region(vdev,
+	ret = vfio_pci_register_dev_region(&vdev->cdev,
 		PCI_VENDOR_ID_INTEL | VFIO_REGION_TYPE_PCI_VENDOR_TYPE,
 		VFIO_REGION_SUBTYPE_INTEL_IGD_HOST_CFG,
 		&vfio_pci_igd_cfg_regops, host_bridge->cfg_size,
@@ -248,7 +248,7 @@ static int vfio_pci_igd_cfg_init(struct vfio_pci_device *vdev)
 		return -EINVAL;
 	}
 
-	ret = vfio_pci_register_dev_region(vdev,
+	ret = vfio_pci_register_dev_region(&vdev->cdev,
 		PCI_VENDOR_ID_INTEL | VFIO_REGION_TYPE_PCI_VENDOR_TYPE,
 		VFIO_REGION_SUBTYPE_INTEL_IGD_LPC_CFG,
 		&vfio_pci_igd_cfg_regops, lpc_bridge->cfg_size,

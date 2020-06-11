@@ -4,6 +4,7 @@
 
 #include <linux/types.h>
 #include <linux/errno.h>
+#include <linux/notifier.h>
 
 #define INVALID_IOASID ((ioasid_t)-1)
 typedef unsigned int ioasid_t;
@@ -29,6 +30,12 @@ struct ioasid_allocator_ops {
 	void *pdata;
 };
 
+/* Notification data when IOASID status changed */
+enum ioasid_notify_val {
+	IOASID_FREE = 1,
+	IOASID_SUSPEND,
+};
+
 #define DECLARE_IOASID_SET(name) struct ioasid_set name = { 0 }
 
 #if IS_ENABLED(CONFIG_IOASID)
@@ -40,6 +47,8 @@ void *ioasid_find(struct ioasid_set *set, ioasid_t ioasid,
 int ioasid_register_allocator(struct ioasid_allocator_ops *allocator);
 void ioasid_unregister_allocator(struct ioasid_allocator_ops *allocator);
 int ioasid_set_data(ioasid_t ioasid, void *data);
+int ioasid_add_notifier(ioasid_t ioasid, struct notifier_block *nb);
+void ioasid_remove_notifier(ioasid_t ioasid, struct notifier_block *nb);
 
 #else /* !CONFIG_IOASID */
 static inline ioasid_t ioasid_alloc(struct ioasid_set *set, ioasid_t min,
@@ -56,6 +65,17 @@ static inline void *ioasid_find(struct ioasid_set *set, ioasid_t ioasid,
 				bool (*getter)(void *))
 {
 	return NULL;
+}
+
+static inline int ioasid_add_notifier(ioasid_t ioasid,
+				      struct notifier_block *nb)
+{
+	return -ENOTSUPP;
+}
+
+static inline void ioasid_remove_notifier(ioasid_t ioasid,
+				       struct notifier_block *nb)
+{
 }
 
 static inline int ioasid_register_allocator(struct ioasid_allocator_ops *allocator)

@@ -32,11 +32,11 @@ struct mdev_device {
 	struct list_head next;
 	struct kobject *type_kobj;
 	struct device *iommu_device;
+	void *iommu_domain;
 	bool active;
 };
 
 #define to_mdev_device(dev)	container_of(dev, struct mdev_device, dev)
-#define dev_is_mdev(d)		((d)->bus == &mdev_bus_type)
 
 struct mdev_type {
 	struct kobject kobj;

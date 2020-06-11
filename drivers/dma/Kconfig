@@ -285,8 +285,12 @@ config INTEL_IDMA64
 config INTEL_IDXD
 	tristate "Intel Data Accelerators support"
 	depends on PCI && X86_64
+	depends on SBITMAP
+	depends on MSI_IMS
+	depends on VFIO_PCI
+	depends on VFIO_MDEV
+	depends on VFIO_MDEV_DEVICE
 	select DMA_ENGINE
-	select SBITMAP
 	help
 	  Enable support for the Intel(R) data accelerators present
 	  in Intel Xeon CPU.
@@ -294,6 +298,29 @@ config INTEL_IDXD
 	  Say Y if you have such a platform.
 
 	  If unsure, say N.
+
+# Config symbol that collects all the dependencies that's necessary to
+# support shared virtual memory for the devices supported by idxd.
+config INTEL_IDXD_SVM
+	bool "Accelerator Shared Virtual Memory Support"
+	depends on INTEL_IDXD
+	depends on INTEL_IOMMU_SVM
+	depends on PCI_PRI
+	depends on PCI_PASID
+	depends on PCI_IOV
+
+comment "SVM support not enabled for Intel Accelerator (see INTEL_IDXD_SVM)"
+	depends on INTEL_IDXD && !INTEL_IDXD_SVM
+
+config INTEL_IDXD_KTEST
+	tristate "Intel IDXD kernel direct API test"
+	depends on INTEL_IDXD && INTEL_IDXD_SVM && DMATEST
+	help
+	  Enable support for IDXD kernel direct API testing.
+
+	  Say Y if you want to perform testing for idxd KAPI.
+
+	  If unsure, say N
 
 config INTEL_IOATDMA
 	tristate "Intel I/OAT DMA support"

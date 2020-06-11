@@ -1492,6 +1492,10 @@ static void flexrm_mbox_msi_write(struct msi_desc *desc, struct msi_msg *msg)
 	writel_relaxed(msg->data, ring->regs + RING_MSI_DATA_VALUE);
 }
 
+static const struct platform_msi_ops flexrm_mbox_msi_ops = {
+	.write_msg	= flexrm_mbox_msi_write,
+};
+
 static int flexrm_mbox_probe(struct platform_device *pdev)
 {
 	int index, ret = 0;
@@ -1604,7 +1608,7 @@ static int flexrm_mbox_probe(struct platform_device *pdev)
 
 	/* Allocate platform MSIs for each ring */
 	ret = platform_msi_domain_alloc_irqs(dev, mbox->num_rings,
-						flexrm_mbox_msi_write);
+						&flexrm_mbox_msi_ops);
 	if (ret)
 		goto fail_destroy_cmpl_pool;
 

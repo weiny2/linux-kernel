@@ -295,6 +295,10 @@ static const struct of_device_id mvebu_icu_subset_of_match[] = {
 	{},
 };
 
+static const struct platform_msi_ops mvebu_icu_msi_ops = {
+	.write_msg	= mvebu_icu_write_msg,
+};
+
 static int mvebu_icu_subset_probe(struct platform_device *pdev)
 {
 	struct mvebu_icu_msi_data *msi_data;
@@ -324,7 +328,7 @@ static int mvebu_icu_subset_probe(struct platform_device *pdev)
 		return -ENODEV;
 
 	irq_domain = platform_msi_create_device_tree_domain(dev, ICU_MAX_IRQS,
-							    mvebu_icu_write_msg,
+							    &mvebu_icu_msi_ops,
 							    &mvebu_icu_domain_ops,
 							    msi_data);
 	if (!irq_domain) {

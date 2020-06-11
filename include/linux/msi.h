@@ -33,10 +33,12 @@ typedef void (*irq_write_msi_msg_t)(struct msi_desc *desc,
  * platform_msi_desc - Platform device specific msi descriptor data
  * @msi_priv_data:	Pointer to platform private data
  * @msi_index:		The index of the MSI descriptor for multi MSI
+ * @masked:		mask bits
  */
 struct platform_msi_desc {
 	struct platform_msi_priv_data	*msi_priv_data;
 	u16				msi_index;
+	u32				masked;
 };
 
 /**
@@ -130,6 +132,18 @@ struct msi_desc {
 	};
 };
 
+enum platform_msi_type {
+	NOT_PLAT_MSI = 0,
+	GEN_PLAT_MSI = 1,
+	IMS =	2,
+};
+
+struct platform_msi_group_entry {
+	unsigned int group_id;
+	struct list_head group_list;
+	struct list_head entry_list;
+};
+
 /* Helpers to hide struct msi_desc implementation details */
 #define msi_desc_to_dev(desc)		((desc)->dev)
 #define dev_to_msi_list(dev)		(&(dev)->msi_list)
@@ -139,6 +153,32 @@ struct msi_desc {
 	list_for_each_entry((desc), dev_to_msi_list((dev)), list)
 #define for_each_msi_entry_safe(desc, tmp, dev)	\
 	list_for_each_entry_safe((desc), (tmp), dev_to_msi_list((dev)), list)
+
+#define dev_to_platform_msi_group_list(dev)    (&(dev)->platform_msi_list)
+
+#define first_platform_msi_group_entry(dev)				\
+	list_first_entry(dev_to_platform_msi_group_list((dev)),		\
+			 struct platform_msi_group_entry, group_list)
+
+#define platform_msi_current_group_entry_list(dev)			\
+	(&((list_last_entry(dev_to_platform_msi_group_list((dev)),	\
+			    struct platform_msi_group_entry,		\
+			    group_list))->entry_list))
+
+#define first_msi_entry_current_group(dev)				\
+	list_first_entry_select((dev)->platform_msi_type,		\
+				platform_msi_current_group_entry_list((dev)),	\
+				dev_to_msi_list((dev)), struct msi_desc, list)
+
+#define for_each_msi_entry_current_group(desc, dev)			\
+	list_for_each_entry_select((dev)->platform_msi_type, desc,	\
+				   platform_msi_current_group_entry_list((dev)),\
+				   dev_to_msi_list((dev)), list)
+
+#define for_each_platform_msi_entry_in_group(desc, platform_msi_group, group, dev)	\
+	list_for_each_entry((platform_msi_group), dev_to_platform_msi_group_list((dev)), group_list)	\
+		if (((platform_msi_group)->group_id) == (group))			\
+			list_for_each_entry((desc), (&(platform_msi_group)->entry_list), list)
 
 #ifdef CONFIG_IRQ_MSI_IOMMU
 static inline const void *msi_desc_get_iommu_cookie(struct msi_desc *desc)
@@ -321,6 +361,30 @@ enum {
 	MSI_FLAG_LEVEL_CAPABLE		= (1 << 6),
 };
 
+/*
+ * platform_msi_ops - Callbacks for platform MSI ops
+ * @irq_mask:   mask an interrupt source
+ * @irq_unmask: unmask an interrupt source
+ * @irq_write_msi_msg: write message content
+ */
+struct platform_msi_ops {
+	unsigned int		(*irq_mask)(struct msi_desc *desc);
+	unsigned int		(*irq_unmask)(struct msi_desc *desc);
+	irq_write_msi_msg_t	write_msg;
+};
+
+/*
+ * Internal data structure containing a (made up, but unique) devid
+ * and the callback to write the MSI message.
+ */
+struct platform_msi_priv_data {
+	struct device			*dev;
+	void				*host_data;
+	msi_alloc_info_t		arg;
+	const struct platform_msi_ops	*ops;
+	int				devid;
+};
+
 int msi_domain_set_affinity(struct irq_data *data, const struct cpumask *mask,
 			    bool force);
 
@@ -330,14 +394,21 @@ struct irq_domain *msi_create_irq_domain(struct fwnode_handle *fwnode,
 int msi_domain_alloc_irqs(struct irq_domain *domain, struct device *dev,
 			  int nvec);
 void msi_domain_free_irqs(struct irq_domain *domain, struct device *dev);
+void msi_domain_free_irqs_group(struct irq_domain *domain,
+				struct device *dev, unsigned int group);
 struct msi_domain_info *msi_get_domain_info(struct irq_domain *domain);
 
 struct irq_domain *platform_msi_create_irq_domain(struct fwnode_handle *fwnode,
 						  struct msi_domain_info *info,
 						  struct irq_domain *parent);
 int platform_msi_domain_alloc_irqs(struct device *dev, unsigned int nvec,
-				   irq_write_msi_msg_t write_msi_msg);
+				   const struct platform_msi_ops *platform_ops);
 void platform_msi_domain_free_irqs(struct device *dev);
+int platform_msi_domain_alloc_irqs_group(struct device *dev, unsigned int nvec,
+					 const struct platform_msi_ops *platform_ops,
+					 unsigned int *group_id);
+void platform_msi_domain_free_irqs_group(struct device *dev,
+					 unsigned int group_id);
 
 /* When an MSI domain is used as an intermediate domain */
 int msi_domain_prepare_irqs(struct irq_domain *domain, struct device *dev,
@@ -348,20 +419,22 @@ struct irq_domain *
 __platform_msi_create_device_domain(struct device *dev,
 				    unsigned int nvec,
 				    bool is_tree,
-				    irq_write_msi_msg_t write_msi_msg,
+				    const struct platform_msi_ops *platform_ops,
 				    const struct irq_domain_ops *ops,
 				    void *host_data);
 
-#define platform_msi_create_device_domain(dev, nvec, write, ops, data)	\
-	__platform_msi_create_device_domain(dev, nvec, false, write, ops, data)
-#define platform_msi_create_device_tree_domain(dev, nvec, write, ops, data) \
-	__platform_msi_create_device_domain(dev, nvec, true, write, ops, data)
+#define platform_msi_create_device_domain(dev, nvec, p_ops, ops, data)	\
+	__platform_msi_create_device_domain(dev, nvec, false, p_ops, ops, data)
+#define platform_msi_create_device_tree_domain(dev, nvec, p_ops, ops, data) \
+	__platform_msi_create_device_domain(dev, nvec, true, p_ops, ops, data)
 
 int platform_msi_domain_alloc(struct irq_domain *domain, unsigned int virq,
 			      unsigned int nr_irqs);
 void platform_msi_domain_free(struct irq_domain *domain, unsigned int virq,
 			      unsigned int nvec);
 void *platform_msi_get_host_data(struct irq_domain *domain);
+irq_hw_number_t platform_msi_calc_hwirq(struct msi_desc *desc);
+void platform_msi_write_msg(struct irq_data *data, struct msi_msg *msg);
 #endif /* CONFIG_GENERIC_MSI_IRQ_DOMAIN */
 
 #ifdef CONFIG_PCI_MSI_IRQ_DOMAIN
@@ -382,4 +455,12 @@ static inline struct irq_domain *pci_msi_get_device_domain(struct pci_dev *pdev)
 }
 #endif /* CONFIG_PCI_MSI_IRQ_DOMAIN */
 
+#ifdef CONFIG_MSI_IMS
+struct irq_domain *dev_get_ims_domain(struct device *dev);
+#else
+static inline struct irq_domain *dev_get_ims_domain(struct device *dev)
+{
+	return NULL;
+}
+#endif
 #endif /* LINUX_MSI_H */

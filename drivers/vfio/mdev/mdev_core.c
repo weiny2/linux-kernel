@@ -33,6 +33,12 @@ struct device *mdev_parent_dev(struct mdev_device *mdev)
 }
 EXPORT_SYMBOL(mdev_parent_dev);
 
+struct device *mdev_dev_to_parent_dev(struct device *dev)
+{
+	return to_mdev_device(dev)->parent->dev;
+}
+EXPORT_SYMBOL(mdev_dev_to_parent_dev);
+
 void *mdev_get_drvdata(struct mdev_device *mdev)
 {
 	return mdev->driver_data;
@@ -403,6 +409,22 @@ struct device *mdev_get_iommu_device(struct device *dev)
 	return mdev->iommu_device;
 }
 EXPORT_SYMBOL(mdev_get_iommu_device);
+
+void mdev_set_iommu_domain(struct device *dev, void *domain)
+{
+	struct mdev_device *mdev = to_mdev_device(dev);
+
+	mdev->iommu_domain = domain;
+}
+EXPORT_SYMBOL(mdev_set_iommu_domain);
+
+void *mdev_get_iommu_domain(struct device *dev)
+{
+	struct mdev_device *mdev = to_mdev_device(dev);
+
+	return mdev->iommu_domain;
+}
+EXPORT_SYMBOL(mdev_get_iommu_domain);
 
 static int __init mdev_init(void)
 {

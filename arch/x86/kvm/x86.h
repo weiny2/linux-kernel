@@ -115,7 +115,7 @@ static inline bool x86_exception_has_error_code(unsigned int vector)
 {
 	static u32 exception_has_error_code = BIT(DF_VECTOR) | BIT(TS_VECTOR) |
 			BIT(NP_VECTOR) | BIT(SS_VECTOR) | BIT(GP_VECTOR) |
-			BIT(PF_VECTOR) | BIT(AC_VECTOR);
+			BIT(PF_VECTOR) | BIT(AC_VECTOR) | BIT(CP_VECTOR);
 
 	return (1U << vector) & exception_has_error_code;
 }
@@ -285,6 +285,8 @@ extern unsigned int min_timer_period_us;
 extern bool enable_vmware_backdoor;
 
 extern int pi_inject_timer;
+
+extern bool enable_pasid_trans;
 
 extern struct static_key kvm_no_apic_vcpu;
 

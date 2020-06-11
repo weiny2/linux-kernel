@@ -567,6 +567,8 @@ struct device {
 #endif
 #ifdef CONFIG_GENERIC_MSI_IRQ
 	struct list_head	msi_list;
+	struct list_head	platform_msi_list;
+	unsigned int		platform_msi_type;
 #endif
 
 	const struct dma_map_ops *dma_ops;
@@ -622,6 +624,7 @@ struct device {
     defined(CONFIG_ARCH_HAS_SYNC_DMA_FOR_CPU_ALL)
 	bool			dma_coherent:1;
 #endif
+	unsigned int		group_id;
 };
 
 static inline struct device *kobj_to_dev(struct kobject *kobj)
