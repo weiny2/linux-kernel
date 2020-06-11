@@ -35,6 +35,7 @@
 #include <asm/simd.h>
 
 asmlinkage u16 crc_t10dif_pcl(u16 init_crc, const u8 *buf, size_t len);
+asmlinkage u16 crct10dif_pcl_avx512(u16 init_crc, const u8 *buf, size_t len);
 
 struct chksum_desc_ctx {
 	__u16 crc;
@@ -56,7 +57,12 @@ static int chksum_update(struct shash_desc *desc, const u8 *data,
 
 	if (length >= 16 && crypto_simd_usable()) {
 		kernel_fpu_begin();
-		ctx->crc = crc_t10dif_pcl(ctx->crc, data, length);
+		if (IS_ENABLED(CONFIG_AS_AVX512) &&
+		    boot_cpu_has(X86_FEATURE_AVX512F) &&
+		    boot_cpu_has(X86_FEATURE_VPCLMULQDQ))
+			ctx->crc = crct10dif_pcl_avx512(ctx->crc, data, length);
+		else
+			ctx->crc = crc_t10dif_pcl(ctx->crc, data, length);
 		kernel_fpu_end();
 	} else
 		ctx->crc = crc_t10dif_generic(ctx->crc, data, length);
@@ -75,7 +81,12 @@ static int __chksum_finup(__u16 crc, const u8 *data, unsigned int len, u8 *out)
 {
 	if (len >= 16 && crypto_simd_usable()) {
 		kernel_fpu_begin();
-		*(__u16 *)out = crc_t10dif_pcl(crc, data, len);
+		if (IS_ENABLED(CONFIG_AS_AVX512) &&
+		    boot_cpu_has(X86_FEATURE_AVX512F) &&
+		    boot_cpu_has(X86_FEATURE_VPCLMULQDQ))
+			*(__u16 *)out = crct10dif_pcl_avx512(crc, data, len);
+		else
+			*(__u16 *)out = crc_t10dif_pcl(crc, data, len);
 		kernel_fpu_end();
 	} else
 		*(__u16 *)out = crc_t10dif_generic(crc, data, len);
@@ -115,6 +126,7 @@ static struct shash_alg alg = {
 
 static const struct x86_cpu_id crct10dif_cpu_id[] = {
 	X86_MATCH_FEATURE(X86_FEATURE_PCLMULQDQ, NULL),
+	X86_MATCH_FEATURE(X86_FEATURE_VPCLMULQDQ, NULL),
 	{}
 };
 MODULE_DEVICE_TABLE(x86cpu, crct10dif_cpu_id);
