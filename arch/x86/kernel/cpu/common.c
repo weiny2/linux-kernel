@@ -58,6 +58,7 @@
 #include <asm/keylocker.h>
 #include <asm/cet.h>
 #include <asm/uv/uv.h>
+#include <asm/rar.h>
 
 #include "cpu.h"
 
@@ -604,6 +605,19 @@ static __init int setup_disable_ibt(char *s)
 __setup("no_user_ibt", setup_disable_ibt);
 #endif
 
+#ifdef CONFIG_X86_INTEL_RAR
+static __init int setup_disable_rar(char *s)
+{
+	if (!boot_cpu_has(X86_FEATURE_RAR))
+		return 1;
+
+	setup_clear_cpu_cap(X86_FEATURE_RAR);
+	pr_info("x86: 'norar' specified, disabling\n");
+	return 1;
+}
+__setup("norar", setup_disable_rar);
+#endif
+
 /*
  * Some CPU features depend on higher CPUID levels, which may not always
  * be available due to CPUID level capping or broken virtualization
@@ -1013,6 +1027,19 @@ static void init_cqm(struct cpuinfo_x86 *c)
 	}
 }
 
+static void init_rar(struct cpuinfo_x86 *c)
+{
+	u64 msr;
+
+	if (!cpu_has(c, X86_FEATURE_CORE_CAPABILITIES))
+		return;
+
+	rdmsrl(MSR_IA32_CORE_CAPS, msr);
+
+	if (msr & MSR_IA32_CORE_CAPS_RAR_DETECT)
+		set_cpu_cap(c, X86_FEATURE_RAR);
+}
+
 void get_cpu_cap(struct cpuinfo_x86 *c)
 {
 	u32 eax, ebx, ecx, edx;
@@ -1091,6 +1118,7 @@ void get_cpu_cap(struct cpuinfo_x86 *c)
 	init_scattered_cpuid_features(c);
 	init_speculation_control(c);
 	init_cqm(c);
+	init_rar(c);
 
 	/*
 	 * Clear/Set all flags overridden by options, after probe.
@@ -2063,6 +2091,9 @@ void cpu_init(void)
 
 	if (is_uv_system())
 		uv_cpu_init();
+
+	if (cpu_feature_enabled(X86_FEATURE_RAR))
+		rar_cpu_init();
 
 	load_fixmap_gdt(cpu);
 }

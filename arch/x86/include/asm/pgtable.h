@@ -303,6 +303,16 @@ static inline int pgd_devmap(pgd_t pgd)
 	return 0;
 }
 #endif
+
+#define __HAVE_ARCH_FLUSH_PMD_TLB_RANGE
+#define flush_pmd_tlb_range(vma, addr, end)				\
+	flush_tlb_mm_range((vma)->vm_mm, addr, end,			\
+			   ((vma)->vm_flags & VM_HUGETLB)		\
+				? huge_page_shift(hstate_vma(vma))	\
+				: PAGE_SHIFT, false, true)
+
+#define flush_pud_tlb_range(vma, addr, end) flush_tlb_range(vma, addr, end)
+
 #endif /* CONFIG_TRANSPARENT_HUGEPAGE */
 
 static inline pte_t pte_set_flags(pte_t pte, pteval_t set)

@@ -3106,6 +3106,8 @@
 
 	no_user_ibt	[X86-64] Disable Indirect Branch Tracking for user-mode
 			applications
+	norar		[X86-64]
+			Disable RAR (Remote Action Request)
 
 	nosmap		[X86,PPC]
 			Disable SMAP (Supervisor Mode Access Prevention)
