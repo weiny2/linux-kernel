@@ -14,6 +14,7 @@ fit into other categories.
 .. toctree::
    :maxdepth: 2
 
+   dlb
    eeprom
    ibmvmc
    ics932s401
