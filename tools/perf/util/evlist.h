@@ -175,6 +175,7 @@ struct callchain_param;
 void perf_evlist__set_id_pos(struct evlist *evlist);
 bool perf_can_sample_identifier(void);
 bool perf_can_record_switch_events(void);
+bool perf_can_record_text_poke_events(void);
 bool perf_can_record_cpu_wide(void);
 bool perf_can_aux_sample(void);
 void perf_evlist__config(struct evlist *evlist, struct record_opts *opts,
