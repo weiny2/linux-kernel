@@ -54,7 +54,7 @@ const struct x86_cpu_id *x86_match_cpu(const struct x86_cpu_id *match)
 }
 EXPORT_SYMBOL(x86_match_cpu);
 
-static const struct x86_cpu_desc *
+const struct x86_cpu_desc *
 x86_match_cpu_with_stepping(const struct x86_cpu_desc *match)
 {
 	struct cpuinfo_x86 *c = &boot_cpu_data;

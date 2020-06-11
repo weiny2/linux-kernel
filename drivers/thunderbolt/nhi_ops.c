@@ -121,20 +121,24 @@ static void icl_nhi_set_ltr(struct tb_nhi *nhi)
 
 static int icl_nhi_suspend(struct tb_nhi *nhi)
 {
+	struct tb *tb = pci_get_drvdata(nhi->pdev);
 	int ret;
 
 	if (icl_nhi_is_device_connected(nhi))
 		return 0;
 
-	/*
-	 * If there is no device connected we need to perform both: a
-	 * handshake through LC mailbox and force power down before
-	 * entering D3.
-	 */
-	icl_nhi_lc_mailbox_cmd(nhi, ICL_LC_PREPARE_FOR_RESET);
-	ret = icl_nhi_lc_mailbox_cmd_complete(nhi, ICL_LC_MAILBOX_TIMEOUT);
-	if (ret)
-		return ret;
+	/* TGL A step does not have PREPARE_FOR_RESET implemented */
+	if (!tb_switch_is_tiger_lake_astep(tb->root_switch)) {
+		/*
+		 * If there is no device connected we need to perform
+		 * both: a handshake through LC mailbox and force power
+		 * down before entering D3.
+		 */
+		icl_nhi_lc_mailbox_cmd(nhi, ICL_LC_PREPARE_FOR_RESET);
+		ret = icl_nhi_lc_mailbox_cmd_complete(nhi, ICL_LC_MAILBOX_TIMEOUT);
+		if (ret)
+			return ret;
+	}
 
 	return icl_nhi_force_power(nhi, false);
 }

@@ -2,7 +2,6 @@
 menuconfig USB4
 	tristate "Unified support for USB4 and Thunderbolt"
 	depends on PCI
-	depends on X86 || COMPILE_TEST
 	select APPLE_PROPERTIES if EFI_STUB && X86
 	select CRC32
 	select CRYPTO
@@ -16,3 +15,23 @@ menuconfig USB4
 
 	  To compile this driver a module, choose M here. The module will be
 	  called thunderbolt.
+
+config USB4_KUNIT_TEST
+	bool "KUnit tests"
+	depends on KUNIT=y
+	depends on USB4=y
+
+if USB4
+
+config USB4_DEBUG
+	bool "Debugging interface (EXPERIMENTAL)"
+	help
+	  Enable USB4 and Thunderbolt ioctl interface for querying and
+	  debugging. This will create /dev/tb_dbgX device for each
+	  Thunderbolt controller.
+
+	  Only enable this if you know what you are doing! Never enable
+	  this for production systems!
+
+	  The interface is experimental and subject to change any time.
+endif
