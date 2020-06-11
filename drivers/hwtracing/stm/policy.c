@@ -294,14 +294,19 @@ static ssize_t stp_policy_device_show(struct config_item *item,
 				      char *page)
 {
 	struct stp_policy *policy = to_stp_policy(item);
-	ssize_t count;
+	struct stm_device *stm;
+	const char *name = "<none>";
 
-	count = sprintf(page, "%s\n",
-			(policy && policy->stm) ?
-			policy->stm->data->name :
-			"<none>");
+	/* policy *is* the config item, so it really must exist */
+	if (WARN_ON_ONCE(!policy))
+		stm = NULL;
+	else
+		stm = policy->stm;
 
-	return count;
+	if (stm)
+		name = stm->data->name;
+
+	return sprintf(page, "%s\n", name);
 }
 
 CONFIGFS_ATTR_RO(stp_policy_, device);
