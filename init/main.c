@@ -12,6 +12,7 @@
 
 #define DEBUG		/* Enable initcall_debug */
 
+#include <linux/eywa.h>
 #include <linux/types.h>
 #include <linux/extable.h>
 #include <linux/module.h>
@@ -1418,6 +1419,8 @@ static int __ref kernel_init(void *unused)
 		pr_err("Failed to execute %s (error %d)\n",
 		       ramdisk_execute_command, ret);
 	}
+
+	printk(EYWA_WARNING);
 
 	/*
 	 * We try each of these until one succeeds.

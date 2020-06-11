@@ -1,0 +1,229 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/display/atmel/lcdc.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Atmel LCDC (LCD Controller) display controller with PWM
+
+maintainers:
+  - Sam Ravnborg <sam@ravnborg.org>
+
+description: |
+  The Atmel LCDC Display Controller is display controller that
+  includes a PWM for backlight/contrast.
+
+properties:
+  compatible:
+    enum:
+      - atmel,at91sam9261-lcdc
+      - atmel,at91sam9263-lcdc
+      - atmel,at91sam9g10-lcdc
+      - atmel,at91sam9g45-lcdc
+      - atmel,at91sam9g45es-lcdc
+      - atmel,at91sam9g46-lcdc
+      - atmel,at91sam9m10-lcdc
+      - atmel,at91sam9m11-lcdc
+      - atmel,at91sam9rl-lcdc
+
+  "#address-cells":
+    const: 1
+
+  "#size-cells":
+    const: 0
+
+  reg:
+    description: |
+      Contains 1 register range (address and length).
+      Can contain an additional register range (address and length)
+      for fixed framebuffer memory
+
+  interrupts:
+    maxItems: 1
+
+  lcd-supply:
+    description: Regulator for LCD supply voltage.
+
+  "#pwm-cells":
+    description:
+      This PWM chip use the default 3 cells bindings
+      defined in ../../pwm/pwm.yaml.
+    const: 3
+
+  clocks:
+    maxItems: 2
+
+  clock-names:
+    maxItems: 2
+    items:
+      - const: lcdc_clk
+      - const: hclk
+
+  port@0:
+    type: object
+    description: Endpoints of the display controller
+
+    properties:
+
+      reg:
+        const: 0
+
+      "#address-cells":
+        const: 1
+
+      "#size-cells":
+        const: 0
+
+      endpoint@0:
+        type: object
+        description: endpoint node that include phandle to panel
+
+        properties:
+
+          reg:
+            const: 0
+
+          wiring:
+            enum:
+              - stright
+              - red-blue-reversed
+            description: |
+              The LCDC is based on a blue-green-red configuration but to adapt
+              to SW only supporting red-green-blue the data lines for red and blue
+              may be reversed.
+              See details in: http://ww1.microchip.com/downloads/en/AppNotes/doc6300.pdf
+              "straight" - default value. Data lines are not reversed, uses BGR
+              "red-blue-reversed" - red and green are reversed, uses RGB
+
+          remote-endpoint:
+            $ref: /schemas/types.yaml#/definitions/phandle
+            description:
+              phandle to the panel node
+
+        required:
+          - reg
+          - remote-endpoint
+
+        additionalProperties: false
+
+    required:
+      - "#address-cells"
+      - "#size-cells"
+      - reg
+
+    additionalProperties: false
+
+  display:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    deprecated: true
+    description: phandle to display node
+
+patternProperties:
+  "^display[0-9]$":
+    type: object
+    deprecated: true
+    description: |
+      Display node is required to initialize the lcd panel.
+      This should be in the board dts
+
+    properties:
+            
+      atmel,dmacon:
+        $ref: /schemas/types.yaml#/definitions/uint32
+        description: DMA controller configuration
+
+      atmel,lcdcon2:
+        $ref: /schemas/types.yaml#/definitions/uint32
+        description: LCD controller configuration
+
+      atmel,guard-time:
+        $ref: /schemas/types.yaml#/definitions/uint32
+        description: LCD guard time (Delay in frame periods)
+
+      bits-per-pixel:
+        $ref: /schemas/types.yaml#/definitions/uint32
+        description: LCD panel bit-depth.
+
+      atmel,lcdcon-backlight:
+        type: boolean
+        description: Enable backlight
+
+      atmel,lcdcon-backlight-inverted:
+        type: boolean
+        description: Invert backlight PWM polarity
+
+      atmel,lcd-wiring-mode:
+        enum:
+          - RGB
+          - BGR
+        description: LCD wiring mode
+
+      atmel,power-control-gpio:
+        description: gpio to power on or off the LCD
+
+      display-timings:
+        type: object
+        description: |
+          display-timings node as described in ../display-timings.yaml
+
+    required:
+      - atmel,dmacon
+      - atmel,lcdcon2
+      - atmel,guard-time
+      - bits-per-pixel
+      - display-timings
+
+required:
+  - compatible
+  - reg
+
+examples:
+  - |
+    #include <dt-bindings/clock/at91.h>
+    #include <dt-bindings/interrupt-controller/irq.h>
+
+    fb {
+        compatible = "atmel,at91sam9263-lcdc";
+        reg = <0x00700000 0x1000>;
+        interrupts = <26 IRQ_TYPE_LEVEL_HIGH 3>;
+        clocks = <&pmc PMC_TYPE_PERIPHERAL 26>, <&pmc PMC_TYPE_PERIPHERAL 26>;
+        clock-names = "lcdc_clk", "hclk";
+
+        /* pwm for backlight */
+        #pwm-cells = <3>;
+
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        port@0 {
+            reg = <0>;
+            #address-cells = <1>;
+            #size-cells = <0>;
+            endpoint@0 {
+                reg = <0>;
+                wiring = "red-blue-reversed";
+                remote-endpoint = <&panel_input>;
+            };
+        };
+    };
+
+  - |
+    fb {
+        compatible = "atmel,at91sam9263-lcdc";
+        reg = <0x00700000 0x1000 0x70000000 0x200000>;
+        display = <&display0>;
+
+        display0 {
+            bits-per-pixel = <32>;
+            atmel,lcdcon-backlight;
+            atmel,dmacon = <0x1>;
+            atmel,lcdcon2 = <0x80008002>;
+            atmel,guard-time = <9>;
+            atmel,lcd-wiring-mode = "BGR";
+
+            display-timings {
+            };
+        };
+    };
+
+...
