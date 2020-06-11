@@ -35,6 +35,15 @@
 #if defined(CONFIG_PPC_PS3)
 #include <asm/firmware.h>
 #endif
+#if defined(CONFIG_SVOS) && defined(CONFIG_KGDB_KDB)
+//
+// prototypes needed for usb
+//
+extern void set_kdb_usb_scanning(int);
+extern int kdb_usb_active(void);
+extern int kdb_pausekey;
+extern void kgdb_breakpoint(void);
+#endif
 
 /*-------------------------------------------------------------------------*/
 
@@ -377,6 +386,22 @@ static void ehci_shutdown(struct usb_hcd *hcd)
 
 /*-------------------------------------------------------------------------*/
 
+#if defined(CONFIG_SVOS) && defined(CONFIG_KGDB_KDB)
+/* kdb_ehci_poll
+ * This function is a minimalist version of the controller interrupt handler
+*/
+void
+kdb_ehci_poll (struct urb *urb)
+{
+	struct ehci_hcd *ehci =
+		(struct ehci_hcd *) hcd_to_ehci(bus_to_hcd(urb->dev->bus));
+	unsigned long flags;
+
+	spin_lock_irqsave(&ehci->lock, flags);
+	ehci_work(ehci);
+	spin_unlock_irqrestore(&ehci->lock, flags);
+}
+#endif
 /*
  * ehci_work is called from some interrupts, timers, and so on.
  * it calls driver completion functions, after dropping ehci->lock.
@@ -387,13 +412,23 @@ static void ehci_work (struct ehci_hcd *ehci)
 	 * it reports urb completions.  this flag guards against bogus
 	 * attempts at re-entrant schedule scanning.
 	 */
+#if defined(CONFIG_SVOS) && defined(CONFIG_KGDB_KDB)
+	if (ehci->scanning && (kdb_usb_active() == 0)) {
+		ehci->need_rescan = true;
+		return;
+	}
+#else
 	if (ehci->scanning) {
 		ehci->need_rescan = true;
 		return;
 	}
+#endif
 	ehci->scanning = true;
 
  rescan:
+#if defined(CONFIG_SVOS) && defined(CONFIG_KGDB_KDB)
+	set_kdb_usb_scanning(1);
+#endif
 	ehci->need_rescan = false;
 	if (ehci->async_count)
 		scan_async(ehci);
@@ -404,6 +439,9 @@ static void ehci_work (struct ehci_hcd *ehci)
 	if (ehci->need_rescan)
 		goto rescan;
 	ehci->scanning = false;
+#if defined(CONFIG_SVOS) && defined(CONFIG_KGDB_KDB)
+	set_kdb_usb_scanning(0);
+#endif
 
 	/* the IO watchdog guards against hardware or driver bugs that
 	 * misplace IRQs, and should let us run completely without IRQs.
@@ -830,6 +868,12 @@ dead:
 	if (bh)
 		ehci_work (ehci);
 	spin_unlock_irqrestore(&ehci->lock, flags);
+#if defined(CONFIG_SVOS) && defined(CONFIG_KGDB_KDB)
+	if ((ehci->scanning == 0) && (kdb_pausekey == 1)) {
+		kdb_pausekey = 0;
+		kgdb_breakpoint();
+	}
+#endif
 	if (pcd_status)
 		usb_hcd_poll_rh_status(hcd);
 	return IRQ_HANDLED;

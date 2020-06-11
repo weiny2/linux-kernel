@@ -44,6 +44,12 @@ obj-$(CONFIG_TCG_TPM)		+= tpm/
 
 obj-$(CONFIG_PS3_FLASH)		+= ps3flash.o
 
+ifdef CONFIG_X86
+ifdef CONFIG_SVOS
+  obj-$(CONFIG_SVFS_ACPI)	+= svfs_acpi.o
+endif
+endif
+
 obj-$(CONFIG_XILLYBUS)		+= xillybus/
 obj-$(CONFIG_POWERNV_OP_PANEL)	+= powernv-op-panel.o
 obj-$(CONFIG_ADI)		+= adi.o

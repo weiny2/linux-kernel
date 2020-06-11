@@ -44,6 +44,9 @@
 #include <asm/unwind.h>
 #include <asm/vsyscall.h>
 #include <linux/vmalloc.h>
+#ifdef CONFIG_SVOS
+#include <asm/svos.h>
+#endif
 
 /*
  * max_low_pfn_mapped: highest directly mapped pfn < 4 GB
@@ -966,6 +969,9 @@ void __init setup_arch(char **cmdline_p)
 #endif
 		setup_clear_cpu_cap(X86_FEATURE_APIC);
 	}
+#ifdef CONFIG_SVOS
+	svos_mem_init();
+#endif
 
 	e820__reserve_setup_data();
 	e820__finish_early_params();

@@ -8,6 +8,11 @@
 
 obj-y := kdb_io.o kdb_main.o kdb_support.o kdb_bt.o gen-kdb_cmds.o kdb_bp.o kdb_debugger.o
 obj-$(CONFIG_KDB_KEYBOARD)    += kdb_keyboard.o
+ifdef CONFIG_SVOS
+obj-y += kdb_keyboard.o
+obj-y += kdb_usb_keyboard.o
+obj-y += svkdb/
+endif
 
 clean-files := gen-kdb_cmds.c
 

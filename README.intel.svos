@@ -1,0 +1,23 @@
+================
+SVOS
+================
+
+Intel SVOS kernel extensions.  Extensions to the Intel Next kernel used for
+silicon validation.  Intel Next + SVOS extensions = svos-next.
+
+All of the SVOS extensions are demarcated with CONFIG_SVOS, which is disabled by
+default.  The SVOS extensions are intended to be used only in the kernels
+included in the SVOS distros.
+
+SVOS (System Validation Operating System) is Intel's OS foundation for silicon
+validation test software. SVOS consists of a modified kernel (included here)
+plus (not included) a logical filesystem (svfs), IP validation drivers,
+libraries and test applications that work together to expose registers,
+allocate system resources, program test devices and perform highly concurrent
+system-harassing test cases.
+
+http://goto/svos
+
+Classification: Intel Confidential.  SVOS is for Intel internal use only.
+
+================

@@ -30,6 +30,13 @@
 #include <asm/apic.h>
 #include <asm/mce.h>
 #include <asm/msr.h>
+#ifdef CONFIG_SVOS
+#ifndef CONFIG_SVOS_RAS_ERRORCORRECT
+#define SVOS_WITHOUT_RAS
+#endif
+#include <linux/svos.h>
+#include <asm/desc.h>
+#endif
 #include <asm/trace/irq_vectors.h>
 
 #include "internal.h"
@@ -619,6 +626,10 @@ asmlinkage __visible void __irq_entry smp_thermal_interrupt(struct pt_regs *regs
 	entering_irq();
 	trace_thermal_apic_entry(THERMAL_APIC_VECTOR);
 	inc_irq_stat(irq_thermal_count);
+#ifdef SVOS_WITHOUT_RAS
+	/* Call any registered thermal interrupt handlers. */
+	svos_interrupt_callback(INT_MISC_THERMAL, regs);
+#endif
 	smp_thermal_vector();
 	trace_thermal_apic_exit(THERMAL_APIC_VECTOR);
 	exiting_ack_irq();
