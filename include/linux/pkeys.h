@@ -48,6 +48,24 @@ static inline void copy_init_pkru_to_fpregs(void)
 {
 }
 
+static inline int update_local_sup_key(int pkey, unsigned long protection)
+{
+	return -EINVAL;
+}
+
+static inline int pks_key_alloc(const char * const pkey_user)
+{
+	return -EINVAL;
+}
+
+static inline void pks_key_free(int pkey)
+{
+}
+
+static inline bool pks_test_armed(void)
+{
+	return false;
+}
 #endif /* ! CONFIG_ARCH_HAS_PKEYS */
 
 #endif /* _LINUX_PKEYS_H */

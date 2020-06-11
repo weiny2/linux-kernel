@@ -30,6 +30,7 @@ struct uintr;
 #include <asm/vmxfeatures.h>
 #include <asm/vdso/processor.h>
 #include <asm/cet.h>
+#include <asm/pkeys_types.h>
 
 #include <linux/personality.h>
 #include <linux/cache.h>
@@ -561,6 +562,11 @@ struct thread_struct {
 	struct uintr_sender	*ui_send;
 #endif
 
+#ifdef	CONFIG_X86_INTEL_MEMORY_PROTECTION_KEYS
+	/* Protection key register for supervisor (lower 32 bits). */
+	u32			pkrs;
+#endif
+
 	/* Floating point and extended processor state */
 	struct fpu		fpu;
 	/*
@@ -882,6 +888,7 @@ static inline void spin_lock_prefetch(const void *x)
 	.sp0			= TOP_OF_INIT_STACK,			  \
 	.sysenter_cs		= __KERNEL_CS,				  \
 	.addr_limit		= KERNEL_DS,				  \
+	INIT_THREAD_PKRS						  \
 }
 
 #define KSTK_ESP(task)		(task_pt_regs(task)->sp)
@@ -937,6 +944,7 @@ static inline void spin_lock_prefetch(const void *x)
 
 #define INIT_THREAD  {						\
 	.addr_limit		= KERNEL_DS,			\
+	INIT_THREAD_PKRS						\
 }
 
 extern unsigned long KSTK_ESP(struct task_struct *task);

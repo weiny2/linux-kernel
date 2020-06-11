@@ -560,6 +560,21 @@ static __always_inline void setup_pku(struct cpuinfo_x86 *c)
 	set_cpu_cap(c, X86_FEATURE_OSPKE);
 }
 
+static __always_inline void setup_pks(struct cpuinfo_x86 *c)
+{
+	/* check the boot processor, plus compile options for PKU: */
+	if (!cpu_feature_enabled(X86_FEATURE_PKS))
+		return;
+
+	pr_info("x86: Enable Supervisor Protection Keys (PKS)\n");
+	cr4_set_bits(X86_CR4_PKS);
+
+#ifdef CONFIG_ARCH_HAS_PKEYS
+	/* Init PKRU MSR. */
+	pks_init();
+#endif
+}
+
 #ifdef CONFIG_X86_INTEL_MEMORY_PROTECTION_KEYS
 static __init int setup_disable_pku(char *arg)
 {
@@ -1687,6 +1702,7 @@ static void identify_cpu(struct cpuinfo_x86 *c)
 	x86_init_rdrand(c);
 	setup_pku(c);
 	setup_cet(c);
+	setup_pks(c);
 
 	/*
 	 * Clear/Set all flags overridden by options, need do it
