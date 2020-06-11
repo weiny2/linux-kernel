@@ -11,6 +11,7 @@
 #include <linux/mutex.h>
 #include <linux/property.h>
 #include <linux/slab.h>
+#include <linux/usb/pd_vdo.h>
 
 #include "bus.h"
 
@@ -30,6 +31,7 @@ struct typec_cable {
 struct typec_partner {
 	struct device			dev;
 	unsigned int			usb_pd:1;
+	enum usb_mode			usb_mode;
 	struct usb_pd_identity		*identity;
 	enum typec_accessory		accessory;
 	struct ida			mode_ids;
@@ -47,6 +49,7 @@ struct typec_port {
 	enum typec_pwr_opmode		pwr_opmode;
 	enum typec_port_type		port_type;
 	struct mutex			port_type_lock;
+	enum usb_mode			usb_mode;
 
 	enum typec_orientation		orientation;
 	struct typec_switch		*sw;
@@ -145,6 +148,97 @@ static void typec_report_identity(struct device *dev)
 	sysfs_notify(&dev->kobj, "identity", "cert_stat");
 	sysfs_notify(&dev->kobj, "identity", "product");
 }
+
+static const char * const usb_modes[] = {
+	[USB_MODE_NONE] = "none",
+	[USB_MODE_USB2] = "usb2",
+	[USB_MODE_USB3] = "usb3",
+	[USB_MODE_USB4] = "usb4"
+};
+
+static u8 typec_partner_mode(struct typec_partner *partner)
+{
+	struct typec_port *port = to_typec_port(partner->dev.parent);
+	struct usb_pd_identity *id = partner->identity;
+	u32 dev_cap;
+	u8 cap = 0;
+
+	if (port->data_role == TYPEC_HOST) {
+		dev_cap = PD_VDO1_UFP_DEVCAP(id->vdo[0]);
+
+		if (dev_cap & (DEV_USB2_CAPABLE | DEV_USB2_BILLBOARD))
+			cap |= USB_CAPABILITY_USB2;
+		if (dev_cap & DEV_USB3_CAPABLE)
+			cap |= USB_CAPABILITY_USB3;
+		if (dev_cap & DEV_USB4_CAPABLE)
+			cap |= USB_CAPABILITY_USB4;
+	} else {
+		cap = PD_VDO_DFP_HOSTCAP(id->vdo[0]);
+	}
+
+	return cap;
+}
+
+static ssize_t
+usb_mode_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	enum usb_mode mode = 0;
+	int len = 0;
+	u8 cap = 0;
+	int i;
+
+	if (is_typec_port(dev)) {
+		cap = to_typec_port(dev)->cap->usb;
+		mode = to_typec_port(dev)->usb_mode;
+	} else if (is_typec_partner(dev)) {
+		cap = typec_partner_mode(to_typec_partner(dev));
+		mode = to_typec_partner(dev)->usb_mode;
+	}
+
+	for (i = USB_MODE_USB2; i < USB_MODE_USB4 + 1; i++) {
+		if (!(BIT(i - 1) & cap))
+			continue;
+
+		if (i == mode)
+			len += sprintf(buf + len, "[%s] ", usb_modes[i]);
+		else
+			len += sprintf(buf + len, "%s ", usb_modes[i]);
+	}
+
+	buf[len - 1] = '\n';
+	return len;
+}
+
+static ssize_t usb_mode_store(struct device *dev, struct device_attribute *attr,
+			      const char *buf, size_t size)
+{
+	struct typec_port *port;
+	int ret = 0;
+	int mode;
+
+	mode = sysfs_match_string(usb_modes, buf);
+	if (mode < 0)
+		return mode;
+
+	if (is_typec_port(dev)) {
+		port = to_typec_port(dev);
+		ret = port->ops->usb_mode_set(port, mode);
+	} else if (is_typec_partner(dev)) {
+		port = to_typec_port(dev->parent);
+
+		/* Checking does the port support the mode */
+		if (mode && !(BIT(mode - 1) & port->cap->usb))
+			return -EINVAL;
+
+		ret = port->ops->data_reset(port, mode);
+	}
+
+	if (ret)
+		return ret;
+
+	return size;
+}
+static DEVICE_ATTR_RW(usb_mode);
 
 /* ------------------------------------------------------------------------- */
 /* Alternate Modes */
@@ -535,9 +629,35 @@ static DEVICE_ATTR_RO(supports_usb_power_delivery);
 static struct attribute *typec_partner_attrs[] = {
 	&dev_attr_accessory_mode.attr,
 	&dev_attr_supports_usb_power_delivery.attr,
+	&dev_attr_usb_mode.attr,
 	NULL
 };
-ATTRIBUTE_GROUPS(typec_partner);
+
+static umode_t typec_partner_attr_is_visible(struct kobject *kobj,
+					     struct attribute *attr, int n)
+{
+	struct typec_partner *partner = to_typec_partner(kobj_to_dev(kobj));
+	struct typec_port *port = to_typec_port(partner->dev.parent);
+
+	if (attr == &dev_attr_usb_mode.attr) {
+		if (!partner->identity)
+			return 0;
+		if (!port->ops || !port->ops->data_reset)
+			return 0444;
+	}
+
+	return attr->mode;
+}
+
+static struct attribute_group typec_partner_group = {
+	.is_visible = typec_partner_attr_is_visible,
+	.attrs = typec_partner_attrs
+};
+
+static const struct attribute_group *typec_partner_groups[] = {
+	&typec_partner_group,
+	NULL
+};
 
 static void typec_partner_release(struct device *dev)
 {
@@ -917,6 +1037,12 @@ EXPORT_SYMBOL_GPL(typec_unregister_cable);
 /* ------------------------------------------------------------------------- */
 /* USB Type-C ports */
 
+static const char * const typec_orientations[] = {
+	[TYPEC_ORIENTATION_NONE]	= "unknown",
+	[TYPEC_ORIENTATION_NORMAL]	= "normal",
+	[TYPEC_ORIENTATION_REVERSE]	= "reverse",
+};
+
 static const char * const typec_roles[] = {
 	[TYPEC_SINK]	= "sink",
 	[TYPEC_SOURCE]	= "source",
@@ -1248,18 +1374,9 @@ static ssize_t orientation_show(struct device *dev,
 				   struct device_attribute *attr,
 				   char *buf)
 {
-	struct typec_port *p = to_typec_port(dev);
-	enum typec_orientation orientation = typec_get_orientation(p);
+	struct typec_port *port = to_typec_port(dev);
 
-	switch (orientation) {
-	case TYPEC_ORIENTATION_NORMAL:
-		return sprintf(buf, "%s\n", "normal");
-	case TYPEC_ORIENTATION_REVERSE:
-		return sprintf(buf, "%s\n", "reverse");
-	case TYPEC_ORIENTATION_NONE:
-	default:
-		return sprintf(buf, "%s\n", "unknown");
-	}
+	return sprintf(buf, "%s\n", typec_orientations[port->orientation]);
 }
 static DEVICE_ATTR_RO(orientation);
 
@@ -1274,6 +1391,7 @@ static struct attribute *typec_attrs[] = {
 	&dev_attr_vconn_source.attr,
 	&dev_attr_port_type.attr,
 	&dev_attr_orientation.attr,
+	&dev_attr_usb_mode.attr,
 	NULL,
 };
 
@@ -1307,6 +1425,9 @@ static umode_t typec_attr_is_visible(struct kobject *kobj,
 		if (port->cap->orientation_aware)
 			return 0444;
 		return 0;
+	} else if (attr == &dev_attr_usb_mode.attr) {
+		if (!port->ops || !port->ops->usb_mode_set)
+			return 0444;
 	}
 
 	return attr->mode;
@@ -1450,6 +1571,21 @@ void typec_set_pwr_opmode(struct typec_port *port,
 	}
 }
 EXPORT_SYMBOL_GPL(typec_set_pwr_opmode);
+
+/**
+ * typec_find_orientation - Convert orientation string to enum typec_orientation
+ * @name: Orientation string
+ *
+ * This routine is used to find the typec_orientation by its string name @name.
+ *
+ * Returns the orientation value on success, otherwise negative error code.
+ */
+int typec_find_orientation(const char *name)
+{
+	return match_string(typec_orientations, ARRAY_SIZE(typec_orientations),
+			    name);
+}
+EXPORT_SYMBOL_GPL(typec_find_orientation);
 
 /**
  * typec_find_port_power_role - Get the typec port power capability
@@ -1660,6 +1796,13 @@ struct typec_port *typec_register_port(struct device *parent,
 	port->ops = cap->ops;
 	port->port_type = cap->type;
 	port->prefer_role = cap->prefer_role;
+
+	if (cap->usb & USB_CAPABILITY_USB4)
+		port->usb_mode = USB_MODE_USB4;
+	else if (cap->usb & USB_CAPABILITY_USB3)
+		port->usb_mode = USB_MODE_USB3;
+	else if (cap->usb & USB_CAPABILITY_USB2)
+		port->usb_mode = USB_MODE_USB2;
 
 	device_initialize(&port->dev);
 	port->dev.class = typec_class;
