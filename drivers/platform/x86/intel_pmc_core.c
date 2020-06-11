@@ -1536,9 +1536,8 @@ static void pmc_core_dbgfs_register(struct pmc_dev *pmcdev)
 	dir = debugfs_create_dir("pmc_core", NULL);
 	pmcdev->dbgfs_dir = dir;
 
-	if (!pmcdev->map->lpm_en_offset)
-		debugfs_create_file("slp_s0_residency_usec", 0444, dir, pmcdev,
-				    &pmc_core_dev_state);
+	debugfs_create_file("slp_s0_residency_usec", 0444, dir, pmcdev,
+			    &pmc_core_dev_state);
 
 	if (pmcdev->map->pfear_sts)
 		debugfs_create_file("pch_ip_power_gating_status", 0444, dir,
