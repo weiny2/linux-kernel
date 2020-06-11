@@ -134,6 +134,8 @@
 #define X86_CR4_PKE		_BITUL(X86_CR4_PKE_BIT)
 #define X86_CR4_CET_BIT		23 /* enable Control-flow Enforcement */
 #define X86_CR4_CET		_BITUL(X86_CR4_CET_BIT)
+#define X86_CR4_UINT_BIT	25 /* enable User Interrupt support */
+#define X86_CR4_UINT		_BITUL(X86_CR4_UINT_BIT)
 
 /*
  * x86-64 Task Priority Register, CR8

@@ -340,6 +340,36 @@ __visible void smp_kvm_posted_intr_nested_ipi(struct pt_regs *regs)
 }
 #endif
 
+#ifdef CONFIG_X86_INTEL_USER_INTERRUPT
+/*
+ * Handler for UINTR_NOTIFICATION_VECTOR.
+ */
+__visible void smp_uintr_notification_interrupt(struct pt_regs *regs)
+{
+	u64 msr64_1, msr64_2, msr64_3, msr64_4, msr64_5;
+	struct pt_regs *old_regs = set_irq_regs(regs);
+
+	entering_ack_irq();
+	inc_irq_stat(uintr_kernel_notification_count);
+	// TODO: Remove print before upstreaming
+
+	pr_warn_ratelimited("uintr: This interrupt on cpu %d is rarely expected to be delivered to the kernel\n",
+			    smp_processor_id());
+
+	rdmsrl_safe(MSR_IA32_UINT_MISC, &msr64_1);
+	rdmsrl_safe(MSR_IA32_UINT_RR, &msr64_2);
+	rdmsrl_safe(MSR_IA32_UINT_PD, &msr64_3);
+	rdmsrl_safe(MSR_IA32_UINT_HANDLER, &msr64_4);
+	rdmsrl_safe(MSR_IA32_UINT_TT, &msr64_5);
+
+	pr_warn_ratelimited("debug: task=%d uirr=%llx misc=%llx pd=%llx handler=%llx uitt=%llx\n",
+			 current->pid, msr64_2, msr64_1, msr64_3, msr64_4, msr64_5);
+
+	exiting_irq();
+	set_irq_regs(old_regs);
+}
+#endif
+
 
 #ifdef CONFIG_HOTPLUG_CPU
 /* A cpu has been removed from cpu_online_mask.  Reset irq affinities. */

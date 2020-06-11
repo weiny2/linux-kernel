@@ -369,6 +369,7 @@
 #define X86_FEATURE_AVX512_4VNNIW	(18*32+ 2) /* AVX-512 Neural Network Instructions */
 #define X86_FEATURE_AVX512_4FMAPS	(18*32+ 3) /* AVX-512 Multiply Accumulation Single precision */
 #define X86_FEATURE_FSRM		(18*32+ 4) /* Fast Short Rep Mov */
+#define X86_FEATURE_UINTR               (18*32+ 5) /* User interrupt support */
 #define X86_FEATURE_AVX512_4VNNIB	(18*32+ 6) /* AVX-512 Vector Neural Network Instructions Byte version */
 #define X86_FEATURE_AVX512_BITALG2	(18*32+ 7) /* AVX-512 Bit Algebra 2 */
 #define X86_FEATURE_AVX512_VP2INTERSECT (18*32+ 8) /* AVX-512 Intersect for D/Q */

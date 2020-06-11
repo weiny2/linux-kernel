@@ -8816,6 +8816,13 @@ L:	platform-driver-x86@vger.kernel.org
 S:	Maintained
 F:	drivers/platform/x86/intel-uncore-frequency.c
 
+INTEL USERSPACE INTERRUPTS
+M:	Sohil Mehta <sohil.mehta@intel.com>
+M:	Jacob Pan <jacob.jun.pan@linux.intel.com>
+S:	Maintained
+F:	arch/x86/kernel/uintr.c
+F:	arch/x86/include/asm/uintr.h
+
 INTEL VIRTUAL BUTTON DRIVER
 M:	AceLan Kao <acelan.kao@canonical.com>
 L:	platform-driver-x86@vger.kernel.org
@@ -17756,6 +17763,13 @@ T:	git git://git.kernel.org/pub/scm/linux/kernel/git/gregkh/char-misc.git
 F:	Documentation/driver-api/uio-howto.rst
 F:	drivers/uio/
 F:	include/linux/uio_driver.h
+
+USERSPACE INTERRUPTS (UINTR)
+M:	Sohil Mehta <sohil.mehta@intel.com>
+M:	Jacob Pan <jacob.jun.pan@linux.intel.com>
+S:	Maintained
+F:	fs/uintr.c
+F:	include/linux/uintr.h
 
 UTIL-LINUX PACKAGE
 M:	Karel Zak <kzak@redhat.com>
