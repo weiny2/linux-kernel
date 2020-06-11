@@ -125,16 +125,21 @@ static void __init fpu__init_system_generic(void)
 	 * Set up the legacy init FPU context. (xstate init might overwrite this
 	 * with a more modern format, if the CPU supports it.)
 	 */
-	fpstate_init(&init_fpstate);
+	fpstate_init(NULL);
 
 	fpu__init_system_mxcsr();
 }
 
 /*
- * Size of the FPU context state. All tasks in the system use the
- * same context size, regardless of what portion they use.
- * This is inherent to the XSAVE architecture which puts all state
- * components into a single, continuous memory block:
+ * Size of expanded xstate buffer, which is expected to be huge,
+ * not fitting to the task_struct. Allocate as-needed basis
+ */
+unsigned int fpu_kernel_xstate_exp_size;
+EXPORT_SYMBOL_GPL(fpu_kernel_xstate_exp_size);
+
+/*
+ * Size of the default FPU context state. The state is appended
+ * to task_struct, as overall size is manageable.
  */
 unsigned int fpu_kernel_xstate_size;
 EXPORT_SYMBOL_GPL(fpu_kernel_xstate_size);
@@ -222,9 +227,19 @@ static void __init fpu__init_system_xstate_size_legacy(void)
  * This must be called after fpu__init_parse_early_param() is called and
  * xfeatures_mask is enumerated.
  */
+static u64 xstate_enable;
+static u64 xstate_disable;
+
 u64 __init fpu__get_supported_xfeatures_mask(void)
 {
-	return XCNTXT_MASK;
+	u64 mask;
+
+	mask = XFEATURE_MASK_USER_SUPPORTED |
+	       XFEATURE_MASK_SUPERVISOR_SUPPORTED;
+	mask |= xstate_enable;
+	mask &= ~xstate_disable;
+
+	return mask;
 }
 
 /* Legacy code to initialize eager fpu mode. */
@@ -244,6 +259,7 @@ static void __init fpu__init_parse_early_param(void)
 {
 	char arg[32];
 	char *argptr = arg;
+	u64 mask;
 	int bit;
 
 #ifdef CONFIG_X86_32
@@ -273,6 +289,22 @@ static void __init fpu__init_parse_early_param(void)
 	    bit >= 0 &&
 	    bit < NCAPINTS * 32)
 		setup_clear_cpu_cap(bit);
+
+	if (cmdline_find_option(boot_command_line, "xstate.enable", arg,
+				sizeof(arg)) &&
+	    !kstrtoull(arg, 16, &mask) &&
+	    (mask &= XFEATURE_MASK_BLOBS))
+		xstate_enable = mask;
+	else
+		xstate_enable = 0;
+
+	if (cmdline_find_option(boot_command_line, "xstate.disable", arg,
+				sizeof(arg)) &&
+	    !kstrtoull(arg, 16, &mask) &&
+	    (mask &= XFEATURE_MASK_BLOBS))
+		xstate_disable = mask;
+	else
+		xstate_disable = 0;
 }
 
 /*

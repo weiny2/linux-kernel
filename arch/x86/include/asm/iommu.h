@@ -26,4 +26,7 @@ arch_rmrr_sanity_check(struct acpi_dmar_reserved_memory *rmrr)
 	return -EINVAL;
 }
 
+void __free_pasid(struct mm_struct *mm);
+bool __fixup_pasid_exception(void);
+
 #endif /* _ASM_X86_IOMMU_H */

@@ -3093,6 +3093,12 @@
 			noexec=on: enable non-executable mappings (default)
 			noexec=off: disable non-executable mappings
 
+	no_user_shstk	[X86-64] Disable Shadow Stack for user-mode
+			applications
+
+	no_user_ibt	[X86-64] Disable Indirect Branch Tracking for user-mode
+			applications
+
 	nosmap		[X86,PPC]
 			Disable SMAP (Supervisor Mode Access Prevention)
 			even if it is supported by processor.
@@ -5623,6 +5629,20 @@
 			Disables the PV optimizations forcing the guest to run
 			as generic guest with no PV drivers. Currently support
 			XEN HVM, KVM, HYPER_V and VMWARE guest.
+
+	xstate.enable=	[X86-64]
+	xstate.disable=	[X86-64]
+			The kernel is compiled with a default xstate bitmask --
+			enabling it to use the XSAVE hardware to efficiently
+			save and restore thread states on context switch.
+			xstate.enable allows adding to that default mask at
+			boot-time without recompiling the kernel just to support
+			the new thread state. (Note that the kernel will ignore
+			any bits in the mask that do not correspond to features
+			that are actually enabled in CPUID)  xstate.disable
+			allows clearing bits in the default mask, forcing the
+			kernel to forget that it supports the specified thread
+			state.
 
 	xirc2ps_cs=	[NET,PCMCIA]
 			Format:
