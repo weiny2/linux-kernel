@@ -1903,6 +1903,22 @@ config X86_INTEL_MEMORY_PROTECTION_KEYS
 
 	  If unsure, say y.
 
+config X86_INTEL_KEYLOCKER
+	prompt "Intel KeyLocker" if EXPERT
+	def_bool y
+	depends on CPU_SUP_INTEL
+	---help---
+	  Intel's KeyLocker is a new security feature that protects
+	  data-encryption keys for the Advanced Encryption Standard (AES)
+	  algorithm. A new CPU-internal key, the valueof which inaccessible
+	  by any software, encrypts the data encryption key.
+
+	  When enabled, the kernel manages the CPU-internal key with
+	  randomizing the value at the boot-time and loading it to all the
+	  CPUs.
+
+	  If unsure, say Y.
+
 choice
 	prompt "TSX enable mode"
 	depends on CPU_SUP_INTEL

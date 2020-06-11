@@ -55,6 +55,8 @@
 #include <asm/microcode_intel.h>
 #include <asm/intel-family.h>
 #include <asm/cpu_device_id.h>
+#include <asm/keylocker.h>
+
 #include <asm/uv/uv.h>
 
 #include "cpu.h"
@@ -416,6 +418,96 @@ static void __init setup_cr_pinning(void)
 	mask = (X86_CR4_SMEP | X86_CR4_SMAP | X86_CR4_UMIP);
 	cr4_pinned_bits = this_cpu_read(cpu_tlbstate.cr4) & mask;
 	static_key_enable(&cr_pinning.key);
+}
+
+/*
+ * Manage the CPU-internal key for KeyLocker. Load and save a new
+ * randomized key from the boot CPU, and restore it from the saved state to
+ * other CPUs.
+ */
+static __always_inline void setup_keylocker(struct cpuinfo_x86 *c)
+{
+	bool valid;
+
+	if (!cpu_feature_enabled(X86_FEATURE_KEYLOCKER))
+		goto out;
+
+	if (!cpu_has(c, X86_FEATURE_KEYLOCKER))
+		goto out;
+
+	cr4_set_bits(X86_CR4_KEYLOCKER);
+
+	if (c == &boot_cpu_data) {
+		u32 eax, ebx, ecx, edx;
+		bool use_rdrand;
+
+		cpuid_count(KEYLOCKER_CPUID, 0, &eax, &ebx, &ecx, &edx);
+		if (!(ebx & KEYLOCKER_CPUID_EBX_BACKUP))
+			goto disable_keylocker;
+
+		/*
+		 * Use RDRAND to generate a random key value
+		 * if LOADIWKEY does not support randomization
+		 */
+		use_rdrand = !(ecx & KEYLOCKER_CPUID_ECX_RAND);
+
+		valid = x86_load_random_internal_key(use_rdrand);
+		if (!valid) {
+			pr_err("x86/cpu: Internal key randomization failure\n");
+			goto disable_keylocker;
+		}
+		x86_save_internal_key();
+	} else {
+		/*
+		 * Non-boot CPUs follow the boot CPU's enabling status. If
+		 * there is any issue with randomizing, saving, and
+		 * restoring the internal key from the boot CPU, it implies
+		 * insufficient hardware capability. Thus, disable the
+		 * feature in the following CPUs.
+		 */
+		if (!boot_cpu_has(X86_FEATURE_KEYLOCKER))
+			goto disable_keylocker;
+
+		/*
+		 * The CPU-internal key has to be the same in all the CPUs.
+		 * Software can't read the randomized internal key value.
+		 * Instead, save it into a platform-scoped state by the
+		 * boot CPU and restore it from there for other CPUs.
+		 *
+		 * The key also needs to be sanitized in this process. The
+		 * saved status in the platform-scoped state may take time
+		 * to be updated. The boot CPU does not wait for saving
+		 * completion but proceeds onto its boot sequence. At this
+		 * point, proceeded saving the key in parallel, the
+		 * following CPU may find a valid state or wait for its
+		 * readiness.
+		 */
+
+		/*
+		 * Conservatively set the waiting time. In the worst case,
+		 * it takes 100 milliseconds to save the key. However, in
+		 * practice, the measured waiting time takes less than a
+		 * millisecond on the one right after the boot CPU. Other
+		 * CPUs after that need no waiting time.
+		 */
+		valid = x86_check_saved_internal_key(100000);
+		if (!valid)
+			goto disable_keylocker;
+
+		valid = x86_restore_internal_key();
+		if (!valid)
+			goto disable_keylocker;
+	}
+
+	pr_info_once("x86/cpu: Activate KeyLocker feature\n");
+	return;
+
+disable_keylocker:
+	clear_cpu_cap(c, X86_FEATURE_KEYLOCKER);
+	pr_info_once("x86/cpu: Disable KeyLocker feature\n");
+out:
+	/* Make sure the feature disabled for kexec-reboot. */
+	cr4_clear_bits(X86_CR4_KEYLOCKER);
 }
 
 /*
@@ -1483,10 +1575,11 @@ static void identify_cpu(struct cpuinfo_x86 *c)
 	/* Disable the PN if appropriate */
 	squash_the_stupid_serial_number(c);
 
-	/* Set up SMEP/SMAP/UMIP */
+	/* Setup various Intel-specific CPU security features */
 	setup_smep(c);
 	setup_smap(c);
 	setup_umip(c);
+	setup_keylocker(c);
 
 	/*
 	 * The vendor-specific functions might have changed features.
