@@ -794,6 +794,9 @@ void __init setup_arch(char **cmdline_p)
 	memblock_reserve(__pa_symbol(_text),
 			 (unsigned long)__end_of_kernel_reserve - (unsigned long)_text);
 
+#ifdef CONFIG_X86_SLE_SUPPORT
+	memblock_reserve(0xc800000, 10*1024*1024);
+#endif
 	/*
 	 * Make sure page 0 is always reserved because on systems with
 	 * L1TF its contents can be leaked to user processes.
@@ -921,6 +924,9 @@ void __init setup_arch(char **cmdline_p)
 	strlcpy(command_line, boot_command_line, COMMAND_LINE_SIZE);
 	*cmdline_p = command_line;
 
+#ifdef CONFIG_X86_SLE_SUPPORT
+	memblock_reserve(0x70000, 0x7ffff);
+#endif
 	/*
 	 * x86_configure_nx() is called before parse_early_param() to detect
 	 * whether hardware doesn't support NX (so that the early EHCI debug
@@ -1068,8 +1074,9 @@ void __init setup_arch(char **cmdline_p)
 	 */
 	reserve_brk();
 
+#ifndef CONFIG_X86_SLE_SUPPORT
 	cleanup_highmap();
-
+#endif
 	memblock_set_current_limit(ISA_END_ADDRESS);
 	e820__memblock_setup();
 

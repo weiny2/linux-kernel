@@ -44,7 +44,9 @@ int mach_set_rtc_mmss(const struct timespec64 *now)
 	unsigned long long nowtime = now->tv_sec;
 	struct rtc_time tm;
 	int retval = 0;
-
+#ifdef CONFIG_X86_SLE_SUPPORT
+	return -1;
+#endif
 	rtc_time64_to_tm(nowtime, &tm);
 	if (!rtc_valid_tm(&tm)) {
 		retval = mc146818_set_time(&tm);
@@ -65,6 +67,9 @@ void mach_get_cmos_time(struct timespec64 *now)
 	unsigned int status, year, mon, day, hour, min, sec, century = 0;
 	unsigned long flags;
 
+#ifdef CONFIG_X86_SLE_SUPPORT
+	return;
+#endif
 	/*
 	 * If pm_trace abused the RTC as storage, set the timespec to 0,
 	 * which tells the caller that this RTC value is unusable.
