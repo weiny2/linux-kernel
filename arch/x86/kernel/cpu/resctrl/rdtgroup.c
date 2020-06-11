@@ -29,7 +29,8 @@
 
 #include <uapi/linux/magic.h>
 
-#include <asm/resctrl_sched.h>
+#include <asm/intel-family.h>
+#include <asm/resctrl.h>
 #include "internal.h"
 
 DEFINE_STATIC_KEY_FALSE(rdt_enable_key);
@@ -38,6 +39,7 @@ DEFINE_STATIC_KEY_FALSE(rdt_alloc_enable_key);
 static struct kernfs_root *rdt_root;
 struct rdtgroup rdtgroup_default;
 LIST_HEAD(rdt_all_groups);
+u64 mba_cfg_msr;
 
 /* Kernel fs node for "info" directory under root */
 static struct kernfs_node *kn_info;
@@ -1017,6 +1019,152 @@ static int max_threshold_occ_show(struct kernfs_open_file *of,
 	return 0;
 }
 
+/*
+ * As documented in the Intel SDM, on systems supporting the original MBA
+ * implementation the delay value allocated to a core is always the maximum
+ * of the delay values assigned to the hardware threads sharing the core.
+ *
+ * Some systems support a model-specific MSR with which this default
+ * behavior can be changed. On these systems the core can be allocated
+ * with either the minimum or maximum delay value assigned to its hardware
+ * threads.
+ *
+ * NOTE: The hardware deals with memory delay values that may be programmed
+ * from zero (implying zero delay, and full bandwidth available) to the
+ * maximum specified in CPUID. The software interface deals with memory
+ * bandwidth percentages that are the inverse of the delay values (100%
+ * memory bandwidth from user perspective is zero MBA delay from hardware
+ * perspective). When maximum throttling is active the core is allocated
+ * with the maximum delay value that from the software interface will be
+ * the minimum of the bandwidth percentages assigned to the hardware threads
+ * sharing the core.
+ *
+ * Some systems (identified by X86_FEATURE_PER_THREAD_MBA enumerated via CPUID)
+ * support per-thread MBA. On these systems hardware doesn't apply the minimum
+ * or maximum delay value to all threads in a core. Instead, a thread is
+ * allocated with the delay value that is assigned to the thread.
+ */
+static int rdt_thread_throttle_mode_show(struct kernfs_open_file *of,
+					 struct seq_file *seq, void *v)
+{
+	struct rdt_resource *r = of->kn->parent->priv;
+	unsigned int throttle_mode = 0;
+
+	mutex_lock(&rdtgroup_mutex);
+
+	if (r->membw.arch_throttle_mode == THREAD_THROTTLE_PER_THREAD) {
+		seq_puts(seq, "per-thread\n");
+		goto out;
+	}
+
+	if (r->membw.arch_throttle_mode == THREAD_THROTTLE_MIN_MAX)
+		throttle_mode = mba_cfg_msr & MBA_THROTTLE_MODE_MASK;
+
+	seq_puts(seq,
+		 throttle_mode == MBA_THROTTLE_MODE_MIN ? "min\n" : "max\n");
+
+out:
+	mutex_unlock(&rdtgroup_mutex);
+	return 0;
+}
+
+static void update_mba_cfg(void *data)
+{
+	wrmsrl(MSR_MBA_CFG, *(u64 *)data);
+}
+
+/*
+ * The model-specific MBA configuration MSR has package scope. Making a
+ * system-wide MBA configuration change thus needs to modify the MSR on one
+ * CPU from each package.
+ */
+static int rdt_system_mba_cfg_set(u64 mba_cfg)
+{
+	struct rdt_resource *r = &rdt_resources_all[RDT_RESOURCE_MBA];
+	cpumask_var_t cpu_mask;
+	struct rdt_domain *d;
+
+	if (list_is_singular(&r->domains)) {
+		wrmsrl(MSR_MBA_CFG, mba_cfg);
+		goto out;
+	}
+
+	if (!zalloc_cpumask_var(&cpu_mask, GFP_KERNEL)) {
+		rdt_last_cmd_puts("Memory allocation error\n");
+		return -ENOMEM;
+	}
+
+	list_for_each_entry(d, &r->domains, list)
+		cpumask_set_cpu(cpumask_any(&d->cpu_mask), cpu_mask);
+
+	on_each_cpu_mask(cpu_mask, update_mba_cfg, &mba_cfg, 1);
+
+	free_cpumask_var(cpu_mask);
+out:
+	mba_cfg_msr = mba_cfg;
+	return 0;
+}
+
+static void mba_cfg_reset_all(void)
+{
+	struct rdt_resource *r = &rdt_resources_all[RDT_RESOURCE_MBA];
+
+	if (!r->alloc_capable)
+		return;
+
+	if (r->membw.arch_throttle_mode == THREAD_THROTTLE_MIN_MAX)
+		rdt_system_mba_cfg_set(0);
+}
+
+/*
+ * Callback will only be associated with the "thread_throttle_mode" file on
+ * systems that are capable of memory bandwidth allocation
+ * (RDT_RESOURCE_MBA is alloc_capable) AND the thread throttle mode is
+ * THREAD_THROTTLE_MIN_MAX.
+ *
+ * See NOTE associated with rdt_thread_throttle_mode_show() for
+ * details of the min/max interpretation.
+ */
+static ssize_t rdt_thread_throttle_mode_write(struct kernfs_open_file *of,
+					      char *buf, size_t nbytes,
+					      loff_t off)
+{
+	u64 mba_cfg;
+	int ret = 0;
+
+	if (nbytes == 0)
+		return -EINVAL;
+
+	cpus_read_lock();
+	mutex_lock(&rdtgroup_mutex);
+
+	rdt_last_cmd_clear();
+
+	mba_cfg = mba_cfg_msr & MBA_THROTTLE_MODE_MASK;
+
+	if ((sysfs_streq(buf, "min") && mba_cfg == MBA_THROTTLE_MODE_MIN) ||
+	    (sysfs_streq(buf, "max") && mba_cfg == MBA_THROTTLE_MODE_MAX))
+		goto out;
+
+	if (sysfs_streq(buf, "min")) {
+		mba_cfg = MBA_THROTTLE_MODE_MIN;
+	} else if (sysfs_streq(buf, "max")) {
+		mba_cfg = MBA_THROTTLE_MODE_MAX;
+	} else {
+		rdt_last_cmd_puts("Unknown or unsupported mode\n");
+		ret = -EINVAL;
+		goto out;
+	}
+
+	mba_cfg = (mba_cfg_msr & ~MBA_THROTTLE_MODE_MASK) | mba_cfg;
+	ret = rdt_system_mba_cfg_set(mba_cfg);
+
+out:
+	mutex_unlock(&rdtgroup_mutex);
+	cpus_read_unlock();
+	return ret ?: nbytes;
+}
+
 static ssize_t max_threshold_occ_write(struct kernfs_open_file *of,
 				       char *buf, size_t nbytes, loff_t off)
 {
@@ -1266,13 +1414,11 @@ static ssize_t rdtgroup_mode_write(struct kernfs_open_file *of,
 				   char *buf, size_t nbytes, loff_t off)
 {
 	struct rdtgroup *rdtgrp;
-	enum rdtgrp_mode mode;
 	int ret = 0;
+	int user_m;
 
-	/* Valid input requires a trailing newline */
-	if (nbytes == 0 || buf[nbytes - 1] != '\n')
+	if (nbytes == 0)
 		return -EINVAL;
-	buf[nbytes - 1] = '\0';
 
 	rdtgrp = rdtgroup_kn_lock_live(of->kn);
 	if (!rdtgrp) {
@@ -1282,29 +1428,25 @@ static ssize_t rdtgroup_mode_write(struct kernfs_open_file *of,
 
 	rdt_last_cmd_clear();
 
-	mode = rdtgrp->mode;
+	user_m = sysfs_match_string(rdt_mode_str, buf);
 
-	if ((!strcmp(buf, "shareable") && mode == RDT_MODE_SHAREABLE) ||
-	    (!strcmp(buf, "exclusive") && mode == RDT_MODE_EXCLUSIVE) ||
-	    (!strcmp(buf, "pseudo-locksetup") &&
-	     mode == RDT_MODE_PSEUDO_LOCKSETUP) ||
-	    (!strcmp(buf, "pseudo-locked") && mode == RDT_MODE_PSEUDO_LOCKED))
+	/* Do nothing and return success if user asks for current mode */
+	if (user_m == rdtgrp->mode)
 		goto out;
 
-	if (mode == RDT_MODE_PSEUDO_LOCKED) {
+	if (rdtgrp->mode == RDT_MODE_PSEUDO_LOCKED) {
 		rdt_last_cmd_puts("Cannot change pseudo-locked group\n");
 		ret = -EINVAL;
 		goto out;
 	}
 
-	if (!strcmp(buf, "shareable")) {
+	if (user_m == RDT_MODE_SHAREABLE) {
 		if (rdtgrp->mode == RDT_MODE_PSEUDO_LOCKSETUP) {
 			ret = rdtgroup_locksetup_exit(rdtgrp);
 			if (ret)
 				goto out;
 		}
-		rdtgrp->mode = RDT_MODE_SHAREABLE;
-	} else if (!strcmp(buf, "exclusive")) {
+	} else if (user_m == RDT_MODE_EXCLUSIVE) {
 		if (!rdtgroup_mode_test_exclusive(rdtgrp)) {
 			ret = -EINVAL;
 			goto out;
@@ -1314,16 +1456,16 @@ static ssize_t rdtgroup_mode_write(struct kernfs_open_file *of,
 			if (ret)
 				goto out;
 		}
-		rdtgrp->mode = RDT_MODE_EXCLUSIVE;
-	} else if (!strcmp(buf, "pseudo-locksetup")) {
+	} else if (user_m == RDT_MODE_PSEUDO_LOCKSETUP) {
 		ret = rdtgroup_locksetup_enter(rdtgrp);
 		if (ret)
 			goto out;
-		rdtgrp->mode = RDT_MODE_PSEUDO_LOCKSETUP;
 	} else {
 		rdt_last_cmd_puts("Unknown or unsupported mode\n");
 		ret = -EINVAL;
+		goto out;
 	}
+	rdtgrp->mode = user_m;
 
 out:
 	rdtgroup_kn_unlock(of->kn);
@@ -1512,6 +1654,16 @@ static struct rftype res_common_files[] = {
 		.seq_show	= rdt_delay_linear_show,
 		.fflags		= RF_CTRL_INFO | RFTYPE_RES_MB,
 	},
+	/*
+	 * Platform specific which (if any) capabilities are provided by
+	 * thread_throttle_mode. Defer some initialization to platform
+	 * discovery.
+	 */
+	{
+		.name		= "thread_throttle_mode",
+		.kf_ops		= &rdtgroup_kf_single_ops,
+		.seq_show	= rdt_thread_throttle_mode_show,
+	},
 	{
 		.name		= "max_threshold_occupancy",
 		.mode		= 0644,
@@ -1571,6 +1723,52 @@ static struct rftype res_common_files[] = {
 
 };
 
+static struct rftype *rdtgroup_rftype_by_name(const char *name)
+{
+	struct rftype *rfts, *rft;
+	int len;
+
+	rfts = res_common_files;
+	len = ARRAY_SIZE(res_common_files);
+
+	for (rft = rfts; rft < rfts + len; rft++) {
+		if (!strcmp(rft->name, name))
+			return rft;
+	}
+
+	return NULL;
+}
+
+/*
+ * Only systems that support memory bandwidth allocation and have
+ * THREAD_THROTTLE_MIN_MAX set will support a writable thread_throttle_mode
+ * file with which the user can modify the thread throttling mode.
+ */
+void __init thread_throttle_mode_init_rw(void)
+{
+	struct rftype *rft;
+
+	rft = rdtgroup_rftype_by_name("thread_throttle_mode");
+	if (!rft)
+		return;
+
+	rft->mode = 0644;
+	rft->write = rdt_thread_throttle_mode_write;
+	rft->fflags = RF_CTRL_INFO | RFTYPE_RES_MB;
+}
+
+void __init thread_throttle_mode_init_ro(void)
+{
+	struct rftype *rft;
+
+	rft = rdtgroup_rftype_by_name("thread_throttle_mode");
+	if (!rft)
+		return;
+
+	rft->mode = 0444;
+	rft->fflags = RF_CTRL_INFO | RFTYPE_RES_MB;
+}
+
 static int rdtgroup_add_files(struct kernfs_node *kn, unsigned long fflags)
 {
 	struct rftype *rfts, *rft;
@@ -1582,7 +1780,7 @@ static int rdtgroup_add_files(struct kernfs_node *kn, unsigned long fflags)
 	lockdep_assert_held(&rdtgroup_mutex);
 
 	for (rft = rfts; rft < rfts + len; rft++) {
-		if ((fflags & rft->fflags) == rft->fflags) {
+		if (rft->fflags && ((fflags & rft->fflags) == rft->fflags)) {
 			ret = rdtgroup_add_file(kn, rft);
 			if (ret)
 				goto error;
@@ -2371,6 +2569,7 @@ static void rdt_kill_sb(struct super_block *sb)
 	/*Put everything back to default values. */
 	for_each_alloc_enabled_rdt_resource(r)
 		reset_all_ctrls(r);
+	mba_cfg_reset_all();
 	cdp_disable_all();
 	rmdir_all_sub();
 	rdt_pseudo_lock_release();
@@ -2472,7 +2671,7 @@ static int mkdir_mondata_subdir(struct kernfs_node *parent_kn,
 			goto out_destroy;
 
 		if (is_mbm_event(mevt->evtid))
-			mon_event_read(&rr, d, prgrp, mevt->evtid, true);
+			mon_event_read(&rr, r, d, prgrp, mevt->evtid, true);
 	}
 	kernfs_activate(kn);
 	return 0;
