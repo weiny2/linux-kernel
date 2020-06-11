@@ -1638,11 +1638,11 @@ retry:
 				 port_index);
 			goto retry;
 		}
-		/* bail out if port detected a over-current condition */
+		/* bail out if a port is in a active over-current state */
 		if (t1 & PORT_OC) {
 			bus_state->bus_suspended = 0;
 			spin_unlock_irqrestore(&xhci->lock, flags);
-			xhci_dbg(xhci, "Bus suspend bailout, port over-current detected\n");
+			xhci_dbg(xhci, "Bus suspend bailout, port over-current active\n");
 			return -EBUSY;
 		}
 		/* suspend ports in U0, or bail out for new connect changes */
