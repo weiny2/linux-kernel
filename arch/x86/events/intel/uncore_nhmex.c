@@ -1223,6 +1223,7 @@ void nhmex_uncore_cpu_init(void)
 		nhmex_uncore_mbox.event_descs = wsmex_uncore_mbox_events;
 	if (nhmex_uncore_cbox.num_boxes > boot_cpu_data.x86_max_cores)
 		nhmex_uncore_cbox.num_boxes = boot_cpu_data.x86_max_cores;
-	uncore_msr_uncores = nhmex_msr_uncores;
+	uncore_generate_types_rb_tree(&uncore_msr_uncores,
+				      nhmex_msr_uncores);
 }
 /* end of Nehalem-EX uncore support */

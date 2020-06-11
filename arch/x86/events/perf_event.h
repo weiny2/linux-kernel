@@ -40,6 +40,7 @@ enum extra_reg_type {
 	EXTRA_REG_LBR   = 2,	/* lbr_select */
 	EXTRA_REG_LDLAT = 3,	/* ld_lat_threshold */
 	EXTRA_REG_FE    = 4,    /* fe_* */
+	EXTRA_REG_TOPDOWN = 5,	/* Topdown slots/metrics */
 
 	EXTRA_REG_MAX		/* number of entries needed */
 };
@@ -78,6 +79,30 @@ static inline bool constraint_match(struct event_constraint *c, u64 ecode)
 #define PERF_X86_EVENT_LARGE_PEBS	0x0400 /* use large PEBS */
 #define PERF_X86_EVENT_PEBS_VIA_PT	0x0800 /* use PT buffer for PEBS */
 #define PERF_X86_EVENT_PAIR		0x1000 /* Large Increment per Cycle */
+#define PERF_X86_EVENT_TOPDOWN		0x2000 /* Count Topdown slots/metrics events */
+#define PERF_X86_EVENT_PEBS_STLAT	0x4000 /* st+stlat data address sampling */
+
+static inline bool is_topdown_count(struct perf_event *event)
+{
+	return event->hw.flags & PERF_X86_EVENT_TOPDOWN;
+}
+
+static inline bool is_metric_event(struct perf_event *event)
+{
+	return ((event->attr.config & ARCH_PERFMON_EVENTSEL_EVENT) == 0) &&
+		((event->attr.config & INTEL_ARCH_EVENT_MASK) >= 0x1000)  &&
+		((event->attr.config & INTEL_ARCH_EVENT_MASK) <= 0x1300);
+}
+
+static inline bool is_slots_event(struct perf_event *event)
+{
+	return (event->attr.config & INTEL_ARCH_EVENT_MASK) == 0x0400;
+}
+
+static inline bool is_topdown_event(struct perf_event *event)
+{
+	return is_metric_event(event) || is_slots_event(event);
+}
 
 struct amd_nb {
 	int nb_id;  /* NorthBridge id */
@@ -179,6 +204,17 @@ struct x86_perf_task_context;
 #define MAX_LBR_ENTRIES		32
 
 enum {
+	LBR_FORMAT_32		= 0x00,
+	LBR_FORMAT_LIP		= 0x01,
+	LBR_FORMAT_EIP		= 0x02,
+	LBR_FORMAT_EIP_FLAGS	= 0x03,
+	LBR_FORMAT_EIP_FLAGS2	= 0x04,
+	LBR_FORMAT_INFO		= 0x05,
+	LBR_FORMAT_TIME		= 0x06,
+	LBR_FORMAT_MAX_KNOWN    = LBR_FORMAT_TIME,
+};
+
+enum {
 	X86_PERF_KFREE_SHARED = 0,
 	X86_PERF_KFREE_EXCL   = 1,
 	X86_PERF_KFREE_MAX
@@ -233,10 +269,14 @@ struct cpu_hw_events {
 	int				lbr_pebs_users;
 	struct perf_branch_stack	lbr_stack;
 	struct perf_branch_entry	lbr_entries[MAX_LBR_ENTRIES];
-	struct er_account		*lbr_sel;
+	union {
+		struct er_account		*lbr_sel;
+		struct er_account		*lbr_ctl;
+	};
 	u64				br_sel;
 	struct x86_perf_task_context	*last_task_ctx;
 	int				last_log_id;
+	u64				last_lbr_ctl;
 
 	/*
 	 * Intel host/guest exclude bits
@@ -268,6 +308,12 @@ struct cpu_hw_events {
 	u64				tfa_shadow;
 
 	/*
+	 * Perf Metrics
+	 */
+	/* number of accepted metrics events */
+	int				n_metric_event;
+
+	/*
 	 * AMD specific bits
 	 */
 	struct amd_nb			*amd_nb;
@@ -276,6 +322,11 @@ struct cpu_hw_events {
 	int				n_pair; /* Large increment events */
 
 	void				*kfree_on_online[X86_PERF_KFREE_MAX];
+
+	/*
+	 * Hybrid PMU support
+	 */
+	int			        hybrid_pmu_idx;
 };
 
 #define __EVENT_CONSTRAINT_RANGE(c, e, n, m, w, o, f) {	\
@@ -359,6 +410,20 @@ struct cpu_hw_events {
 	EVENT_CONSTRAINT(c, (1ULL << (32+n)), FIXED_EVENT_FLAGS)
 
 /*
+ * Special metric counters do not actually exist, but get remapped
+ * to a combination of FxCtr3 + MSR_PERF_METRICS
+ *
+ * This allocates them to a dummy offset for the scheduler.
+ * This does not allow sharing of multiple users of the same
+ * metric without multiplexing, even though the hardware supports that
+ * in principle.
+ */
+
+#define METRIC_EVENT_CONSTRAINT(c, n)						\
+	EVENT_CONSTRAINT(c, (1ULL << (INTEL_PMC_IDX_FIXED_METRIC_BASE+n)),	\
+	FIXED_EVENT_FLAGS)
+
+/*
  * Constraint on the Event code + UMask
  */
 #define INTEL_UEVENT_CONSTRAINT(c, n)	\
@@ -379,6 +444,10 @@ struct cpu_hw_events {
 #define INTEL_PLD_CONSTRAINT(c, n)	\
 	__EVENT_CONSTRAINT(c, n, INTEL_ARCH_EVENT_MASK|X86_ALL_EVENT_FLAGS, \
 			   HWEIGHT(n), 0, PERF_X86_EVENT_PEBS_LDLAT)
+
+#define INTEL_PSD_CONSTRAINT(c, n)	\
+	__EVENT_CONSTRAINT(c, n, INTEL_ARCH_EVENT_MASK|X86_ALL_EVENT_FLAGS, \
+			   HWEIGHT(n), 0, PERF_X86_EVENT_PEBS_STLAT)
 
 #define INTEL_PST_CONSTRAINT(c, n)	\
 	__EVENT_CONSTRAINT(c, n, INTEL_ARCH_EVENT_MASK|X86_ALL_EVENT_FLAGS, \
@@ -505,6 +574,9 @@ struct extra_reg {
 			       0xffff, \
 			       LDLAT)
 
+#define INTEL_UEVENT_TOPDOWN_EXTRA_REG(event)	\
+	EVENT_EXTRA_REG(event, 0, 0xfcff, -1L, TOPDOWN)
+
 #define EVENT_EXTRA_END EVENT_EXTRA_REG(0, 0, 0, 0, RSP_0)
 
 union perf_capabilities {
@@ -520,7 +592,7 @@ union perf_capabilities {
 		 */
 		u64	full_width_write:1;
 		u64     pebs_baseline:1;
-		u64	pebs_metrics_available:1;
+		u64	perf_metrics:1;
 		u64	pebs_output_pt_available:1;
 	};
 	u64	capabilities;
@@ -561,6 +633,70 @@ enum {
 	x86_lbr_exclusive_max,
 };
 
+enum x86_hybrid_pmu_type_idx {
+	X86_HYBRID_PMU_QUARK_IDX	= 0,
+	X86_HYBRID_PMU_ATOM_IDX		= 1,
+	X86_HYBRID_PMU_KNIGHTS_IDX	= 2,
+	X86_HYBRID_PMU_CORE_IDX		= 3,
+
+	X86_HYBRID_PMU_MAX_INDEX
+};
+
+/* Hybrid PMU type */
+enum x86_hybrid_pmu_type {
+	X86_NON_HYBRID_PMU		= 0,
+	X86_HYBRID_PMU_QUARK		= 1U << X86_HYBRID_PMU_QUARK_IDX,
+	X86_HYBRID_PMU_ATOM		= 1U << X86_HYBRID_PMU_ATOM_IDX,
+	X86_HYBRID_PMU_KNIGHTS		= 1U << X86_HYBRID_PMU_KNIGHTS_IDX,
+	X86_HYBRID_PMU_CORE		= 1U << X86_HYBRID_PMU_CORE_IDX,
+
+	X86_HYBRID_PMU_MAX		= 1U << X86_HYBRID_PMU_MAX_INDEX
+};
+
+struct x86_hybrid_pmu {
+	struct pmu			pmu;
+	const char			*name;
+	enum x86_hybrid_pmu_type	type;
+	cpumask_t			supported_cpus;
+	union perf_capabilities		intel_cap;
+
+	u64				intel_ctrl;
+	int				max_pebs_events;
+	int				num_counters;
+	int				num_counters_fixed;
+	struct event_constraint		unconstrained;
+
+	u64				hw_cache_event_ids
+					[PERF_COUNT_HW_CACHE_MAX]
+					[PERF_COUNT_HW_CACHE_OP_MAX]
+					[PERF_COUNT_HW_CACHE_RESULT_MAX];
+	u64				hw_cache_extra_regs
+					[PERF_COUNT_HW_CACHE_MAX]
+					[PERF_COUNT_HW_CACHE_OP_MAX]
+					[PERF_COUNT_HW_CACHE_RESULT_MAX];
+	struct event_constraint		*event_constraints;
+	struct event_constraint		*pebs_constraints;
+	struct extra_reg		*extra_regs;
+	u64				rtm_abort_event;
+};
+
+#define IS_X86_HYBRID			x86_pmu.hybrid_pmu_bitmap
+
+/* Get hybrid_pmu_idx from CPU ID */
+#define X86_HYBRID_GET_IDX_FROM_CPU(_cpu)		\
+	((cpu_data(_cpu).cpu_type >> 4) - 1)
+
+#define HAS_VALID_HYBRID_PMU_IN_CPUC(_cpuc)				\
+	(IS_X86_HYBRID &&						\
+	 ((_cpuc)->hybrid_pmu_idx >= X86_HYBRID_PMU_QUARK_IDX) &&	\
+	 ((_cpuc)->hybrid_pmu_idx < X86_HYBRID_PMU_MAX_INDEX))
+
+#define X86_HYBRID_READ_FROM_CPUC(_name, _cpuc)				\
+	(HAS_VALID_HYBRID_PMU_IN_CPUC(_cpuc) ? x86_pmu.hybrid_pmu[(_cpuc)->hybrid_pmu_idx]._name : x86_pmu._name)
+
+#define X86_HYBRID_READ_FROM_EVENT(_name, _event)			\
+	(IS_X86_HYBRID ? ((struct x86_hybrid_pmu *)(_event->pmu))->_name : x86_pmu._name)
+
 /*
  * struct x86_pmu - generic x86 pmu
  */
@@ -588,6 +724,7 @@ struct x86_pmu {
 	int		max_events;
 	int		num_counters;
 	int		num_counters_fixed;
+	unsigned	fixed_mask;
 	int		cntval_bits;
 	u64		cntval_mask;
 	union {
@@ -615,6 +752,8 @@ struct x86_pmu {
 	struct x86_pmu_quirk *quirks;
 	int		perfctr_second_write;
 	u64		(*limit_period)(struct perf_event *event, u64 l);
+
+	int		(*validate_group)(struct cpu_hw_events *cpuc, int n);
 
 	/* PMI handler bits */
 	unsigned int	late_ack		:1,
@@ -674,15 +813,80 @@ struct x86_pmu {
 	 */
 	unsigned long	lbr_tos, lbr_from, lbr_to; /* MSR base regs       */
 	int		lbr_nr;			   /* hardware stack size */
-	u64		lbr_sel_mask;		   /* LBR_SELECT valid bits */
-	const int	*lbr_sel_map;		   /* lbr_select mappings */
-	bool		lbr_double_abort;	   /* duplicated lbr aborts */
-	bool		lbr_pt_coexist;		   /* (LBR|BTS) may coexist with PT */
+	union {
+		u64		lbr_sel_mask;	   /* LBR_SELECT valid bits */
+		u64		lbr_ctl_mask;	   /* LBR_CTL valid bits */
+	};
+	int			*lbr_ctl_map;	   /* LBR_CTL mappings */
+	const int		*lbr_sel_map;	   /* lbr_select mappings */
+
+	unsigned int	lbr_double_abort	:1,/* duplicated lbr aborts */
+			lbr_pt_coexist		:1,/* (LBR|BTS) may coexist with PT */
+			arch_lbr		:1;/* Arch LBR supported */
+
+	/* Arch LBR Capabilities */
+	union {
+		struct {
+			/* Supported LBR depth values */
+			unsigned int	arch_lbr_depth_mask	:8;
+
+			unsigned int	reserved	:22;
+
+			/* Deep C-state Reset */
+			unsigned int	arch_lbr_deep_c_reset	:1;
+
+			/* IP values contain LIP */
+			unsigned int	arch_lbr_lip	:1;
+		};
+		unsigned int		arch_lbr_cap;
+	};
+	union {
+		struct {
+			/* CPL Filtering Supported */
+			unsigned int	arch_lbr_cpl:1;
+
+			/* Branch Filtering Supported */
+			unsigned int	arch_lbr_filter:1;
+
+			/* Call-stack Mode Supported */
+			unsigned int	arch_lbr_call_stack:1;
+		};
+		unsigned int		arch_lbr_ctl_cap;
+	};
+	union {
+		struct {
+			/* Mispredict Bit Supported */
+			unsigned int	arch_lbr_mispred:1;
+
+			/* Timed LBRs Supported */
+			unsigned int	arch_lbr_timed_lbr:1;
+
+			/* Branch Type Field Supported */
+			unsigned int	arch_lbr_br_type:1;
+		};
+		unsigned int		arch_lbr_info_cap;
+	};
 
 	/*
 	 * Intel PT/LBR/BTS are exclusive
 	 */
 	atomic_t	lbr_exclusive[x86_lbr_exclusive_max];
+
+	/*
+	 * Intel LBR function pointers
+	 */
+	void		(*lbr_enable)(bool pmi);
+	void		(*lbr_disable)(void);
+	void		(*lbr_reset)(void);
+	void		(*lbr_read)(struct cpu_hw_events *cpuc);
+	void		(*lbr_save)(void *ctx);
+	void		(*lbr_restore)(void *ctx);
+
+	/*
+	 * Intel perf metrics
+	 */
+	u64		(*update_topdown_event)(struct perf_event *event);
+	int		(*set_topdown_event_period)(struct perf_event *event);
 
 	/*
 	 * perf task context (i.e. struct perf_event_context::task_ctx_data)
@@ -715,6 +919,25 @@ struct x86_pmu {
 	int (*check_period) (struct perf_event *event, u64 period);
 
 	int (*aux_output_match) (struct perf_event *event);
+
+	/*
+	 * Intel CET Shadow Stack
+	 */
+	 int (*store_shadow_stack_user) (struct perf_callchain_entry_ctx *entry);
+
+	/*
+	 * Hybrid support
+	 *
+	 * Most of PMU capabilities are the same among different hybrid PMUs.
+	 * The common part can be found in global x86_pmu, which is available
+	 * for all PMUs.
+	 *
+	 * The unique part can be found in hybrid_pmu.
+	 * The hybrid_pmu_bitmap is the bits map of available hybrid_pmu.
+	 */
+	unsigned long			hybrid_pmu_bitmap;
+	struct x86_hybrid_pmu		hybrid_pmu[X86_HYBRID_PMU_MAX_INDEX];
+	int				(*filter_match)(struct perf_event *event);
 };
 
 struct x86_perf_task_context {
@@ -722,7 +945,15 @@ struct x86_perf_task_context {
 	u64 lbr_to[MAX_LBR_ENTRIES];
 	u64 lbr_info[MAX_LBR_ENTRIES];
 	int tos;
-	int valid_lbrs;
+	int lbr_callstack_users;
+	int lbr_stack_state;
+	int log_id;
+};
+
+struct x86_perf_xsave_task_context {
+	struct fxregs_state i387;
+	struct xstate_header header;
+	struct arch_lbr_state lbr_state;
 	int lbr_callstack_users;
 	int lbr_stack_state;
 	int log_id;
@@ -747,6 +978,7 @@ do {									\
 #define PMU_FL_PEBS_ALL		0x10 /* all events are valid PEBS events */
 #define PMU_FL_TFA		0x20 /* deal with TSX force abort */
 #define PMU_FL_PAIR		0x40 /* merge counters for large incr. events */
+#define PMU_FL_INSTR_LATENCY	0x80 /* Support Instruction Latency in PEBS Memory Info Record */
 
 #define EVENT_VAR(_id)  event_attr_##_id
 #define EVENT_PTR(_id) &event_attr_##_id.attr.attr
@@ -773,13 +1005,31 @@ static struct perf_pmu_events_ht_attr event_attr_##v = {		\
 	.event_str_ht	= ht,						\
 }
 
+#define EVENT_ATTR_STR_HYBRID(_name, v, str, _pmu)			\
+static struct perf_pmu_events_hybrid_attr event_attr_##v = {		\
+	.attr		= __ATTR(_name, 0444, events_hybrid_sysfs_show, NULL),\
+	.id		= 0,						\
+	.event_str	= str,						\
+	.pmu_type	= _pmu,						\
+}
+
+#define FORMAT_HYBRID_PTR(_id) (&format_attr_hybrid_##_id.attr.attr)
+
+#define FORMAT_ATTR_HYBRID(_name, _pmu)					\
+static struct perf_pmu_format_hybrid_attr format_attr_hybrid_##_name = {\
+	.attr		= __ATTR_RO(_name),				\
+	.pmu_type	= _pmu,						\
+}
+
 struct pmu *x86_get_pmu(void);
 extern struct x86_pmu x86_pmu __read_mostly;
 
 static inline bool x86_pmu_has_lbr_callstack(void)
 {
-	return  x86_pmu.lbr_sel_map &&
-		x86_pmu.lbr_sel_map[PERF_SAMPLE_BRANCH_CALL_STACK_SHIFT] > 0;
+	return  (x86_pmu.lbr_ctl_map &&
+		x86_pmu.lbr_ctl_map[PERF_SAMPLE_BRANCH_CALL_STACK_SHIFT] > 0) ||
+		(x86_pmu.lbr_sel_map &&
+		x86_pmu.lbr_sel_map[PERF_SAMPLE_BRANCH_CALL_STACK_SHIFT] > 0);
 }
 
 DECLARE_PER_CPU(struct cpu_hw_events, cpu_hw_events);
@@ -823,6 +1073,8 @@ static inline int x86_pmu_rdpmc_index(int index)
 {
 	return x86_pmu.rdpmc_index ? x86_pmu.rdpmc_index(index) : index;
 }
+
+bool check_hw_exists(int num_counters, int num_counters_fixed);
 
 int x86_add_exclusive(unsigned int what);
 
@@ -927,6 +1179,19 @@ ssize_t events_sysfs_show(struct device *dev, struct device_attribute *attr,
 			  char *page);
 ssize_t events_ht_sysfs_show(struct device *dev, struct device_attribute *attr,
 			  char *page);
+ssize_t events_hybrid_sysfs_show(struct device *dev,
+				 struct device_attribute *attr,
+				 char *page);
+
+/*
+ * The disabled fixed counter is from CPUID 10.ECX cpu leaf.
+ * Only common counters are enumerated by CPUID. Use common intel_ctrl here.
+ */
+static inline bool fixed_counter_disabled(int i)
+{
+	return x86_pmu.intel_ctrl &&
+		((1ULL << (i + INTEL_PMC_IDX_FIXED)) & x86_pmu.intel_ctrl);
+}
 
 #ifdef CONFIG_CPU_SUP_AMD
 
@@ -1020,7 +1285,11 @@ extern struct event_constraint intel_bdw_pebs_event_constraints[];
 
 extern struct event_constraint intel_skl_pebs_event_constraints[];
 
+extern struct event_constraint intel_cnl_pebs_event_constraints[];
+
 extern struct event_constraint intel_icl_pebs_event_constraints[];
+
+extern struct event_constraint intel_adl_pebs_event_constraints[];
 
 struct event_constraint *intel_pebs_constraints(struct perf_event *event);
 
@@ -1051,7 +1320,11 @@ void intel_pmu_lbr_sched_task(struct perf_event_context *ctx, bool sched_in);
 
 u64 lbr_from_signext_quirk_wr(u64 val);
 
-void intel_pmu_lbr_reset(void);
+void intel_pmu_lbr_reset_all(void);
+
+void intel_pmu_lbr_reset_32(void);
+
+void intel_pmu_lbr_reset_64(void);
 
 void intel_pmu_lbr_add(struct perf_event *event);
 
@@ -1059,9 +1332,21 @@ void intel_pmu_lbr_del(struct perf_event *event);
 
 void intel_pmu_lbr_enable_all(bool pmi);
 
+void intel_pmu_lbr_enable(bool pmi);
+
 void intel_pmu_lbr_disable_all(void);
 
-void intel_pmu_lbr_read(void);
+void intel_pmu_lbr_disable(void);
+
+void intel_pmu_lbr_read_all(void);
+
+void intel_pmu_lbr_read_32(struct cpu_hw_events *cpuc);
+
+void intel_pmu_lbr_read_64(struct cpu_hw_events *cpuc);
+
+void intel_pmu_lbr_save(void *ctx);
+
+void intel_pmu_lbr_restore(void *ctx);
 
 void intel_pmu_lbr_init_core(void);
 
@@ -1078,6 +1363,8 @@ void intel_pmu_lbr_init_hsw(void);
 void intel_pmu_lbr_init_skl(void);
 
 void intel_pmu_lbr_init_knl(void);
+
+void intel_pmu_arch_lbr_init(void);
 
 void intel_pmu_pebs_data_source_nhm(void);
 

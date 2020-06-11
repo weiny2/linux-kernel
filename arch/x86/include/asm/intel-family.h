@@ -95,6 +95,10 @@
 #define INTEL_FAM6_ROCKETLAKE		0xA7
 #define INTEL_FAM6_ROCKETLAKE_L		0xA8
 
+#define INTEL_FAM6_SAPPHIRERAPIDS	0x8F
+
+#define INTEL_FAM6_ALDERLAKE_HYBRID	0x97
+
 /* "Small Core" Processors (Atom) */
 
 #define INTEL_FAM6_ATOM_BONNELL		0x1C /* Diamondville, Pineview */
@@ -129,5 +133,17 @@
 
 /* Family 5 */
 #define INTEL_FAM5_QUARK_X1000		0x09 /* Quark X1000 SoC */
+
+/*
+ * Types of CPUs in hybrid parts. The first type identifies legacy, non-hybrid,
+ * parts. In such a case, it matches the uninitialized value of cpu_type in
+ * cpuinfo_x86. The rest of the values are only valid if the CPU has
+ * X86_FEATURE_HYBRID_CPU.
+ */
+#define INTEL_FAM6_HYBRID_NONHYBRID	0x00
+#define INTEL_FAM6_HYBRID_QUARK		0x10
+#define INTEL_FAM6_HYBRID_ATOM		0x20
+#define INTEL_FAM6_HYBRID_KNIGHTS	0x30
+#define INTEL_FAM6_HYBRID_CORE		0x40
 
 #endif /* _ASM_X86_INTEL_FAMILY_H */

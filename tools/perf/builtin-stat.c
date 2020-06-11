@@ -127,6 +127,15 @@ static const char * topdown_attrs[] = {
 	NULL,
 };
 
+static const char *topdown_metric_attrs[] = {
+	"slots",
+	"topdown-retiring",
+	"topdown-bad-spec",
+	"topdown-fe-bound",
+	"topdown-be-bound",
+	NULL,
+};
+
 static const char *smi_cost_attrs = {
 	"{"
 	"msr/aperf/,"
@@ -1294,6 +1303,72 @@ static int topdown_filter_events(const char **attr, char **str, bool use_group)
 	return 0;
 }
 
+/* Event encoding for Topdown Metric events */
+#define TOPDOWN_SLOTS		0x0400
+#define TOPDOWN_RETIRE		0x1000
+#define TOPDOWN_BAD_SPEC	0x1100
+#define TOPDOWN_FE_BOUND	0x1200
+#define TOPDOWN_BE_BOUND	0x1300
+
+static bool is_topdown_metric_event(struct evsel *counter)
+{
+	if (!counter->pmu_name)
+		return false;
+
+	if (strcmp(counter->pmu_name, "cpu"))
+		return false;
+
+	if ((counter->core.attr.config == TOPDOWN_RETIRE) ||
+	    (counter->core.attr.config == TOPDOWN_BAD_SPEC) ||
+	    (counter->core.attr.config == TOPDOWN_FE_BOUND) ||
+	    (counter->core.attr.config == TOPDOWN_BE_BOUND))
+		return true;
+
+	return false;
+}
+
+static bool is_topdown_slots_event(struct evsel *counter)
+{
+	if (!counter->pmu_name)
+		return false;
+
+	if (strcmp(counter->pmu_name, "cpu"))
+		return false;
+
+	if (counter->core.attr.config == TOPDOWN_SLOTS)
+		return true;
+
+	return false;
+}
+
+static bool topdown_check_group_member(void)
+{
+	struct evsel *counter, *leader, *member;
+	bool has_slots;
+
+	if (!pmu_have_event("cpu", topdown_metric_attrs[0]))
+		return true;
+
+	evlist__for_each_entry(evsel_list, counter) {
+		if (!is_topdown_metric_event(counter))
+			continue;
+
+		leader = counter->leader;
+		has_slots = false;
+
+		for_each_group_evsel(member, leader) {
+			if (is_topdown_slots_event(member))
+				has_slots = true;
+			counter = member;
+		}
+
+		if (!has_slots)
+			return false;
+	}
+
+	return true;
+}
+
 __weak bool arch_topdown_check_group(bool *warn)
 {
 	*warn = false;
@@ -1498,6 +1573,21 @@ static int add_default_attributes(void)
 		char *str = NULL;
 		bool warn = false;
 
+		if (topdown_filter_events(topdown_metric_attrs, &str, 1) < 0) {
+			pr_err("Out of memory\n");
+			return -1;
+		}
+		if (topdown_metric_attrs[0] && str) {
+			if (!stat_config.interval) {
+				fprintf(stat_config.output,
+					"Topdown accuracy may decreases when measuring long period.\n"
+					"Please print the result regularly, e.g. -I1000\n");
+			}
+			goto setup_metrics;
+		}
+
+		str = NULL;
+
 		if (stat_config.aggr_mode != AGGR_GLOBAL &&
 		    stat_config.aggr_mode != AGGR_CORE) {
 			pr_err("top down event configuration requires --per-core mode\n");
@@ -1519,6 +1609,7 @@ static int add_default_attributes(void)
 		if (topdown_attrs[0] && str) {
 			if (warn)
 				arch_topdown_group_warn();
+setup_metrics:
 			err = parse_events(evsel_list, str, &errinfo);
 			if (err) {
 				fprintf(stderr,
@@ -1888,6 +1979,12 @@ int cmd_stat(int argc, const char **argv)
 					(const char **) stat_usage,
 					PARSE_OPT_STOP_AT_NON_OPTION);
 	perf_stat__collect_metric_expr(evsel_list);
+
+	if (!topdown_check_group_member()) {
+		fprintf(stderr, "Topdown group must include slots event\n");
+		goto out;
+	}
+
 	perf_stat__init_shadow_stats();
 
 	if (stat_config.csv_sep) {
