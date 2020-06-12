@@ -50,6 +50,13 @@ static inline void copy_init_pkru_to_fpregs(void)
 
 #endif /* ! CONFIG_ARCH_HAS_PKEYS */
 
+#ifndef pks_supported
+static inline bool pks_supported(void)
+{
+	return false;
+}
+#endif
+
 #ifndef update_local_sup_key
 static inline int update_local_sup_key(int pkey, unsigned long protection)
 {
