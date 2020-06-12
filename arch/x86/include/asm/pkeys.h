@@ -144,6 +144,11 @@ void pkrs_sched_in(void);
 void pks_init_task(struct task_struct *tsk);
 void pks_init(void);
 u32 get_new_pkr(u32 old_pkr, int pkey, unsigned long init_val);
+static inline bool pks_supported(void)
+{
+	return boot_cpu_has(X86_FEATURE_PKS);
+}
+#define pks_supported pks_supported
 int update_local_sup_key(int pkey, unsigned long protection);
 #define update_local_sup_key update_local_sup_key
 int pks_key_alloc(const char *const pkey_user);
