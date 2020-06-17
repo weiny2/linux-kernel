@@ -12,7 +12,7 @@
 #include <linux/pci.h>
 #include <linux/pci_regs.h>
 
-#define PCI_DVSEC_VENDOR_ID_CXL		0x1e98
+#define PCI_DVSEC_VENDOR_ID_CXL		0x8086
 #define PCI_DVSEC_ID_CXL_DEV		0x0
 
 #define PCI_CXL_VENDOR_ID(reg)		((reg) & (0xffff))
