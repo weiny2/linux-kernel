@@ -17,7 +17,8 @@ Changes for this internal review:
 <proposed upstream cover letter>
 
 This patch set starts by introducing a new page access control mechanism for
-kernel pages, Protection Key Supervisor (PKS).
+kernel pages, Protection Key Supervisor (PKS).  This option is communicated to
+the core by the architecture through ARCH_HAS_SUPERVISOR_PKEYS.
 
 PKS enables protections on 'domains' of pages within the kernel in the same way
 that user space pkeys does.  Access to supervisor pages within a defined
@@ -43,7 +44,7 @@ a mechanism to mitigate PMEM from stray access within the kernel for the
 following reasons.
 
    1) Fast switching of permissions
-   2) Also prevents read access to pages
+   2) Prevents read access to pages without page table manipulations
    3) Works on a per thread basis
    4) No TLB flushes required
 
@@ -51,14 +52,15 @@ Protecting against stray writes is particularly important for PMEM because,
 unlike writes to anonymous memory which can often be corrected with a reboot,
 PMEM persists.  Thus data corruption could result in permanent loss of data.
 
-The 2nd half of this series uses the PKS mechanism to protect PMEM from stray
-access.
+The 2nd half of this series thus uses the PKS mechanism to protect PMEM from
+stray access through a mitigation option STRAY_WRITE_PROTECTION.
 
-Because protecting against stray writes is not security, and is only available
-on some processors, the intention is to simply harden PMEM.
+It is important to note that protecting against stray writes is not security,
+and is only available on some processors, the intention is to simply harden
+PMEM.
 
-Therefore failure to get a key will automatically fall back to not using PKS
-with normal page table protections.
+Therefore, this implementation will automatically fall back to normal page
+table protections if a PKS pkey is not available.
 
 For general access to PMEM pages, we piggy back on the kmap() interface as
 there are many places in the kernel who should not be required apriori
