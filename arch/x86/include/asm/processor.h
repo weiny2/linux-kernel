@@ -27,6 +27,7 @@ struct vm86;
 #include <asm/unwind_hints.h>
 #include <asm/vmxfeatures.h>
 #include <asm/vdso/processor.h>
+#include <asm/pkeys_internal.h>
 
 #include <linux/personality.h>
 #include <linux/cache.h>
