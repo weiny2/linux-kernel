@@ -200,6 +200,15 @@ __setup("init_pkru=", setup_init_pkru);
 
 DEFINE_PER_CPU(u32, pkrs_cache);
 
+/* x86_pkrs_load() - Update CPU with the incoming thread pkrs value */
+void x86_pkrs_load(struct thread_struct *thread)
+{
+	if (!cpu_feature_enabled(X86_FEATURE_PKS))
+		return;
+
+	pks_write_pkrs(thread->pkrs);
+}
+
 /*
  * PKS is independent of PKU and either or both may be supported on a CPU.
  *

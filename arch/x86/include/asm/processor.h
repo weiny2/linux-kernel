@@ -2,6 +2,8 @@
 #ifndef _ASM_X86_PROCESSOR_H
 #define _ASM_X86_PROCESSOR_H
 
+#include <linux/pks-keys.h>
+
 #include <asm/processor-flags.h>
 
 /* Forward declaration, a strange C thing */
@@ -474,6 +476,10 @@ struct thread_struct {
 	 * PKRU is the hardware itself.
 	 */
 	u32			pkru;
+#ifdef	CONFIG_ARCH_ENABLE_SUPERVISOR_PKEYS
+	/* Saved Protection key register for supervisor mappings */
+	u32			pkrs;
+#endif
 
 #ifdef CONFIG_X86_USER_SHADOW_STACK
 	unsigned long		features;
@@ -649,9 +655,16 @@ static __always_inline void prefetchw(const void *x)
 #else
 extern unsigned long __end_init_task[];
 
+#ifdef CONFIG_ARCH_ENABLE_SUPERVISOR_PKEYS
+#define INIT_THREAD  {							    \
+	.sp	= (unsigned long)&__end_init_task - sizeof(struct pt_regs), \
+	.pkrs = PKS_INIT_VALUE,						    \
+}
+#else
 #define INIT_THREAD {							    \
 	.sp	= (unsigned long)&__end_init_task - sizeof(struct pt_regs), \
 }
+#endif
 
 extern unsigned long KSTK_ESP(struct task_struct *task);
 
