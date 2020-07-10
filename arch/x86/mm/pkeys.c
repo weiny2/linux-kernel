@@ -236,3 +236,16 @@ u32 get_new_pkr(u32 old_pkr, int pkey, unsigned long init_val)
 	/* Return the old part along with the new part: */
 	return old_pkr | new_pkr_bits;
 }
+
+DEFINE_PER_CPU(u32, pkrs_cache);
+
+/*
+ * Write the PKey Register Supervisor.  This must be run with preemption
+ * disabled as it does not guarantee the atomicity of updating the pkrs_cache
+ * and MSR on its own.
+ */
+void write_pkrs(u32 pkrs_val)
+{
+	this_cpu_write(pkrs_cache, pkrs_val);
+	wrmsrl(MSR_IA32_PKRS, pkrs_val);
+}
