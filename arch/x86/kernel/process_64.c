@@ -59,6 +59,7 @@
 #include <asm/unistd_32_ia32.h>
 #endif
 
+#include "asm/pks.h"
 #include "process.h"
 
 /* Prints also some state that isn't saved in the pt_regs */
@@ -631,6 +632,8 @@ __switch_to(struct task_struct *prev_p, struct task_struct *next_p)
 
 	/* Load the Intel cache allocation PQR MSR. */
 	resctrl_sched_in();
+
+	pks_sched_in();
 
 	return prev_p;
 }
