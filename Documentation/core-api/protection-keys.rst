@@ -171,3 +171,7 @@ of WRPKRU.  So to quote from the WRPKRU text:
 	and updated the PKRU register.
 
 Example code can be found in lib/pks/pks_test.c
+
+For admins a debugfs interface provides a list of the current keys in use at:
+
+        /sys/kernel/debug/x86/pks_keys_allocated
