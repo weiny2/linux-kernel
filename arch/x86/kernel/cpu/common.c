@@ -56,6 +56,7 @@
 #include <asm/intel-family.h>
 #include <asm/cpu_device_id.h>
 #include <asm/uv/uv.h>
+#include <asm/pkeys_internal.h>
 
 #include "cpu.h"
 
@@ -1442,6 +1443,7 @@ static void setup_pks(void)
 		return;
 
 	cr4_set_bits(X86_CR4_PKS);
+	write_pkrs(INIT_PKRS_VALUE);
 }
 
 /*
