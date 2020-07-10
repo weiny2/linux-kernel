@@ -229,3 +229,16 @@ u32 update_pkey_val(u32 pk_reg, int pkey, unsigned int flags)
 
         return pk_reg;
 }
+
+DEFINE_PER_CPU(u32, pkrs_cache);
+
+/*
+ * Write the PKey Register Supervisor.  This must be run with preemption
+ * disabled as it does not guarantee the atomicity of updating the pkrs_cache
+ * and MSR on its own.
+ */
+void write_pkrs(u32 pkrs_val)
+{
+	this_cpu_write(pkrs_cache, pkrs_val);
+	wrmsrl(MSR_IA32_PKRS, pkrs_val);
+}
