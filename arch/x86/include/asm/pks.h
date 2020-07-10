@@ -7,6 +7,7 @@
 DECLARE_PER_CPU(u32, pkrs_cache);
 
 void pks_setup(void);
+void x86_pkrs_load(struct thread_struct *thread);
 
 /*
  * pks_write_pkrs() - Write the pkrs of the current CPU
@@ -42,6 +43,7 @@ static inline void pks_write_pkrs(const u32 new_pkrs)
 #else /* !CONFIG_ARCH_ENABLE_SUPERVISOR_PKEYS */
 
 static inline void pks_setup(void) { }
+static inline void x86_pkrs_load(struct thread_struct *thread) { }
 
 #endif /* CONFIG_ARCH_ENABLE_SUPERVISOR_PKEYS */
 
