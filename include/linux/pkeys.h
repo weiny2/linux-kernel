@@ -99,6 +99,12 @@ enum pks_pkey_consumers {
 			PKR_AD_KEY(12)	| PKR_AD_KEY(13)	| \
 			PKR_AD_KEY(14)	| PKR_AD_KEY(15))
 
-#endif
+void pks_init_task(struct task_struct *task);
+
+#else /* !CONFIG_ARCH_ENABLE_SUPERVISOR_PKEYS */
+
+static inline void pks_init_task(struct task_struct *task) { }
+
+#endif /* CONFIG_ARCH_ENABLE_SUPERVISOR_PKEYS */
 
 #endif /* _LINUX_PKEYS_H */

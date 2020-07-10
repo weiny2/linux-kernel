@@ -240,6 +240,19 @@ static void pks_write_pkrs(u32 new_pkrs)
 	}
 }
 
+/**
+ * pks_write_current() - Write the current thread's saved PKRS value
+ *
+ * Context: must be called with preemption disabled
+ */
+void pks_write_current(void)
+{
+	if (!cpu_feature_enabled(X86_FEATURE_PKS))
+		return;
+
+	pks_write_pkrs(current->thread.pks_saved_pkrs);
+}
+
 /*
  * PKS is independent of PKU and either or both may be supported on a CPU.
  */
@@ -256,6 +269,11 @@ void pks_setup(void)
 	wrmsrl(MSR_IA32_PKRS, PKS_INIT_VALUE);
 	pks_write_pkrs(PKS_INIT_VALUE);
 	cr4_set_bits(X86_CR4_PKS);
+}
+
+void pks_init_task(struct task_struct *task)
+{
+	task->thread.pks_saved_pkrs = PKS_INIT_VALUE;
 }
 
 #endif /* CONFIG_ARCH_ENABLE_SUPERVISOR_PKEYS */

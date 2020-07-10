@@ -96,6 +96,7 @@
 #include <linux/scs.h>
 #include <linux/io_uring.h>
 #include <linux/bpf.h>
+#include <linux/pkeys.h>
 
 #include <asm/pgalloc.h>
 #include <linux/uaccess.h>
@@ -969,6 +970,7 @@ static struct task_struct *dup_task_struct(struct task_struct *orig, int node)
 #ifdef CONFIG_MEMCG
 	tsk->active_memcg = NULL;
 #endif
+	pks_init_task(tsk);
 	return tsk;
 
 free_stack:

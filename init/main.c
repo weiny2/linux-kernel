@@ -99,6 +99,7 @@
 #include <linux/kcsan.h>
 #include <linux/init_syscalls.h>
 #include <linux/stackdepot.h>
+#include <linux/pkeys.h>
 
 #include <asm/io.h>
 #include <asm/bugs.h>
@@ -927,6 +928,7 @@ asmlinkage __visible void __init __no_sanitize_address start_kernel(void)
 	char *after_dashes;
 
 	set_task_stack_end_magic(&init_task);
+	pks_init_task(&init_task);
 	smp_setup_processor_id();
 	debug_objects_early_init();
 	init_vmlinux_build_id();

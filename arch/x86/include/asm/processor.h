@@ -502,6 +502,12 @@ struct thread_struct {
 	unsigned long		cr2;
 	unsigned long		trap_nr;
 	unsigned long		error_code;
+
+#ifdef	CONFIG_ARCH_ENABLE_SUPERVISOR_PKEYS
+	/* Saved Protection key register for supervisor mappings */
+	u32			pks_saved_pkrs;
+#endif
+
 #ifdef CONFIG_VM86
 	/* Virtual 86 mode info */
 	struct vm86		*vm86;
@@ -769,7 +775,18 @@ static inline void spin_lock_prefetch(const void *x)
 #define KSTK_ESP(task)		(task_pt_regs(task)->sp)
 
 #else
-#define INIT_THREAD { }
+
+#ifdef CONFIG_ARCH_ENABLE_SUPERVISOR_PKEYS
+/*
+ * Early task gets full permissions, the restrictive value is set in
+ * pks_init_task()
+ */
+#define INIT_THREAD  {					\
+	.pks_saved_pkrs = 0,				\
+}
+#else
+#define INIT_THREAD  { }
+#endif
 
 extern unsigned long KSTK_ESP(struct task_struct *task);
 
