@@ -2,6 +2,7 @@
 #ifndef _ASM_X86_IDTENTRY_H
 #define _ASM_X86_IDTENTRY_H
 
+#include <linux/compiler.h>
 /* Interrupts/Exceptions */
 #include <asm/trapnr.h>
 
@@ -11,8 +12,8 @@
 
 #include <asm/irq_stack.h>
 
-bool idtentry_enter_nmi(struct pt_regs *regs);
-void idtentry_exit_nmi(struct pt_regs *regs, bool irq_state);
+irqentry_state_t idtentry_enter_nmi(struct pt_regs *regs);
+void idtentry_exit_nmi(struct pt_regs *regs, irqentry_state_t irq_state);
 
 /**
  * DECLARE_IDTENTRY - Declare functions for simple IDT entry points
