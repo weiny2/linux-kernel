@@ -259,9 +259,9 @@ __visible noinstr void xen_pv_evtchn_do_upcall(struct pt_regs *regs)
 {
 	struct pt_regs *old_regs;
 	bool inhcall;
-	irqentry_state_t state;
+	irqentry_state_t irq_state;
 
-	state = irqentry_enter(regs);
+	irqentry_enter(regs, &irq_state);
 	old_regs = set_irq_regs(regs);
 
 	instrumentation_begin();
@@ -271,13 +271,13 @@ __visible noinstr void xen_pv_evtchn_do_upcall(struct pt_regs *regs)
 	set_irq_regs(old_regs);
 
 	inhcall = get_and_clear_inhcall();
-	if (inhcall && !WARN_ON_ONCE(state.exit_rcu)) {
+	if (inhcall && !WARN_ON_ONCE(irq_state.exit_rcu)) {
 		instrumentation_begin();
 		irqentry_exit_cond_resched();
 		instrumentation_end();
 		restore_inhcall(inhcall);
 	} else {
-		irqentry_exit(regs, state);
+		irqentry_exit(regs, &irq_state);
 	}
 }
 #endif /* CONFIG_XEN_PV */
