@@ -650,7 +650,8 @@ DEFINE_IDTENTRY_RAW(exc_int3)
 		instrumentation_end();
 		irqentry_exit_to_user_mode(regs);
 	} else {
-		bool irq_state = idtentry_enter_nmi(regs);
+		irqentry_state_t irq_state = idtentry_enter_nmi(regs);
+
 		instrumentation_begin();
 		if (!do_int3(regs))
 			die("int3", regs, 0);
@@ -863,7 +864,8 @@ out:
 static __always_inline void exc_debug_kernel(struct pt_regs *regs,
 					     unsigned long dr6)
 {
-	bool irq_state = idtentry_enter_nmi(regs);
+	irqentry_state_t irq_state = idtentry_enter_nmi(regs);
+
 	instrumentation_begin();
 
 	/*
