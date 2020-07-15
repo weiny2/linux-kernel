@@ -352,6 +352,7 @@ typedef struct irqentry_state {
 /**
  * irqentry_enter - Handle state tracking on ordinary interrupt entries
  * @regs:	Pointer to pt_regs of interrupted context
+ * @state:	Pointer to an object to store the irq state
  *
  * Invokes:
  *  - lockdep irqflag state tracking as low level ASM entry disabled
@@ -380,7 +381,7 @@ typedef struct irqentry_state {
  *
  * Returns: An opaque object that must be passed to idtentry_exit()
  */
-irqentry_state_t noinstr irqentry_enter(struct pt_regs *regs);
+void noinstr irqentry_enter(struct pt_regs *regs, irqentry_state_t *state);
 
 /**
  * irqentry_exit_cond_resched - Conditionally reschedule on return from interrupt
@@ -392,7 +393,7 @@ void irqentry_exit_cond_resched(void);
 /**
  * irqentry_exit - Handle return from exception that used irqentry_enter()
  * @regs:	Pointer to pt_regs (exception entry regs)
- * @state:	Return value from matching call to irqentry_enter()
+ * @state:	Reference to the value saved in irqentry_enter()
  *
  * Depending on the return target (kernel/user) this runs the necessary
  * preemption and work checks if possible and reguired and returns to
@@ -403,15 +404,17 @@ void irqentry_exit_cond_resched(void);
  *
  * Counterpart to irqentry_enter().
  */
-void noinstr irqentry_exit(struct pt_regs *regs, irqentry_state_t state);
+void noinstr irqentry_exit(struct pt_regs *regs, irqentry_state_t *state);
 
 /**
  * irqentry_nmi_enter - Handle NMI entry
  * @regs:	Pointer to currents pt_regs
+ * @irq_state:	Pointer to storage for state; to be passed back to
+ *              irqentry_nmi_exit
  *
  * Similar to irqentry_enter() but taking care of the NMI constraints.
  */
-irqentry_state_t noinstr irqentry_nmi_enter(struct pt_regs *regs);
+void noinstr irqentry_nmi_enter(struct pt_regs *regs, irqentry_state_t *irq_state);
 
 /**
  * irqentry_nmi_exit - Handle return from NMI handling
@@ -422,6 +425,6 @@ irqentry_state_t noinstr irqentry_nmi_enter(struct pt_regs *regs);
  *
  * Counterpart to irqentry_nmi_enter().
  */
-void noinstr irqentry_nmi_exit(struct pt_regs *regs, irqentry_state_t irq_state);
+void noinstr irqentry_nmi_exit(struct pt_regs *regs, irqentry_state_t *irq_state);
 
 #endif
