@@ -194,7 +194,6 @@ int copy_thread_tls(unsigned long clone_flags, unsigned long sp,
  * headers.
  */
 #ifdef CONFIG_ARCH_HAS_SUPERVISOR_PKEYS
-DECLARE_PER_CPU(u32, pkrs_cache);
 static inline void pks_init_task(struct task_struct *tsk)
 {
 	/* New tasks get the most restrictive PKRS value */

@@ -27,7 +27,8 @@
 #define        PKS_NUM_KEYS            16
 
 #ifdef CONFIG_ARCH_HAS_SUPERVISOR_PKEYS
-void write_pkrs(u32 pkrs_val);
+DECLARE_PER_CPU(u32, pkrs_cache);
+void noinstr write_pkrs(u32 pkrs_val);
 #else
 static inline void write_pkrs(u32 pkrs_val) { }
 #endif
