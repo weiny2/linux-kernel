@@ -241,7 +241,7 @@ noinstr bool __kvm_handle_async_pf(struct pt_regs *regs, u32 token)
 	if (!flags)
 		return false;
 
-	state = irqentry_enter(regs);
+	irqentry_enter(regs, &state);
 	instrumentation_begin();
 
 	/*
@@ -262,7 +262,7 @@ noinstr bool __kvm_handle_async_pf(struct pt_regs *regs, u32 token)
 	}
 
 	instrumentation_end();
-	irqentry_exit(regs, state);
+	irqentry_exit(regs, &state);
 	return true;
 }
 
@@ -272,7 +272,7 @@ DEFINE_IDTENTRY_SYSVEC(sysvec_kvm_asyncpf_interrupt)
 	u32 token;
 	irqentry_state_t state;
 
-	state = irqentry_enter(regs);
+	irqentry_enter(regs, &state);
 
 	inc_irq_stat(irq_hv_callback_count);
 
@@ -283,7 +283,7 @@ DEFINE_IDTENTRY_SYSVEC(sysvec_kvm_asyncpf_interrupt)
 		wrmsrl(MSR_KVM_ASYNC_PF_ACK, 1);
 	}
 
-	irqentry_exit(regs, state);
+	irqentry_exit(regs, &state);
 	set_irq_regs(old_regs);
 }
 
