@@ -235,7 +235,7 @@ u32 update_pkey_val(u32 pk_reg, int pkey, unsigned int flags)
 
 DEFINE_PER_CPU(u32, pkrs_cache);
 
-void write_pkrs(u32 new_pkrs)
+noinstr void write_pkrs(u32 new_pkrs)
 {
 	u32 *pkrs = get_cpu_ptr(&pkrs_cache);
 
