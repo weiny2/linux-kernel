@@ -29,9 +29,9 @@
 #ifdef CONFIG_ARCH_HAS_SUPERVISOR_PKEYS
 extern u32 pkrs_global_cache;
 DECLARE_PER_CPU(u32, pkrs_cache);
-void write_pkrs(u32 new_pkrs);
+noinstr void write_pkrs(u32 new_pkrs);
 #else
-static inline void write_pkrs(u32 new_pkrs) { }
+static _always_inline void write_pkrs(u32 new_pkrs) { }
 #endif
 
 #endif /*_ASM_X86_PKEYS_INTERNAL_H */
