@@ -14,6 +14,8 @@ void idtentry_enter_user(struct pt_regs *regs);
 void idtentry_exit_user(struct pt_regs *regs);
 
 typedef struct idtentry_state {
+	unsigned int pkrs_ref;
+	u32 pkrs;
 	bool exit_rcu;
 } idtentry_state_t;
 
