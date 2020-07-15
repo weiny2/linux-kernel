@@ -34,6 +34,7 @@
 #include <asm/io_bitmap.h>
 #include <asm/syscall.h>
 #include <asm/irq_stack.h>
+#include <asm/pkeys.h>
 
 #ifdef CONFIG_X86_64
 __visible noinstr void do_syscall_64(unsigned long nr, struct pt_regs *regs)
@@ -198,9 +199,11 @@ SYSCALL_DEFINE0(ni_syscall)
 	return -ENOSYS;
 }
 
-noinstr bool idtentry_enter_nmi(struct pt_regs *regs)
+noinstr irqentry_state_t idtentry_enter_nmi(struct pt_regs *regs)
 {
-	bool irq_state = lockdep_hardirqs_enabled();
+	irqentry_state_t ret;
+
+	ret.exit_rcu = lockdep_hardirqs_enabled();
 
 	__nmi_enter();
 	lockdep_hardirqs_off(CALLER_ADDR0);
@@ -212,14 +215,15 @@ noinstr bool idtentry_enter_nmi(struct pt_regs *regs)
 	ftrace_nmi_enter();
 	instrumentation_end();
 
-	return irq_state;
+	irq_save_pkrs(&ret);
+	return ret;
 }
 
-noinstr void idtentry_exit_nmi(struct pt_regs *regs, bool restore)
+noinstr void idtentry_exit_nmi(struct pt_regs *regs, irqentry_state_t irq_state)
 {
 	instrumentation_begin();
 	ftrace_nmi_exit();
-	if (restore) {
+	if (irq_state.exit_rcu) {
 		trace_hardirqs_on_prepare();
 		lockdep_hardirqs_on_prepare(CALLER_ADDR0);
 	}
@@ -227,10 +231,74 @@ noinstr void idtentry_exit_nmi(struct pt_regs *regs, bool restore)
 
 	rcu_nmi_exit();
 	lockdep_hardirq_exit();
-	if (restore)
+	if (irq_state.exit_rcu)
 		lockdep_hardirqs_on(CALLER_ADDR0);
+
+	irq_restore_pkrs(&irq_state);
 	__nmi_exit();
 }
+
+#ifdef CONFIG_ARCH_HAS_SUPERVISOR_PKEYS
+/*
+ * PKRS is a per-logical-processor MSR which overlays additional protection for
+ * pages which have been mapped with a protection key.
+ *
+ * The register is not maintained with XSAVE so we have to maintain the MSR
+ * value in software during context switch and exception handling.
+ *
+ * Context switches save the MSR in the task struct thus taking that value to
+ * other processors if necessary.
+ *
+ * To protect against exceptions having access to this memory we save the
+ * current running value and set the default PKRS value for the duration of the
+ * exception.  Thus preventing exception handlers from having the access of the
+ * interrupted task.
+ *
+ * Furthermore, Zone Device Access Protection maintains access in a re-entrant
+ * manner through a reference count which also needs to be maintained should
+ * exception handlers use those interfaces for memory access.  Here we start
+ * off the exception handler ref count to 0 and ensure it is 0 when the
+ * exception is done.  Then restore it for the interrupted task.
+ */
+
+noinstr void irq_save_pkrs(irqentry_state_t *state)
+{
+	if (!cpu_feature_enabled(X86_FEATURE_PKS))
+		return;
+
+#ifdef CONFIG_ZONE_DEVICE_ACCESS_PROTECTION
+	/*
+	 * Save the ref count of the current running process and set it to 0
+	 * for any irq users to properly track re-entrance
+	 */
+	state->pkrs_ref = current->dev_page_access_ref;
+	current->dev_page_access_ref = 0;
+#endif
+
+	/*
+	 * The thread_pkrs must be maintained separately to prevent global
+	 * overrides from 'sticking' on a thread.
+	 */
+	state->thread_pkrs = current->thread.saved_pkrs;
+	state->pkrs = this_cpu_read(pkrs_cache);
+	write_pkrs(INIT_PKRS_VALUE);
+}
+
+noinstr void irq_restore_pkrs(irqentry_state_t *state)
+{
+	if (!cpu_feature_enabled(X86_FEATURE_PKS))
+		return;
+
+	write_pkrs(state->pkrs);
+	current->thread.saved_pkrs = state->thread_pkrs;
+
+#ifdef CONFIG_ZONE_DEVICE_ACCESS_PROTECTION
+	WARN_ON_ONCE(current->dev_page_access_ref != 0);
+	/* Restore the interrupted process reference */
+	current->dev_page_access_ref = state->pkrs_ref;
+#endif
+}
+#endif /* CONFIG_ARCH_HAS_SUPERVISOR_PKEYS */
 
 #ifdef CONFIG_XEN_PV
 #ifndef CONFIG_PREEMPTION
@@ -295,6 +363,8 @@ __visible noinstr void xen_pv_evtchn_do_upcall(struct pt_regs *regs)
 
 	inhcall = get_and_clear_inhcall();
 	if (inhcall && !WARN_ON_ONCE(state.exit_rcu)) {
+		/* Normally called by irqentry_exit, we must restore pkrs here */
+		irq_restore_pkrs(&state);
 		instrumentation_begin();
 		irqentry_exit_cond_resched();
 		instrumentation_end();

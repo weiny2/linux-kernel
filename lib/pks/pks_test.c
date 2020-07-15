@@ -114,13 +114,13 @@ error:
  * NOTE: It clears the protection key from the page such that the fault handler
  * will not re-trigger.
  */
-bool pks_test_armed_and_clear(void)
+bool pks_test_armed_and_clear(u32 *val)
 {
 	bool armed = (test_armed_key != 0);
 
 	if (armed) {
 		/* Enable read and write to stop faults */
-		pks_update_protection(test_armed_key, 0, false);
+		*val = update_pkey_val(*val, test_armed_key, 0);
 		fault_cnt++;
 	}
 

@@ -48,7 +48,7 @@ static inline void copy_init_pkru_to_fpregs(void)
 {
 }
 
-static inline bool pks_test_armed_and_clear(void)
+static inline bool pks_test_armed_and_clear(u32 *val)
 {
 	return false;
 }
