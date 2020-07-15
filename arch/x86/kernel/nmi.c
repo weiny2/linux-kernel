@@ -502,14 +502,14 @@ nmi_restart:
 
 	this_cpu_write(nmi_dr7, local_db_save());
 
-	irq_state = irqentry_nmi_enter(regs);
+	irqentry_nmi_enter(regs, &irq_state);
 
 	inc_irq_stat(__nmi_count);
 
 	if (!ignore_nmis)
 		default_do_nmi(regs);
 
-	irqentry_nmi_exit(regs, irq_state);
+	irqentry_nmi_exit(regs, &irq_state);
 
 	local_db_restore(this_cpu_read(nmi_dr7));
 
