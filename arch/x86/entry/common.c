@@ -41,6 +41,7 @@
 #include <asm/io_bitmap.h>
 #include <asm/syscall.h>
 #include <asm/irq_stack.h>
+#include <asm/pkeys.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/syscalls.h>
@@ -558,6 +559,72 @@ SYSCALL_DEFINE0(ni_syscall)
 	return -ENOSYS;
 }
 
+#ifdef CONFIG_ARCH_HAS_SUPERVISOR_PKEYS
+/*
+ * PKRS is a per-logical-processor MSR which overlays additional protection for
+ * pages which have been mapped with a protection key.
+ *
+ * The register is not maintained with XSAVE so we have to maintain the MSR
+ * value in software during context switch and exception handling.
+ *
+ * Context switches save the MSR in the task struct thus taking that value to
+ * other processors if necessary.
+ *
+ * To protect against exceptions having access to this memory we save the
+ * current running value and set the default PKRS value for the duration of the
+ * exception.  Thus preventing exception handlers from having the access of the
+ * interrupted task.
+ *
+ * Furthermore, Zone Device Access Protection maintains access in a re-entrant
+ * manner through a reference count which also needs to be maintained should
+ * exception handlers use those interfaces for memory access.  Here we start
+ * off the exception handler ref count to 0 and ensure it is 0 when the
+ * exception is done.  Then restore it for the interrupted task.
+ */
+
+static noinstr void idt_save_pkrs(idtentry_state_t *state)
+{
+	if (!cpu_feature_enabled(X86_FEATURE_PKS))
+		return;
+
+#ifdef CONFIG_ZONE_DEVICE_ACCESS_PROTECTION
+	/*
+	 * Save the ref count of the current running process and set it to 0
+	 * for any irq users to properly track re-entrance
+	 */
+	state->pkrs_ref = current->dev_page_access_ref;
+	current->dev_page_access_ref = 0;
+#endif
+
+	/*
+	 * The thread_pkrs must be maintained separately to prevent global
+	 * overrides from 'sticking' on a thread.
+	 */
+	state->thread_pkrs = current->thread.saved_pkrs;
+	state->pkrs = this_cpu_read(pkrs_cache);
+	write_pkrs(INIT_PKRS_VALUE);
+}
+
+static noinstr void idt_restore_pkrs(idtentry_state_t *state)
+{
+	if (!cpu_feature_enabled(X86_FEATURE_PKS))
+		return;
+
+	write_pkrs(state->pkrs);
+	current->thread.saved_pkrs = state->thread_pkrs;
+
+#ifdef CONFIG_ZONE_DEVICE_ACCESS_PROTECTION
+	WARN_ON_ONCE(current->dev_page_access_ref != 0);
+	/* Restore the interrupted process reference */
+	current->dev_page_access_ref = state->pkrs_ref;
+#endif
+}
+#else
+static __always_inline void idt_save_pkrs(idtentry_state_t *state) { }
+static __always_inline void idt_restore_pkrs(idtentry_state_t *state) { }
+#endif
+
+
 /**
  * idtentry_enter - Handle state tracking on ordinary idtentries
  * @regs:	Pointer to pt_regs of interrupted context
@@ -640,7 +707,7 @@ idtentry_state_t noinstr idtentry_enter(struct pt_regs *regs)
 		instrumentation_end();
 
 		ret.exit_rcu = true;
-		return ret;
+		goto done;
 	}
 
 	/*
@@ -655,6 +722,8 @@ idtentry_state_t noinstr idtentry_enter(struct pt_regs *regs)
 	trace_hardirqs_off();
 	instrumentation_end();
 
+done:
+	idt_save_pkrs(&ret);
 	return ret;
 }
 
@@ -694,7 +763,12 @@ void noinstr idtentry_exit(struct pt_regs *regs, idtentry_state_t state)
 	/* Check whether this returns to user mode */
 	if (user_mode(regs)) {
 		prepare_exit_to_usermode(regs);
-	} else if (regs->flags & X86_EFLAGS_IF) {
+		return;
+	}
+
+	idt_restore_pkrs(&state);
+
+	if (regs->flags & X86_EFLAGS_IF) {
 		/*
 		 * If RCU was not watching on entry this needs to be done
 		 * carefully and needs the same ordering of lockdep/tracing
@@ -819,6 +893,8 @@ __visible noinstr void xen_pv_evtchn_do_upcall(struct pt_regs *regs)
 
 	inhcall = get_and_clear_inhcall();
 	if (inhcall && !WARN_ON_ONCE(state.exit_rcu)) {
+		/* Normally called by idtentry_exit, we must restore pkrs here */
+		idt_restore_pkrs(&state);
 		instrumentation_begin();
 		idtentry_exit_cond_resched(regs, true);
 		instrumentation_end();
