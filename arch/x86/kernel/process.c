@@ -194,15 +194,7 @@ static inline void pks_init_task(struct task_struct *tsk)
 }
 static inline void pks_sched_in(void)
 {
-	u64 current_pkrs = current->thread.saved_pkrs;
-
-	/*
-	 * PKRS is only temporarily changed during specific code paths.  Only a
-	 * preemption during these windows away from the default value would
-	 * require updating the MSR.
-	 */
-	if (unlikely(this_cpu_read(pkrs_cache) != current_pkrs))
-		write_pkrs(current_pkrs);
+	write_pkrs(current->thread.saved_pkrs);
 }
 #else
 static inline void pks_init_task(struct task_struct *tsk) { }

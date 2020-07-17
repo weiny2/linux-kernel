@@ -23,9 +23,9 @@
 			 PKR_AD_KEY(13) | PKR_AD_KEY(14) | PKR_AD_KEY(15))
 
 #ifdef CONFIG_ARCH_HAS_SUPERVISOR_PKEYS
-void write_pkrs(u32 pkrs_val);
+void write_pkrs(u32 new_pkrs);
 #else
-static inline void write_pkrs(u32 pkrs_val) { }
+static inline void write_pkrs(u32 new_pkrs) { }
 #endif
 
 #endif /*_ASM_X86_PKEYS_INTERNAL_H */
