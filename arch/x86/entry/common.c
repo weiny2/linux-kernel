@@ -588,6 +588,9 @@ static void noinstr idt_save_pkrs(idtentry_state_t state)
 		return;
 
 #ifdef CONFIG_ZONE_DEVICE_ACCESS_PROTECTION
+	trace_printk("idt_save_pkrs %p ref %d\n",
+		current, current->dev_page_access_ref);
+
 	/*
 	 * Save the ref count of the current running process and set it to 0
 	 * for any irq users to properly track re-entrance
@@ -599,6 +602,9 @@ static void noinstr idt_save_pkrs(idtentry_state_t state)
 	state.pkrs = this_cpu_read(pkrs_cache);
 	if (state.pkrs != INIT_PKRS_VALUE)
 		write_pkrs(INIT_PKRS_VALUE);
+
+	trace_printk("idt_save_pkrs 0x%08X; %d\n",
+		state.pkrs, state.pkrs_ref);
 }
 
 static void noinstr idt_restore_pkrs(idtentry_state_t state)
@@ -607,6 +613,11 @@ static void noinstr idt_restore_pkrs(idtentry_state_t state)
 
 	if (!cpu_feature_enabled(X86_FEATURE_PKS))
 		return;
+
+	trace_printk("idt_restore_pkrs 0x%08X; %d; %p ref %d\n",
+		state.pkrs, state.pkrs_ref,
+		current,
+		current->dev_page_access_ref);
 
 	pkrs = this_cpu_read(pkrs_cache);
 	if (state.pkrs != pkrs)
