@@ -99,36 +99,28 @@ static void dev_protection_enable_put(struct dev_pagemap *pgmap)
 		static_branch_dec(&dev_protection_static_key);
 }
 
-void dev_access_disable(void)
+void __dev_access_disable(void)
 {
 	unsigned long flags;
 
-	if (!static_branch_unlikely(&dev_protection_static_key))
-		return;
-
 	local_irq_save(flags);
-	current->dev_page_access_ref--;
-	if (current->dev_page_access_ref == 0)
+	if (!--current->dev_page_access_ref)
 		pks_update_protection(dev_page_pkey, PKEY_DISABLE_ACCESS);
 	local_irq_restore(flags);
 }
-EXPORT_SYMBOL_GPL(dev_access_disable);
+EXPORT_SYMBOL_GPL(__dev_access_disable);
 
-void dev_access_enable(void)
+void __dev_access_enable(void)
 {
 	unsigned long flags;
 
-	if (!static_branch_unlikely(&dev_protection_static_key))
-		return;
-
 	local_irq_save(flags);
 	/* 0 clears the PKEY_DISABLE_ACCESS bit, allowing access */
-	if (current->dev_page_access_ref == 0)
+	if (!current->dev_page_access_ref++)
 		pks_update_protection(dev_page_pkey, 0);
-	current->dev_page_access_ref++;
 	local_irq_restore(flags);
 }
-EXPORT_SYMBOL_GPL(dev_access_enable);
+EXPORT_SYMBOL_GPL(__dev_access_enable);
 
 /**
  * dev_access_protection_init: Configure a PKS key domain for device pages

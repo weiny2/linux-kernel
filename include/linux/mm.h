@@ -1145,8 +1145,18 @@ static inline bool page_is_access_protected(struct page *page)
 	return false;
 }
 
-void dev_access_enable(void);
-void dev_access_disable(void);
+void __dev_access_enable(void);
+void __dev_access_disable(void);
+static __always_inline void dev_access_enable(void)
+{
+	if (static_branch_unlikely(&dev_protection_static_key))
+		__dev_access_enable();
+}
+static __always_inline void dev_access_disable(void)
+{
+	if (static_branch_unlikely(&dev_protection_static_key))
+		__dev_access_disable();
+}
 #else
 static inline bool page_is_access_protected(struct page *page)
 {
