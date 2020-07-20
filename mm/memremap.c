@@ -73,7 +73,7 @@ static void devmap_managed_enable_put(void)
 
 #ifdef CONFIG_ZONE_DEVICE_ACCESS_PROTECTION
 /*
- * Note all devices which have asked for protections share the same key.  The
+ * Note; all devices which have asked for protections share the same key.  The
  * key may, or may not, have been provided by the core.  If not, protection
  * will remain disabled.  The key acquisition is attempted at init time and
  * never again.  So we don't have to worry about dev_page_pkey changing.
@@ -82,7 +82,7 @@ static int dev_page_pkey = PKEY_INVALID;
 DEFINE_STATIC_KEY_FALSE(dev_protection_static_key);
 EXPORT_SYMBOL(dev_protection_static_key);
 
-static pgprot_t dev_protection_enable_get(struct dev_pagemap *pgmap, pgprot_t prot)
+static pgprot_t dev_pgprot_get(struct dev_pagemap *pgmap, pgprot_t prot)
 {
 	if (pgmap->flags & PGMAP_PROT_ENABLED && dev_page_pkey != PKEY_INVALID) {
 		pgprotval_t val = pgprot_val(prot);
@@ -93,7 +93,7 @@ static pgprot_t dev_protection_enable_get(struct dev_pagemap *pgmap, pgprot_t pr
 	return prot;
 }
 
-static void dev_protection_enable_put(struct dev_pagemap *pgmap)
+static void dev_pgprot_put(struct dev_pagemap *pgmap)
 {
 	if (pgmap->flags & PGMAP_PROT_ENABLED && dev_page_pkey != PKEY_INVALID)
 		static_branch_dec(&dev_protection_static_key);
@@ -145,11 +145,11 @@ static int __init __dev_access_protection_init(void)
 }
 subsys_initcall(__dev_access_protection_init);
 #else
-static pgprot_t dev_protection_enable_get(struct dev_pagemap *pgmap, pgprot_t prot)
+static pgprot_t dev_pgprot_get(struct dev_pagemap *pgmap, pgprot_t prot)
 {
 	return prot;
 }
-static void dev_protection_enable_put(struct dev_pagemap *pgmap)
+static void dev_pgprot_put(struct dev_pagemap *pgmap)
 {
 }
 #endif /* CONFIG_ZONE_DEVICE_ACCESS_PROTECTION */
@@ -243,7 +243,7 @@ void memunmap_pages(struct dev_pagemap *pgmap)
 	pgmap_array_delete(res);
 	WARN_ONCE(pgmap->altmap.alloc, "failed to free all reserved pages\n");
 	devmap_managed_enable_put();
-	dev_protection_enable_put(pgmap);
+	dev_pgprot_put(pgmap);
 }
 EXPORT_SYMBOL_GPL(memunmap_pages);
 
@@ -279,7 +279,7 @@ void *memremap_pages(struct dev_pagemap *pgmap, int nid)
 	int error, is_ram;
 	bool need_devmap_managed = true;
 
-	params.pgprot = dev_protection_enable_get(pgmap, params.pgprot);
+	params.pgprot = dev_pgprot_get(pgmap, params.pgprot);
 
 	switch (pgmap->type) {
 	case MEMORY_DEVICE_PRIVATE:
