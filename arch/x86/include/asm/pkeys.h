@@ -143,9 +143,9 @@ u32 update_pkey_val(u32 pk_reg, int pkey, unsigned int flags);
 int pks_key_alloc(const char *const pkey_user);
 void pks_key_free(int pkey);
 
-void pks_mknoaccess(int pkey);
-void pks_mkread(int pkey);
-void pks_mkrdwr(int pkey);
+void pks_mknoaccess(int pkey, bool global);
+void pks_mkread(int pkey, bool global);
+void pks_mkrdwr(int pkey, bool global);
 
 #endif /* CONFIG_ARCH_HAS_SUPERVISOR_PKEYS */
 

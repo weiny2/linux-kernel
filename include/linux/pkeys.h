@@ -57,15 +57,15 @@ static inline int pks_key_alloc(const char * const pkey_user)
 static inline void pks_key_free(int pkey)
 {
 }
-static inline void pks_mknoaccess(int pkey)
+static inline void pks_mknoaccess(int pkey, bool global)
 {
 	WARN_ON_ONCE(1);
 }
-static inline void pks_mkread(int pkey)
+static inline void pks_mkread(int pkey, bool global)
 {
 	WARN_ON_ONCE(1);
 }
-static inline void pks_mkrdwr(int pkey)
+static inline void pks_mkrdwr(int pkey, bool global)
 {
 	WARN_ON_ONCE(1);
 }
