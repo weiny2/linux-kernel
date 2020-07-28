@@ -941,9 +941,64 @@ mm_fault_error(struct pt_regs *regs, unsigned long error_code,
 	}
 }
 
+u32 pkrs_global_cache = INIT_PKRS_VALUE;
+EXPORT_SYMBOL_GPL(pkrs_global_cache);
+
+/*
+ * check if we have had a 'global' pkey update.  If so, handle this like a lazy
+ * TLB; fix up the local MSR and return
+ */
+static bool global_pkey_is_enabled(u8 pkey, bool is_write)
+{
+	int pkey_shift = pkey * PKR_BITS_PER_PKEY;
+	u32 mask = (((1 << PKR_BITS_PER_PKEY) - 1) << pkey_shift);
+	u32 val;
+	u32 *pkrs;
+
+	val = (pkrs_global_cache & mask) >> pkey_shift;
+	if (val & PKR_AD_BIT)
+		return false;
+
+	if (is_write && (val & PKR_WD_BIT))
+		return false;
+
+	/* fixup register */
+	pkrs = get_cpu_ptr(&pkrs_cache);
+
+	val = *pkrs & ~mask;
+	val |= (pkrs_global_cache & mask);
+
+	*pkrs = val;
+	current->thread.saved_pkrs = val;
+	wrmsrl(MSR_IA32_PKRS, val);
+	put_cpu_ptr(pkrs);
+
+	return true;
+}
+
 static int spurious_kernel_fault_check(unsigned long error_code, pte_t *pte)
 {
-	if ((error_code & X86_PF_WRITE) && !pte_write(*pte))
+	bool is_write = (error_code & X86_PF_WRITE);
+
+	if (error_code & X86_PF_PK) {
+		u8 pkey = pte_flags_pkey(pte->pte);
+
+		/*
+		 * If we get a protection key exception it could be because we are
+		 * running the PKS test.  If so, pks_test_armed_and_clear() will clear
+		 * the protection mechanism and we can safely return.
+		 */
+		if (pks_test_armed_and_clear())
+			return 1;
+
+		if (global_pkey_is_enabled(pkey, is_write))
+			return 1;
+
+		WARN_ON_ONCE(1);
+		return 0;
+	}
+
+	if (is_write && !pte_write(*pte))
 		return 0;
 
 	if ((error_code & X86_PF_INSTR) && !pte_exec(*pte))
@@ -953,7 +1008,7 @@ static int spurious_kernel_fault_check(unsigned long error_code, pte_t *pte)
 }
 
 /*
- * Handle a spurious fault caused by a stale TLB entry.
+ * Handle a spurious fault caused by a stale TLB entry or a lazy PKRS update.
  *
  * This allows us to lazily refresh the TLB when increasing the
  * permissions of a kernel page (RO -> RW or NX -> X).  Doing it
@@ -967,6 +1022,11 @@ static int spurious_kernel_fault_check(unsigned long error_code, pte_t *pte)
  *
  * There are no security implications to leaving a stale TLB when
  * increasing the permissions on a page.
+ *
+ * Similarly, PKRS increases in permissions are done on a thread local level.
+ * But if the caller indicates the permission should be allowd globaly we can
+ * lazily update only those threads which fault and avoid a global IPI MSR
+ * update.
  *
  * Returns non-zero if a spurious fault was handled, zero otherwise.
  *
@@ -1106,20 +1166,9 @@ do_kern_addr_fault(struct pt_regs *regs, unsigned long hw_error_code,
 		   unsigned long address)
 {
 	/*
-	 * If we get a protection key exception it could be because we are
-	 * running the PKS test.  If so, pks_test_armed_and_clear() will clear
-	 * the protection mechanism and we can safely return.
-	 *
-	 * Otherwise we warn the user that something has gone wrong and
-	 * continue with the fault.
+	 * Was the fault spurious; caused by lazy TLB invalidation or PKRS
+	 * update?
 	 */
-	if (hw_error_code & X86_PF_PK) {
-		if (pks_test_armed_and_clear())
-			return;
-		WARN_ON_ONCE(hw_error_code & X86_PF_PK);
-	}
-
-	/* Was the fault spurious, caused by lazy TLB invalidation? */
 	if (spurious_kernel_fault(hw_error_code, address))
 		return;
 

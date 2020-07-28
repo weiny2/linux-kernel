@@ -120,7 +120,7 @@ bool pks_test_armed_and_clear(void)
 
 	if (armed) {
 		/* Enable read and write to stop faults */
-		pks_update_protection(test_armed_key, 0);
+		pks_update_protection(test_armed_key, 0, false);
 		fault_cnt++;
 	}
 
@@ -182,7 +182,7 @@ static int run_access_test(struct pks_test_ctx *ctx,
 	int ret = 0;
 	bool exception;
 
-	pks_update_protection(ctx->pkey, test->ad | test->wd);
+	pks_update_protection(ctx->pkey, test->ad | test->wd, false);
 
 	spin_lock(&test_lock);
 	test_armed_key = ctx->pkey;
@@ -380,7 +380,8 @@ static ssize_t pks_write_file(struct file *file, const char __user *user_buf,
 	if (!strcmp(buf, "1")) {
 		/* Ensure a known state to test context switch */
 		pks_update_protection(ctx->pkey,
-				      PKEY_DISABLE_ACCESS | PKEY_DISABLE_WRITE);
+				      PKEY_DISABLE_ACCESS | PKEY_DISABLE_WRITE,
+				      false);
 	}
 
 	/* After context switch msr should be restored */

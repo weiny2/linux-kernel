@@ -317,7 +317,7 @@ void pks_key_free(int pkey)
 	__clear_bit(pkey, &pks_key_allocation_map);
 	pks_key_users[pkey] = NULL;
 	/* Restore to default AD=1 and WD=0. */
-	pks_update_protection(pkey, PKEY_DISABLE_ACCESS);
+	pks_update_protection(pkey, PKEY_DISABLE_ACCESS, true);
 	mutex_unlock(&pks_lock);
 }
 EXPORT_SYMBOL_GPL(pks_key_free);
