@@ -163,12 +163,12 @@ static void check_exception(irqentry_state_t *irq_state)
 	 * Check we can update the value during exception without affecting the
 	 * calling thread.  The calling thread is checked after exception...
 	 */
-	pks_mkrdwr(test_armed_key);
+	pks_mkrdwr(test_armed_key, false);
 	if (!check_pkrs(test_armed_key, 0)) {
 		pr_err("     FAIL: exception did not change register to 0\n");
 		test_exception_ctx->pass = false;
 	}
-	pks_mknoaccess(test_armed_key);
+	pks_mknoaccess(test_armed_key, false);
 	if (!check_pkrs(test_armed_key, PKEY_DISABLE_ACCESS | PKEY_DISABLE_WRITE)) {
 		pr_err("     FAIL: exception did not change register to 0x3\n");
 		test_exception_ctx->pass = false;
@@ -314,13 +314,13 @@ static int run_access_test(struct pks_test_ctx *ctx,
 {
 	switch (test->mode) {
 		case PKS_TEST_NO_ACCESS:
-			pks_mknoaccess(ctx->pkey);
+			pks_mknoaccess(ctx->pkey, false);
 			break;
 		case PKS_TEST_RDWR:
-			pks_mkrdwr(ctx->pkey);
+			pks_mkrdwr(ctx->pkey, false);
 			break;
 		case PKS_TEST_RDONLY:
-			pks_mkread(ctx->pkey);
+			pks_mkread(ctx->pkey, false);
 			break;
 		default:
 			pr_err("BUG in test invalid mode\n");
@@ -476,7 +476,7 @@ static void run_exception_test(void)
 		goto free_context;
 	}
 
-	pks_mkread(ctx->pkey);
+	pks_mkread(ctx->pkey, false);
 
 	spin_lock(&test_lock);
 	WRITE_ONCE(test_exception_ctx, ctx);
@@ -556,7 +556,7 @@ static void crash_it(void)
 		return;
 	}
 
-	pks_mknoaccess(ctx->pkey);
+	pks_mknoaccess(ctx->pkey, false);
 
 	spin_lock(&test_lock);
 	WRITE_ONCE(test_armed_key, 0);
@@ -618,7 +618,7 @@ static ssize_t pks_write_file(struct file *file, const char __user *user_buf,
 	/* start of context switch test */
 	if (!strcmp(buf, "1")) {
 		/* Ensure a known state to test context switch */
-		pks_mknoaccess(ctx->pkey);
+		pks_mknoaccess(ctx->pkey, false);
 	}
 
 	/* After context switch msr should be restored */

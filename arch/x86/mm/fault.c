@@ -32,6 +32,8 @@
 #include <asm/pgtable_areas.h>		/* VMALLOC_START, ...		*/
 #include <asm/kvm_para.h>		/* kvm_handle_async_pf		*/
 
+#include <asm-generic/mman-common.h>
+
 #define CREATE_TRACE_POINTS
 #include <asm/trace/exceptions.h>
 
@@ -995,9 +997,124 @@ mm_fault_error(struct pt_regs *regs, unsigned long error_code,
 	}
 }
 
-static int spurious_kernel_fault_check(unsigned long error_code, pte_t *pte)
+#ifdef CONFIG_ARCH_HAS_SUPERVISOR_PKEYS
+/*
+ * check if we have had a 'global' pkey update.  If so, handle this like a lazy
+ * TLB; fix up the local MSR and return
+ *
+ * See arch/x86/kernel/process.c for the explanation on how global is handled
+ * with a simple '&' operation.
+ *
+ * Also we don't update the current thread saved_pkrs because we don't want the
+ * global value to 'stick' with the thread.  Rather we want this to be valid
+ * only for the remainder of this time slice.  For subsequent time slices the
+ * global value will be factored in during schedule; see arch/x86/kernel/process.c
+ *
+ * Finally we have a trade off between performance and forcing a restriction of
+ * permissions across all CPUs on a global update.
+ *
+ * Given the following window.
+ *
+ *          Global PKRS            CPU #0                CPU #1
+ *             cache                 MSR                   MSR
+ *
+ *                  |                  |                     |
+ *   Global         |----------\       |                     |
+ *   Restriction    |           ------------> read           |             <= T1
+ *   (on CPU #0)    |                  |       |             |
+ *    ------\       |                  |       |             |
+ *           ------>|                  |       |             |
+ *                  |                  |       |             |
+ *    Update CPU #1 |--------\         |       |             |
+ *                  |         --------------\  |             |
+ *                  |                  |     --|------------>|
+ *    Global remote |                  |       |             |
+ *     MSR update   |                  |       |             |
+ *     (CPU 2-n)    |                  |       |             |
+ *                  |-----> CPU's      |       v             |
+ *   local          |       (2-N)      |     local --\       |
+ *   update         |                  |     update   ------>|(Update      <= T2
+ *    ----------------\                |                     | Incorrect)
+ *                  |  -----------\    |                     |
+ *                  |              --->|(Update OK)          |
+ *         Context  |                  |                     |
+ *         Switch   |----------\       |                     |
+ *                  |           ------------> read           |
+ *                  |                  |       |             |
+ *                  |                  |       |             |
+ *                  |                  |       v             |
+ *                  |                  |     local --\       |
+ *                  |                  |     update   ------>|(Update
+ *                  |                  |                     | Correct)
+ *
+ * We allow for a larger window of the global pkey being open because global
+ * updates should be rare and we don't want to burden normal faults with having
+ * to read the global state.
+ */
+static bool global_pkey_is_enabled(pte_t *pte, bool is_write,
+				   irqentry_state_t *irq_state)
 {
-	if ((error_code & X86_PF_WRITE) && !pte_write(*pte))
+	u8 pkey = pte_flags_pkey(pte->pte);
+	int pkey_shift = pkey * PKR_BITS_PER_PKEY;
+	u32 mask = (((1 << PKR_BITS_PER_PKEY) - 1) << pkey_shift);
+	u32 global = READ_ONCE(pkrs_global_cache);
+	u32 val;
+
+	/* Return early if global access is not valid */
+	val = (global & mask) >> pkey_shift;
+	if ((val & PKR_AD_BIT) || (is_write && (val & PKR_WD_BIT)))
+		return false;
+
+	irq_state->pkrs &= global;
+
+	return true;
+}
+
+#else /* !CONFIG_ARCH_HAS_SUPERVISOR_PKEYS */
+__always_inline bool global_pkey_is_enabled(pte_t *pte, bool is_write,
+					    irqentry_state_t *irq_state)
+{
+	return false;
+}
+#endif /* CONFIG_ARCH_HAS_SUPERVISOR_PKEYS */
+
+#ifdef CONFIG_PKS_TESTING
+bool pks_test_callback(irqentry_state_t *irq_state);
+static bool handle_pks_testing(unsigned long hw_error_code, irqentry_state_t *irq_state)
+{
+	/*
+	 * If we get a protection key exception it could be because we
+	 * are running the PKS test.  If so, pks_test_callback() will
+	 * clear the protection mechanism and return true to indicate
+	 * the fault was handled
+	 */
+	return pks_test_callback(irq_state);
+}
+#else /* !CONFIG_PKS_TESTING */
+static bool handle_pks_testing(unsigned long hw_error_code, irqentry_state_t *irq_state)
+{
+	return false;
+}
+#endif /* CONFIG_PKS_TESTING */
+
+
+static int spurious_kernel_fault_check(unsigned long error_code, pte_t *pte,
+				       irqentry_state_t *irq_state)
+{
+	bool is_write = (error_code & X86_PF_WRITE);
+
+	if (IS_ENABLED(CONFIG_ARCH_HAS_SUPERVISOR_PKEYS) &&
+	    error_code & X86_PF_PK) {
+		if (global_pkey_is_enabled(pte, is_write, irq_state))
+			return 1;
+
+		if (handle_pks_testing(error_code, irq_state))
+			return 1;
+
+		return 0;
+	}
+
+	if (is_write && !pte_write(*pte))
 		return 0;
 
 	if ((error_code & X86_PF_INSTR) && !pte_exec(*pte))
@@ -1007,7 +1124,7 @@ static int spurious_kernel_fault_check(unsigned long error_code, pte_t *pte)
 }
 
 /*
- * Handle a spurious fault caused by a stale TLB entry.
+ * Handle a spurious fault caused by a stale TLB entry or a lazy PKRS update.
  *
  * This allows us to lazily refresh the TLB when increasing the
  * permissions of a kernel page (RO -> RW or NX -> X).  Doing it
@@ -1022,13 +1139,19 @@ static int spurious_kernel_fault_check(unsigned long error_code, pte_t *pte)
  * There are no security implications to leaving a stale TLB when
  * increasing the permissions on a page.
  *
+ * Similarly, PKRS increases in permissions are done on a thread local level.
+ * But if the caller indicates the permission should be allowd globaly we can
+ * lazily update only those threads which fault and avoid a global IPI MSR
+ * update.
+ *
  * Returns non-zero if a spurious fault was handled, zero otherwise.
  *
  * See Intel Developer's Manual Vol 3 Section 4.10.4.3, bullet 3
  * (Optional Invalidation).
  */
 static noinline int
-spurious_kernel_fault(unsigned long error_code, unsigned long address)
+spurious_kernel_fault(unsigned long error_code, unsigned long address,
+		      irqentry_state_t *irq_state)
 {
 	pgd_t *pgd;
 	p4d_t *p4d;
@@ -1038,17 +1161,19 @@ spurious_kernel_fault(unsigned long error_code, unsigned long address)
 	int ret;
 
 	/*
-	 * Only writes to RO or instruction fetches from NX may cause
-	 * spurious faults.
+	 * Only PKey faults or writes to RO or instruction fetches from NX may
+	 * cause spurious faults.
 	 *
 	 * These could be from user or supervisor accesses but the TLB
 	 * is only lazily flushed after a kernel mapping protection
 	 * change, so user accesses are not expected to cause spurious
 	 * faults.
 	 */
-	if (error_code != (X86_PF_WRITE | X86_PF_PROT) &&
-	    error_code != (X86_PF_INSTR | X86_PF_PROT))
-		return 0;
+	if (!(error_code & X86_PF_PK)) {
+		if (error_code != (X86_PF_WRITE | X86_PF_PROT) &&
+		    error_code != (X86_PF_INSTR | X86_PF_PROT))
+			return 0;
+	}
 
 	pgd = init_mm.pgd + pgd_index(address);
 	if (!pgd_present(*pgd))
@@ -1059,27 +1184,31 @@ spurious_kernel_fault(unsigned long error_code, unsigned long address)
 		return 0;
 
 	if (p4d_large(*p4d))
-		return spurious_kernel_fault_check(error_code, (pte_t *) p4d);
+		return spurious_kernel_fault_check(error_code, (pte_t *) p4d,
+						   irq_state);
 
 	pud = pud_offset(p4d, address);
 	if (!pud_present(*pud))
 		return 0;
 
 	if (pud_large(*pud))
-		return spurious_kernel_fault_check(error_code, (pte_t *) pud);
+		return spurious_kernel_fault_check(error_code, (pte_t *) pud,
+						   irq_state);
 
 	pmd = pmd_offset(pud, address);
 	if (!pmd_present(*pmd))
 		return 0;
 
 	if (pmd_large(*pmd))
-		return spurious_kernel_fault_check(error_code, (pte_t *) pmd);
+		return spurious_kernel_fault_check(error_code, (pte_t *) pmd,
+						   irq_state);
 
 	pte = pte_offset_kernel(pmd, address);
 	if (!pte_present(*pte))
 		return 0;
 
-	ret = spurious_kernel_fault_check(error_code, pte);
+	ret = spurious_kernel_fault_check(error_code, pte,
+					  irq_state);
 	if (!ret)
 		return 0;
 
@@ -1087,7 +1216,8 @@ spurious_kernel_fault(unsigned long error_code, unsigned long address)
 	 * Make sure we have permissions in PMD.
 	 * If not, then there's a bug in the page tables:
 	 */
-	ret = spurious_kernel_fault_check(error_code, (pte_t *) pmd);
+	ret = spurious_kernel_fault_check(error_code, (pte_t *) pmd,
+					  irq_state);
 	WARN_ONCE(!ret, "PMD has incorrect permission bits\n");
 
 	return ret;
@@ -1150,25 +1280,6 @@ static int fault_in_kernel_space(unsigned long address)
 	return address >= TASK_SIZE_MAX;
 }
 
-#ifdef CONFIG_PKS_TESTING
-bool pks_test_callback(irqentry_state_t *irq_state);
-static bool handle_pks_testing(unsigned long hw_error_code, irqentry_state_t *irq_state)
-{
-	/*
-	 * If we get a protection key exception it could be because we
-	 * are running the PKS test.  If so, pks_test_callback() will
-	 * clear the protection mechanism and return true to indicate
-	 * the fault was handled.
-	 */
-	return (hw_error_code & X86_PF_PK) && pks_test_callback(irq_state);
-}
-#else
-static bool handle_pks_testing(unsigned long hw_error_code, irqentry_state_t *irq_state)
-{
-	return false;
-}
-#endif
-
 /*
  * Called for all faults where 'address' is part of the kernel address
  * space.  Might get called for faults that originate from *code* that
@@ -1185,9 +1296,6 @@ do_kern_addr_fault(struct pt_regs *regs, unsigned long hw_error_code,
 	if (!IS_ENABLED(CONFIG_ARCH_HAS_SUPERVISOR_PKEYS) ||
 	    !cpu_feature_enabled(X86_FEATURE_PKS))
 		WARN_ON_ONCE(hw_error_code & X86_PF_PK);
-
-	if (handle_pks_testing(hw_error_code, irq_state))
-		return;
 
 #ifdef CONFIG_X86_32
 	/*
@@ -1220,8 +1328,11 @@ do_kern_addr_fault(struct pt_regs *regs, unsigned long hw_error_code,
 	}
 #endif
 
-	/* Was the fault spurious, caused by lazy TLB invalidation? */
-	if (spurious_kernel_fault(hw_error_code, address))
+	/*
+	 * Was the fault spurious; caused by lazy TLB invalidation or PKRS
+	 * update?
+	 */
+	if (spurious_kernel_fault(hw_error_code, address, irq_state))
 		return;
 
 	/* kprobes don't want to hook the spurious faults: */
@@ -1492,7 +1603,7 @@ DEFINE_IDTENTRY_RAW_ERRORCODE(exc_page_fault)
 	 *
 	 * Fingers crossed.
 	 *
-	 * The async #PF handling code takes care of idtentry handling
+	 * The async #PF handling code takes care of irqentry handling
 	 * itself.
 	 */
 	if (kvm_handle_async_pf(regs, (u32)address))

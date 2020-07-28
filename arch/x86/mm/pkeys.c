@@ -263,33 +263,84 @@ noinstr void write_pkrs(u32 new_pkrs)
 }
 EXPORT_SYMBOL_GPL(write_pkrs);
 
+/*
+ * NOTE: The pkrs_global_cache is _never_ stored in the per thread PKRS cache
+ * values [thread.saved_pkrs] by design
+ *
+ * This allows us to invalidate access on running threads immediately upon
+ * invalidate.  Sleeping threads will not be enabled due to the algorithm
+ * during pkrs_sched_in()
+ */
+DEFINE_SPINLOCK(pkrs_global_cache_lock);
+u32 pkrs_global_cache = INIT_PKRS_VALUE;
+EXPORT_SYMBOL_GPL(pkrs_global_cache);
+
+static inline void update_global_pkrs(int pkey, unsigned long protection)
+{
+	int pkey_shift = pkey * PKR_BITS_PER_PKEY;
+	u32 mask = (((1 << PKR_BITS_PER_PKEY) - 1) << pkey_shift);
+	u32 old_val;
+
+	spin_lock(&pkrs_global_cache_lock);
+	old_val = (pkrs_global_cache & mask) >> pkey_shift;
+	pkrs_global_cache &= ~mask;
+	if (protection & PKEY_DISABLE_ACCESS)
+		pkrs_global_cache |= PKR_AD_BIT << pkey_shift;
+	if (protection & PKEY_DISABLE_WRITE)
+		pkrs_global_cache |= PKR_WD_BIT << pkey_shift;
+
+	/*
+	 * If we are preventing access from the old value.  Force the
+	 * update on all running threads.
+	 */
+	if (((old_val == 0) && protection) ||
+	    ((old_val & PKR_WD_BIT) && (protection & PKEY_DISABLE_ACCESS))) {
+		int cpu;
+
+		for_each_online_cpu(cpu) {
+			u32 *ptr = per_cpu_ptr(&pkrs_cache, cpu);
+
+			*ptr = update_pkey_val(*ptr, pkey, protection);
+			wrmsrl_on_cpu(cpu, MSR_IA32_PKRS, *ptr);
+			put_cpu_ptr(ptr);
+		}
+	}
+	spin_unlock(&pkrs_global_cache_lock);
+}
+
 /**
  * Do not call this directly, see pks_mk*() below.
  *
  * @pkey: Key for the domain to change
  * @protection: protection bits to be used
+ * @global: should this change be made globally or not.
  *
  * Protection utilizes the same protection bits specified for User pkeys
  *     PKEY_DISABLE_ACCESS
  *     PKEY_DISABLE_WRITE
  *
  */
-static inline void pks_update_protection(int pkey, unsigned long protection)
+static inline void pks_update_protection(int pkey, unsigned long protection,
+					 bool global)
 {
-	current->thread.saved_pkrs = update_pkey_val(current->thread.saved_pkrs,
-						     pkey, protection);
 	preempt_disable();
+	if (global)
+		update_global_pkrs(pkey, protection);
+
+	current->thread.saved_pkrs = update_pkey_val(current->thread.saved_pkrs, pkey,
+						     protection);
 	write_pkrs(current->thread.saved_pkrs);
+
 	preempt_enable();
 }
 
 /**
  * PKS access control functions
  *
- * Change the access of the domain specified by the pkey.  These are global
- * updates.  They only affects the current running thread.  It is undefined and
- * a bug for users to call this without having allocated a pkey and using it as
- * pkey here.
+ * Change the access of the domain specified by the pkey.  These may be global
+ * updates depending on the value of global.  It is undefined and a bug for
+ * users to call this without having allocated a pkey and using it as pkey
+ * here.
  *
  * pks_mknoaccess()
  *     Disable all access to the domain
@@ -299,23 +350,30 @@ static inline void pks_update_protection(int pkey, unsigned long protection)
  *     Make the domain Read/Write
  *
  * @pkey the pkey for which the access should change.
- *
+ * @global if true the access is enabled on all threads/logical cpus
  */
-void pks_mknoaccess(int pkey)
+void pks_mknoaccess(int pkey, bool global)
 {
-	pks_update_protection(pkey, PKEY_DISABLE_ACCESS);
+	/*
+	 * We force disable access to be 11b
+	 * (PKEY_DISABLE_ACCESS | PKEY_DISABLE_WRITE)
+	 * instaed of 01b See arch/x86/kernel/process.c where the global pkrs
+	 * is factored in during context switch.
+	 */
+	pks_update_protection(pkey, PKEY_DISABLE_ACCESS | PKEY_DISABLE_WRITE,
+			      global);
 }
 EXPORT_SYMBOL_GPL(pks_mknoaccess);
 
-void pks_mkread(int pkey)
+void pks_mkread(int pkey, bool global)
 {
-	pks_update_protection(pkey, PKEY_DISABLE_WRITE);
+	pks_update_protection(pkey, PKEY_DISABLE_WRITE, global);
 }
 EXPORT_SYMBOL_GPL(pks_mkread);
 
-void pks_mkrdwr(int pkey)
+void pks_mkrdwr(int pkey, bool global)
 {
-	pks_update_protection(pkey, 0);
+	pks_update_protection(pkey, 0, global);
 }
 EXPORT_SYMBOL_GPL(pks_mkrdwr);
 
@@ -377,7 +435,7 @@ void pks_key_free(int pkey)
 		return;
 
 	/* Restore to default of no access */
-	pks_mknoaccess(pkey);
+	pks_mknoaccess(pkey, true);
 	pks_key_users[pkey] = NULL;
 	__clear_bit(pkey, &pks_key_allocation_map);
 }
