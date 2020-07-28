@@ -32,18 +32,18 @@ static inline void invalidate_kernel_vmap_range(void *vaddr, int size)
 
 #include <asm/kmap_types.h>
 
-static inline void dev_page_enable_access(struct page *page)
+static inline void dev_page_enable_access(struct page *page, bool global)
 {
 	if (!page_is_access_protected(page))
 		return;
-	dev_access_enable();
+	dev_access_enable(global);
 }
 
-static inline void dev_page_disable_access(struct page *page)
+static inline void dev_page_disable_access(struct page *page, bool global)
 {
 	if (!page_is_access_protected(page))
 		return;
-	dev_access_disable();
+	dev_access_disable(global);
 }
 
 #ifdef CONFIG_HIGHMEM
@@ -74,7 +74,7 @@ static inline void *kmap(struct page *page)
 	 * Even non-highmem pages may have additional access protections which
 	 * need to be checked and potentially enabled.
 	 */
-	dev_page_enable_access(page);
+	dev_page_enable_access(page, true);
 	return addr;
 }
 
@@ -87,7 +87,7 @@ static inline void kunmap(struct page *page)
 	 * Even non-highmem pages may have additional access protections which
 	 * need to be checked and potentially disabled.
 	 */
-	dev_page_disable_access(page);
+	dev_page_disable_access(page, true);
 	if (!PageHighMem(page))
 		return;
 	kunmap_high(page);
@@ -110,7 +110,7 @@ static inline void *kmap_atomic_prot(struct page *page, pgprot_t prot)
 {
 	preempt_disable();
 	pagefault_disable();
-	dev_page_enable_access(page);
+	dev_page_enable_access(page, false);
 	if (!PageHighMem(page))
 		return page_address(page);
 	return kmap_atomic_high_prot(page, prot);
@@ -163,7 +163,7 @@ static inline unsigned long totalhigh_pages(void) { return 0UL; }
 static inline void *kmap(struct page *page)
 {
 	might_sleep();
-	dev_page_enable_access(page);
+	dev_page_enable_access(page, true);
 	return page_address(page);
 }
 
@@ -173,7 +173,7 @@ static inline void kunmap_high(struct page *page)
 
 static inline void kunmap(struct page *page)
 {
-	dev_page_disable_access(page);
+	dev_page_disable_access(page, true);
 #ifdef ARCH_HAS_FLUSH_ON_KUNMAP
 	kunmap_flush_on_unmap(page_address(page));
 #endif
@@ -183,7 +183,7 @@ static inline void *kmap_atomic(struct page *page)
 {
 	preempt_disable();
 	pagefault_disable();
-	dev_page_enable_access(page);
+	dev_page_enable_access(page, false);
 	return page_address(page);
 }
 #define kmap_atomic_prot(page, prot)	kmap_atomic(page)
@@ -245,7 +245,7 @@ static inline void kmap_atomic_idx_pop(void)
 #define kunmap_atomic(addr)                                     \
 do {                                                            \
 	BUILD_BUG_ON(__same_type((addr), struct page *));       \
-	dev_page_disable_access(kmap_to_page(addr));                     \
+	dev_page_disable_access(kmap_to_page(addr), false);     \
 	kunmap_atomic_high(addr);                               \
 	pagefault_enable();                                     \
 	preempt_enable();                                       \

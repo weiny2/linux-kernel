@@ -99,25 +99,26 @@ static void dev_pgprot_put(struct dev_pagemap *pgmap)
 		static_branch_dec(&dev_protection_static_key);
 }
 
-void __dev_access_disable(void)
+void __dev_access_disable(bool global)
 {
 	unsigned long flags;
 
 	local_irq_save(flags);
 	if (!--current->dev_page_access_ref)
-		pks_update_protection(dev_page_pkey, PKEY_DISABLE_ACCESS);
+		pks_update_protection(dev_page_pkey, PKEY_DISABLE_ACCESS,
+				      global);
 	local_irq_restore(flags);
 }
 EXPORT_SYMBOL_GPL(__dev_access_disable);
 
-void __dev_access_enable(void)
+void __dev_access_enable(bool global)
 {
 	unsigned long flags;
 
 	local_irq_save(flags);
 	/* 0 clears the PKEY_DISABLE_ACCESS bit, allowing access */
 	if (!current->dev_page_access_ref++)
-		pks_update_protection(dev_page_pkey, 0);
+		pks_update_protection(dev_page_pkey, 0, global);
 	local_irq_restore(flags);
 }
 EXPORT_SYMBOL_GPL(__dev_access_enable);

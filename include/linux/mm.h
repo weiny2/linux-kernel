@@ -1145,25 +1145,25 @@ static inline bool page_is_access_protected(struct page *page)
 	return false;
 }
 
-void __dev_access_enable(void);
-void __dev_access_disable(void);
-static __always_inline void dev_access_enable(void)
+void __dev_access_enable(bool global);
+void __dev_access_disable(bool global);
+static __always_inline void dev_access_enable(bool global)
 {
 	if (static_branch_unlikely(&dev_protection_static_key))
-		__dev_access_enable();
+		__dev_access_enable(global);
 }
-static __always_inline void dev_access_disable(void)
+static __always_inline void dev_access_disable(bool global)
 {
 	if (static_branch_unlikely(&dev_protection_static_key))
-		__dev_access_disable();
+		__dev_access_disable(global);
 }
 #else
 static inline bool page_is_access_protected(struct page *page)
 {
 	return false;
 }
-static inline void dev_access_enable(void) { }
-static inline void dev_access_disable(void) { }
+static inline void dev_access_enable(bool global) { }
+static inline void dev_access_disable(bool global) { }
 #endif /* CONFIG_ZONE_DEVICE_ACCESS_PROTECTION */
 
 /* 127: arbitrary random number, small enough to assemble well */

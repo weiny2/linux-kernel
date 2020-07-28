@@ -142,27 +142,52 @@ u32 update_pkey_val(u32 pk_reg, int pkey, unsigned int flags);
 int pks_key_alloc(const char *const pkey_user);
 void pks_key_free(int pkey);
 
+extern u32 pkrs_global_cache;
+
 /*
  * pks_update_protection - Update the protection of the specified key
  *
  * @pkey: Key for the domain to change
  * @protection: protection bits to be used
+ * @global: true == this change should be global; false == thread local only
  *
  * Protection utilizes the same protection bits specified for User pkeys
  *     PKEY_DISABLE_ACCESS
  *     PKEY_DISABLE_WRITE
  *
- * This is not a global update.  It only affects the current running thread.
- *
  * It is undefined and a bug for users to call this without having allocated a
  * pkey and using it as pkey here.
  */
-static inline void pks_update_protection(int pkey, unsigned long protection)
+static inline void pks_update_protection(int pkey, unsigned long protection,
+					 bool global)
 {
-	current->thread.saved_pkrs = update_pkey_val(current->thread.saved_pkrs,
-						     pkey, protection);
+	u32 val = update_pkey_val(current->thread.saved_pkrs, pkey, protection);
+
 	preempt_disable();
-	write_pkrs(current->thread.saved_pkrs);
+	if (global) {
+		pkrs_global_cache = update_pkey_val(pkrs_global_cache, pkey,
+						    protection);
+
+		/*
+		 * If we are disabling globaly; force the update on the running
+		 * threads
+		 */
+		if (protection) {
+			int cpu;
+
+			for_each_online_cpu(cpu) {
+				u32 *ptr = per_cpu_ptr(&pkrs_cache, cpu);
+
+				*ptr = update_pkey_val(*ptr, pkey, protection);
+				wrmsrl_on_cpu(cpu, MSR_IA32_PKRS, *ptr);
+				put_cpu_ptr(ptr);
+			}
+		}
+	}
+
+	current->thread.saved_pkrs = val;
+	write_pkrs(val);
+
 	preempt_enable();
 }
 #endif /* CONFIG_ARCH_HAS_SUPERVISOR_PKEYS */
