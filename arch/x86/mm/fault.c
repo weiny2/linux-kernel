@@ -32,6 +32,8 @@
 #include <asm/pgtable_areas.h>		/* VMALLOC_START, ...		*/
 #include <asm/kvm_para.h>		/* kvm_handle_async_pf		*/
 
+#include <asm-generic/mman-common.h>
+
 #define CREATE_TRACE_POINTS
 #include <asm/trace/exceptions.h>
 
@@ -940,9 +942,59 @@ mm_fault_error(struct pt_regs *regs, unsigned long error_code,
 	}
 }
 
+#ifdef CONFIG_ARCH_HAS_SUPERVISOR_PKEYS
+/*
+ * check if we have had a 'global' pkey update.  If so, handle this like a lazy
+ * TLB; fix up the local MSR and return
+ */
+static bool global_pkey_is_enabled(pte_t *pte, bool is_write)
+{
+	u8 pkey = pte_flags_pkey(pte->pte);
+	int pkey_shift = pkey * PKR_BITS_PER_PKEY;
+	u32 mask = (((1 << PKR_BITS_PER_PKEY) - 1) << pkey_shift);
+	u32 global = READ_ONCE(pkrs_global_cache);
+	u32 val;
+	u32 *pkrs;
+
+	/* Check if the access is valid with the global register */
+	val = (global & mask) >> pkey_shift;
+	if ((val & PKR_AD_BIT) || (is_write && (val & PKR_WD_BIT)))
+		return false;
+
+	/*
+	 * NOTE: We don't udate the current thread saved_pkrs because the MSR
+	 * will be valid for the remainder of this time slice and subsequent
+	 * schedule in should pick up the global relaxation of permissions.
+	 */
+	pkrs = get_cpu_ptr(&pkrs_cache);
+	val = *pkrs & ~mask;
+	val |= (global & mask);
+	*pkrs = val;
+	wrmsrl(MSR_IA32_PKRS, val);
+	put_cpu_ptr(pkrs);
+
+	return true;
+}
+#else /* !CONFIG_ARCH_HAS_SUPERVISOR_PKEYS */
+__always_inline bool global_pkey_is_enabled(pte_t *pte, bool is_write)
+{
+	return false;
+}
+#endif
+
 static int spurious_kernel_fault_check(unsigned long error_code, pte_t *pte)
 {
-	if ((error_code & X86_PF_WRITE) && !pte_write(*pte))
+	bool is_write = (error_code & X86_PF_WRITE);
+
+	if (error_code & X86_PF_PK) {
+		if (global_pkey_is_enabled(pte, is_write))
+			return 1;
+
+		WARN_ON_ONCE(1);
+		return 0;
+	}
+
+	if (is_write && !pte_write(*pte))
 		return 0;
 
 	if ((error_code & X86_PF_INSTR) && !pte_exec(*pte))
@@ -952,7 +1004,7 @@ static int spurious_kernel_fault_check(unsigned long error_code, pte_t *pte)
 }
 
 /*
- * Handle a spurious fault caused by a stale TLB entry.
+ * Handle a spurious fault caused by a stale TLB entry or a lazy PKRS update.
  *
  * This allows us to lazily refresh the TLB when increasing the
  * permissions of a kernel page (RO -> RW or NX -> X).  Doing it
@@ -966,6 +1018,11 @@ static int spurious_kernel_fault_check(unsigned long error_code, pte_t *pte)
  *
  * There are no security implications to leaving a stale TLB when
  * increasing the permissions on a page.
+ *
+ * Similarly, PKRS increases in permissions are done on a thread local level.
+ * But if the caller indicates the permission should be allowd globaly we can
+ * lazily update only those threads which fault and avoid a global IPI MSR
+ * update.
  *
  * Returns non-zero if a spurious fault was handled, zero otherwise.
  *
@@ -983,17 +1040,19 @@ spurious_kernel_fault(unsigned long error_code, unsigned long address)
 	int ret;
 
 	/*
-	 * Only writes to RO or instruction fetches from NX may cause
-	 * spurious faults.
+	 * Only PKey faults or writes to RO or instruction fetches from NX may
+	 * cause spurious faults.
 	 *
 	 * These could be from user or supervisor accesses but the TLB
 	 * is only lazily flushed after a kernel mapping protection
 	 * change, so user accesses are not expected to cause spurious
 	 * faults.
 	 */
-	if (error_code != (X86_PF_WRITE | X86_PF_PROT) &&
-	    error_code != (X86_PF_INSTR | X86_PF_PROT))
-		return 0;
+	if (!(error_code & X86_PF_PK)) {
+		if (error_code != (X86_PF_WRITE | X86_PF_PROT) &&
+		    error_code != (X86_PF_INSTR | X86_PF_PROT))
+			return 0;
+	}
 
 	pgd = init_mm.pgd + pgd_index(address);
 	if (!pgd_present(*pgd))
@@ -1105,13 +1164,9 @@ do_kern_addr_fault(struct pt_regs *regs, unsigned long hw_error_code,
 		   unsigned long address)
 {
 	/*
-	 * Protection keys exceptions only happen on user pages.  We
-	 * have no user pages in the kernel portion of the address
-	 * space, so do not expect them here.
+	 * Was the fault spurious; caused by lazy TLB invalidation or PKRS
+	 * update?
 	 */
-	WARN_ON_ONCE(hw_error_code & X86_PF_PK);
-
-	/* Was the fault spurious, caused by lazy TLB invalidation? */
 	if (spurious_kernel_fault(hw_error_code, address))
 		return;
 
