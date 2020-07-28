@@ -42,6 +42,7 @@
 #include <asm/spec-ctrl.h>
 #include <asm/io_bitmap.h>
 #include <asm/proto.h>
+#include <asm/pkeys.h>
 #include <asm/pkeys_internal.h>
 
 #include "process.h"
@@ -188,15 +189,77 @@ int copy_thread(unsigned long clone_flags, unsigned long sp, unsigned long arg,
 }
 
 #ifdef CONFIG_ARCH_HAS_SUPERVISOR_PKEYS
-DECLARE_PER_CPU(u32, pkrs_cache);
 static inline void pks_init_task(struct task_struct *tsk)
 {
 	/* New tasks get the most restrictive PKRS value */
 	tsk->thread.saved_pkrs = INIT_PKRS_VALUE;
 }
+
+extern u32 pkrs_global_cache;
+
+/**
+ * The global value can only decrease permissions (increase access) so the
+ * following are the possibilities.  Unfortunately, bit wise '&' works most of
+ * the time but not all.  So if the global is not the default we must check the
+ * individual pkey values.
+ *
+ * 00 all access
+ * 10 write disabled
+ * 01 access disabled
+ * 11 dont care (effectively access disabled)
+ *
+ * local  global  result  effective
+ *                        operation
+ * 00     00      00       &
+ * 00     10      00       &
+ * 00     01      00       &
+ * 00     11      00       &
+ *
+ * 10     00      00       &
+ * 10     10      10       &
+ * 10     01      10       ^ special case
+ * 10     11      10       &
+ *
+ * 01     00      00       &
+ * 01     10      10       ^ special case
+ * 01     01      01       &
+ * 01     11      01       &
+ *
+ * 11     00      00       &
+ * 11     10      10       &
+ * 11     01      01       &
+ * 11     11      11       &
+ */
+static inline u32 add_in_global(u32 old)
+{
+	u32 global_reg = READ_ONCE(pkrs_global_cache);
+	u32 new = 0;
+	int i;
+
+	if (global_reg == INIT_PKRS_VALUE)
+		return old;
+
+	for (i = PKS_KERN_DEFAULT_KEY; i < PKS_NUM_KEYS; i++) {
+		int pkey_shift = i * PKR_BITS_PER_PKEY;
+		u8 local = (old >> pkey_shift) & 0x3;
+		u8 global = (global_reg >> pkey_shift) & 0x3;
+		u8 new_bits = local & global;
+
+		/* Special case */
+		if (local && global && !new_bits)
+			new_bits = 0x2;
+
+		new |= (new_bits << pkey_shift);
+	}
+
+	return new;
+}
 static inline void pks_sched_in(void)
 {
-	write_pkrs(current->thread.saved_pkrs);
+	u32 val = current->thread.saved_pkrs;
+
+	val = add_in_global(val);
+	write_pkrs(val);
 }
 #else
 static inline void pks_init_task(struct task_struct *tsk) { }
