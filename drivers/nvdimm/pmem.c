@@ -148,9 +148,9 @@ static blk_status_t pmem_do_read(struct pmem_device *pmem,
 	if (unlikely(is_bad_pmem(&pmem->bb, sector, len)))
 		return BLK_STS_IOERR;
 
-	dev_access_enable();
+	dev_access_enable(false);
 	rc = read_pmem(page, page_off, pmem_addr, len);
-	dev_access_disable();
+	dev_access_disable(false);
 	flush_dcache_page(page);
 	return rc;
 }
@@ -182,13 +182,13 @@ static blk_status_t pmem_do_write(struct pmem_device *pmem,
 	 * after clear poison.
 	 */
 	flush_dcache_page(page);
-	dev_access_enable();
+	dev_access_enable(false);
 	write_pmem(pmem_addr, page, page_off, len);
 	if (unlikely(bad_pmem)) {
 		rc = pmem_clear_poison(pmem, pmem_off, len);
 		write_pmem(pmem_addr, page, page_off, len);
 	}
-	dev_access_disable();
+	dev_access_disable(false);
 
 	return rc;
 }
