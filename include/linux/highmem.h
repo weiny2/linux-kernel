@@ -45,7 +45,7 @@ static inline void kmap_flush_tlb(unsigned long addr) { }
 #endif
 
 void *kmap_high(struct page *page);
-static inline void *kmap(struct page *page)
+static inline void *__kmap(struct page *page)
 {
 	void *addr;
 
@@ -60,7 +60,7 @@ static inline void *kmap(struct page *page)
 
 void kunmap_high(struct page *page);
 
-static inline void kunmap(struct page *page)
+static inline void __kunmap(struct page *page)
 {
 	might_sleep();
 	if (!PageHighMem(page))
@@ -134,7 +134,7 @@ static inline struct page *kmap_to_page(void *addr)
 
 static inline unsigned long totalhigh_pages(void) { return 0UL; }
 
-static inline void *kmap(struct page *page)
+static inline void *__kmap(struct page *page)
 {
 	might_sleep();
 	return page_address(page);
@@ -144,7 +144,7 @@ static inline void kunmap_high(struct page *page)
 {
 }
 
-static inline void kunmap(struct page *page)
+static inline void __kunmap(struct page *page)
 {
 #ifdef ARCH_HAS_FLUSH_ON_KUNMAP
 	kunmap_flush_on_unmap(page_address(page));
@@ -208,6 +208,24 @@ static inline void kmap_atomic_idx_pop(void)
 }
 
 #endif
+
+static inline void *kmap(struct page *page)
+{
+	return __kmap(page);
+}
+static inline void kunmap(struct page *page)
+{
+	__kunmap(page);
+}
+
+static inline void *kmap_thread(struct page *page)
+{
+	return __kmap(page);
+}
+static inline void kunmap_thread(struct page *page)
+{
+	__kunmap(page);
+}
 
 /*
  * Prevent people trying to call kunmap_atomic() as if it were kunmap()
