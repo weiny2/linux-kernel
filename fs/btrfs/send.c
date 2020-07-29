@@ -4988,10 +4988,10 @@ static int put_file_data(struct send_ctx *sctx, u64 offset, u32 len)
 			}
 		}
 
-		addr = kmap(page);
+		addr = kmap_thread(page);
 		memcpy(sctx->send_buf + sctx->send_size, addr + pg_offset,
 		       cur_len);
-		kunmap(page);
+		kunmap_thread(page);
 		unlock_page(page);
 		put_page(page);
 		index++;
