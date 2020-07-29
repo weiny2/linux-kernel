@@ -140,7 +140,7 @@ int lzo_compress_pages(struct list_head *ws, struct address_space *mapping,
 	*total_in = 0;
 
 	in_page = find_get_page(mapping, start >> PAGE_SHIFT);
-	data_in = kmap(in_page);
+	data_in = kmap_thread(in_page);
 
 	/*
 	 * store the size of all chunks of compressed data in
@@ -151,7 +151,7 @@ int lzo_compress_pages(struct list_head *ws, struct address_space *mapping,
 		ret = -ENOMEM;
 		goto out;
 	}
-	cpage_out = kmap(out_page);
+	cpage_out = kmap_thread(out_page);
 	out_offset = LZO_LEN;
 	tot_out = LZO_LEN;
 	pages[0] = out_page;
@@ -209,7 +209,7 @@ int lzo_compress_pages(struct list_head *ws, struct address_space *mapping,
 				if (out_len == 0 && tot_in >= len)
 					break;
 
-				kunmap(out_page);
+				kunmap_thread(out_page);
 				if (nr_pages == nr_dest_pages) {
 					out_page = NULL;
 					ret = -E2BIG;
@@ -221,7 +221,7 @@ int lzo_compress_pages(struct list_head *ws, struct address_space *mapping,
 					ret = -ENOMEM;
 					goto out;
 				}
-				cpage_out = kmap(out_page);
+				cpage_out = kmap_thread(out_page);
 				pages[nr_pages++] = out_page;
 
 				pg_bytes_left = PAGE_SIZE;
@@ -243,12 +243,12 @@ int lzo_compress_pages(struct list_head *ws, struct address_space *mapping,
 			break;
 
 		bytes_left = len - tot_in;
-		kunmap(in_page);
+		kunmap_thread(in_page);
 		put_page(in_page);
 
 		start += PAGE_SIZE;
 		in_page = find_get_page(mapping, start >> PAGE_SHIFT);
-		data_in = kmap(in_page);
+		data_in = kmap_thread(in_page);
 		in_len = min(bytes_left, PAGE_SIZE);
 	}
 
@@ -258,10 +258,10 @@ int lzo_compress_pages(struct list_head *ws, struct address_space *mapping,
 	}
 
 	/* store the size of all chunks of compressed data */
-	cpage_out = kmap(pages[0]);
+	cpage_out = kmap_thread(pages[0]);
 	write_compress_length(cpage_out, tot_out);
 
-	kunmap(pages[0]);
+	kunmap_thread(pages[0]);
 
 	ret = 0;
 	*total_out = tot_out;
@@ -269,10 +269,10 @@ int lzo_compress_pages(struct list_head *ws, struct address_space *mapping,
 out:
 	*out_pages = nr_pages;
 	if (out_page)
-		kunmap(out_page);
+		kunmap_thread(out_page);
 
 	if (in_page) {
-		kunmap(in_page);
+		kunmap_thread(in_page);
 		put_page(in_page);
 	}
 
@@ -305,7 +305,7 @@ int lzo_decompress_bio(struct list_head *ws, struct compressed_bio *cb)
 	u64 disk_start = cb->start;
 	struct bio *orig_bio = cb->orig_bio;
 
-	data_in = kmap(pages_in[0]);
+	data_in = kmap_thread(pages_in[0]);
 	tot_len = read_compress_length(data_in);
 	/*
 	 * Compressed data header check.
@@ -387,7 +387,7 @@ cont:
 				else
 					kunmap(pages_in[page_in_index]);
 
-				data_in = kmap(pages_in[++page_in_index]);
+				data_in = kmap_thread(pages_in[++page_in_index]);
 
 				in_page_bytes_left = PAGE_SIZE;
 				in_offset = 0;
