@@ -88,14 +88,14 @@ static blk_status_t do_blktrans_request(struct mtd_blktrans_ops *tr,
 			return BLK_STS_IOERR;
 		return BLK_STS_OK;
 	case REQ_OP_READ:
-		buf = kmap(bio_page(req->bio)) + bio_offset(req->bio);
+		buf = kmap_thread(bio_page(req->bio)) + bio_offset(req->bio);
 		for (; nsect > 0; nsect--, block++, buf += tr->blksize) {
 			if (tr->readsect(dev, block, buf)) {
-				kunmap(bio_page(req->bio));
+				kunmap_thread(bio_page(req->bio));
 				return BLK_STS_IOERR;
 			}
 		}
-		kunmap(bio_page(req->bio));
+		kunmap_thread(bio_page(req->bio));
 		rq_flush_dcache_pages(req);
 		return BLK_STS_OK;
 	case REQ_OP_WRITE:
@@ -103,14 +103,14 @@ static blk_status_t do_blktrans_request(struct mtd_blktrans_ops *tr,
 			return BLK_STS_IOERR;
 
 		rq_flush_dcache_pages(req);
-		buf = kmap(bio_page(req->bio)) + bio_offset(req->bio);
+		buf = kmap_thread(bio_page(req->bio)) + bio_offset(req->bio);
 		for (; nsect > 0; nsect--, block++, buf += tr->blksize) {
 			if (tr->writesect(dev, block, buf)) {
-				kunmap(bio_page(req->bio));
+				kunmap_thread(bio_page(req->bio));
 				return BLK_STS_IOERR;
 			}
 		}
-		kunmap(bio_page(req->bio));
+		kunmap_thread(bio_page(req->bio));
 		return BLK_STS_OK;
 	default:
 		return BLK_STS_IOERR;
