@@ -4863,9 +4863,9 @@ static ssize_t fill_read_buf(struct send_ctx *sctx, u64 offset, u32 len)
 			}
 		}
 
-		addr = kmap(page);
+		addr = kmap_thread(page);
 		memcpy(sctx->read_buf + ret, addr + pg_offset, cur_len);
-		kunmap(page);
+		kunmap_thread(page);
 		unlock_page(page);
 		put_page(page);
 		index++;
