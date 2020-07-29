@@ -107,7 +107,7 @@ static int romfs_readpage(struct file *file, struct page *page)
 	void *buf;
 	int ret;
 
-	buf = kmap(page);
+	buf = kmap_thread(page);
 	if (!buf)
 		return -ENOMEM;
 
@@ -136,7 +136,7 @@ static int romfs_readpage(struct file *file, struct page *page)
 		SetPageUptodate(page);
 
 	flush_dcache_page(page);
-	kunmap(page);
+	kunmap_thread(page);
 	unlock_page(page);
 	return ret;
 }
