@@ -4184,7 +4184,6 @@ static int do_journal_end(struct reiserfs_transaction_handle *th, int flags)
 		/* copy all the real blocks into log area.  dirty log blocks */
 		if (buffer_journaled(cn->bh)) {
 			struct buffer_head *tmp_bh;
-			char *addr;
 			struct page *page;
 			tmp_bh =
 			    journal_getblk(sb,
@@ -4194,11 +4193,9 @@ static int do_journal_end(struct reiserfs_transaction_handle *th, int flags)
 					    SB_ONDISK_JOURNAL_SIZE(sb)));
 			set_buffer_uptodate(tmp_bh);
 			page = cn->bh->b_page;
-			addr = kmap(page);
-			memcpy(tmp_bh->b_data,
-			       addr + offset_in_page(cn->bh->b_data),
-			       cn->bh->b_size);
-			kunmap(page);
+			memcpy_from_page(tmp_bh->b_data, page,
+					 offset_in_page(cn->bh->b_data),
+					 cn->bh->b_size);
 			mark_buffer_dirty(tmp_bh);
 			jindex++;
 			set_buffer_journal_dirty(cn->bh);
