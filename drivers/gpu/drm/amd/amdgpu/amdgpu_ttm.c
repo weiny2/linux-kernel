@@ -2400,11 +2400,11 @@ static ssize_t amdgpu_ttm_gtt_read(struct file *f, char __user *buf,
 
 		page = adev->gart.pages[p];
 		if (page) {
-			ptr = kmap(page);
+			ptr = kmap_thread(page);
 			ptr += off;
 
 			r = copy_to_user(buf, ptr, cur_size);
-			kunmap(adev->gart.pages[p]);
+			kunmap_thread(adev->gart.pages[p]);
 		} else
 			r = clear_user(buf, cur_size);
 
@@ -2470,9 +2470,9 @@ static ssize_t amdgpu_iomem_read(struct file *f, char __user *buf,
 		if (p->mapping != adev->mman.bdev.dev_mapping)
 			return -EPERM;
 
-		ptr = kmap(p);
+		ptr = kmap_thread(p);
 		r = copy_to_user(buf, ptr + off, bytes);
-		kunmap(p);
+		kunmap_thread(p);
 		if (r)
 			return -EFAULT;
 
@@ -2521,9 +2521,9 @@ static ssize_t amdgpu_iomem_write(struct file *f, const char __user *buf,
 		if (p->mapping != adev->mman.bdev.dev_mapping)
 			return -EPERM;
 
-		ptr = kmap(p);
+		ptr = kmap_thread(p);
 		r = copy_from_user(ptr + off, buf, bytes);
-		kunmap(p);
+		kunmap_thread(p);
 		if (r)
 			return -EFAULT;
 

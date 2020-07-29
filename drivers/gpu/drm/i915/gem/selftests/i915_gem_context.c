@@ -1751,7 +1751,7 @@ static int check_scratch_page(struct i915_gem_context *ctx, u32 *out)
 		return -EINVAL;
 	}
 
-	vaddr = kmap(page);
+	vaddr = kmap_thread(page);
 	if (!vaddr) {
 		pr_err("No (mappable) scratch page!\n");
 		return -EINVAL;
@@ -1762,7 +1762,7 @@ static int check_scratch_page(struct i915_gem_context *ctx, u32 *out)
 		pr_err("Inconsistent initial state of scratch page!\n");
 		err = -EINVAL;
 	}
-	kunmap(page);
+	kunmap_thread(page);
 
 	return err;
 }
