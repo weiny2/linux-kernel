@@ -4586,7 +4586,7 @@ again:
 	if (offset != blocksize) {
 		if (!len)
 			len = blocksize - offset;
-		kaddr = kmap(page);
+		kaddr = kmap_thread(page);
 		if (front)
 			memset(kaddr + (block_start - page_offset(page)),
 				0, offset);
@@ -4594,7 +4594,7 @@ again:
 			memset(kaddr + (block_start - page_offset(page)) +  offset,
 				0, len);
 		flush_dcache_page(page);
-		kunmap(page);
+		kunmap_thread(page);
 	}
 	ClearPageChecked(page);
 	set_page_dirty(page);
@@ -6479,9 +6479,9 @@ static noinline int uncompress_inline(struct btrfs_path *path,
 	 */
 
 	if (max_size + pg_offset < PAGE_SIZE) {
-		char *map = kmap(page);
+		char *map = kmap_thread(page);
 		memset(map + pg_offset + max_size, 0, PAGE_SIZE - max_size - pg_offset);
-		kunmap(page);
+		kunmap_thread(page);
 	}
 	kfree(tmp);
 	return ret;
@@ -6674,7 +6674,7 @@ next:
 					goto out;
 				}
 			} else {
-				map = kmap(page);
+				map = kmap_thread(page);
 				read_extent_buffer(leaf, map + pg_offset, ptr,
 						   copy_size);
 				if (pg_offset + copy_size < PAGE_SIZE) {
@@ -6682,7 +6682,7 @@ next:
 					       PAGE_SIZE - pg_offset -
 					       copy_size);
 				}
-				kunmap(page);
+				kunmap_thread(page);
 			}
 			flush_dcache_page(page);
 		}
@@ -8281,10 +8281,10 @@ again:
 		zero_start = PAGE_SIZE;
 
 	if (zero_start != PAGE_SIZE) {
-		kaddr = kmap(page);
+		kaddr = kmap_thread(page);
 		memset(kaddr + zero_start, 0, PAGE_SIZE - zero_start);
 		flush_dcache_page(page);
-		kunmap(page);
+		kunmap_thread(page);
 	}
 	ClearPageChecked(page);
 	set_page_dirty(page);
