@@ -142,12 +142,12 @@ static int __shmem_rw(struct file *file, loff_t off,
 		if (IS_ERR(page))
 			return PTR_ERR(page);
 
-		vaddr = kmap(page);
+		vaddr = kmap_thread(page);
 		if (write)
 			memcpy(vaddr + offset_in_page(off), ptr, this);
 		else
 			memcpy(ptr, vaddr + offset_in_page(off), this);
-		kunmap(page);
+		kunmap_thread(page);
 		put_page(page);
 
 		len -= this;
