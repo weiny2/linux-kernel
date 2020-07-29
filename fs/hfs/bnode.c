@@ -23,8 +23,8 @@ void hfs_bnode_read(struct hfs_bnode *node, void *buf,
 	off += node->page_offset;
 	page = node->page[0];
 
-	memcpy(buf, kmap(page) + off, len);
-	kunmap(page);
+	memcpy(buf, kmap_thread(page) + off, len);
+	kunmap_thread(page);
 }
 
 u16 hfs_bnode_read_u16(struct hfs_bnode *node, int off)
@@ -108,9 +108,9 @@ void hfs_bnode_copy(struct hfs_bnode *dst_node, int dst,
 	src_page = src_node->page[0];
 	dst_page = dst_node->page[0];
 
-	memcpy(kmap(dst_page) + dst, kmap(src_page) + src, len);
-	kunmap(src_page);
-	kunmap(dst_page);
+	memcpy(kmap_thread(dst_page) + dst, kmap_thread(src_page) + src, len);
+	kunmap_thread(src_page);
+	kunmap_thread(dst_page);
 	set_page_dirty(dst_page);
 }
 
@@ -125,9 +125,9 @@ void hfs_bnode_move(struct hfs_bnode *node, int dst, int src, int len)
 	src += node->page_offset;
 	dst += node->page_offset;
 	page = node->page[0];
-	ptr = kmap(page);
+	ptr = kmap_thread(page);
 	memmove(ptr + dst, ptr + src, len);
-	kunmap(page);
+	kunmap_thread(page);
 	set_page_dirty(page);
 }
 
