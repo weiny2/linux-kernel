@@ -92,10 +92,10 @@ static int copy_inline_to_page(struct inode *inode,
 	if (comp_type == BTRFS_COMPRESS_NONE) {
 		char *map;
 
-		map = kmap(page);
+		map = kmap_thread(page);
 		memcpy(map, data_start, datal);
 		flush_dcache_page(page);
-		kunmap(page);
+		kunmap_thread(page);
 	} else {
 		ret = btrfs_decompress(comp_type, data_start, page, 0,
 				       inline_size, datal);
@@ -119,10 +119,10 @@ static int copy_inline_to_page(struct inode *inode,
 	if (datal < block_size) {
 		char *map;
 
-		map = kmap(page);
+		map = kmap_thread(page);
 		memset(map + datal, 0, block_size - datal);
 		flush_dcache_page(page);
-		kunmap(page);
+		kunmap_thread(page);
 	}
 
 	SetPageUptodate(page);
