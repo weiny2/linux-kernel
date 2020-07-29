@@ -120,9 +120,9 @@ void hfs_bnode_move(struct hfs_bnode *node, int dst, int src, int len)
 	src += node->page_offset;
 	dst += node->page_offset;
 	page = node->page[0];
-	ptr = kmap(page);
+	ptr = kmap_thread(page);
 	memmove(ptr + dst, ptr + src, len);
-	kunmap(page);
+	kunmap_thread(page);
 	set_page_dirty(page);
 }
 
