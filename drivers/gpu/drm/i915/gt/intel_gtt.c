@@ -312,9 +312,9 @@ static void poison_scratch_page(struct page *page, unsigned long size)
 	do {
 		void *vaddr;
 
-		vaddr = kmap(page);
+		vaddr = kmap_thread(page);
 		memset(vaddr, POISON_FREE, PAGE_SIZE);
-		kunmap(page);
+		kunmap_thread(page);
 
 		page = pfn_to_page(page_to_pfn(page) + 1);
 		size -= PAGE_SIZE;
