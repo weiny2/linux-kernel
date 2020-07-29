@@ -400,9 +400,9 @@ int gma_crtc_cursor_set(struct drm_crtc *crtc,
 		/* Copy the cursor to cursor mem */
 		tmp_dst = dev_priv->vram_addr + cursor_gt->offset;
 		for (i = 0; i < cursor_pages; i++) {
-			tmp_src = kmap(gt->pages[i]);
+			tmp_src = kmap_thread(gt->pages[i]);
 			memcpy(tmp_dst, tmp_src, PAGE_SIZE);
-			kunmap(gt->pages[i]);
+			kunmap_thread(gt->pages[i]);
 			tmp_dst += PAGE_SIZE;
 		}
 

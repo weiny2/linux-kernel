@@ -566,9 +566,9 @@ i915_gem_object_create_shmem_from_data(struct drm_i915_private *dev_priv,
 		if (err < 0)
 			goto fail;
 
-		vaddr = kmap(page);
+		vaddr = kmap_thread(page);
 		memcpy(vaddr, data, len);
-		kunmap(page);
+		kunmap_thread(page);
 
 		err = pagecache_write_end(file, file->f_mapping,
 					  offset, len, len,
