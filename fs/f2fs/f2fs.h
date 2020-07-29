@@ -2407,12 +2407,12 @@ static inline struct page *f2fs_pagecache_get_page(
 
 static inline void f2fs_copy_page(struct page *src, struct page *dst)
 {
-	char *src_kaddr = kmap(src);
-	char *dst_kaddr = kmap(dst);
+	char *src_kaddr = kmap_thread(src);
+	char *dst_kaddr = kmap_thread(dst);
 
 	memcpy(dst_kaddr, src_kaddr, PAGE_SIZE);
-	kunmap(dst);
-	kunmap(src);
+	kunmap_thread(dst);
+	kunmap_thread(src);
 }
 
 static inline void f2fs_put_page(struct page *page, int unlock)
