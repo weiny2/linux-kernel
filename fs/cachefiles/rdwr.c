@@ -936,9 +936,9 @@ int cachefiles_write_page(struct fscache_storage *op, struct page *page)
 		}
 	}
 
-	data = kmap(page);
+	data = kmap_thread(page);
 	ret = kernel_write(file, data, len, &pos);
-	kunmap(page);
+	kunmap_thread(page);
 	fput(file);
 	if (ret != len)
 		goto error_eio;
