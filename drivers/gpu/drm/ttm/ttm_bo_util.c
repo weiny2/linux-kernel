@@ -460,7 +460,7 @@ static int ttm_bo_kmap_ttm(struct ttm_buffer_object *bo,
 
 		map->bo_kmap_type = ttm_bo_map_kmap;
 		map->page = ttm->pages[start_page];
-		map->virtual = kmap(map->page);
+		map->virtual = kmap_thread(map->page);
 	} else {
 		/*
 		 * We need to use vmap to get the desired page protection
@@ -513,7 +513,7 @@ void ttm_bo_kunmap(struct ttm_bo_kmap_obj *map)
 		vunmap(map->virtual);
 		break;
 	case ttm_bo_map_kmap:
-		kunmap(map->page);
+		kunmap_thread(map->page);
 		break;
 	case ttm_bo_map_premapped:
 		break;
