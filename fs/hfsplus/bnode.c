@@ -29,14 +29,14 @@ void hfs_bnode_read(struct hfs_bnode *node, void *buf, int off, int len)
 	off &= ~PAGE_MASK;
 
 	l = min_t(int, len, PAGE_SIZE - off);
-	memcpy(buf, kmap(*pagep) + off, l);
-	kunmap(*pagep);
+	memcpy(buf, kmap_thread(*pagep) + off, l);
+	kunmap_thread(*pagep);
 
 	while ((len -= l) != 0) {
 		buf += l;
 		l = min_t(int, len, PAGE_SIZE);
-		memcpy(buf, kmap(*++pagep), l);
-		kunmap(*pagep);
+		memcpy(buf, kmap_thread(*++pagep), l);
+		kunmap_thread(*pagep);
 	}
 }
 
@@ -142,24 +142,24 @@ void hfs_bnode_copy(struct hfs_bnode *dst_node, int dst,
 
 	if (src == dst) {
 		l = min_t(int, len, PAGE_SIZE - src);
-		memcpy(kmap(*dst_page) + src, kmap(*src_page) + src, l);
-		kunmap(*src_page);
+		memcpy(kmap_thread(*dst_page) + src, kmap_thread(*src_page) + src, l);
+		kunmap_thread(*src_page);
 		set_page_dirty(*dst_page);
-		kunmap(*dst_page);
+		kunmap_thread(*dst_page);
 
 		while ((len -= l) != 0) {
 			l = min_t(int, len, PAGE_SIZE);
-			memcpy(kmap(*++dst_page), kmap(*++src_page), l);
-			kunmap(*src_page);
+			memcpy(kmap_thread(*++dst_page), kmap_thread(*++src_page), l);
+			kunmap_thread(*src_page);
 			set_page_dirty(*dst_page);
-			kunmap(*dst_page);
+			kunmap_thread(*dst_page);
 		}
 	} else {
 		void *src_ptr, *dst_ptr;
 
 		do {
-			src_ptr = kmap(*src_page) + src;
-			dst_ptr = kmap(*dst_page) + dst;
+			src_ptr = kmap_thread(*src_page) + src;
+			dst_ptr = kmap_thread(*dst_page) + dst;
 			if (PAGE_SIZE - src < PAGE_SIZE - dst) {
 				l = PAGE_SIZE - src;
 				src = 0;
@@ -171,9 +171,9 @@ void hfs_bnode_copy(struct hfs_bnode *dst_node, int dst,
 			}
 			l = min(len, l);
 			memcpy(dst_ptr, src_ptr, l);
-			kunmap(*src_page);
+			kunmap_thread(*src_page);
 			set_page_dirty(*dst_page);
-			kunmap(*dst_page);
+			kunmap_thread(*dst_page);
 			if (!dst)
 				dst_page++;
 			else
@@ -202,10 +202,10 @@ void hfs_bnode_move(struct hfs_bnode *node, int dst, int src, int len)
 
 		if (src == dst) {
 			while (src < len) {
-				memmove(kmap(*dst_page), kmap(*src_page), src);
-				kunmap(*src_page);
+				memmove(kmap_thread(*dst_page), kmap_thread(*src_page), src);
+				kunmap_thread(*src_page);
 				set_page_dirty(*dst_page);
-				kunmap(*dst_page);
+				kunmap_thread(*dst_page);
 				len -= src;
 				src = PAGE_SIZE;
 				src_page--;
@@ -221,8 +221,8 @@ void hfs_bnode_move(struct hfs_bnode *node, int dst, int src, int len)
 			void *src_ptr, *dst_ptr;
 
 			do {
-				src_ptr = kmap(*src_page) + src;
-				dst_ptr = kmap(*dst_page) + dst;
+				src_ptr = kmap_thread(*src_page) + src;
+				dst_ptr = kmap_thread(*dst_page) + dst;
 				if (src < dst) {
 					l = src;
 					src = PAGE_SIZE;
@@ -234,9 +234,9 @@ void hfs_bnode_move(struct hfs_bnode *node, int dst, int src, int len)
 				}
 				l = min(len, l);
 				memmove(dst_ptr - l, src_ptr - l, l);
-				kunmap(*src_page);
+				kunmap_thread(*src_page);
 				set_page_dirty(*dst_page);
-				kunmap(*dst_page);
+				kunmap_thread(*dst_page);
 				if (dst == PAGE_SIZE)
 					dst_page--;
 				else
@@ -269,8 +269,8 @@ void hfs_bnode_move(struct hfs_bnode *node, int dst, int src, int len)
 			void *src_ptr, *dst_ptr;
 
 			do {
-				src_ptr = kmap(*src_page) + src;
-				dst_ptr = kmap(*dst_page) + dst;
+				src_ptr = kmap_thread(*src_page) + src;
+				dst_ptr = kmap_thread(*dst_page) + dst;
 				if (PAGE_SIZE - src <
 						PAGE_SIZE - dst) {
 					l = PAGE_SIZE - src;
@@ -283,9 +283,9 @@ void hfs_bnode_move(struct hfs_bnode *node, int dst, int src, int len)
 				}
 				l = min(len, l);
 				memmove(dst_ptr, src_ptr, l);
-				kunmap(*src_page);
+				kunmap_thread(*src_page);
 				set_page_dirty(*dst_page);
-				kunmap(*dst_page);
+				kunmap_thread(*dst_page);
 				if (!dst)
 					dst_page++;
 				else
