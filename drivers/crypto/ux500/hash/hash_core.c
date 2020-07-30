@@ -1085,6 +1085,7 @@ int hash_hw_update(struct ahash_request *req)
 	if (msg_length > (req_ctx->state.length.low_word + msg_length) &&
 	    HASH_HIGH_WORD_MAX_VAL == req_ctx->state.length.high_word) {
 		pr_err("%s: HASH_MSG_LENGTH_OVERFLOW!\n", __func__);
+		crypto_hash_walk_done(&walk, 0);
 		return -EPERM;
 	}
 
