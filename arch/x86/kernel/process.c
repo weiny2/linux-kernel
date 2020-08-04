@@ -228,13 +228,13 @@ static inline void pks_init_task(struct task_struct *tsk)
 static inline u32 add_in_global(u32 old)
 {
 	u32 new;
-	u32 global = READ_ONCE(pkrs_global_cache);
+	u32 global_reg = READ_ONCE(pkrs_global_cache);
 	int i;
 
 	for (i = PKS_KERN_DEFAULT_KEY; i < PKS_NUM_KEYS; i++) {
 		int pkey_shift = i * PKR_BITS_PER_PKEY;
 		u8 local = (old >> pkey_shift) & 0x3;
-		u8 global = (global >> pkey_shift) & 0x3;
+		u8 global = (global_reg >> pkey_shift) & 0x3;
 		u8 new_bits = local & global;
 
 		if (local == 0x2 && global == 0x1)
