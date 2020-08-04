@@ -596,6 +596,11 @@ static noinstr void idt_save_pkrs(idtentry_state_t *state)
 	current->dev_page_access_ref = 0;
 #endif
 
+	/*
+	 * The thread_pkrs must be maintained separately to prevent global
+	 * overrides from 'sticking' on a thread.
+	 */
+	state->thread_pkrs = current->thread.saved_pkrs;
 	state->pkrs = this_cpu_read(pkrs_cache);
 	write_pkrs(INIT_PKRS_VALUE);
 }
@@ -606,7 +611,7 @@ static noinstr void idt_restore_pkrs(idtentry_state_t *state)
 		return;
 
 	write_pkrs(state->pkrs);
-	current->thread.saved_pkrs = state->pkrs;
+	current->thread.saved_pkrs = state->thread_pkrs;
 
 #ifdef CONFIG_ZONE_DEVICE_ACCESS_PROTECTION
 	WARN_ON_ONCE(current->dev_page_access_ref != 0);
