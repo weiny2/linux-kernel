@@ -941,6 +941,15 @@ mm_fault_error(struct pt_regs *regs, unsigned long error_code,
 	}
 }
 
+
+/*
+ * NOTE: The pkrs_global_cache is _never_ stored in the per thread PKRS cache
+ * values [thread.saved_pkrs] by design
+ *
+ * This allows us to invalidate access on running threads immediately upon
+ * invalidate.  Sleeping threads will not be enabled due to the algorithm
+ * during pkrs_sched_in()
+ */
 u32 pkrs_global_cache = INIT_PKRS_VALUE;
 EXPORT_SYMBOL_GPL(pkrs_global_cache);
 
@@ -952,24 +961,24 @@ static bool global_pkey_is_enabled(u8 pkey, bool is_write)
 {
 	int pkey_shift = pkey * PKR_BITS_PER_PKEY;
 	u32 mask = (((1 << PKR_BITS_PER_PKEY) - 1) << pkey_shift);
+	u32 global = READ_ONCE(pkrs_global_cache);
 	u32 val;
 	u32 *pkrs;
 
-	val = (pkrs_global_cache & mask) >> pkey_shift;
-	if (val & PKR_AD_BIT)
+	/* Check if the access is valid with the global register */
+	val = (global & mask) >> pkey_shift;
+	if ((val & PKR_AD_BIT) || (is_write && (val & PKR_WD_BIT)))
 		return false;
 
-	if (is_write && (val & PKR_WD_BIT))
-		return false;
-
-	/* fixup register */
+	/*
+	 * NOTE: We don't udate the current thread saved_pkrs because the MSR
+	 * will be valid for the remainder of this time slice and subsequent
+	 * schedule in should pick up the global relaxation of permissions.
+	 */
 	pkrs = get_cpu_ptr(&pkrs_cache);
-
 	val = *pkrs & ~mask;
-	val |= (pkrs_global_cache & mask);
-
+	val |= (global & mask);
 	*pkrs = val;
-	current->thread.saved_pkrs = val;
 	wrmsrl(MSR_IA32_PKRS, val);
 	put_cpu_ptr(pkrs);
 

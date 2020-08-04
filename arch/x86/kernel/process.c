@@ -202,7 +202,7 @@ static inline void pks_init_task(struct task_struct *tsk)
  * 11 dont care
  *
  * Global can only increase permissions so the following are the possibilities.
- * & works most of the time but not all.
+ * bit wise and works most of the time but not all.
  *
  * local     global   &     result  operation
  * 00        00             00       &
@@ -228,12 +228,13 @@ static inline void pks_init_task(struct task_struct *tsk)
 static inline u32 add_in_global(u32 old)
 {
 	u32 new;
+	u32 global = READ_ONCE(pkrs_global_cache);
 	int i;
 
 	for (i = PKS_KERN_DEFAULT_KEY; i < PKS_NUM_KEYS; i++) {
 		int pkey_shift = i * PKR_BITS_PER_PKEY;
 		u8 local = (old >> pkey_shift) & 0x3;
-		u8 global = (pkrs_global_cache >> pkey_shift) & 0x3;
+		u8 global = (global >> pkey_shift) & 0x3;
 		u8 new_bits = local & global;
 
 		if (local == 0x2 && global == 0x1)
@@ -250,9 +251,7 @@ static inline void pks_sched_in(void)
 {
 	u32 val = current->thread.saved_pkrs;
 
-	if (pkrs_global_cache != INIT_PKRS_VALUE)
-		val = add_in_global(val);
-
+	val = add_in_global(val);
 	write_pkrs(val);
 }
 #else

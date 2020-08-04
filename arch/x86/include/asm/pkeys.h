@@ -169,13 +169,12 @@ static inline void pks_update_protection(int pkey, unsigned long protection,
 						    protection);
 
 		/*
-		 * If we are disabling globaly; force the update accross
+		 * If we are disabling globaly; force the update on the running
 		 * threads
 		 */
 		if (protection) {
 			int cpu;
 
-			/* FIXME LOCKING!!! */
 			for_each_online_cpu(cpu) {
 				u32 *ptr = per_cpu_ptr(&pkrs_cache, cpu);
 				u32 val = update_pkey_val(*ptr, pkey, protection);
