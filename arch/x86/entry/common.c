@@ -582,12 +582,6 @@ SYSCALL_DEFINE0(ni_syscall)
  * exception is done.  Then restore it for the interrupted task.
  */
 
-static noinstr void pks_update_thread(u32 val)
-{
-	current->thread.saved_pkrs = val;
-	write_pkrs(val);
-}
-
 static noinstr void idt_save_pkrs(idtentry_state_t *state)
 {
 	if (!cpu_feature_enabled(X86_FEATURE_PKS))
@@ -602,9 +596,8 @@ static noinstr void idt_save_pkrs(idtentry_state_t *state)
 	current->dev_page_access_ref = 0;
 #endif
 
-	state->pkrs = current->thread.saved_pkrs;
-	if (state->pkrs != INIT_PKRS_VALUE)
-		pks_update_thread(INIT_PKRS_VALUE);
+	state->pkrs = this_cpu_read(pkrs_cache);
+	write_pkrs(INIT_PKRS_VALUE);
 }
 
 static noinstr void idt_restore_pkrs(idtentry_state_t *state)
@@ -612,7 +605,8 @@ static noinstr void idt_restore_pkrs(idtentry_state_t *state)
 	if (!cpu_feature_enabled(X86_FEATURE_PKS))
 		return;
 
-	pks_update_thread(state->pkrs);
+	write_pkrs(state->pkrs);
+	current->thread.saved_pkrs = state->pkrs;
 
 #ifdef CONFIG_ZONE_DEVICE_ACCESS_PROTECTION
 	WARN_ON_ONCE(current->dev_page_access_ref != 0);
