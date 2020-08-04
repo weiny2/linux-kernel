@@ -985,7 +985,8 @@ static bool global_pkey_is_enabled(u8 pkey, bool is_write)
 	return true;
 }
 
-static int spurious_kernel_fault_check(unsigned long error_code, pte_t *pte)
+static int spurious_kernel_fault_check(unsigned long error_code, pte_t *pte,
+				       idtentry_state_t *idt_state)
 {
 	bool is_write = (error_code & X86_PF_WRITE);
 
@@ -997,7 +998,7 @@ static int spurious_kernel_fault_check(unsigned long error_code, pte_t *pte)
 		 * running the PKS test.  If so, pks_test_armed_and_clear() will clear
 		 * the protection mechanism and we can safely return.
 		 */
-		if (pks_test_armed_and_clear())
+		if (pks_test_armed_and_clear(&idt_state->pkrs))
 			return 1;
 
 		if (global_pkey_is_enabled(pkey, is_write))
@@ -1043,7 +1044,8 @@ static int spurious_kernel_fault_check(unsigned long error_code, pte_t *pte)
  * (Optional Invalidation).
  */
 static noinline int
-spurious_kernel_fault(unsigned long error_code, unsigned long address)
+spurious_kernel_fault(unsigned long error_code, unsigned long address,
+		      idtentry_state_t *idt_state)
 {
 	pgd_t *pgd;
 	p4d_t *p4d;
@@ -1076,27 +1078,31 @@ spurious_kernel_fault(unsigned long error_code, unsigned long address)
 		return 0;
 
 	if (p4d_large(*p4d))
-		return spurious_kernel_fault_check(error_code, (pte_t *) p4d);
+		return spurious_kernel_fault_check(error_code, (pte_t *) p4d,
+						   idt_state);
 
 	pud = pud_offset(p4d, address);
 	if (!pud_present(*pud))
 		return 0;
 
 	if (pud_large(*pud))
-		return spurious_kernel_fault_check(error_code, (pte_t *) pud);
+		return spurious_kernel_fault_check(error_code, (pte_t *) pud,
+						   idt_state);
 
 	pmd = pmd_offset(pud, address);
 	if (!pmd_present(*pmd))
 		return 0;
 
 	if (pmd_large(*pmd))
-		return spurious_kernel_fault_check(error_code, (pte_t *) pmd);
+		return spurious_kernel_fault_check(error_code, (pte_t *) pmd,
+						   idt_state);
 
 	pte = pte_offset_kernel(pmd, address);
 	if (!pte_present(*pte))
 		return 0;
 
-	ret = spurious_kernel_fault_check(error_code, pte);
+	ret = spurious_kernel_fault_check(error_code, pte,
+					  idt_state);
 	if (!ret)
 		return 0;
 
@@ -1104,7 +1110,8 @@ spurious_kernel_fault(unsigned long error_code, unsigned long address)
 	 * Make sure we have permissions in PMD.
 	 * If not, then there's a bug in the page tables:
 	 */
-	ret = spurious_kernel_fault_check(error_code, (pte_t *) pmd);
+	ret = spurious_kernel_fault_check(error_code, (pte_t *) pmd,
+					  idt_state);
 	WARN_ONCE(!ret, "PMD has incorrect permission bits\n");
 
 	return ret;
@@ -1174,13 +1181,13 @@ static int fault_in_kernel_space(unsigned long address)
  */
 static void
 do_kern_addr_fault(struct pt_regs *regs, unsigned long hw_error_code,
-		   unsigned long address)
+		   unsigned long address, idtentry_state_t *idt_state)
 {
 	/*
 	 * Was the fault spurious; caused by lazy TLB invalidation or PKRS
 	 * update?
 	 */
-	if (spurious_kernel_fault(hw_error_code, address))
+	if (spurious_kernel_fault(hw_error_code, address, idt_state))
 		return;
 
 	/* kprobes don't want to hook the spurious faults: */
@@ -1419,7 +1426,7 @@ trace_page_fault_entries(struct pt_regs *regs, unsigned long error_code,
 
 static __always_inline void
 handle_page_fault(struct pt_regs *regs, unsigned long error_code,
-			      unsigned long address)
+		  unsigned long address, idtentry_state_t *idt_state)
 {
 	trace_page_fault_entries(regs, error_code, address);
 
@@ -1428,7 +1435,7 @@ handle_page_fault(struct pt_regs *regs, unsigned long error_code,
 
 	/* Was the fault on kernel-controlled part of the address space? */
 	if (unlikely(fault_in_kernel_space(address))) {
-		do_kern_addr_fault(regs, error_code, address);
+		do_kern_addr_fault(regs, error_code, address, idt_state);
 	} else {
 		do_user_addr_fault(regs, error_code, address);
 		/*
@@ -1483,7 +1490,7 @@ DEFINE_IDTENTRY_RAW_ERRORCODE(exc_page_fault)
 	state = idtentry_enter(regs);
 
 	instrumentation_begin();
-	handle_page_fault(regs, error_code, address);
+	handle_page_fault(regs, error_code, address, &state);
 	instrumentation_end();
 
 	idtentry_exit(regs, state);
