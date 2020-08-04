@@ -177,9 +177,9 @@ static inline void pks_update_protection(int pkey, unsigned long protection,
 
 			for_each_online_cpu(cpu) {
 				u32 *ptr = per_cpu_ptr(&pkrs_cache, cpu);
-				u32 val = update_pkey_val(*ptr, pkey, protection);
 
-				wrmsrl_on_cpu(cpu, MSR_IA32_PKRS, val);
+				*ptr = update_pkey_val(*ptr, pkey, protection);
+				wrmsrl_on_cpu(cpu, MSR_IA32_PKRS, *ptr);
 				put_cpu_ptr(ptr);
 			}
 		}
