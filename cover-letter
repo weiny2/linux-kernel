@@ -1,8 +1,46 @@
 PKS: Add Protection Keys Supervisor (PKS) support
 
-This RFC series has been reviewed by Dave Hansen.
+NOTES for New Intel internal review
+
+I've made some pretty major changes to the series after Dave realized that
+kmap() may break with my changes.
+
+After discussing we realized that kmap() is most often (~209/229 times) as a
+single thread map/do something/unmap pattern.
+
+However, another ~20 kmap users do not follow this pattern.  And, as best I can
+tell, they expect the mapping to be 'global' and available to any thread who
+may access the mapping.[1]
+
+Therefore, this new patch series introduces a new kmap call 'k[un]map_thread()'
+which is to be used when the mapping is contained to a single thread of
+execution.
+
+It was considered to see if kmap_atomic() instead.  Indeed some of the ~209
+call sites could be converted to k[un]map_atomic() but not all.  Therefore, if
+a new call is required anyway, it is best to allow the thread to be preempted
+if needed and use the new call.[2]
+
+
+Other additions include saving the PKRS state during NMI exceptions (suggested
+by Thomas Gleixner, fixing the broken IDT exception code, addressing all code
+comments from the public RFC V2, and moving a couple of patches out of the
+series which were DAX bug fixes.[3]
+
+
+[1] The following list is left as kmap()
+
+
+[2] NOTE k[un]map_atomic() is obviously thread local so they do not change.
+[3] They were submitted for 5.9 inclusion to get them out of the way.
+
 
 Changes from RFC V2:
+	Account for the fact that not all kmaps are 'thread local'
+		Introduce kmap_thread() concept for the majority of calls which
+		are thread local
+	Add save state during NMI exceptions
+	Fix up state saving during IDT exceptions
 	Clean up commit messages to reflect that writes and reads are prevented
 	Clean up function names
 
