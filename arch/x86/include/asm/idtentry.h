@@ -2,6 +2,7 @@
 #ifndef _ASM_X86_IDTENTRY_H
 #define _ASM_X86_IDTENTRY_H
 
+#include <linux/compiler.h>
 /* Interrupts/Exceptions */
 #include <asm/trapnr.h>
 
@@ -402,6 +403,92 @@ __visible noinstr void func(struct pt_regs *regs,			\
 #define DEFINE_IDTENTRY_DEBUG		DEFINE_IDTENTRY_IST
 #define DEFINE_IDTENTRY_DEBUG_USER	DEFINE_IDTENTRY_NOIST
 #endif
+
+#ifdef CONFIG_ARCH_HAS_SUPERVISOR_PKEYS
+/*
+ * PKRS is a per-logical-processor MSR which overlays additional protection for
+ * pages which have been mapped with a protection key.
+ *
+ * The register is not maintained with XSAVE so we have to maintain the MSR
+ * value in software during context switch and exception handling.
+ *
+ * Context switches save the MSR in the task struct thus taking that value to
+ * other processors if necessary.
+ *
+ * To protect against exceptions having access to this memory we save the
+ * current running value and set the default PKRS value for the duration of the
+ * exception.  Thus preventing exception handlers from having the access of the
+ * interrupted task.
+ *
+ * Furthermore, Zone Device Access Protection maintains access in a re-entrant
+ * manner through a reference count which also needs to be maintained should
+ * exception handlers use those interfaces for memory access.  Here we start
+ * off the exception handler ref count to 0 and ensure it is 0 when the
+ * exception is done.  Then restore it for the interrupted task.
+ */
+
+static __always_inline void idt_save_pkrs(idtentry_state_t *state)
+{
+	if (!cpu_feature_enabled(X86_FEATURE_PKS))
+		return;
+
+#ifdef CONFIG_ZONE_DEVICE_ACCESS_PROTECTION
+	/*
+	 * Save the ref count of the current running process and set it to 0
+	 * for any irq users to properly track re-entrance
+	 */
+	state->pkrs_ref = current->dev_page_access_ref;
+	current->dev_page_access_ref = 0;
+#endif
+
+	/*
+	 * The thread_pkrs must be maintained separately to prevent global
+	 * overrides from 'sticking' on a thread.
+	 */
+	state->thread_pkrs = current->thread.saved_pkrs;
+	state->pkrs = this_cpu_read(pkrs_cache);
+	write_pkrs(INIT_PKRS_VALUE);
+}
+
+static __always_inline void idt_restore_pkrs(idtentry_state_t *state)
+{
+	if (!cpu_feature_enabled(X86_FEATURE_PKS))
+		return;
+
+	write_pkrs(state->pkrs);
+	current->thread.saved_pkrs = state->thread_pkrs;
+
+#ifdef CONFIG_ZONE_DEVICE_ACCESS_PROTECTION
+	WARN_ON_ONCE(current->dev_page_access_ref != 0);
+	/* Restore the interrupted process reference */
+	current->dev_page_access_ref = state->pkrs_ref;
+#endif
+}
+
+static __always_inline void idtentry_nmi_enter(idtentry_state_t *state)
+{
+	nmi_enter();
+	instrumentation_begin();
+	idt_save_pkrs(state);
+	instrumentation_end();
+}
+
+static __always_inline void idtentry_nmi_exit(idtentry_state_t *state)
+{
+
+	instrumentation_begin();
+	idt_restore_pkrs(state);
+	instrumentation_end();
+	nmi_exit();
+}
+
+#else /* !CONFIG_ARCH_HAS_SUPERVISOR_PKEYS */
+static __always_inline void idt_save_pkrs(idtentry_state_t *state) { }
+static __always_inline void idt_restore_pkrs(idtentry_state_t *state) { }
+static __always_inline void idtentry_nmi_enter(idtentry_state_t *state) { }
+static __always_inline void idtentry_nmi_exit(idtentry_state_t *state) { }
+#endif /* CONFIG_ARCH_HAS_SUPERVISOR_PKEYS */
+
 
 #else /* !__ASSEMBLY__ */
 

@@ -33,6 +33,7 @@
 #include <asm/reboot.h>
 #include <asm/cache.h>
 #include <asm/nospec-branch.h>
+#include <asm/idtentry.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/nmi.h>
@@ -478,6 +479,8 @@ static DEFINE_PER_CPU(unsigned long, nmi_dr7);
 
 DEFINE_IDTENTRY_RAW(exc_nmi)
 {
+	idtentry_state_t state = { };
+
 	if (IS_ENABLED(CONFIG_SMP) && arch_cpu_is_offline(smp_processor_id()))
 		return;
 
@@ -491,14 +494,14 @@ nmi_restart:
 
 	this_cpu_write(nmi_dr7, local_db_save());
 
-	nmi_enter();
+	idtentry_nmi_enter(&state);
 
 	inc_irq_stat(__nmi_count);
 
 	if (!ignore_nmis)
 		default_do_nmi(regs);
 
-	nmi_exit();
+	idtentry_nmi_exit(&state);
 
 	local_db_restore(this_cpu_read(nmi_dr7));
 
