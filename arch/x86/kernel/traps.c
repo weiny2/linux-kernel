@@ -649,7 +649,9 @@ DEFINE_IDTENTRY_RAW(exc_int3)
 		instrumentation_end();
 		idtentry_exit_user(regs);
 	} else {
-		nmi_enter();
+		idtentry_state_t state = { };
+
+		idtentry_nmi_enter(&state);
 		instrumentation_begin();
 		trace_hardirqs_off_finish();
 		if (!do_int3(regs))
@@ -657,7 +659,7 @@ DEFINE_IDTENTRY_RAW(exc_int3)
 		if (regs->flags & X86_EFLAGS_IF)
 			trace_hardirqs_on_prepare();
 		instrumentation_end();
-		nmi_exit();
+		idtentry_nmi_exit(&state);
 	}
 }
 
@@ -865,7 +867,9 @@ out:
 static __always_inline void exc_debug_kernel(struct pt_regs *regs,
 					     unsigned long dr6)
 {
-	nmi_enter();
+	idtentry_state_t state = { };
+
+	idtentry_nmi_enter(&state);
 	instrumentation_begin();
 	trace_hardirqs_off_finish();
 
@@ -887,7 +891,7 @@ static __always_inline void exc_debug_kernel(struct pt_regs *regs,
 	if (regs->flags & X86_EFLAGS_IF)
 		trace_hardirqs_on_prepare();
 	instrumentation_end();
-	nmi_exit();
+	idtentry_nmi_exit(&state);
 }
 
 static __always_inline void exc_debug_user(struct pt_regs *regs,
