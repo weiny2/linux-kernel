@@ -1316,6 +1316,11 @@ struct task_struct {
 #ifdef CONFIG_ZONE_DEVICE_ACCESS_PROTECTION
 	unsigned int			dev_page_access_ref;
 #endif
+
+#ifdef CONFIG_DEBUG_KMAP_THREAD
+	unsigned int			kmap_thread_cnt;
+#endif
+
 	/*
 	 * New fields for task_struct should be added above here, so that
 	 * they are included in the randomized portion of task_struct.

@@ -815,6 +815,13 @@ config DEBUG_HIGHMEM
 	  This option enables additional error checking for high memory
 	  systems.  Disable for production systems.
 
+config DEBUG_KMAP_THREAD
+	bool "Kmap debugging"
+	depends on DEBUG_KERNEL
+	help
+	  This option enables additional error checking for kernel mapping
+	  code.  Disable for production systems.
+
 config HAVE_DEBUG_STACKOVERFLOW
 	bool
 

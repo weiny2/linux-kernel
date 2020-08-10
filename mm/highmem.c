@@ -482,3 +482,26 @@ void __init page_address_init(void)
 }
 
 #endif	/* defined(HASHED_PAGE_VIRTUAL) */
+
+#define CREATE_TRACE_POINTS
+#include <trace/events/kmap_thread.h>
+
+#ifdef CONFIG_DEBUG_KMAP_THREAD
+void *kmap_thread(struct page *page)
+{
+	trace_kmap_thread(current, page, __builtin_return_address(0),
+			  current->kmap_thread_cnt);
+	current->kmap_thread_cnt++;
+	return __kmap(page, false);
+}
+EXPORT_SYMBOL_GPL(kmap_thread);
+
+void kunmap_thread(struct page *page)
+{
+	__kunmap(page, false);
+	current->kmap_thread_cnt--;
+	trace_kunmap_thread(current, page, __builtin_return_address(0),
+			    current->kmap_thread_cnt);
+}
+EXPORT_SYMBOL_GPL(kunmap_thread);
+#endif
