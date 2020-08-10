@@ -247,6 +247,10 @@ static inline void kunmap(struct page *page)
 	__kunmap(page, true);
 }
 
+#ifdef CONFIG_DEBUG_KMAP_THREAD
+void *kmap_thread(struct page *page);
+void kunmap_thread(struct page *page);
+#else
 static inline void *kmap_thread(struct page *page)
 {
 	return __kmap(page, false);
@@ -255,6 +259,7 @@ static inline void kunmap_thread(struct page *page)
 {
 	__kunmap(page, false);
 }
+#endif
 
 /*
  * Prevent people trying to call kunmap_atomic() as if it were kunmap()
