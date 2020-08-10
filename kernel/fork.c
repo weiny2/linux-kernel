@@ -723,6 +723,17 @@ static inline void put_signal_struct(struct signal_struct *sig)
 		free_signal_struct(sig);
 }
 
+#ifdef CONFIG_DEBUG_KMAP_THREAD
+static void check_outstanding_kmap_thread(struct task_struct *tsk)
+{
+	if (tsk->kmap_thread_cnt)
+		pr_warn(KERN_ERR "WARNING: PID %d; Failed to kunmap_thread() [cnt %d]\n",
+			tsk->pid, tsk->kmap_thread_cnt);
+}
+#else
+static void check_outstanding_kmap_thread(struct task_struct *tsk) { }
+#endif
+
 void __put_task_struct(struct task_struct *tsk)
 {
 	WARN_ON(!tsk->exit_state);
@@ -736,6 +747,7 @@ void __put_task_struct(struct task_struct *tsk)
 	exit_creds(tsk);
 	delayacct_tsk_free(tsk);
 	put_signal_struct(tsk->signal);
+	check_outstanding_kmap_thread(tsk);
 
 	if (!profile_handoff_task(tsk))
 		free_task(tsk);
@@ -942,6 +954,9 @@ static struct task_struct *dup_task_struct(struct task_struct *orig, int node)
 
 #ifdef CONFIG_MEMCG
 	tsk->active_memcg = NULL;
+#endif
+#ifdef CONFIG_DEBUG_KMAP_THREAD
+	tsk->kmap_thread_cnt = 0;
 #endif
 	return tsk;
 

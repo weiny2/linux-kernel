@@ -212,6 +212,9 @@ struct task_struct init_task
 #ifdef CONFIG_SECCOMP
 	.seccomp	= { .filter_count = ATOMIC_INIT(0) },
 #endif
+#ifdef CONFIG_DEBUG_KMAP_THREAD
+	.kmap_thread_cnt = 0,
+#endif
 };
 EXPORT_SYMBOL(init_task);
 
