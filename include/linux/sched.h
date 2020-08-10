@@ -1326,6 +1326,11 @@ struct task_struct {
 	struct callback_head		mce_kill_me;
 #endif
 
+
+#ifdef CONFIG_DEBUG_KMAP_THREAD
+	unsigned int			kmap_thread_cnt;
+#endif
+
 	/*
 	 * New fields for task_struct should be added above here, so that
 	 * they are included in the randomized portion of task_struct.
