@@ -198,15 +198,15 @@ static inline void pks_init_task(struct task_struct *tsk)
 extern u32 pkrs_global_cache;
 
 /**
- * Funky bit works
+ * The global value can only decrease permissions (increase access) so the
+ * following are the possibilities.  Unfortunately, bit wise '&' works most of
+ * the time but not all.  So if the global is not the default we must check the
+ * individual pkey values.
  *
  * 00 all access
  * 10 write disabled
  * 01 access disabled
  * 11 dont care
- *
- * Global can only increase permissions so the following are the possibilities.
- * bit wise '&' works most of the time but not all.
  *
  * local  global  result  effective
  *                        operation
@@ -217,11 +217,11 @@ extern u32 pkrs_global_cache;
  *
  * 10     00      00       &
  * 10     10      10       &
- * 10     01      10       ^
+ * 10     01      10       ^ special case
  * 10     11      10       &
  *
  * 01     00      00       &
- * 01     10      10       ^
+ * 01     10      10       ^ special case
  * 01     01      01       &
  * 01     11      01       &
  *
@@ -236,15 +236,17 @@ static inline u32 add_in_global(u32 old)
 	u32 global_reg = READ_ONCE(pkrs_global_cache);
 	int i;
 
+	if (global_reg == INIT_PKRS_VALUE)
+		return old;
+
 	for (i = PKS_KERN_DEFAULT_KEY; i < PKS_NUM_KEYS; i++) {
 		int pkey_shift = i * PKR_BITS_PER_PKEY;
 		u8 local = (old >> pkey_shift) & 0x3;
 		u8 global = (global_reg >> pkey_shift) & 0x3;
 		u8 new_bits = local & global;
 
-		if (local == 0x2 && global == 0x1)
-			new_bits = 0x2;
-		if (local == 0x1 && global == 0x2)
+		/* Special case */
+		if (local && global && !new_bits)
 			new_bits = 0x2;
 
 		new |= (new_bits << pkey_shift);
