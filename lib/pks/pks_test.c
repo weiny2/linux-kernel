@@ -108,13 +108,13 @@ error:
 }
 
 /**
- * pks_test_armed_and_clear() is exported so that the fault handler can detect
+ * pks_test_callback() is exported so that the fault handler can detect
  * and report back status of intentional faults.
  *
  * NOTE: It clears the protection key from the page such that the fault handler
  * will not re-trigger.
  */
-bool pks_test_armed_and_clear(u32 *val)
+bool pks_test_callback(u32 *val)
 {
 	bool armed = (test_armed_key != 0);
 

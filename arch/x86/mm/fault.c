@@ -999,7 +999,7 @@ static int spurious_kernel_fault_check(unsigned long error_code, pte_t *pte,
 		 * running the PKS test.  If so, pks_test_armed_and_clear() will clear
 		 * the protection mechanism and we can safely return.
 		 */
-		if (pks_test_armed_and_clear(&irq_state->pkrs))
+		if (pks_test_callback(&irq_state->pkrs))
 			return 1;
 
 		if (global_pkey_is_enabled(pte, is_write))
