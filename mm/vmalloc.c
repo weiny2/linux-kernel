@@ -2590,6 +2590,34 @@ void *vmalloc(unsigned long size)
 EXPORT_SYMBOL(vmalloc);
 
 /**
+ * vmalloc_pks - allocate virtually contiguous memory within the specified pkey
+ * domain
+ *
+ * @size:     allocation size
+ * @pkey:     the pkey domain to allocate the memory under
+ *
+ * Allocate enough pages to cover @size from the page level allocator and map
+ * them into contiguous kernel virtual space with the specific PKS protections
+ * if the architecture supports it.
+ *
+ * NOTE: This does not change the PKS settings established with other mappings
+ * such as the direct map.
+ *
+ * WARNING: Calling this with an invalid pkey is undefined.
+ *
+ * Return: pointer to the allocated memory or %NULL on error
+ */
+void *vmalloc_pks(unsigned long size, int pkey)
+{
+	void *ret = __vmalloc_node_range(size, 1, VMALLOC_START, VMALLOC_END,
+					 GFP_KERNEL, PAGE_KERNEL_PKEY(pkey), 0,
+					 NUMA_NO_NODE, __builtin_return_address(0));
+	vm_unmap_aliases();
+	return ret;
+}
+EXPORT_SYMBOL(vmalloc_pks);
+
+/**
  * vzalloc - allocate virtually contiguous memory with zero fill
  * @size:    allocation size
  *
