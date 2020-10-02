@@ -121,6 +121,7 @@ mapping adds that mapping to the protection domain.
         int pks_key_alloc(const char * const pkey_user);
         #define PAGE_KERNEL_PKEY(pkey)
         #define _PAGE_KEY(pkey)
+        void * vmalloc_pks(unsigned long size, int pkey);
         void pks_mknoaccess(int pkey, bool global);
         void pks_mkread(int pkey, bool global);
         void pks_mkrdwr(int pkey, bool global);
@@ -137,6 +138,9 @@ using any of the rest of the API is undefined.
 Kernel users must set the PTE permissions in the page table entries for the
 mappings they want to protect.  This can be done with PAGE_KERNEL_PKEY() or
 _PAGE_KEY().
+
+Alternatively, vmalloc_pks() is provided to allocate memory within the pkey
+domain specified.
 
 The pks_mk*() family of calls allows kernel users the ability to change the
 protections for the domain identified by the pkey specified.  3 states are
