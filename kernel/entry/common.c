@@ -327,7 +327,7 @@ noinstr void irqentry_enter(struct pt_regs *regs, irqentry_state_t *state)
 		instrumentation_end();
 
 		state->exit_rcu = true;
-		return;
+		goto done;
 	}
 
 	/*
@@ -341,6 +341,9 @@ noinstr void irqentry_enter(struct pt_regs *regs, irqentry_state_t *state)
 	/* Use the combo lockdep/tracing function */
 	trace_hardirqs_off();
 	instrumentation_end();
+
+done:
+	irq_save_pkrs(state);
 }
 
 void irqentry_exit_cond_resched(void)
@@ -362,7 +365,12 @@ noinstr void irqentry_exit(struct pt_regs *regs, irqentry_state_t *state)
 	/* Check whether this returns to user mode */
 	if (user_mode(regs)) {
 		irqentry_exit_to_user_mode(regs);
-	} else if (!regs_irqs_disabled(regs)) {
+		return;
+	}
+
+	irq_restore_pkrs(state);
+
+	if (!regs_irqs_disabled(regs)) {
 		/*
 		 * If RCU was not watching on entry this needs to be done
 		 * carefully and needs the same ordering of lockdep/tracing
