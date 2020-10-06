@@ -342,11 +342,23 @@ void irqentry_exit_to_user_mode(struct pt_regs *regs);
 
 #ifndef irqentry_state
 typedef struct irqentry_state {
+#ifdef CONFIG_ARCH_HAS_SUPERVISOR_PKEYS
+	u32 pkrs;
+	u32 thread_pkrs;
+#endif
 	union {
 		bool	exit_rcu;
 		bool	lockdep;
 	};
 } irqentry_state_t;
+#endif
+
+#ifdef CONFIG_ARCH_HAS_SUPERVISOR_PKEYS
+noinstr void irq_save_set_pkrs(irqentry_state_t *state, u32 val);
+noinstr void irq_restore_pkrs(irqentry_state_t *state);
+#else
+static __always_inline void irq_save_set_pkrs(irqentry_state_t *state, u32 val) { }
+static __always_inline void irq_restore_pkrs(irqentry_state_t *state) { }
 #endif
 
 /**
