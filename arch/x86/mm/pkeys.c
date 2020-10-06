@@ -247,7 +247,7 @@ DEFINE_PER_CPU(u32, pkrs_cache);
  * 	until all prior executions of WRPKRU have completed execution
  * 	and updated the PKRU register.
  */
-void write_pkrs(u32 new_pkrs)
+noinstr void write_pkrs(u32 new_pkrs)
 {
 	u32 *pkrs;
 

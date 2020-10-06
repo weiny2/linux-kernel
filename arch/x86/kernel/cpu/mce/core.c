@@ -1904,6 +1904,8 @@ void (*machine_check_vector)(struct pt_regs *) = unexpected_machine_check;
 
 static __always_inline void exc_machine_check_kernel(struct pt_regs *regs)
 {
+	irqentry_state_t irq_state = { };
+
 	WARN_ON_ONCE(user_mode(regs));
 
 	/*
@@ -1915,6 +1917,7 @@ static __always_inline void exc_machine_check_kernel(struct pt_regs *regs)
 		return;
 
 	nmi_enter();
+	irq_save_pkrs(&irq_state);
 	/*
 	 * The call targets are marked noinstr, but objtool can't figure
 	 * that out because it's an indirect call. Annotate it.
@@ -1925,6 +1928,7 @@ static __always_inline void exc_machine_check_kernel(struct pt_regs *regs)
 	if (regs->flags & X86_EFLAGS_IF)
 		trace_hardirqs_on_prepare();
 	instrumentation_end();
+	irq_restore_pkrs(&irq_state);
 	nmi_exit();
 }
 
