@@ -334,7 +334,7 @@ noinstr void irqentry_enter(struct pt_regs *regs, irqentry_state_t *irq_state)
 		instrumentation_end();
 
 		irq_state->exit_rcu = true;
-		return;
+		goto done;
 	}
 
 	/*
@@ -348,6 +348,9 @@ noinstr void irqentry_enter(struct pt_regs *regs, irqentry_state_t *irq_state)
 	rcu_irq_enter_check_tick();
 	trace_hardirqs_off_finish();
 	instrumentation_end();
+
+done:
+	irq_save_set_pkrs(irq_state, INIT_PKRS_VALUE);
 }
 
 void irqentry_exit_cond_resched(void)
@@ -369,7 +372,12 @@ noinstr void irqentry_exit(struct pt_regs *regs, irqentry_state_t *irq_state)
 	/* Check whether this returns to user mode */
 	if (user_mode(regs)) {
 		irqentry_exit_to_user_mode(regs);
-	} else if (!regs_irqs_disabled(regs)) {
+		return;
+	}
+
+	irq_restore_pkrs(irq_state);
+
+	if (!regs_irqs_disabled(regs)) {
 		/*
 		 * If RCU was not watching on entry this needs to be done
 		 * carefully and needs the same ordering of lockdep/tracing
@@ -415,10 +423,12 @@ void noinstr irqentry_nmi_enter(struct pt_regs *regs, irqentry_state_t *irq_stat
 	trace_hardirqs_off_finish();
 	ftrace_nmi_enter();
 	instrumentation_end();
+	irq_save_set_pkrs(irq_state, INIT_PKRS_VALUE);
 }
 
 void noinstr irqentry_nmi_exit(struct pt_regs *regs, irqentry_state_t *irq_state)
 {
+	irq_restore_pkrs(irq_state);
 	instrumentation_begin();
 	ftrace_nmi_exit();
 	if (irq_state->lockdep) {
