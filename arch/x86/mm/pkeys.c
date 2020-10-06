@@ -232,7 +232,7 @@ u32 update_pkey_val(u32 pk_reg, int pkey, unsigned int flags)
 	return pk_reg;
 }
 
-static DEFINE_PER_CPU(u32, pkrs_cache);
+DEFINE_PER_CPU(u32, pkrs_cache);
 
 /**
  * write_pkrs() optimizes MSR writes by maintaining a per cpu cache which can
@@ -248,7 +248,7 @@ static DEFINE_PER_CPU(u32, pkrs_cache);
  *     until all prior executions of WRPKRU have completed execution
  *     and updated the PKRU register.
  */
-void write_pkrs(u32 new_pkrs)
+noinstr void write_pkrs(u32 new_pkrs)
 {
 	u32 *pkrs;
 
