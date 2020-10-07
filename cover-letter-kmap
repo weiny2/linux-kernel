@@ -1,0 +1,73 @@
+PMEM: Introduce stray write protection for PMEM
+
+Should a stray write in the kernel occur persistent memory is affected more
+than regular memory.  A write to the wrong area of memory could result in
+latent data corruption which will will persist after a reboot.  PKS provides a
+nice way to restrict access to persistent memory kernel mappings, while
+providing fast access when needed.
+
+Since the last RFC[1] this patch set has grown quite a bit.  However,
+functionally there is only 1 major change.  Specifically, kmap() is most often
+used within a single thread in a 'map/do something/unmap' pattern.  In fact
+this is the pattern in ~209/229 (90%) of the callers of kmap().  This pattern
+works very well for the pmem use case and the testing which was done.  However,
+there were another ~20 kmap users which do not follow this pattern.  And, as
+best I can tell, they expect the mapping created with kmap to be 'global' and
+available to any thread who may access the mapping.[2]
+
+While we don't anticipate global mappings to pmem there is a danger in
+changing the semantics of kmap().  Effectively, this would cause an unresolved
+page fault with little to no information about why.
+
+There were a number of options considered.
+
+1) Attempt to change all the thread local kmap() calls to kmap_atomic()[3]
+2) Introduce a flags parameter to kmap() to indicate if the mapping should be
+   global or not
+3) Change ~20 call sites to 'kmap_global()' to indicate that they require a
+   global mapping of the pages
+4) Change ~209 call sites to 'kmap_thread()' to indicate that the mapping is to
+   be used within that thread of execution only
+
+Option 1 is simply not feasible kmap_atomic() is not the same semantic as
+kmap() within a single tread.  Option 2 would require all of the call sites of
+kmap() to change.  Option 3 seems like a good minimal change but there is a
+danger that new code may miss the semantic change of kmap() and not get the
+behavior intended for future users.  Therefore, option #4 was chosen.
+
+It follow that a global PKS state was also required.  This needed to be handled
+in the most efficient manner possible.  Specifically we lazily override the
+thread specific PKRS key value only when needed because most of the time PKS
+will not be involved and when it is it will be thread local 90% of the time.
+
+
+[1] https://lore.kernel.org/lkml/20200717072056.73134-1-ira.weiny@intel.com/
+
+[2] The following list of callers continue calling kmap() (utilizing the global
+PKRS).  It would be nice if more of them could be converted to kmap_thread()
+
+	drivers/firewire/net.c:         ptr = kmap(dev->broadcast_rcv_buffer.pages[u]);
+	drivers/gpu/drm/i915/gem/i915_gem_pages.c:              return kmap(sg_page(sgt->sgl));
+	drivers/gpu/drm/ttm/ttm_bo_util.c:              map->virtual = kmap(map->page);
+	drivers/infiniband/hw/qib/qib_user_sdma.c:      mpage = kmap(page);
+	drivers/misc/vmw_vmci/vmci_host.c:      context->notify = kmap(context->notify_page) + (uva & (PAGE_SIZE - 1));
+	drivers/misc/xilinx_sdfec.c:            addr = kmap(pages[i]);
+	drivers/mmc/host/usdhi6rol0.c:  host->pg.mapped         = kmap(host->pg.page);
+	drivers/mmc/host/usdhi6rol0.c:  host->pg.mapped = kmap(host->pg.page);
+	drivers/mmc/host/usdhi6rol0.c:  host->pg.mapped = kmap(host->pg.page);
+	drivers/nvme/target/tcp.c:              iov->iov_base = kmap(sg_page(sg)) + sg->offset + sg_offset;
+	drivers/scsi/libiscsi_tcp.c:            segment->sg_mapped = kmap(sg_page(sg));
+	drivers/target/iscsi/iscsi_target.c:            iov[i].iov_base = kmap(sg_page(sg)) + sg->offset + page_off;
+	drivers/target/target_core_transport.c:         return kmap(sg_page(sg)) + sg->offset;
+	fs/btrfs/check-integrity.c:             block_ctx->datav[i] = kmap(block_ctx->pagev[i]);
+	fs/ceph/dir.c:          cache_ctl->dentries = kmap(cache_ctl->page);
+	fs/ceph/inode.c:                ctl->dentries = kmap(ctl->page);
+	fs/erofs/zpvec.h:               kmap_atomic(ctor->curr) : kmap(ctor->curr);
+	lib/scatterlist.c:              miter->addr = kmap(miter->page) + miter->__offset;
+	net/ceph/pagelist.c:    pl->mapped_tail = kmap(page);
+	net/ceph/pagelist.c:            pl->mapped_tail = kmap(page);
+	virt/kvm/kvm_main.c:                    hva = kmap(page);
+
+[3] NOTE k[un]map_atomic() is obviously thread local so those calls use thread
+local PKRS updates as before.
+
