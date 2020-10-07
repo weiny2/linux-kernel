@@ -1,0 +1,37 @@
+trusted keys: Add PKS protection to trusted keys
+
+Leaking a trusted key would be a critical security issue.  PKS provides an
+additonal mechanism to restrict access to the memory holding trusted keys.
+
+Provide a skeleton of a new allocation call which provides a PKS restricted
+mapping of the trusted key memory.  Allocate a PKS domain (pkey), create a
+mapping with that key, and enable/disable access as needed to that mapping.
+
+The issue with this approach is that it fails to protect the direct mapping.
+The current ideas to protect the direct mapping are:
+
+	1) Do nothing.
+	2) Allow the direct map to be fragmented through a set_memory_pks() like call.
+	3) Piggy back on secretmem's solution to map out some direct map memory
+	   then overlay that with PKS.
+	4) Integrate PKS into secretmem and use this enhanced secretmem for
+	   trusted keys.
+
+Doing nothing is not really providing the level of security we need for this
+use case.
+
+Allowing the direct map to fragment may be ok as trusted keys don't use a lot
+of pages and are usually allocated early in the system boot but that is not
+always the case.  In addition the current code could be made
+to not allocating an entire page for each key to limit the number of pages, and
+therfore the fragmentation, needed.
+
+The use of secretmem is complicated by its newness but whatever solution is
+used there should be used here.  And probalby through some nice interface.
+
+The final thought is to determine if a 'general allocator' for PKS protected
+memory should be developed at all.  The current implementation is limited in
+key space and so a higher bar to entry may be a good thing.  On the other hand,
+dealing with mappings for the average driver writer is complicated and doing
+this wrong could result in a false sense of 'security'.
+
