@@ -344,7 +344,7 @@ static int zisofs_readpage(struct file *file, struct page *page)
 			pages[i] = grab_cache_page_nowait(mapping, index);
 		if (pages[i]) {
 			ClearPageError(pages[i]);
-			kmap(pages[i]);
+			kmap_thread(pages[i]);
 		}
 	}
 
@@ -356,7 +356,7 @@ static int zisofs_readpage(struct file *file, struct page *page)
 			flush_dcache_page(pages[i]);
 			if (i == full_page && err)
 				SetPageError(pages[i]);
-			kunmap(pages[i]);
+			kunmap_thread(pages[i]);
 			unlock_page(pages[i]);
 			if (i != full_page)
 				put_page(pages[i]);
