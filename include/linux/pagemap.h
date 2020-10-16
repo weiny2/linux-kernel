@@ -1028,4 +1028,53 @@ unsigned int i_blocks_per_page(struct inode *inode, struct page *page)
 {
 	return thp_size(page) >> inode->i_blkbits;
 }
+
+static inline void memcpy_page(struct page *dst_page, size_t dst_off,
+			       struct page *src_page, size_t src_off,
+			       size_t len)
+{
+	char *dst = kmap_atomic(dst_page);
+	char *src = kmap_atomic(src_page);
+	memcpy(dst + dst_off, src + src_off, len);
+	kunmap_atomic(src);
+	kunmap_atomic(dst);
+}
+
+static inline void memmove_page(struct page *dst_page, size_t dst_off,
+			       struct page *src_page, size_t src_off,
+			       size_t len)
+{
+	char *dst = kmap_atomic(dst_page);
+	char *src = kmap_atomic(src_page);
+	memmove(dst + dst_off, src + src_off, len);
+	kunmap_atomic(src);
+	kunmap_atomic(dst);
+}
+
+static inline void memcpy_from_page(char *to, struct page *page, size_t offset, size_t len)
+{
+	char *from = kmap_atomic(page);
+	memcpy(to, from + offset, len);
+	kunmap_atomic(from);
+}
+
+static inline void memcpy_to_page(struct page *page, size_t offset, const char *from, size_t len)
+{
+	char *to = kmap_atomic(page);
+	memcpy(to + offset, from, len);
+	kunmap_atomic(to);
+}
+
+static inline void memset_page(struct page *page, int val, size_t offset, size_t len)
+{
+	char *addr = kmap_atomic(page);
+	memset(addr + offset, val, len);
+	kunmap_atomic(addr);
+}
+
+static inline void memzero_page(struct page *page, size_t offset, size_t len)
+{
+	memset_page(page, 0, offset, len);
+}
+
 #endif /* _LINUX_PAGEMAP_H */
