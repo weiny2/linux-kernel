@@ -2,6 +2,8 @@
 #ifndef _ASM_X86_PKEYS_H
 #define _ASM_X86_PKEYS_H
 
+#include <uapi/asm-generic/mman-common.h>
+
 /*
  * If more than 16 keys are ever supported, a thorough audit
  * will be necessary to ensure that the types that store key
@@ -121,6 +123,22 @@ static inline int vma_pkey(struct vm_area_struct *vma)
 				      VM_PKEY_BIT2 | VM_PKEY_BIT3;
 
 	return (vma->vm_flags & vma_pkey_mask) >> VM_PKEY_SHIFT;
+}
+
+/*
+ * Kernel users use the same flags as user space:
+ *     PKEY_DISABLE_ACCESS
+ *     PKEY_DISABLE_WRITE
+ */
+static inline u32 pkey_update_pkval(u32 pkval, const u8 pkey, u32 accessbits)
+{
+	int shift = pkey * PKR_BITS_PER_PKEY;
+
+	if (WARN_ON_ONCE(accessbits & ~PKEY_ACCESS_MASK))
+		accessbits &= PKEY_ACCESS_MASK;
+
+	pkval &= ~(PKEY_ACCESS_MASK << shift);
+	return pkval | accessbits << shift;
 }
 
 #endif /*_ASM_X86_PKEYS_H */
