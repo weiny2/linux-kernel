@@ -350,6 +350,10 @@ void irqentry_exit_to_user_mode(struct pt_regs *regs);
  * struct irqentry_state - Opaque object for exception state storage
  * @thread_pkrs: Thread Supervisor Pkey value to be restored when exception is
  *               complete.
+ * @pkrs: Currently active pkrs value to be restored after exception
+ *        completion.  NOTE this is different from the thread_pkrs value
+ *        because it may contain a global PKRS value which should not be
+ *        allowed to 'stick' in the thread_pkrs value.
  * @exit_rcu: Used exclusively in the irqentry_*() calls; signals whether the
  *            exit path has to invoke rcu_irq_exit().
  * @lockdep: Used exclusively in the irqentry_nmi_*() calls; ensures that
@@ -366,6 +370,7 @@ void irqentry_exit_to_user_mode(struct pt_regs *regs);
 typedef struct irqentry_state {
 #ifdef CONFIG_ARCH_HAS_SUPERVISOR_PKEYS
 	u32 thread_pkrs;
+	u32 pkrs;
 #endif
 	union {
 		bool	exit_rcu;

@@ -232,6 +232,7 @@ noinstr void irq_save_set_pkrs(irqentry_state_t *irq_state, u32 val)
 		return;
 
 	irq_state->thread_pkrs = current->thread.saved_pkrs;
+	irq_state->pkrs = this_cpu_read(pkrs_cache);
 	write_pkrs(INIT_PKRS_VALUE);
 }
 
@@ -240,7 +241,7 @@ noinstr void irq_restore_pkrs(irqentry_state_t *irq_state)
 	if (!cpu_feature_enabled(X86_FEATURE_PKS))
 		return;
 
-	write_pkrs(irq_state->thread_pkrs);
+	write_pkrs(irq_state->pkrs);
 	current->thread.saved_pkrs = irq_state->thread_pkrs;
 }
 #endif /* CONFIG_ARCH_HAS_SUPERVISOR_PKEYS */
