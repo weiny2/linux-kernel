@@ -43,7 +43,7 @@
 #include <asm/io_bitmap.h>
 #include <asm/proto.h>
 #include <asm/frame.h>
-#include <asm/pkeys_common.h>
+#include <linux/pkeys.h>
 
 #include "process.h"
 
@@ -195,6 +195,74 @@ static inline void pks_init_task(struct task_struct *tsk)
 	tsk->thread.saved_pkrs = INIT_PKRS_VALUE;
 }
 
+extern u32 pkrs_global_cache;
+
+/**
+ * The global PKRS value can only increase access.  Because 01b and 11b both
+ * disable access.  The following truth table is our desired result for each of
+ * the pkeys when we add in the global permissions.
+ *
+ * 00 R/W    - Write enabled (all access)
+ * 10 Read   - write disabled (Read only)
+ * 01 NO Acc - access disabled
+ * 11 NO Acc - also access disabled
+ *
+ * local  global  desired   required
+ *                result    operation
+ * 00      00         00      &
+ * 00      10         00      &
+ * 00      01         00      &
+ * 00      11         00      &
+ *
+ * 10      00         00      &
+ * 10      10         10      &
+ * 10      01         10      ^ special case
+ * 10      11         10      &
+ *
+ * 01      00         00      &
+ * 01      10         10      ^ special case
+ * 01      01         01      &
+ * 01      11         01      &
+ *
+ * 11      00         00      &
+ * 11      10         10      &
+ * 11      01         01      &
+ * 11      11         11      &
+ *
+ * In order to eliminate the need to loop through each pkey and deal with the 2
+ * above special cases we force all 01b values to 11b through the API thus
+ * resulting in the simplified truth table below.
+ *
+ * 00 R/W    - Write enabled (all access)
+ * 10 Read   - write disabled (Read only)
+ * 01 NO Acc - access disabled
+ *    (Not allowed in the API always use 11)
+ * 11 NO Acc - access disabled
+ *
+ * local  global  desired   effective
+ *                result    operation
+ * 00      00         00      &
+ * 00      10         00      &
+ * 00      11         00      &
+ * 00      11         00      &
+ *
+ * 10      00         00      &
+ * 10      10         10      &
+ * 10      11         10      &
+ * 10      11         10      &
+ *
+ * 11      00         00      &
+ * 11      10         10      &
+ * 11      11         11      &
+ * 11      11         11      &
+ *
+ * 11      00         00      &
+ * 11      10         10      &
+ * 11      11         11      &
+ * 11      11         11      &
+ *
+ * Thus we can simply 'AND' in the global pkrs value.
+ */
 static inline void pks_sched_in(void)
 {
 	/*
@@ -202,7 +270,7 @@ static inline void pks_sched_in(void)
 	 * preemption during these windows away from the default value would
 	 * require updating the MSR.  write_pkrs() handles this optimization.
 	 */
-	write_pkrs(current->thread.saved_pkrs);
+	write_pkrs(current->thread.saved_pkrs & pkrs_global_cache);
 }
 #else
 static inline void pks_init_task(struct task_struct *tsk) { }

@@ -60,15 +60,15 @@ static inline __must_check int pks_key_alloc(const char * const pkey_user, int f
 static inline void pks_key_free(int pkey)
 {
 }
-static inline void pks_mk_noaccess(int pkey)
+static inline void pks_mk_noaccess(int pkey, bool global)
 {
 	pr_err("%s is not valid without PKS support\n", __func__);
 }
-static inline void pks_mk_readonly(int pkey)
+static inline void pks_mk_readonly(int pkey, bool global)
 {
 	pr_err("%s is not valid without PKS support\n", __func__);
 }
-static inline void pks_mk_readwrite(int pkey)
+static inline void pks_mk_readwrite(int pkey, bool global)
 {
 	pr_err("%s is not valid without PKS support\n", __func__);
 }

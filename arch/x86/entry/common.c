@@ -225,13 +225,21 @@ SYSCALL_DEFINE0(ni_syscall)
  * current running value and set the PKRS value for the duration of the
  * exception.  Thus preventing exception handlers from having the elevated
  * access of the interrupted task.
+ *
+ * NOTE That the thread saved PKRS must be preserved separately to ensure
+ * global overrides do not 'stick' on a thread.
  */
 noinstr void irq_save_set_pkrs(irqentry_state_t *irq_state, u32 val)
 {
 	if (!cpu_feature_enabled(X86_FEATURE_PKS))
 		return;
 
+	/*
+	 * The thread_pkrs must be maintained separately to prevent global
+	 * overrides from 'sticking' on a thread.
+	 */
 	irq_state->thread_pkrs = current->thread.saved_pkrs;
+	irq_state->pkrs = this_cpu_read(pkrs_cache);
 	write_pkrs(INIT_PKRS_VALUE);
 }
 
@@ -240,7 +248,7 @@ noinstr void irq_restore_pkrs(irqentry_state_t *irq_state)
 	if (!cpu_feature_enabled(X86_FEATURE_PKS))
 		return;
 
-	write_pkrs(irq_state->thread_pkrs);
+	write_pkrs(irq_state->pkrs);
 	current->thread.saved_pkrs = irq_state->thread_pkrs;
 }
 #endif /* CONFIG_ARCH_HAS_SUPERVISOR_PKEYS */

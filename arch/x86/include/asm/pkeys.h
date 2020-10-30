@@ -143,9 +143,9 @@ u32 update_pkey_val(u32 pk_reg, int pkey, unsigned int flags);
 __must_check int pks_key_alloc(const char *const pkey_user, int flags);
 void pks_key_free(int pkey);
 
-void pks_mk_noaccess(int pkey);
-void pks_mk_readonly(int pkey);
-void pks_mk_readwrite(int pkey);
+void pks_mk_noaccess(int pkey, bool global);
+void pks_mk_readonly(int pkey, bool global);
+void pks_mk_readwrite(int pkey, bool global);
 
 #endif /* CONFIG_ARCH_HAS_SUPERVISOR_PKEYS */
 

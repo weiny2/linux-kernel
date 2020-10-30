@@ -121,9 +121,9 @@ mapping adds that mapping to the protection domain.
         int pks_key_alloc(const char * const pkey_user, int flags);
         #define PAGE_KERNEL_PKEY(pkey)
         #define _PAGE_KEY(pkey)
-        void pks_mk_noaccess(int pkey);
-        void pks_mk_readonly(int pkey);
-        void pks_mk_readwrite(int pkey);
+        void pks_mk_noaccess(int pkey, bool global);
+        void pks_mk_readonly(int pkey, bool global);
+        void pks_mk_readwrite(int pkey, bool global);
         void pks_key_free(int pkey);
 
 pks_key_alloc() allocates keys dynamically to allow better use of the limited
@@ -142,7 +142,10 @@ _PAGE_KEY().
 The pks_mk*() family of calls allows kernel users the ability to change the
 protections for the domain identified by the pkey specified.  3 states are
 available pks_mk_noaccess(), pks_mk_readonly(), and pks_mk_readwrite() which
-set the access to none, read, and read/write respectively.
+set the access to none, read, and read/write respectively.  'global' specifies
+that the protection should be set across all threads (logical CPU's) not just
+the current running thread/CPU.  This increases the overhead of PKS and lessens
+the protection so it should be used sparingly.
 
 Finally, pks_key_free() allows a user to return the key to the allocator for
 use by others.
