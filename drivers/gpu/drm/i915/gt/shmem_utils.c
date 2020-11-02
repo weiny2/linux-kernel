@@ -95,19 +95,17 @@ static int __shmem_rw(struct file *file, loff_t off,
 		unsigned int this =
 			min_t(size_t, PAGE_SIZE - offset_in_page(off), len);
 		struct page *page;
-		void *vaddr;
 
 		page = shmem_read_mapping_page_gfp(file->f_mapping, pfn,
 						   GFP_KERNEL);
 		if (IS_ERR(page))
 			return PTR_ERR(page);
 
-		vaddr = kmap(page);
 		if (write)
-			memcpy(vaddr + offset_in_page(off), ptr, this);
+			memcpy_to_page(page, offset_in_page(off), ptr, this);
 		else
-			memcpy(ptr, vaddr + offset_in_page(off), this);
-		kunmap(page);
+			memcpy_from_page(ptr, page, offset_in_page(off), this);
+
 		put_page(page);
 
 		len -= this;

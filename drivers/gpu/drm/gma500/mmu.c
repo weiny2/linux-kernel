@@ -5,6 +5,7 @@
  **************************************************************************/
 
 #include <linux/highmem.h>
+#include <linux/pagemap.h>
 
 #include "mmu.h"
 #include "psb_drv.h"
@@ -204,8 +205,7 @@ struct psb_mmu_pd *psb_mmu_alloc_pd(struct psb_mmu_driver *driver,
 
 	kunmap(pd->p);
 
-	clear_page(kmap(pd->dummy_page));
-	kunmap(pd->dummy_page);
+	memzero_page(pd->dummy_page, 0, PAGE_SIZE);
 
 	pd->tables = vmalloc_user(sizeof(struct psb_mmu_pt *) * 1024);
 	if (!pd->tables)

@@ -9,6 +9,7 @@
 
 #include <linux/delay.h>
 #include <linux/highmem.h>
+#include <linux/pagemap.h>
 
 #include <drm/drm_crtc.h>
 #include <drm/drm_fourcc.h>
@@ -334,7 +335,7 @@ int gma_crtc_cursor_set(struct drm_crtc *crtc,
 	struct gtt_range *gt;
 	struct gtt_range *cursor_gt = gma_crtc->cursor_gt;
 	struct drm_gem_object *obj;
-	void *tmp_dst, *tmp_src;
+	void *tmp_dst;
 	int ret = 0, i, cursor_pages;
 
 	/* If we didn't get a handle then turn the cursor off */
@@ -400,9 +401,7 @@ int gma_crtc_cursor_set(struct drm_crtc *crtc,
 		/* Copy the cursor to cursor mem */
 		tmp_dst = dev_priv->vram_addr + cursor_gt->offset;
 		for (i = 0; i < cursor_pages; i++) {
-			tmp_src = kmap(gt->pages[i]);
-			memcpy(tmp_dst, tmp_src, PAGE_SIZE);
-			kunmap(gt->pages[i]);
+			memcpy_from_page(tmp_dst, gt->pages[i], 0, PAGE_SIZE);
 			tmp_dst += PAGE_SIZE;
 		}
 

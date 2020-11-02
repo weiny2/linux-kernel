@@ -153,13 +153,8 @@ static void poison_scratch_page(struct drm_i915_gem_object *scratch)
 	if (IS_ENABLED(CONFIG_DRM_I915_DEBUG_GEM))
 		val = POISON_FREE;
 
-	for_each_sgt_page(page, sgt, scratch->mm.pages) {
-		void *vaddr;
-
-		vaddr = kmap(page);
-		memset(vaddr, val, PAGE_SIZE);
-		kunmap(page);
-	}
+	for_each_sgt_page(page, sgt, scratch->mm.pages)
+		memset_page(page, val, 0, PAGE_SIZE);
 }
 
 int setup_scratch_page(struct i915_address_space *vm)
