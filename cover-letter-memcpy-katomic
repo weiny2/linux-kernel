@@ -1,0 +1,34 @@
+kmap: Create memcpy/memzero/memcpy_page interface
+
+The following pattern is used often:
+
+	kmap()
+	mempcy() OR memset()
+	kunmap()
+
+This is best done with k[un]map_atomic() instead of k[un]map().  Furthermore,
+iov_iter.c already defined 3 functions which do exactly this.
+
+	memcpy_from_page()
+	memcpy_to_page()
+	memzero_page()
+
+
+Lift these to the core and replace the pattern as appropriate.
+
+In addition the following pattern was found a number of places which has
+similar requirements regarding kmap_atomic().
+
+	kmap(p1)
+	kmap(p2)
+	copy_page()
+	kunmap(p2)
+	kunmap(p1)
+
+Define a memcpy_page() as part of this new interface which can replace this
+pattern and use it.
+
+Once the kmap_local() implementation from Thomas is finalized we can replace
+the kmap_atomics with kmap_local() in these common functions as a further
+optimization.
+
