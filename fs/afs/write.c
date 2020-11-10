@@ -30,7 +30,6 @@ static int afs_fill_page(struct afs_vnode *vnode, struct key *key,
 {
 	struct afs_read *req;
 	size_t p;
-	void *data;
 	int ret;
 
 	_enter(",,%llu", (unsigned long long)pos);
@@ -38,9 +37,7 @@ static int afs_fill_page(struct afs_vnode *vnode, struct key *key,
 	if (pos >= vnode->vfs_inode.i_size) {
 		p = pos & ~PAGE_MASK;
 		ASSERTCMP(p + len, <=, PAGE_SIZE);
-		data = kmap(page);
-		memset(data + p, 0, len);
-		kunmap(page);
+		memzero_page(page, p, len);
 		return 0;
 	}
 
