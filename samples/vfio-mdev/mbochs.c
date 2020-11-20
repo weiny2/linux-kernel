@@ -442,7 +442,6 @@ static ssize_t mdev_access(struct mdev_device *mdev, char *buf, size_t count,
 	struct device *dev = mdev_dev(mdev);
 	struct page *pg;
 	loff_t poff;
-	char *map;
 	int ret = 0;
 
 	mutex_lock(&mdev_state->ops_lock);
@@ -479,12 +478,10 @@ static ssize_t mdev_access(struct mdev_device *mdev, char *buf, size_t count,
 		pos -= MBOCHS_MMIO_BAR_OFFSET;
 		poff = pos & ~PAGE_MASK;
 		pg = __mbochs_get_page(mdev_state, pos >> PAGE_SHIFT);
-		map = kmap(pg);
 		if (is_write)
-			memcpy(map + poff, buf, count);
+			memcpy_to_page(pg, poff, buf, count);
 		else
-			memcpy(buf, map + poff, count);
-		kunmap(pg);
+			memcpy_from_page(buf, pg, poff, count);
 		put_page(pg);
 
 	} else {
