@@ -119,6 +119,9 @@ For 32-bit we have the following conventions - kernel is built with
 	pushq	%r13		/* pt_regs->r13 */
 	pushq	%r14		/* pt_regs->r14 */
 	pushq	%r15		/* pt_regs->r15 */
+#ifdef CONFIG_ARCH_HAS_SUPERVISOR_PKEYS
+	pushq	0		/* space for thread_pkrs */
+#endif
 	UNWIND_HINT_REGS
 
 	.if \save_ret
@@ -147,6 +150,9 @@ For 32-bit we have the following conventions - kernel is built with
 .endm
 
 .macro POP_REGS pop_rdi=1 skip_r11rcx=0
+#ifdef CONFIG_ARCH_HAS_SUPERVISOR_PKEYS
+	popq %r15	/* remove space for thread_pkrs */
+#endif
 	popq %r15
 	popq %r14
 	popq %r13

@@ -88,6 +88,13 @@ struct pt_regs {
 /* top of stack page */
 };
 
+struct extended_pt_regs {
+#ifdef CONFIG_ARCH_HAS_SUPERVISOR_PKEYS
+	unsigned long thread_pkrs;
+#endif
+	struct pt_regs pt_regs;
+};
+
 #endif /* !__i386__ */
 
 #ifdef CONFIG_PARAVIRT
