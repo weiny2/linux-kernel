@@ -27,7 +27,6 @@
 			 PKR_AD_KEY(13) | PKR_AD_KEY(14) | PKR_AD_KEY(15))
 
 #ifdef CONFIG_ARCH_HAS_SUPERVISOR_PKEYS
-DECLARE_PER_CPU(u32, pkrs_cache);
 noinstr void write_pkrs(u32 new_pkrs);
 #else
 static __always_inline void write_pkrs(u32 new_pkrs) { }
