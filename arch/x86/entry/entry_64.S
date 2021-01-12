@@ -332,7 +332,9 @@ SYM_CODE_END(ret_from_fork)
 		movq	$-1, ORIG_RAX(%rsp)	/* no syscall to restart */
 	.endif
 
+	PUSH_PTREGS_AUXILIARY
 	call	\cfunc
+	POP_PTREGS_AUXILIARY
 
 	jmp	error_return
 .endm
@@ -435,7 +437,9 @@ SYM_CODE_START(\asmsym)
 
 	movq	%rsp, %rdi		/* pt_regs pointer */
 
+	PUSH_PTREGS_AUXILIARY
 	call	\cfunc
+	POP_PTREGS_AUXILIARY
 
 	jmp	paranoid_exit
 
@@ -496,7 +500,9 @@ SYM_CODE_START(\asmsym)
 	 * stack.
 	 */
 	movq	%rsp, %rdi		/* pt_regs pointer */
+	PUSH_PTREGS_AUXILIARY
 	call	vc_switch_off_ist
+	POP_PTREGS_AUXILIARY
 	movq	%rax, %rsp		/* Switch to new stack */
 
 	UNWIND_HINT_REGS
@@ -507,7 +513,9 @@ SYM_CODE_START(\asmsym)
 
 	movq	%rsp, %rdi		/* pt_regs pointer */
 
+	PUSH_PTREGS_AUXILIARY
 	call	kernel_\cfunc
+	POP_PTREGS_AUXILIARY
 
 	/*
 	 * No need to switch back to the IST stack. The current stack is either
@@ -542,7 +550,9 @@ SYM_CODE_START(\asmsym)
 	movq	%rsp, %rdi		/* pt_regs pointer into first argument */
 	movq	ORIG_RAX(%rsp), %rsi	/* get error code into 2nd argument*/
 	movq	$-1, ORIG_RAX(%rsp)	/* no syscall to restart */
+	PUSH_PTREGS_AUXILIARY
 	call	\cfunc
+	POP_PTREGS_AUXILIARY
 
 	jmp	paranoid_exit
 
@@ -785,7 +795,9 @@ SYM_CODE_START_LOCAL(exc_xen_hypervisor_callback)
 	movq	%rdi, %rsp			/* we don't return, adjust the stack frame */
 	UNWIND_HINT_REGS
 
+	PUSH_PTREGS_AUXILIARY
 	call	xen_pv_evtchn_do_upcall
+	POP_PTREGS_AUXILIARY
 
 	jmp	error_return
 SYM_CODE_END(exc_xen_hypervisor_callback)
@@ -985,7 +997,9 @@ SYM_CODE_START_LOCAL(error_entry)
 	/* Put us onto the real thread stack. */
 	popq	%r12				/* save return addr in %12 */
 	movq	%rsp, %rdi			/* arg0 = pt_regs pointer */
+	PUSH_PTREGS_AUXILIARY
 	call	sync_regs
+	POP_PTREGS_AUXILIARY
 	movq	%rax, %rsp			/* switch stack */
 	ENCODE_FRAME_POINTER
 	pushq	%r12
@@ -1041,7 +1055,9 @@ SYM_CODE_START_LOCAL(error_entry)
 	 * as if we faulted immediately after IRET.
 	 */
 	mov	%rsp, %rdi
+	PUSH_PTREGS_AUXILIARY
 	call	fixup_bad_iret
+	POP_PTREGS_AUXILIARY
 	mov	%rax, %rsp
 	jmp	.Lerror_entry_from_usermode_after_swapgs
 SYM_CODE_END(error_entry)
@@ -1147,7 +1163,9 @@ SYM_CODE_START(asm_exc_nmi)
 
 	movq	%rsp, %rdi
 	movq	$-1, %rsi
+	PUSH_PTREGS_AUXILIARY
 	call	exc_nmi
+	POP_PTREGS_AUXILIARY
 
 	/*
 	 * Return back to user mode.  We must *not* do the normal exit
@@ -1182,6 +1200,8 @@ SYM_CODE_START(asm_exc_nmi)
 	 * | outermost RIP         } iteration.                      |
 	 * +---------------------------------------------------------+
 	 * | pt_regs                                                 |
+	 * +---------------------------------------------------------+
+	 * | (Optionally) extended_pt_regs                           |
 	 * +---------------------------------------------------------+
 	 *
 	 * The "original" frame is used by hardware.  Before re-enabling
@@ -1359,7 +1379,9 @@ end_repeat_nmi:
 
 	movq	%rsp, %rdi
 	movq	$-1, %rsi
+	PUSH_PTREGS_AUXILIARY
 	call	exc_nmi
+	POP_PTREGS_AUXILIARY
 
 	/* Always restore stashed CR3 value (see paranoid_entry) */
 	RESTORE_CR3 scratch_reg=%r15 save_reg=%r14

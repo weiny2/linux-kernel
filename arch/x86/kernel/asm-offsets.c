@@ -18,6 +18,7 @@
 #include <asm/bootparam.h>
 #include <asm/suspend.h>
 #include <asm/tlbflush.h>
+#include <asm/ptrace.h>
 
 #ifdef CONFIG_XEN
 #include <xen/interface/xen.h>
@@ -93,4 +94,17 @@ static void __used common(void)
 	OFFSET(TSS_sp0, tss_struct, x86_tss.sp0);
 	OFFSET(TSS_sp1, tss_struct, x86_tss.sp1);
 	OFFSET(TSS_sp2, tss_struct, x86_tss.sp2);
+
+#ifdef CONFIG_ARCH_ENABLE_PTREGS_AUXILIARY
+	/* Size of Auxiliary pt_regs data */
+	DEFINE(PTREGS_AUX_SIZE, sizeof(struct pt_regs_extended) -
+				sizeof(struct pt_regs));
+#else
+	/*
+	 * Adding data to struct pt_regs_auxiliary requires setting
+	 * ARCH_ENABLE_PTREGS_AUXILIARY
+	 */
+	BUILD_BUG_ON((sizeof(struct pt_regs_extended) -
+		      sizeof(struct pt_regs)) != 0);
+#endif
 }
