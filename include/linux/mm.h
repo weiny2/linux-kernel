@@ -1193,8 +1193,16 @@ static inline bool page_is_access_protected(struct page *page)
 	return false;
 }
 
-void pgmap_mk_readwrite(struct page *page);
-void pgmap_mk_noaccess(struct page *page);
+void pgmap_mk_readwrite(struct page *page, bool global);
+void pgmap_mk_noaccess(struct page *page, bool global);
+
+static inline bool page_is_globally_kmapped(struct page *page)
+{
+	return page_is_access_protected(page) &&
+		(page->pgmap->flags & PGMAP_KMAP_GLOBAL);
+}
+
+int pgmap_get_pkey(void);
 
 #else
 
@@ -1203,8 +1211,19 @@ static inline bool page_is_access_protected(struct page *page)
 	return false;
 }
 
-static inline void pgmap_mk_readwrite(struct page *page) { }
-static inline void pgmap_mk_noaccess(struct page *page) { }
+static inline void pgmap_mk_readwrite(struct page *page, bool global) { }
+static inline void pgmap_mk_noaccess(struct page *page, bool global) { }
+
+static inline bool page_is_globally_kmapped(struct page *page)
+{
+	return false;
+}
+
+static inline int pgmap_get_pkey(void)
+{
+	return INT_MIN;
+}
+
 #endif /* CONFIG_ZONE_DEVICE_ACCESS_PROTECTION */
 
 /* 127: arbitrary random number, small enough to assemble well */

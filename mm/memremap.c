@@ -95,13 +95,24 @@ static void dev_pgprot_put(struct dev_pagemap *pgmap)
 		static_branch_dec(&dev_protection_static_key);
 }
 
-void pgmap_mk_readwrite(struct page *page)
+void pgmap_mk_readwrite(struct page *page, bool global)
 {
 	/* There is no known use case to  */
 	lockdep_assert_in_irq();
 
 	if (!page_is_access_protected(page))
 		return;
+
+	/*
+	 * NOTE: [Un]Marking the page as global could race with accesses in the
+	 * fault handler but this would be a bug in the code using the address
+	 * returned from kmap.  IOW a kmapped address can't be handed to
+	 * another thread prior to this returning and the caller must ensure
+	 * that thread is done with the address prior to the kunmap_* call.  To
+	 * do otherwise would be a bug regardless of the extra protection here.
+	 */
+	if (global)
+		page->pgmap->flags |= PGMAP_KMAP_GLOBAL;
 
 	if (!current->dev_page_access_ref++)
 		pks_mk_readwrite(pgmap_pkey);
@@ -109,13 +120,17 @@ void pgmap_mk_readwrite(struct page *page)
 
 EXPORT_SYMBOL_GPL(pgmap_mk_readwrite);
 
-void pgmap_mk_noaccess(struct page *page)
+void pgmap_mk_noaccess(struct page *page, bool global)
 {
 	/* There is no known use case to  */
 	lockdep_assert_in_irq();
 
 	if (!page_is_access_protected(page))
 		return;
+
+	/* See comment in pgmap_mk_readwrite */
+	if (global)
+		page->pgmap->flags &= ~PGMAP_KMAP_GLOBAL;
 
 	if (!--current->dev_page_access_ref)
 		pks_mk_noaccess(pgmap_pkey);
@@ -144,6 +159,12 @@ static int __init __dev_access_protection_init(void)
 	return 0;
 }
 subsys_initcall(__dev_access_protection_init);
+
+int pgmap_get_pkey(void)
+{
+	return pgmap_pkey;
+}
+EXPORT_SYMBOL_GPL(pgmap_get_pkey);
 #else
 static pgprot_t dev_pgprot_get(struct dev_pagemap *pgmap, pgprot_t prot)
 {
