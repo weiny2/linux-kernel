@@ -363,6 +363,11 @@ static void persistent_memory_invalidate_cache(void *ptr, size_t size)
 		invalidate_kernel_vmap_range(ptr, size);
 }
 
+/*
+ * IKW Where does this go?
+ * AFAICT this potentially returns a pointer into PMEM which is held for an
+ * undetermined amount of time.
+ */
 static struct wc_memory_superblock *sb(struct dm_writecache *wc)
 {
 	return wc->memory_map;
