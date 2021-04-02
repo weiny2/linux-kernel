@@ -77,22 +77,63 @@ static void devmap_managed_enable_put(struct dev_pagemap *pgmap)
 static int pgmap_pkey = PKEY_INVALID;
 DEFINE_STATIC_KEY_FALSE(dev_protection_static_key);
 EXPORT_SYMBOL(dev_protection_static_key);
+DEFINE_SPINLOCK(pgmap_pkey_lock);
 
 static pgprot_t dev_pgprot_get(struct dev_pagemap *pgmap, pgprot_t prot)
 {
-	if (pgmap->flags & PGMAP_PKEY_PROTECT && pgmap_pkey != PKEY_INVALID) {
-		pgprotval_t val = pgprot_val(prot);
+	pgprotval_t val;
+	int pkey;
 
-		static_branch_inc(&dev_protection_static_key);
-		prot = __pgprot(val | _PAGE_PKEY(pgmap_pkey));
+	if (!(pgmap->flags & PGMAP_PKEY_PROTECT))
+		return prot;
+
+	/*
+	 * Ensure the pgmap_pkey is atomically updated along with the static
+	 * branch enable/disable.
+	 */
+	spin_lock(&pgmap_pkey_lock);
+	if (pgmap_pkey == PKEY_INVALID) {
+		pkey = pks_key_alloc("Device Memory");
+		if (pkey < 0) {
+			/* Failed to get a key so change this pgmap as not protected. */
+			pgmap->flags &= ~PGMAP_PKEY_PROTECT;
+			goto unlock;
+		}
+
+		pgmap_pkey = pkey;
 	}
+
+pkey_valid:
+	val = pgprot_val(prot);
+	prot = __pgprot(val | _PAGE_PKEY(pgmap_pkey));
+	static_branch_inc(&dev_protection_static_key);
+unlock:
+	spin_unlock(&pgmap_pkey_lock);
 	return prot;
 }
 
 static void dev_pgprot_put(struct dev_pagemap *pgmap)
 {
-	if (pgmap->flags & PGMAP_PKEY_PROTECT && pgmap_pkey != PKEY_INVALID)
-		static_branch_dec(&dev_protection_static_key);
+	if (!(pgmap->flags & PGMAP_PKEY_PROTECT))
+		return;
+
+	/*
+	 * Ensure the pgmap_pkey is atomically updated along with the static
+	 * branch enable/disable.
+	 */
+	spin_lock(&pgmap_pkey_lock);
+
+	static_branch_dec(&dev_protection_static_key);
+
+	/* There are still users so keep the key. */
+	if (static_branch_unlikely(&dev_protection_static_key))
+		goto unlock;
+
+	pks_key_free(pgmap_pkey);
+	pgmap_pkey = PKEY_INVALID;
+
+unlock:
+	spin_unlock(&pgmap_pkey_lock);
 }
 
 void pgmap_mk_readwrite(struct page *page)
@@ -128,28 +169,6 @@ void pgmap_mk_noaccess(struct page *page)
 }
 EXPORT_SYMBOL_GPL(pgmap_mk_noaccess);
 
-/**
- * dev_access_protection_init: Configure a PKS key domain for device pages
- *
- * The domain defaults to the protected state.  Device page mappings should set
- * the PGMAP_PKEY_PROTECT flag when mapping pages.
- *
- * Note the pkey is never free'ed.  This is run at init time and we either get
- * the key or we do not.  We need to do this to maintian a constant key (or
- * not) as device memory is added or removed.
- */
-static int __init __dev_access_protection_init(void)
-{
-	int pkey = pks_key_alloc("Device Memory");
-
-	if (pkey < 0)
-		return 0;
-
-	pgmap_pkey = pkey;
-
-	return 0;
-}
-subsys_initcall(__dev_access_protection_init);
 #else
 static pgprot_t dev_pgprot_get(struct dev_pagemap *pgmap, pgprot_t prot)
 {
