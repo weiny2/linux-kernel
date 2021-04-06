@@ -798,18 +798,12 @@ void write_pkrs(u32 new_pkrs);
 #define pks_init_task(tsk) \
 	tsk->thread.saved_pkrs = INIT_PKRS_VALUE
 
-/*
- * PKRS is only temporarily changed during specific code paths.  Only a
- * preemption during these windows away from the default value would
- * require updating the MSR.  write_pkrs() handles this optimization.
- */
-#define pks_sched_in() \
-	write_pkrs(current->thread.saved_pkrs)
+void pkrs_write_current(void);
 
 #else /* !CONFIG_ARCH_ENABLE_SUPERVISOR_PKEYS */
 
 #define pks_init_task(tsk)
-#define pks_sched_in()
+void pkrs_write_current(void) { }
 
 #endif /* CONFIG_ARCH_ENABLE_SUPERVISOR_PKEYS */
 

@@ -237,6 +237,13 @@ u32 update_pkey_val(u32 pk_reg, int pkey, unsigned int flags)
 #ifdef CONFIG_ARCH_ENABLE_SUPERVISOR_PKEYS
 
 __static_or_pks_test DEFINE_PER_CPU(u32, pkrs_cache);
+DEFINE_STATIC_PERCPU_RWSEM(pkrs_global_lock);
+
+/*
+ * If a pkey is not in use this mask ensures those pkeys are held to
+ * PKEY_DISABLE_ACCESS.
+ */
+static u32 pkrs_invalid_mask = INIT_PKRS_VALUE;
 
 /*
  * write_pkrs() optimizes MSR writes by maintaining a per cpu cache which can
@@ -281,6 +288,18 @@ void setup_pks(void)
 }
 
 /*
+ * PKRS is only temporarily changed during specific code paths.  Only a
+ * preemption during these windows away from the default value would
+ * require updating the MSR.  write_pkrs() handles this optimization.
+ */
+void pkrs_write_current(void)
+{
+	/* Disable access for invalid pkeys. */
+	current->thread.saved_pkrs |= pkrs_invalid_mask;
+	write_pkrs(current->thread.saved_pkrs);
+}
+
+/*
  * Do not call this directly, see pks_mk*() below.
  *
  * @pkey: Key for the domain to change
@@ -293,9 +312,11 @@ void setup_pks(void)
  */
 static inline void pks_update_protection(int pkey, unsigned long protection)
 {
+	/* WARN if a specified pkey is invalid. */
+	WARN_ON(pkrs_invalid_mask & PKR_AD_KEY(pkey));
 	current->thread.saved_pkrs = update_pkey_val(current->thread.saved_pkrs,
 						     pkey, protection);
-	write_pkrs(current->thread.saved_pkrs);
+	pkrs_write_current();
 }
 
 /**
@@ -389,6 +410,9 @@ __must_check int pks_key_alloc(const char * const pkey_user)
 	/* for debugging key exhaustion */
 	pks_key_users[nr] = pkey_user;
 
+	/* allow access with this pkey */
+	pkrs_invalid_mask = update_pkey_val(pkrs_invalid_mask, nr, 0);
+
 	return nr;
 }
 EXPORT_SYMBOL_GPL(pks_key_alloc);
@@ -404,8 +428,10 @@ void pks_key_free(int pkey)
 		return;
 	}
 
-	/* Restore to default of no access */
-	pks_mk_noaccess(pkey);
+	/* disallow access with this pkey */
+	pkrs_invalid_mask = update_pkey_val(pkrs_invalid_mask, pkey,
+					    PKEY_DISABLE_ACCESS);
+
 	pks_key_users[pkey] = NULL;
 	clear_bit_unlock(pkey, &pks_key_allocation_map);
 }
