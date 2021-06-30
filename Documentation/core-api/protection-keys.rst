@@ -169,3 +169,9 @@ WRMSR(MSR_IA32_PKRS) is an exception.  It is not a serializing instruction and
 instead maintains ordering properties similar to WRPKRU.  Thus it is safe to
 immediately use a mapping when the pks_set*() functions returns.  Check the
 latest SDM for details.
+
+Testing
+-------
+
+.. kernel-doc:: lib/pks/pks_test.c
+        :doc: PKS_TEST
