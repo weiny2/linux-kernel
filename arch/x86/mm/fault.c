@@ -1173,6 +1173,9 @@ do_kern_addr_fault(struct pt_regs *regs, unsigned long hw_error_code,
 		if (pks_handle_abandoned_pkeys(regs))
 			return;
 
+		if (pks_handle_key_fault(regs, hw_error_code, address))
+			return;
+
 		/*
 		 * If a protection key exception occurs it could be because a PKS test
 		 * is running.  If so, pks_test_callback() will clear the protection
