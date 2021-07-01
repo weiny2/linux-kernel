@@ -46,6 +46,9 @@ static inline void pks_set_readwrite(const u8 pkey)
 	arch_pks_update_protection(pkey, PKEY_READ_WRITE);
 }
 
+typedef bool (*pks_key_callback)(struct pt_regs *regs, unsigned long address,
+				 bool write);
+
 #else /* !CONFIG_ARCH_ENABLE_SUPERVISOR_PKEYS */
 
 static inline void pks_set_noaccess(u8 pkey) {}
