@@ -213,6 +213,38 @@ u32 pkey_update_pkval(u32 pkval, int pkey, u32 accessbits)
 __static_or_pks_test DEFINE_PER_CPU(u32, pkrs_cache);
 
 /*
+ * Define a mask of pkeys which are allowed, ie have not been abandoned.
+ * Default is all keys are allowed.
+ */
+#define PKRS_ALLOWED_MASK_DEFAULT 0xffffffff
+u32 __read_mostly pks_pkey_allowed_mask = PKRS_ALLOWED_MASK_DEFAULT;
+
+/*
+ * pks_handle_abandoned_pkeys() - Fixup any running threads who fault on an
+ *				  abandoned pkey
+ * @regs: Faulting thread registers
+ *
+ * Return true if any pkeys were abandoned.  If the fault was on a different
+ * pkey the fault will occur again and fail.  This potental extra fault is
+ * inefficient but abandoning a pkey should be a rare event.  And faulting on
+ * another pkey while something got abandoned even more rare.
+ */
+bool pks_handle_abandoned_pkeys(struct pt_regs *regs)
+{
+	struct pt_regs_extended *ept_regs;
+	u32 old;
+
+	if (!cpu_feature_enabled(X86_FEATURE_PKS))
+		return 0;
+
+	ept_regs = to_extended_pt_regs(regs);
+	old = ept_regs->aux.pks_thread_pkrs;
+	ept_regs->aux.pks_thread_pkrs &= pks_pkey_allowed_mask;
+
+	return (ept_regs->aux.pks_thread_pkrs != old);
+}
+
+/*
  * pks_write_pkrs() - Write the pkrs of the current CPU
  * @new_pkrs: New value to write to the current CPU register
  *
@@ -241,6 +273,18 @@ static void pks_write_pkrs(u32 new_pkrs)
 	}
 }
 
+/* __pks_write_current() - internal version of pks_write_current() */
+static void __pks_write_current(void)
+{
+	current->thread.pks_saved_pkrs &= pks_pkey_allowed_mask;
+	pks_write_pkrs(current->thread.pks_saved_pkrs);
+}
+
+static u32 pks_init_value(void)
+{
+	return PKS_INIT_VALUE & pks_pkey_allowed_mask;
+}
+
 /**
  * pks_write_current() - Write the current thread's saved PKRS value
  *
@@ -251,7 +295,7 @@ void pks_write_current(void)
 	if (!cpu_feature_enabled(X86_FEATURE_PKS))
 		return;
 
-	pks_write_pkrs(current->thread.pks_saved_pkrs);
+	__pks_write_current();
 }
 
 /*
@@ -271,7 +315,7 @@ void pks_save_pt_regs(struct pt_regs *regs)
 
 	aux_pt_regs = &to_extended_pt_regs(regs)->aux;
 	aux_pt_regs->pks_thread_pkrs = current->thread.pks_saved_pkrs;
-	pks_write_pkrs(PKS_INIT_VALUE);
+	pks_write_pkrs(pks_init_value());
 }
 
 void pks_restore_pt_regs(struct pt_regs *regs)
@@ -283,7 +327,7 @@ void pks_restore_pt_regs(struct pt_regs *regs)
 
 	aux_pt_regs = &to_extended_pt_regs(regs)->aux;
 	current->thread.pks_saved_pkrs = aux_pt_regs->pks_thread_pkrs;
-	pks_write_pkrs(current->thread.pks_saved_pkrs);
+	__pks_write_current();
 }
 
 void pks_dump_fault_info(struct pt_regs_auxiliary *aux_pt_regs)
@@ -299,22 +343,26 @@ void pks_dump_fault_info(struct pt_regs_auxiliary *aux_pt_regs)
  */
 void pks_setup(void)
 {
+	u32 init_value;
+
 	if (!cpu_feature_enabled(X86_FEATURE_PKS))
 		return;
 
+	init_value = pks_init_value();
+
 	/*
-	 * If the PKS_INIT_VALUE is 0 then pks_write_pkrs() could fail to
-	 * initialize the MSR.  Do a single write here to ensure the MSR is
-	 * written at least one time.
+	 * If init_value is 0 then pks_write_pkrs() could fail to initialize
+	 * the MSR.  Do a single write here to ensure the MSR is written at
+	 * least one time.
 	 */
-	wrmsrl(MSR_IA32_PKRS, PKS_INIT_VALUE);
-	pks_write_pkrs(PKS_INIT_VALUE);
+	wrmsrl(MSR_IA32_PKRS, init_value);
+	pks_write_pkrs(init_value);
 	cr4_set_bits(X86_CR4_PKS);
 }
 
 void pks_init_task(struct task_struct *task)
 {
-	task->thread.pks_saved_pkrs = PKS_INIT_VALUE;
+	task->thread.pks_saved_pkrs = pks_init_value();
 }
 
 /*
@@ -339,9 +387,37 @@ void pks_update_protection(int pkey, u32 protection)
 	current->thread.pks_saved_pkrs = pkey_update_pkval(pkrs, pkey,
 							   protection);
 	preempt_disable();
-	pks_write_pkrs(current->thread.pks_saved_pkrs);
+	__pks_write_current();
 	preempt_enable();
 }
 EXPORT_SYMBOL_GPL(pks_update_protection);
+
+/**
+ * pks_abandon_protections() - Force readwrite (no protections)
+ * @pkey: The pkey to force
+ *
+ * Force the value of the pkey to readwrite (no protections) thus abandoning
+ * protections for this key.  This is a permanent change and has no
+ * coresponding reversal function.
+ *
+ * This also updates the current running thread.
+ */
+void pks_abandon_protections(int pkey)
+{
+	u32 old_mask, new_mask;
+
+	if (!cpu_feature_enabled(X86_FEATURE_PKS))
+		return;
+
+	do {
+		old_mask = READ_ONCE(pks_pkey_allowed_mask);
+		new_mask = pkey_update_pkval(old_mask, pkey, 0);
+	} while (unlikely(
+		 cmpxchg(&pks_pkey_allowed_mask, old_mask, new_mask) != old_mask));
+
+	/* Update the local thread as well. */
+	pks_update_protection(pkey, 0);
+}
+EXPORT_SYMBOL_GPL(pks_abandon_protections);
 
 #endif /* CONFIG_ARCH_ENABLE_SUPERVISOR_PKEYS */

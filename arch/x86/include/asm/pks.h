@@ -9,6 +9,7 @@ void pks_write_current(void);
 void pks_save_pt_regs(struct pt_regs *regs);
 void pks_restore_pt_regs(struct pt_regs *regs);
 void pks_dump_fault_info(struct pt_regs_auxiliary *aux_pt_regs);
+bool pks_handle_abandoned_pkeys(struct pt_regs *regs);
 
 #else /* !CONFIG_ARCH_ENABLE_SUPERVISOR_PKEYS */
 
@@ -17,6 +18,11 @@ static inline void pks_write_current(void) { }
 static inline void pks_save_pt_regs(struct pt_regs *regs) { }
 static inline void pks_restore_pt_regs(struct pt_regs *regs) { }
 static inline void pks_dump_fault_info(struct pt_regs_auxiliary *aux_pt_regs) { }
+
+static inline bool pks_handle_abandoned_pkeys(struct pt_regs *regs)
+{
+	return false;
+}
 
 #endif /* CONFIG_ARCH_ENABLE_SUPERVISOR_PKEYS */
 

@@ -128,11 +128,14 @@ static inline void pks_mk_readwrite(int pkey)
 	pks_update_protection(pkey, 0);
 }
 
+void pks_abandon_protections(int pkey);
+
 #else /* !CONFIG_ARCH_ENABLE_SUPERVISOR_PKEYS */
 
 static inline void pks_init_task(struct task_struct *task) { }
 static inline void pks_mk_noaccess(int pkey) {}
 static inline void pks_mk_readwrite(int pkey) {}
+static inline void pks_abandon_protections(int pkey) {}
 
 #endif /* CONFIG_ARCH_ENABLE_SUPERVISOR_PKEYS */
 

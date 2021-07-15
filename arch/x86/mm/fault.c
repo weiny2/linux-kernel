@@ -1170,6 +1170,9 @@ do_kern_addr_fault(struct pt_regs *regs, unsigned long hw_error_code,
 		 */
 		WARN_ON_ONCE(!cpu_feature_enabled(X86_FEATURE_PKS));
 
+		if (pks_handle_abandoned_pkeys(regs))
+			return;
+
 		/*
 		 * If a protection key exception occurs it could be because a PKS test
 		 * is running.  If so, pks_test_callback() will clear the protection
