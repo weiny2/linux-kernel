@@ -48,6 +48,17 @@ static inline void pks_write_pkrs(const u32 new_pkrs)
 	}
 }
 
+static inline void __pks_update_protection(const u8 pkey, const u8 protection)
+{
+	u32 pkrs;
+
+	preempt_disable();
+	pkrs = pkey_update_pkval(current->thread.pkrs, pkey, protection);
+	pks_write_pkrs(pkrs);
+	current->thread.pkrs = pkrs;
+	preempt_enable();
+}
+
 /*
  * See pks_set*()
  * @pkey: Key for the domain to change
@@ -61,16 +72,38 @@ static inline void pks_write_pkrs(const u32 new_pkrs)
 static inline void arch_pks_update_protection(const u8 pkey,
 					      const u8 protection)
 {
-	u32 pkrs;
+	if (!cpu_feature_enabled(X86_FEATURE_PKS))
+		return;
+
+	__pks_update_protection(pkey, protection);
+}
+
+/*
+ * Do not call this directly, see pks_update_exception()
+ * @regs: Faulting thread registers
+ * @pkey: pkey to update
+ * @protection: protection bits to use.
+ *
+ * CONTEXT: Exception
+ */
+static inline void arch_pks_update_exception(struct pt_regs *regs,
+					     const u8 pkey,
+					     const u8 protection)
+{
+	struct pt_regs_extended *ept_regs;
+	u32 old;
 
 	if (!cpu_feature_enabled(X86_FEATURE_PKS))
 		return;
 
-	preempt_disable();
-	pkrs = pkey_update_pkval(current->thread.pkrs, pkey, protection);
-	pks_write_pkrs(pkrs);
-	current->thread.pkrs = pkrs;
-	preempt_enable();
+	if (WARN_ON_ONCE(pkey >= PKS_KEY_MAX))
+		return;
+
+	__pks_update_protection(pkey, protection);
+
+	ept_regs = to_extended_pt_regs(regs);
+	old = ept_regs->aux.pkrs;
+	ept_regs->aux.pkrs = pkey_update_pkval(old, pkey, protection);
 }
 
 bool pks_handle_key_fault(struct pt_regs *regs, unsigned long hw_error_code,
