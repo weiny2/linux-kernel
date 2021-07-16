@@ -450,10 +450,26 @@ err_pfn_remap:
 }
 
 
-/*
- * Not device managed version of dev_memremap_pages, undone by
- * memunmap_pages().  Please use dev_memremap_pages if you have a struct
- * device available.
+/**
+ * memremap_pages - remap and provide memmap backing for the given resource
+ * @pgmap: pointer to a struct dev_pagemap
+ * @nid: The node to map memory on
+ *
+ * Please use devm_memremap_pages if you have a struct device available
+ *
+ * pgmap notes:
+ * 1/ At a minimum the res and type members of @pgmap must be initialized
+ *    by the caller before passing it to this function
+ *
+ * 2/ The altmap field may optionally be initialized, in which case
+ *    PGMAP_ALTMAP_VALID must be set in pgmap->flags.
+ *
+ * 3/ The ref field may optionally be provided, in which pgmap->ref must be
+ *    'live' on entry and will be killed and reaped at memunmap_pages() time.
+ *
+ * 4/ range is expected to be a host memory range that could feasibly be
+ *    treated as a "System RAM" range, i.e. not a device mmio range, but
+ *    this is not enforced.
  */
 void *memremap_pages(struct dev_pagemap *pgmap, int nid)
 {
@@ -554,24 +570,13 @@ void *memremap_pages(struct dev_pagemap *pgmap, int nid)
 EXPORT_SYMBOL_GPL(memremap_pages);
 
 /**
- * devm_memremap_pages - remap and provide memmap backing for the given resource
+ * devm_memremap_pages - Device managed version of memremap_pages
  * @dev: hosting device for @res
  * @pgmap: pointer to a struct dev_pagemap
  *
- * Notes:
- * 1/ At a minimum the res and type members of @pgmap must be initialized
- *    by the caller before passing it to this function
- *
- * 2/ The altmap field may optionally be initialized, in which case
- *    PGMAP_ALTMAP_VALID must be set in pgmap->flags.
- *
- * 3/ The ref field may optionally be provided, in which pgmap->ref must be
- *    'live' on entry and will be killed and reaped at
- *    devm_memremap_pages_release() time, or if this routine fails.
- *
- * 4/ range is expected to be a host memory range that could feasibly be
- *    treated as a "System RAM" range, i.e. not a device mmio range, but
- *    this is not enforced.
+ * See memremap_pages for basic details of the requirements for pgmap.  In the
+ * case of pgmap->ref being specified here the ref will be killed and reaped at
+ * devm_memremap_pages_release() time, or if this routine fails.
  */
 void *devm_memremap_pages(struct device *dev, struct dev_pagemap *pgmap)
 {
