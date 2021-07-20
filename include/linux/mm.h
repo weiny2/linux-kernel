@@ -1230,6 +1230,8 @@ static inline void pgmap_mk_noaccess(struct page *page)
 
 bool pgmap_protection_enabled(void);
 
+bool pgmap_pks_fault_callback(unsigned long address, bool write);
+
 #else
 
 static inline void __pgmap_mk_readwrite(struct dev_pagemap *pgmap) { }
