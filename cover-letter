@@ -1,0 +1,253 @@
+Topic: pks-pmem
+Version: 10
+Subject: PKS/PMEM: Add Stray Write Protection
+
+I'm looking for Intel acks on the series prior to submitting to maintainers.
+Most of the changes from V8 to V9 was in getting the tests straightened out.
+But there are some improvements in the actual code.
+
+
+Changes for V10
+	Rebased to latest
+	Drop the irqentry_exit_cond_resched() fixup patch as that was fixed by
+		Mark Rutland in:
+		4624a14f4daa ("sched/preempt: Simplify irqentry_exit_cond_resched() callers") 
+	Adjust irqentry_exit_cond_resched() changes based on Marks fix
+	Fix test_pks cpu option processing
+	Move memremap code to memremap.h
+
+
+
+PKS/PMEM Stray write protection
+===============================
+
+This series is broken into 2 parts.
+
+	1) Introduce Protection Key Supervisor (PKS), testing, and
+	   documentation
+	2) Use PKS to protect PMEM from stray writes
+
+Introduce Protection Key Supervisor (PKS)
+-----------------------------------------
+
+PKS enables protections on 'domains' of supervisor pages to limit supervisor
+mode access to pages beyond the normal paging protections.  PKS works in a
+similar fashion to user space pkeys, PKU.  As with PKU, supervisor pkeys are
+checked in addition to normal paging protections.  And page mappings are
+assigned to a domain by setting a 4 bit pkey in the PTE of that mapping.
+
+Unlike PKU, permissions are changed via a MSR update.  This update avoids TLB
+flushes making this an efficient way to alter protections vs PTE updates.
+
+Also, unlike PTE updates PKS permission changes apply only to the current
+processor.  Therefore changing permissions apply only to that thread and not
+any other cpu/process.  This allows protections to remain in place on other
+cpus for additional protection and isolation.
+
+Even though PKS updates are thread local, XSAVE is not supported for the PKRS
+MSR.  Therefore this implementation saves and restores the MSR across context
+switches and during exceptions within software.  Nested exceptions are
+supported by each exception getting a new PKS state.
+
+For consistent behavior with current paging protections, pkey 0 is reserved and
+configured to allow full access via the pkey mechanism, thus preserving the
+default paging protections because PTEs naturally have a pkey value of 0.
+
+Other keys, (1-15) are statically allocated by kernel consumers when
+configured.  This is done by adding the appropriate PKS_NEW_KEY and
+PKS_DECLARE_INIT_VALUE macros to pks-keys.h.
+
+Two PKS consumers, PKS_TEST and PMEM stray write protection, are included in
+this series.  When the number of users grows larger the sharing of keys will
+need to be resolved depending on the needs of the users at that time.  Many
+methods have been contemplated but the number of kernel users and use cases
+envisioned is still quite small, much less than the 15 available keys.
+
+To summarize, the following are key attributes of PKS.
+
+	1) Fast switching of permissions
+		1a) Prevents access without page table manipulations
+		1b) No TLB flushes required
+	2) Works on a per thread basis, thus allowing protections to be
+	   preserved on threads which are not actively accessing data through
+	   the mapping.
+
+PKS is available with 4 and 5 level paging.  For this and simplicity of
+implementation, the feature is restricted to x86_64.
+
+
+Use PKS to protect PMEM from stray writes
+-----------------------------------------
+
+DAX leverages the direct-map to enable 'struct page' services for PMEM.  Given
+that PMEM capacity may be an order of magnitude higher capacity than System RAM
+it presents a large vulnerability surface to stray writes.  Such a stray write
+becomes a silent data corruption bug.
+
+Stray pointers to System RAM may result in a crash or other undesirable
+behavior which, while unfortunate, are usually recoverable with a reboot.
+Stray writes to PMEM are permanent in nature and thus are more likely to result
+in permanent user data loss.  Given that PMEM access from the kernel is limited
+to a constrained set of locations (PMEM driver, Filesystem-DAX, direct-I/O, and
+any properly kmap'ed page), it is amenable to PKS protection.
+
+Set up an infrastructure for extra device access protection. Then implement the
+protection using the new Protection Keys Supervisor (PKS) on architectures
+which support it.
+
+Because PMEM pages are all associated with a struct dev_pagemap and flags in
+struct page are valuable the flag of protecting memory can be stored in struct
+dev_pagemap.  All PMEM is protected by the same pkey.  So a single flag is all
+that is needed in each dev_pagemap to indicate protection.
+
+General access in the kernel is supported by modifying the kmap infrastructure
+which can detect if a page is pks protected and enable access until the
+corresponding unmap is called.
+
+Because PKS is a thread local mechanism and because kmap was never really
+intended to create a long term mapping, this implementation does not support
+the kmap()/kunmap() calls.  Calling kmap() on a PMEM protected page is allowed
+but accessing that mapping will cause a fault.
+
+Originally this series modified many of the kmap call sites to indicate they
+were thread local.[1]  And an attempt to support kmap()[2] was made.  But now
+that kmap_local_page() has been developed[3] and in more wide spread use,
+kmap() can safely be left unsupported.
+
+How the fault is handled is configurable via a new module parameter
+memremap.pks_fault_mode.  Two modes are supported.
+
+	'relaxed' (default) -- WARN_ONCE, disable the protection and allow
+	                       access
+
+	'strict' -- prevent any unguarded access to a protected dev_pagemap
+		    range
+
+This 'safety valve' feature has already been useful in the development of this
+feature.
+
+
+[1] https://lore.kernel.org/lkml/20201009195033.3208459-1-ira.weiny@intel.com/
+
+[2] https://lore.kernel.org/lkml/87mtycqcjf.fsf@nanos.tec.linutronix.de/
+
+[3] https://lore.kernel.org/lkml/20210128061503.1496847-1-ira.weiny@intel.com/
+    https://lore.kernel.org/lkml/20210210062221.3023586-1-ira.weiny@intel.com/
+    https://lore.kernel.org/lkml/20210205170030.856723-1-ira.weiny@intel.com/
+    https://lore.kernel.org/lkml/20210217024826.3466046-1-ira.weiny@intel.com/
+
+
+----------------------------------------------------------------------------
+Changes for V9
+
+Review and update all commit messages.
+Update cover letter below
+
+PKS Core
+	Separate user and supervisor pkey code in the headers
+		create linux/pks.h for supervisor calls
+		This facilitated making the pmem code more efficient 
+	Completely rearchitect the test code
+		[After Dave Hansen and Rick Edgecombe found issues in the test
+			code it was easier to rearchitect the code completely
+			rather than attempt to fix it.]
+		Remove pks_test_callback in favor of using fault hooks
+			Fault hooks also isolate the fault callbacks from being
+			false positives if non-test consumers are running
+		Make additional PKS_TEST_RUN_ALL Kconfig option which is
+			mutually exclusive to any non-test PKS consumer
+			PKS_TEST_RUN_ALL takes over all pkey callbacks
+		Ensure that each test runs within it's own context and is
+			mutually exclusive from running while any other test is
+			running.
+		Ensure test session and context memory is cleaned up on file
+			close
+		Use pr_debug() and dynamic debug for in kernel debug messages
+		Enhance test_pks selftest
+			Add the ability to run all tests not just the context
+				switch test
+			Standardize output [PASS][FAIL][SKIP]
+			Add '-d' option enables dynamic debug to see the kernel
+				debug messages
+
+	Incorporate feedback from Rick Edgecombe
+		Update all pkey types to u8
+		Fix up test code barriers
+	Move patch declaring PKS_INIT_VALUE ahead of the patch which enables
+		PKS so that PKS_INIT_VALUE can be used when pks_setup() is
+		first created
+	From Dan Williams
+		Use macros instead of an enum for a pkey allocation scheme
+			which is predicated on the config options of consumers
+			This almost worked perfectly.  It required a bit of
+			tweeking to be able to allocate all of the keys.
+
+	From Dave Hansen
+		Reposition some code to be near/similar to user pkeys
+			s/pks_write_current/x86_pkrs_load
+			s/pks_saved_pkrs/pkrs
+		Update Documentation
+		s/PKR_{RW,AD,WD}_KEY/PKR_{RW,AD,WD}_MASK
+		Consistently use lower case for pkey
+		Update commit messages
+		Add Acks
+
+PMEM Stray Write
+	Building on the change to the pks_mk_*() function rename
+		s/pgmap_mk_*/pgmap_set_*/
+		s/dax_mk_*/dax_set_*/
+	From Dan Williams
+		Avoid adding new dax operations by teaching dax_device about pgmap
+		Remove pgmap_protection_flag_invalid() patch (Just let
+			kmap'ings fail)
+
+Changes for V8
+
+Feedback from Thomas
+	* clean up noinstr mess
+	* Fix static PKEY allocation mess
+	* Ensure all functions are consistently named.
+	* Split up patches to do 1 thing per patch
+	* pkey_update_pkval() implementation
+	* Streamline the use of pks_write_pkrs() by not disabling preemption
+		- Leave this to the callers who require it.
+		- Use documentation and lockdep to prevent errors
+	* Clean up commit messages to explain in detail _why_ each patch is
+		there.
+
+Feedback from Dave H.
+	* Leave out pks_mk_readonly() as it is not used by the PMEM use case
+
+Feedback from Peter Anvin
+	* Replace pks_abandon_pkey() with pks_update_exception()
+		This is an even greater simplification in that it no longer
+		attempts to shield users from faults.  As the main use case for
+		abandoning a key was to allow a system to continue running even
+		with an error.  This should be a rare event so the performance
+		should not be an issue.
+
+* Simplify ARCH_ENABLE_SUPERVISOR_PKEYS
+
+* Update PKS Test code
+	- Add default value test
+	- Split up the test code into patches which follow each feature
+	  addition
+	- simplify test code processing
+	- ensure consistent reporting of errors.
+
+* Ensure all entry points to the PKS code are protected by
+	cpu_feature_enabled(X86_FEATURE_PKS)
+	- At the same time make sure non-entry points or sub-functions to the
+	  PKS code are not _unnecessarily_ protected by the feature check
+
+* Update documentation
+	- Use kernel docs to place the docs with the code for easier internal
+	  developer use
+
+* Adjust the PMEM use cases for the core changes
+
+* Split the PMEM patches up to be 1 change per patch and help clarify review
+
+* Review all header files and remove those no longer needed
+
+* Review/update/clarify all commit messages
