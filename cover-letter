@@ -1,0 +1,162 @@
+Topic: pks-pmem
+Version: 8
+Subject: PKS/PMEM: Add Stray Write Protection
+
+Changes for V8
+
+Feedback from Thomas
+	* clean up noinstr mess based on feed back from 
+	* Ensure all functions are consistently named.
+	* Split up patches to do 1 single thing
+	* pkey_update_pkval() implementation
+	* pks_write_pkrs() can be used 
+
+* Simplify ARCH_ENABLE_SUPERVISOR_PKEYS
+
+* Ensure all entry points to the PKS code are protected by 
+	cpu_feature_enabled(X86_FEATURE_PKS)
+	- Make sure non-entry points or sub-functions to the PKS code are not
+	  unecessarily protected by the feature check
+
+
+* Split up the test code into chunks which follow each feature addition.
+	- Add default value test
+	- simplify test code processing
+	- ensure consistent reporting of errors.
+* Clean up commit messages to explain in detail _why_ each patch is there.
+* Clean up redundant or unneeded header files
+* Push off and leave out pks_mk_readonly() as it is not used by the PMEM use
+	case
+
+
+
+PKS/PMEM Stray write protection
+===============================
+
+This series is broken into 2 parts.
+
+	1) Introduce Protection Key Supervisor (PKS)
+	2) Use PKS to protect PMEM from stray writes
+
+Introduce Protection Key Supervisor (PKS)
+-----------------------------------------
+
+PKS enables protections on 'domains' of supervisor pages to limit supervisor
+mode access to pages beyond the normal paging protections.  PKS works in a
+similar fashion to user space pkeys, PKU.  As with PKU, supervisor pkeys are
+checked in addition to normal paging protections.  And page mappings are
+assigned to a pkey domain by setting a 4 bit pkey in the PTE of that mapping.
+
+Unlike PKU Access or Writes are disabled via a MSR update.  This update avoids
+TLB flushes when permissions change making this an efficient way to alter
+protections vs PTE updates.
+
+XSAVE is not supported for the PKRS MSR.  Therefore the implementation saves
+and restores the MSR across context switches and during exceptions within
+software.  Nested exceptions are supported by each exception getting a new
+default PKS state.
+
+For consistent behavior with current paging protections, pkey 0 is reserved and
+configured to allow full access via the pkey mechanism, thus preserving the
+default paging protections because PTEs naturally have a pkey value of 0.
+
+Other keys, (1-15) are statically allocated by kernel users.  This is done by
+adding an entry to 'enum pks_pkey_consumers' and a corresponding default value
+in consumer_defaults in the function create_initial_pkrs_value().
+
+In the second part of this patch set a single key is used by persistent memory
+stray write protection.  When the number of users grows larger the sharing of
+keys will need to be resolved depending on the needs of the users at that time.
+Many methods have been contemplated but the number of kernel users and use
+cases envisioned is still quite small.  Much less than the 15 available keys.
+
+The following are key attributes of PKS.
+
+	1) Fast switching of permissions
+		1a) Prevents access without page table manipulations
+		1b) No TLB flushes required
+	2) Works on a per thread basis, thus allowing protections to be
+	   preserved on threads which are not actively accessing data through
+	   the mapping.
+
+PKS is available with 4 and 5 level paging.  The implementation is restricted
+to x86_64.
+
+
+Use PKS to protect PMEM from stray writes
+-----------------------------------------
+
+DAX leverages the direct-map to enable 'struct page' services for PMEM.  Given
+that PMEM capacity may be an order of magnitude higher capacity than System RAM
+it presents a large vulnerability surface to stray writes.  Such a stray write
+becomes a silent data corruption bug.
+
+Stray pointers to System RAM may result in a crash or other undesirable
+behavior which, while unfortunate, are usually recoverable with a reboot.
+Stray writes to PMEM are permanent in nature and thus are more likely to result
+in permanent user data loss.  Given that PMEM access from the kernel is limited
+to a constrained set of locations (PMEM driver, Filesystem-DAX, direct-I/O, and
+any properly kmap'ed page), it is amenable to PKS protection.
+
+Set up an infrastructure for extra device access protection. Then implement the
+protection using the new Protection Keys Supervisor (PKS) on architectures
+which support it.
+
+Because PMEM pages are all associated with a struct dev_pagemap and flags in
+struct page are valuable the flag of protecting memory can be stored in struct
+dev_pagemap.  All PMEM is protected by the same pkey.  So a single flag is all
+that is needed in each page to indicate protection.
+
+General access in the kernel is supported by modifying the kmap infrastructure
+which can detect if a page is pks protected and enable access until the
+corresponding unmap is called.
+
+Because PKS is a thread local mechanism and because kmap was never really
+intended to create a long term mappings, this implementation does not support
+the kmap()/kunmap() calls.  Calling kmap() on a PMEM protected page is flagged
+and treated immediately as a PKS access violation early to allow for better
+traceability of the unsupported code path.
+
+Originally this series modified many of the kmap call sites to indicate they
+were thread local.[1]  And an attempt to support kmap()[2] was made.  But now
+that kmap_local_page() has been developed[3] and in more wide spread use,
+kmap() can safely be left unsupported.
+
+Furthermore, handling invalid access to these pages is configurable via a new
+module parameter memremap.pks_fault_mode.  2 modes are suported.
+
+	'relaxed' (default) -- WARN_ONCE, disable the protection and allow
+	                       access
+
+	'strict' -- prevent any unguarded access to a protected dev_pagemap
+		    range
+
+The fault handler detects the invalid access and applies the above
+configuration.  Relaxed warns, allow the access to continue, and abandons the
+protection.  Where 'strict' oopes the kernel.
+
+Due to the nesting nature of kmap, the pmem direct accesses, and the fact that
+the pkey is a single global domain.  Reference counting must be employed to
+ensure that protections are enabled on the thread at the correct time.  The
+reference count is stored the struct thread_struct.
+
+Reference counting is not needed during exceptions as normal PMEM accesses are
+never done during exceptions.
+
+
+
+[1] https://lore.kernel.org/lkml/20201009195033.3208459-1-ira.weiny@intel.com/
+
+[2] https://lore.kernel.org/lkml/87mtycqcjf.fsf@nanos.tec.linutronix.de/
+
+[3] https://lore.kernel.org/lkml/20210128061503.1496847-1-ira.weiny@intel.com/
+    https://lore.kernel.org/lkml/20210210062221.3023586-1-ira.weiny@intel.com/
+    https://lore.kernel.org/lkml/20210205170030.856723-1-ira.weiny@intel.com/
+    https://lore.kernel.org/lkml/20210217024826.3466046-1-ira.weiny@intel.com/
+
+[4] https://lore.kernel.org/lkml/20201106232908.364581-1-ira.weiny@intel.com/
+
+[5] https://lore.kernel.org/lkml/20210322053020.2287058-1-ira.weiny@intel.com/
+
+[6] https://lore.kernel.org/lkml/20210331191405.341999-1-ira.weiny@intel.com/
+
