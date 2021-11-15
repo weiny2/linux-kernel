@@ -146,7 +146,7 @@ Changing permissions of individual keys
 ---------------------------------------
 
 .. kernel-doc:: include/linux/pkeys.h
-        :identifiers: pks_mk_readwrite pks_mk_noaccess
+        :identifiers: pks_mk_readwrite pks_mk_readonly pks_mk_noaccess
 
 .. kernel-doc:: arch/x86/mm/pkeys.c
         :identifiers: pks_abandon_protections
