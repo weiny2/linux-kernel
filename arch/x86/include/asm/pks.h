@@ -11,6 +11,11 @@
 
 DECLARE_PER_CPU(u32, pkrs_cache);
 
+static inline bool arch_pks_available(void)
+{
+	return cpu_feature_enabled(X86_FEATURE_PKS);
+}
+
 void pks_setup(void);
 void x86_pkrs_load(struct thread_struct *thread);
 void pks_save_pt_regs(struct pt_regs *regs);
