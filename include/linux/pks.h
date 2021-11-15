@@ -27,6 +27,18 @@ static inline void pks_set_noaccess(u8 pkey)
 }
 
 /**
+ * pks_set_readonly() - Make the domain Read only
+ * @pkey: the pkey for which the access should change.
+ *
+ * Allow read access to the domain specified by pkey.  This is not a global
+ * update and only affects the current running thread.
+ */
+static inline void pks_set_readonly(u8 pkey)
+{
+	pks_update_protection(pkey, PKEY_DISABLE_WRITE);
+}
+
+/**
  * pks_set_readwrite() - Make the domain Read/Write
  * @pkey: the pkey for which the access should change.
  *
@@ -49,6 +61,7 @@ static inline bool pks_available(void)
 }
 
 static inline void pks_set_noaccess(u8 pkey) {}
+static inline void pks_set_readonly(u8 pkey) {}
 static inline void pks_set_readwrite(u8 pkey) {}
 static inline void pks_update_exception(struct pt_regs *regs,
 					u8 pkey,
