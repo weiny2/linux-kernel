@@ -151,6 +151,9 @@ Changing permissions of individual keys
 .. kernel-doc:: arch/x86/mm/pkeys.c
         :identifiers: pks_abandon_protections
 
+.. kernel-doc:: arch/x86/mm/pkeys.c
+        :identifiers: pks_enabled
+
 Overriding Default Fault Behavior
 ---------------------------------
 

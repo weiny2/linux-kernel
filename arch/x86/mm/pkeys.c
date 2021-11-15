@@ -453,6 +453,16 @@ void pks_init_task(struct task_struct *task)
 	task->thread.pks_saved_pkrs = pks_init_value();
 }
 
+/**
+ * pks_enabled() - Is PKS enabled on this system
+ *
+ * Return if PKS is currently supported and enabled on this system.
+ */
+bool pks_enabled(void)
+{
+	return cpu_feature_enabled(X86_FEATURE_PKS);
+}
+
 /*
  * Do not call this directly, see pks_mk*().
  *

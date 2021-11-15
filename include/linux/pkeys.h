@@ -104,6 +104,7 @@ enum pks_pkey_consumers {
 			PKR_AD_KEY(14)	| PKR_AD_KEY(15))
 
 void pks_init_task(struct task_struct *task);
+bool pks_enabled(void);
 void pks_update_protection(int pkey, u32 protection);
 
 /**
@@ -137,6 +138,12 @@ typedef bool (*pks_key_callback)(unsigned long address, bool write);
 #else /* !CONFIG_ARCH_ENABLE_SUPERVISOR_PKEYS */
 
 static inline void pks_init_task(struct task_struct *task) { }
+
+static inline bool pks_enabled(void)
+{
+	return false;
+}
+
 static inline void pks_mk_noaccess(int pkey) {}
 static inline void pks_mk_readwrite(int pkey) {}
 static inline void pks_abandon_protections(int pkey) {}
