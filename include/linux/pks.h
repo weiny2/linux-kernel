@@ -11,6 +11,16 @@
 #include <asm/pks.h>
 
 /**
+ * pks_available() - Is PKS available on this system
+ *
+ * Return if PKS is currently supported and enabled on this system.
+ */
+static inline bool pks_available(void)
+{
+	return arch_pks_available();
+}
+
+/**
  * pks_set_noaccess() - Disable all access to the domain
  * @pkey: the pkey for which the access should change.
  *
@@ -75,6 +85,11 @@ typedef bool (*pks_key_callback)(struct pt_regs *regs, unsigned long address,
 				 bool write);
 
 #else /* !CONFIG_ARCH_ENABLE_SUPERVISOR_PKEYS */
+
+static inline bool pks_available(void)
+{
+	return false;
+}
 
 static inline void pks_set_noaccess(u8 pkey) {}
 static inline void pks_set_nowrite(u8 pkey) {}

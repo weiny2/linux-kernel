@@ -152,6 +152,9 @@ Changing permissions of individual keys
 .. kernel-doc:: include/linux/pks.h
         :identifiers: pks_update_exception
 
+.. kernel-doc:: arch/x86/include/asm/pks.h
+        :identifiers: pks_available
+
 Overriding Default Fault Behavior
 ---------------------------------
 
