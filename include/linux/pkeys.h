@@ -50,6 +50,8 @@ static inline bool arch_pkeys_enabled(void)
 
 #ifdef CONFIG_ARCH_ENABLE_SUPERVISOR_PKEYS
 
+#include <uapi/asm-generic/mman-common.h>
+
 /**
  * DOC: PKS_KEY_ALLOCATION
  *
@@ -100,10 +102,24 @@ enum pks_pkey_consumers {
 			PKR_AD_KEY(14)	| PKR_AD_KEY(15))
 
 void pks_init_task(struct task_struct *task);
+void pks_update_protection(int pkey, u32 protection);
+
+/**
+ * pks_mk_readwrite() - Make the domain Read/Write
+ * @pkey: the pkey for which the access should change.
+ *
+ * Allow all access, read and write, to the domain specified by pkey.  This is
+ * not a global update and only affects the current running thread.
+ */
+static inline void pks_mk_readwrite(int pkey)
+{
+	pks_update_protection(pkey, 0);
+}
 
 #else /* !CONFIG_ARCH_ENABLE_SUPERVISOR_PKEYS */
 
 static inline void pks_init_task(struct task_struct *task) { }
+static inline void pks_mk_readwrite(int pkey) {}
 
 #endif /* CONFIG_ARCH_ENABLE_SUPERVISOR_PKEYS */
 
