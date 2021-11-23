@@ -226,11 +226,21 @@ DEFINE_PER_CPU(u32, pkrs_cache);
  *	#endif
  *	};
  */
+#ifndef CONFIG_PKS_TEST_ALL_KEYS
+
 static const pks_key_callback pks_key_callbacks[PKS_KEY_MAX] = {
 #ifdef CONFIG_PKS_TEST
 	[PKS_KEY_TEST]		= pks_test_fault_callback,
 #endif
 };
+
+#else /* CONFIG_PKS_TEST_ALL_KEYS */
+
+static const pks_key_callback pks_key_callbacks[PKS_KEY_MAX] = {
+	[1 ... (PKS_KEY_MAX-1)]	= pks_test_fault_callback,
+};
+
+#endif
 
 static bool pks_call_fault_callback(struct pt_regs *regs, unsigned long address,
 				    bool write, u16 key)

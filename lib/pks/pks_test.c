@@ -50,12 +50,12 @@
 #define CHECK_CTX_SWITCH	3
 #define RUN_EXCEPTION		4
 #define RUN_EXCEPTION_UPDATE	5
+#define RUN_ALL_KEYS		6
 #define RUN_CRASH_TEST		9
 
 DECLARE_PER_CPU(u32, pkrs_cache);
 
 static struct dentry *pks_test_dentry;
-
 DEFINE_MUTEX(test_run_lock);
 
 struct pks_test_ctx {
@@ -109,6 +109,27 @@ static void debug_result(const char *label, int test_num,
 		     sd->last_test_pass ? "PASS" : "FAIL");
 }
 
+/*
+ * pks_set_*() calls normally require constants for the pkey value
+ * If all keys are being tested the checks are removed.
+ */
+#ifdef CONFIG_PKS_TEST_ALL_KEYS
+
+#define TEST_SET(op)							\
+static inline void test_set_##op(u8 pkey)				\
+{									\
+	pks_set_##op(pkey);						\
+}
+
+static __always_inline void test_pks_update_exception(struct pt_regs *regs,
+						      u8 pkey, u8 protections)
+{
+	pks_update_exception(regs, pkey, protections);
+}
+
+
+#else
+
 #define TEST_SET(op)							\
 static inline void test_set_##op(u8 pkey)				\
 {									\
@@ -120,6 +141,8 @@ static __always_inline void test_pks_update_exception(struct pt_regs *regs,
 {
 	pks_update_exception(regs, PKS_KEY_TEST, protections);
 }
+
+#endif
 
 TEST_SET(readwrite)
 TEST_SET(noaccess)
@@ -464,6 +487,39 @@ static bool run_exception_test(struct pks_session_data *sd)
 	return pass;
 }
 
+#ifdef CONFIG_PKS_TEST_ALL_KEYS
+
+static bool run_all_keys(void)
+{
+	struct pks_test_ctx *ctx[PKS_NUM_PKEYS];
+	static char name[PKS_NUM_PKEYS][64];
+	int i;
+	bool rc = true;
+
+	for (i = 1; i < PKS_NUM_PKEYS; i++) {
+		sprintf(name[i], "pks ctx %d", i);
+		ctx[i] = alloc_ctx(i);
+	}
+
+	for (i = 1; i < PKS_NUM_PKEYS; i++) {
+		pr_debug("Running pkey '%d'\n", i);
+		if (!IS_ERR(ctx[i])) {
+			/* sticky fail */
+			if (!test_ctx(ctx[i]))
+				rc = false;
+		}
+	}
+
+	for (i = 1; i < PKS_NUM_PKEYS; i++) {
+		if (!IS_ERR(ctx[i]))
+			free_ctx(ctx[i]);
+	}
+
+	return rc;
+}
+
+#endif
+
 static void crash_it(struct pks_session_data *sd)
 {
 	struct pks_test_ctx *ctx;
@@ -669,6 +725,12 @@ static ssize_t pks_write_file(struct file *file, const char __user *user_buf,
 		pr_debug("Fault clear test\n");
 		sd->last_test_pass = run_exception_update(file->private_data);
 		break;
+#ifdef CONFIG_PKS_TEST_ALL_KEYS
+	case RUN_ALL_KEYS:
+		pr_debug("Run all\n");
+		sd->last_test_pass = run_all_keys();
+		goto unlock_test;
+#endif
 	default:
 		pr_debug("Unknown test\n");
 		sd->last_test_pass = false;
