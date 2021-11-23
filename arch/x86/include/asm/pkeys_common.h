@@ -2,6 +2,7 @@
 #ifndef _ASM_X86_PKEYS_COMMON_H
 #define _ASM_X86_PKEYS_COMMON_H
 
+#define PKS_NUM_PKEYS 16
 #define PKR_AD_BIT 0x1u
 #define PKR_WD_BIT 0x2u
 #define PKR_BITS_PER_PKEY 2

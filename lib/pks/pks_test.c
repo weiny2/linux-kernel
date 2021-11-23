@@ -20,9 +20,12 @@
  * * 4  Test that the exception thread PKRS remains independent of the
  *      interrupted threads PKRS
  * * 5  Test abandoning the protections on a key.
- * * 6  Test fault callback to abandon a key, CONFIG_PKS_FAULT_CALLBACK_TEST
+ * * 6  Test using a fault callback to abandon a key.
+ * * 7  Run through every pkey and run the single key tests on it.
  * * 8  Loop through all CPUs, report the msr, and check against the default.
  * * 9  Set up and fault on a PKS protected page.
+ *
+ * NOTE: Option 4 will conflict with other kernel users.
  *
  * NOTE: 9 will fault on purpose.  Therefore, it requires the option to be
  * specified 2 times in a row to ensure the intent to run it.
@@ -62,6 +65,7 @@
 #define RUN_EXCEPTION		4
 #define RUN_ABANDON_TEST	5
 #define RUN_FAULT_ABANDON	6
+#define RUN_TEST_ALL_KEYS	7
 #define RUN_CRASH_TEST		9
 
 DECLARE_PER_CPU(u32, pkrs_cache);
@@ -69,6 +73,7 @@ extern u32 pks_pkey_allowed_mask;
 
 static struct dentry *pks_test_dentry;
 static bool crash_armed;
+static bool test_all_armed;
 
 static bool last_test_pass;
 static int test_armed_key;
@@ -566,6 +571,51 @@ result:
 	return rc;
 }
 
+static bool run_all_keys(void)
+{
+	struct pks_test_ctx *ctx[PKS_NUM_PKEYS];
+	static char name[PKS_NUM_PKEYS][64];
+	int i;
+	bool rc = true;
+
+	for (i = 1; i < PKS_NUM_PKEYS; i++) {
+		sprintf(name[i], "pks ctx %d", i);
+		ctx[i] = alloc_ctx(i);
+	}
+
+	for (i = 1; i < PKS_NUM_PKEYS; i++) {
+		if (!IS_ERR(ctx[i])) {
+			/* Ensure the key is set up correctly */
+			recover_abandoned_key(ctx[i]);
+
+			/* sticky fail */
+			if (!test_ctx(ctx[i]))
+				rc = false;
+		}
+	}
+
+	for (i = 1; i < PKS_NUM_PKEYS; i++) {
+		if (!IS_ERR(ctx[i]))
+			free_ctx(ctx[i]);
+	}
+
+	return rc;
+}
+
+static void arm_or_run_all_test(void)
+{
+	if (!test_all_armed) {
+		pr_warn("CAUTION: Test will conflict with all PKS users.\n");
+		pr_warn("         Specify this test a second time to run\n");
+		pr_warn("         OR run any other test to clear\n");
+		test_all_armed = true;
+		return;
+	}
+
+	last_test_pass = run_all_keys();
+	test_all_armed = false;
+}
+
 static void crash_it(void)
 {
 	struct pks_test_ctx *ctx;
@@ -807,6 +857,9 @@ static ssize_t pks_write_file(struct file *file, const char __user *user_buf,
 	case RUN_FAULT_ABANDON:
 		last_test_pass = run_fault_abandon_test();
 		break;
+	case RUN_TEST_ALL_KEYS:
+		arm_or_run_all_test();
+		goto skip_arm_clearing;
 	default:
 		last_test_pass = false;
 		break;
@@ -814,6 +867,7 @@ static ssize_t pks_write_file(struct file *file, const char __user *user_buf,
 
 	/* Clear arming on any test run */
 	crash_armed = false;
+	test_all_armed = false;
 
 skip_arm_clearing:
 	return count;
