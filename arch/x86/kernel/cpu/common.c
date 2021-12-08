@@ -65,6 +65,7 @@
 #include <asm/set_memory.h>
 #include <asm/traps.h>
 #include <asm/sev.h>
+#include <asm/pks.h>
 
 #include "cpu.h"
 
@@ -1912,6 +1913,7 @@ static void identify_cpu(struct cpuinfo_x86 *c)
 	x86_init_rdrand(c);
 	setup_pku(c);
 	setup_cet(c);
+	pks_setup();
 
 	/*
 	 * Clear/Set all flags overridden by options, need do it
