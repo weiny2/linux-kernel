@@ -9,6 +9,7 @@
 #include <linux/pks-keys.h>
 #include <uapi/asm-generic/mman-common.h>
 
+#include <asm/pks.h>
 #include <asm/cpufeature.h>             /* boot_cpu_has, ...            */
 #include <asm/mmu_context.h>            /* vma_pkey()                   */
 
@@ -197,15 +198,25 @@ __setup("init_pkru=", setup_init_pkru);
 
 #ifdef CONFIG_ARCH_ENABLE_SUPERVISOR_PKEYS
 
+DEFINE_PER_CPU(u32, pkrs_cache);
+
 /*
  * PKS is independent of PKU and either or both may be supported on a CPU.
+ *
+ * Context: must be called with preemption disabled
  */
 void pks_setup(void)
 {
 	if (!cpu_feature_enabled(X86_FEATURE_PKS))
 		return;
 
+	/*
+	 * If the PKS_INIT_VALUE is 0 then pks_write_pkrs() will fail to
+	 * initialize the MSR.  Do a single write here to ensure the MSR is
+	 * written at least one time.
+	 */
 	wrmsrl(MSR_IA32_PKRS, PKS_INIT_VALUE);
+	pks_write_pkrs(PKS_INIT_VALUE);
 	cr4_set_bits(X86_CR4_PKS);
 }
 
