@@ -19,6 +19,7 @@
  * * 3  Check the context armed in '2' to ensure the MSR value was preserved
  * * 4  Test that the exception thread PKRS remains independent of the
  *      interrupted threads PKRS
+ * * 5  Test abandoning the protections on a key.
  * * 8  Loop through all CPUs, report the msr, and check against the default.
  * * 9  Set up and fault on a PKS protected page.
  *
@@ -38,9 +39,11 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/debugfs.h>
+#include <linux/delay.h>
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
+#include <linux/kthread.h>
 #include <linux/pkeys.h>
 #include <uapi/asm-generic/mman-common.h>
 
@@ -56,9 +59,11 @@
 #define ARM_CTX_SWITCH		2
 #define CHECK_CTX_SWITCH	3
 #define RUN_EXCEPTION		4
+#define RUN_ABANDON_TEST	5
 #define RUN_CRASH_TEST		9
 
 DECLARE_PER_CPU(u32, pkrs_cache);
+extern u32 pks_pkey_allowed_mask;
 
 static struct dentry *pks_test_dentry;
 static bool crash_armed;
@@ -414,6 +419,151 @@ result:
 	return pass;
 }
 
+static struct pks_access_test abandon_test_ary[] = {
+	{ PKS_TEST_NO_ACCESS,     PKS_WRITE,  PKS_NO_FAULT_EXPECTED },
+	{ PKS_TEST_NO_ACCESS,     PKS_READ,   PKS_NO_FAULT_EXPECTED },
+
+	{ PKS_TEST_RDWR,          PKS_WRITE,  PKS_NO_FAULT_EXPECTED },
+	{ PKS_TEST_RDWR,          PKS_READ,   PKS_NO_FAULT_EXPECTED },
+};
+
+static DEFINE_SPINLOCK(abandoned_test_lock);
+struct abandoned_shared_data {
+	struct pks_test_ctx *ctx;
+	void *kmap_addr;
+	struct pks_access_test *test;
+	bool thread_running;
+	bool sched_thread;
+};
+
+static void recover_abandoned_key(struct pks_test_ctx *ctx)
+{
+	pks_mk_noaccess(ctx->pkey);
+	/* Force re-enablement of all keys */
+	pks_pkey_allowed_mask = 0xffffffff;
+}
+
+static int abandoned_test_main(void *d)
+{
+	struct abandoned_shared_data *data = d;
+	struct pks_test_ctx *ctx = data->ctx;
+	void *kmap_addr;
+
+	if (!arm_access_test(ctx, data->test))
+		ctx->pass = false;
+
+	spin_lock(&abandoned_test_lock);
+	data->thread_running = true;
+	spin_unlock(&abandoned_test_lock);
+
+	while (!kthread_should_stop()) {
+		spin_lock(&abandoned_test_lock);
+		kmap_addr = data->kmap_addr;
+		spin_unlock(&abandoned_test_lock);
+
+		if (kmap_addr) {
+			if (data->sched_thread)
+				msleep(20);
+			if (!run_access_test(ctx, data->test, kmap_addr))
+				ctx->pass = false;
+			data->kmap_addr = NULL;
+			kmap_addr = NULL;
+		}
+	}
+
+	return 0;
+}
+
+static bool run_abandon_pkey_test(struct pks_test_ctx *ctx,
+				  struct pks_access_test *test,
+				  void *ptr,
+				  bool sched_thread)
+{
+	struct task_struct *other_task;
+	struct abandoned_shared_data data;
+	bool running = false;
+
+	recover_abandoned_key(ctx);
+
+	memset(&data, 0, sizeof(data));
+	data.ctx = ctx;
+	data.test = test;
+	data.thread_running = false;
+	data.sched_thread = sched_thread;
+	other_task = kthread_run(abandoned_test_main, &data, "PKRS abandoned test");
+	if (IS_ERR(other_task)) {
+		pr_err("     FAIL: Failed to start thread\n");
+		return false;
+	}
+
+	while (!running) {
+		spin_lock(&abandoned_test_lock);
+		running = data.thread_running;
+		spin_unlock(&abandoned_test_lock);
+	}
+
+	pr_info("checking...  mode %s; write %s; sched %s\n",
+			get_mode_str(test->mode),
+			test->write ? "TRUE" : "FALSE",
+			data.sched_thread ? "TRUE" : "FALSE");
+
+	spin_lock(&abandoned_test_lock);
+	pks_abandon_protections(ctx->pkey);
+	data.kmap_addr = ptr;
+	spin_unlock(&abandoned_test_lock);
+
+	while (data.kmap_addr)
+		msleep(20);
+
+	kthread_stop(other_task);
+
+	return ctx->pass;
+}
+
+static bool run_abandoned_test(void)
+{
+	struct pks_test_ctx *ctx;
+	bool rc = true;
+	void *ptr;
+	int i;
+
+	pr_info("     ***** BEGIN: abandoned pkey checking\n");
+
+	ctx = alloc_ctx(PKS_KEY_TEST);
+	if (IS_ERR(ctx)) {
+		pr_err("     FAIL: no context\n");
+		rc = false;
+		goto result;
+	}
+
+	ptr = alloc_test_page(ctx->pkey);
+	if (!ptr) {
+		pr_err("     FAIL: no vmalloc page\n");
+		rc = false;
+		goto free_context;
+	}
+
+	for (i = 0; i < ARRAY_SIZE(abandon_test_ary); i++) {
+		/* sticky fail */
+		if (!run_abandon_pkey_test(ctx, &abandon_test_ary[i], ptr, false))
+			rc = false;
+
+		/* sticky fail */
+		if (!run_abandon_pkey_test(ctx, &abandon_test_ary[i], ptr, true))
+			rc = false;
+	}
+
+	recover_abandoned_key(ctx);
+
+	vfree(ptr);
+free_context:
+	free_ctx(ctx);
+result:
+	pr_info("     ***** END: abandoned pkey checking : %s\n",
+		 rc ? "PASS" : "FAIL");
+	return rc;
+}
+
 static void crash_it(void)
 {
 	struct pks_test_ctx *ctx;
@@ -578,6 +728,9 @@ static ssize_t pks_write_file(struct file *file, const char __user *user_buf,
 		break;
 	case RUN_EXCEPTION:
 		last_test_pass = run_exception_test();
+		break;
+	case RUN_ABANDON_TEST:
+		last_test_pass = run_abandoned_test();
 		break;
 	default:
 		last_test_pass = false;
