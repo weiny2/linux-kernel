@@ -504,6 +504,15 @@ static void show_ldttss(const struct desc_ptr *gdt, const char *name, u16 index)
 		 name, index, addr, (desc.limit0 | (desc.limit1 << 16)));
 }
 
+static void show_extended_regs_oops(struct pt_regs *regs,
+				    unsigned long error_code)
+{
+	struct pt_regs_auxiliary *aux_pt_regs = &to_extended_pt_regs(regs)->aux;
+
+	if (error_code & X86_PF_PK)
+		pks_dump_fault_info(aux_pt_regs);
+}
+
 static void
 show_fault_oops(struct pt_regs *regs, unsigned long error_code, unsigned long address)
 {
@@ -548,6 +557,8 @@ show_fault_oops(struct pt_regs *regs, unsigned long error_code, unsigned long ad
 		 (error_code & X86_PF_RSVD)  ? "reserved bit violation" :
 		 (error_code & X86_PF_PK)    ? "protection keys violation" :
 					       "permissions violation");
+
+	show_extended_regs_oops(regs, error_code);
 
 	if (!(error_code & X86_PF_USER) && user_mode(regs)) {
 		struct desc_ptr idt, gdt;
