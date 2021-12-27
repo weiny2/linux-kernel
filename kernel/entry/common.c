@@ -392,17 +392,22 @@ void raw_irqentry_exit_cond_resched(void)
 }
 #ifdef CONFIG_PREEMPT_DYNAMIC
 #if defined(CONFIG_HAVE_PREEMPT_DYNAMIC_CALL)
-DEFINE_STATIC_CALL(irqentry_exit_cond_resched, raw_irqentry_exit_cond_resched);
+DEFINE_STATIC_CALL(irqentry_exit_cond_resched_internal, raw_irqentry_exit_cond_resched);
 #elif defined(CONFIG_HAVE_PREEMPT_DYNAMIC_KEY)
-DEFINE_STATIC_KEY_TRUE(sk_dynamic_irqentry_exit_cond_resched);
+DEFINE_STATIC_KEY_TRUE(sk_dynamic_irqentry_exit_cond_resched_internal);
 void dynamic_irqentry_exit_cond_resched(void)
 {
-	if (!static_branch_unlikely(&sk_dynamic_irqentry_exit_cond_resched))
+	if (!static_branch_unlikely(&sk_dynamic_irqentry_exit_cond_resched_internal))
 		return;
 	raw_irqentry_exit_cond_resched();
 }
 #endif
 #endif
+
+void irqentry_exit_cond_resched(struct pt_regs *regs)
+{
+	irqentry_exit_cond_resched_internal();
+}
 
 noinstr void irqentry_exit(struct pt_regs *regs, irqentry_state_t state)
 {
@@ -430,7 +435,7 @@ noinstr void irqentry_exit(struct pt_regs *regs, irqentry_state_t state)
 
 		instrumentation_begin();
 		if (IS_ENABLED(CONFIG_PREEMPTION))
-			irqentry_exit_cond_resched();
+			irqentry_exit_cond_resched_internal();
 
 		/* Covers both tracing and lockdep */
 		trace_hardirqs_on();
