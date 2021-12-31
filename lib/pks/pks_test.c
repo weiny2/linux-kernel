@@ -218,12 +218,9 @@ static struct pks_access_test pkey_test_ary[] = {
 	{ PKS_TEST_RDWR,          PKS_READ,   PKS_NO_FAULT_EXPECTED },
 };
 
-static bool run_access_test(struct pks_test_ctx *ctx,
-			   struct pks_access_test *test,
-			   void *ptr)
+static bool arm_access_test(struct pks_test_ctx *ctx,
+			    struct pks_access_test *test)
 {
-	bool fault;
-
 	switch (test->mode) {
 	case PKS_TEST_NO_ACCESS:
 		pks_mk_noaccess(ctx->pkey);
@@ -235,6 +232,14 @@ static bool run_access_test(struct pks_test_ctx *ctx,
 		pr_err("BUG in test invalid mode\n");
 		return false;
 	}
+	return true;
+}
+
+static bool run_access_test(struct pks_test_ctx *ctx,
+			   struct pks_access_test *test,
+			   void *ptr)
+{
+	bool fault;
 
 	WRITE_ONCE(test_armed_key, ctx->pkey);
 
@@ -298,6 +303,8 @@ static bool test_ctx(struct pks_test_ctx *ctx)
 
 	for (i = 0; i < ARRAY_SIZE(pkey_test_ary); i++) {
 		/* sticky fail */
+		if (!arm_access_test(ctx, &pkey_test_ary[i]))
+			rc = false;
 		if (!run_access_test(ctx, &pkey_test_ary[i], ptr))
 			rc = false;
 	}
