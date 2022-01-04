@@ -270,7 +270,11 @@ bool pks_handle_abandoned_pkeys(struct pt_regs *regs)
  *	#endif
  *	};
  */
-static const pks_key_callback pks_key_callbacks[PKS_KEY_NR_CONSUMERS] = { 0 };
+static const pks_key_callback pks_key_callbacks[PKS_KEY_NR_CONSUMERS] = {
+#ifdef CONFIG_PKS_TEST
+	[PKS_KEY_TEST]		= pks_test_fault_callback,
+#endif
+};
 
 static bool pks_call_fault_callback(unsigned long address, bool write, u16 key)
 {

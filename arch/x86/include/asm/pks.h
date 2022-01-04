@@ -40,6 +40,7 @@ static inline bool pks_handle_key_fault(struct pt_regs *regs,
 
 bool pks_test_callback(struct pt_regs *regs);
 #define __static_or_pks_test
+bool pks_test_fault_callback(unsigned long address, bool write);
 
 #else /* !CONFIG_PKS_TEST */
 

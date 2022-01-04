@@ -20,6 +20,7 @@
  * * 4  Test that the exception thread PKRS remains independent of the
  *      interrupted threads PKRS
  * * 5  Test abandoning the protections on a key.
+ * * 6  Test fault callback to abandon a key, CONFIG_PKS_FAULT_CALLBACK_TEST
  * * 8  Loop through all CPUs, report the msr, and check against the default.
  * * 9  Set up and fault on a PKS protected page.
  *
@@ -60,6 +61,7 @@
 #define CHECK_CTX_SWITCH	3
 #define RUN_EXCEPTION		4
 #define RUN_ABANDON_TEST	5
+#define RUN_FAULT_ABANDON	6
 #define RUN_CRASH_TEST		9
 
 DECLARE_PER_CPU(u32, pkrs_cache);
@@ -676,6 +678,76 @@ static void check_ctx_switch(struct file *file)
 	}
 }
 
+struct {
+	struct pks_test_ctx *ctx;
+	void *test_page;
+	bool armed;
+	bool callback_seen;
+} fault_callback_ctx;
+
+bool pks_test_fault_callback(unsigned long address, bool write)
+{
+	if (!fault_callback_ctx.armed)
+		return false;
+
+	fault_callback_ctx.armed = false;
+	fault_callback_ctx.callback_seen = true;
+
+	pks_abandon_protections(fault_callback_ctx.ctx->pkey);
+
+	return true;
+}
+
+static bool run_fault_abandon_test(void)
+{
+	struct pks_test_ctx *ctx;
+	void *test_page;
+	bool rc = true;
+
+	ctx = alloc_ctx(PKS_KEY_TEST);
+	if (IS_ERR(ctx))
+		return false;
+
+	test_page = alloc_test_page(ctx->pkey);
+	if (!test_page) {
+		pr_err("Failed to vmalloc page???\n");
+		free_ctx(ctx);
+		return false;
+	}
+
+	/* ensure a known state */
+	recover_abandoned_key(ctx);
+
+	test_armed_key = PKS_KEY_TEST;
+	fault_callback_ctx.ctx = ctx;
+	fault_callback_ctx.test_page = test_page;
+	fault_callback_ctx.armed = true;
+	fault_callback_ctx.callback_seen = false;
+
+	/* fault */
+	memcpy(test_page, ctx->data, 8);
+
+	if (!fault_callback_ctx.callback_seen) {
+		pr_err("Failed to see the callback\n");
+		rc = false;
+		goto done;
+	}
+
+	/* no fault */
+	memcpy(test_page, ctx->data, 8);
+
+	if (fault_caught()) {
+		pr_err("The key failed to be abandoned in the callback\n");
+		return false;
+	}
+
+	recover_abandoned_key(ctx);
+
+done:
+	free_ctx(ctx);
+	return rc;
+}
+
 static ssize_t pks_read_file(struct file *file, char __user *user_buf,
 			     size_t count, loff_t *ppos)
 {
@@ -731,6 +803,9 @@ static ssize_t pks_write_file(struct file *file, const char __user *user_buf,
 		break;
 	case RUN_ABANDON_TEST:
 		last_test_pass = run_abandoned_test();
+		break;
+	case RUN_FAULT_ABANDON:
+		last_test_pass = run_fault_abandon_test();
 		break;
 	default:
 		last_test_pass = false;
