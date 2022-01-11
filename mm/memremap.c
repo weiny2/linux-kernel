@@ -141,6 +141,15 @@ static const struct kernel_param_ops param_ops_pks_fault_modes = {
 	__param_check(name, p, pks_fault_modes)
 module_param(pks_fault_mode, pks_fault_modes, 0644);
 
+void __pgmap_protection_flag_invalid(struct dev_pagemap *pgmap)
+{
+	BUG_ON(pks_fault_mode == PKS_MODE_STRICT);
+
+	WARN_ONCE(1, "Page map protection disabled");
+	pks_abandon_protections(PKS_KEY_PGMAP_PROTECTION);
+}
+EXPORT_SYMBOL_GPL(__pgmap_protection_flag_invalid);
+
 bool pgmap_pks_fault_callback(unsigned long address, bool write)
 {
 	/* In strict mode just let the fault handler oops */
