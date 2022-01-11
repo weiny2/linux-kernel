@@ -1866,7 +1866,8 @@ config X86_INTEL_MEMORY_PROTECTION_KEYS
 	  If unsure, say y.
 
 config ARCH_ENABLE_PTREGS_AUXILIARY
-	bool
+	def_bool y
+	depends on ARCH_ENABLE_SUPERVISOR_PKEYS
 
 choice
 	prompt "TSX enable mode"

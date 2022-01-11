@@ -14,6 +14,9 @@
  * ARCH_ENABLE_PTREGS_AUXILIARY.  Failure to do so will result in a build failure.
  */
 struct pt_regs_auxiliary {
+#ifdef CONFIG_ARCH_ENABLE_SUPERVISOR_PKEYS
+	u32 pks_thread_pkrs;
+#endif
 };
 
 #ifdef __i386__

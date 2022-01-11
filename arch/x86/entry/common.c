@@ -34,6 +34,7 @@
 #include <asm/io_bitmap.h>
 #include <asm/syscall.h>
 #include <asm/irq_stack.h>
+#include <asm/pks.h>
 
 #ifdef CONFIG_X86_64
 
@@ -322,9 +323,11 @@ __visible noinstr void xen_pv_evtchn_do_upcall(struct pt_regs *regs)
 #ifdef CONFIG_ARCH_ENABLE_PTREGS_AUXILIARY
 void arch_save_aux_pt_regs(struct pt_regs *regs)
 {
+	pks_save_pt_regs(regs);
 }
 
 void arch_restore_aux_pt_regs(struct pt_regs *regs)
 {
+	pks_restore_pt_regs(regs);
 }
 #endif
