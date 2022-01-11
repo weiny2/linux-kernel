@@ -1181,6 +1181,26 @@ static inline bool is_pci_p2pdma_page(const struct page *page)
 		page->pgmap->type == MEMORY_DEVICE_PCI_P2PDMA;
 }
 
+#ifdef CONFIG_DEVMAP_ACCESS_PROTECTION
+DECLARE_STATIC_KEY_FALSE(dev_pgmap_protection_static_key);
+
+/*
+ * devmap_protected() requires a reference on the page to ensure there is no
+ * races with dev_pagemap tear down.
+ */
+static inline bool devmap_protected(struct page *page)
+{
+	if (!static_branch_unlikely(&dev_pgmap_protection_static_key))
+		return false;
+	if (!is_zone_device_page(page))
+		return false;
+	if (page->pgmap->flags & PGMAP_PROTECTION)
+		return true;
+	return false;
+}
+
+#endif /* CONFIG_DEVMAP_ACCESS_PROTECTION */
+
 /* 127: arbitrary random number, small enough to assemble well */
 #define folio_ref_zero_or_close_to_overflow(folio) \
 	((unsigned int) folio_ref_count(folio) + 127u <= 127u)
