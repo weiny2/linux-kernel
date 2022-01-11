@@ -318,3 +318,13 @@ __visible noinstr void xen_pv_evtchn_do_upcall(struct pt_regs *regs)
 	}
 }
 #endif /* CONFIG_XEN_PV */
+
+#ifdef CONFIG_ARCH_ENABLE_PTREGS_AUXILIARY
+void arch_save_aux_pt_regs(struct pt_regs *regs)
+{
+}
+
+void arch_restore_aux_pt_regs(struct pt_regs *regs)
+{
+}
+#endif

@@ -95,4 +95,11 @@ static __always_inline void arch_exit_to_user_mode(void)
 }
 #define arch_exit_to_user_mode arch_exit_to_user_mode
 
+#ifdef CONFIG_ARCH_ENABLE_PTREGS_AUXILIARY
+void arch_save_aux_pt_regs(struct pt_regs *regs);
+#define arch_save_aux_pt_regs arch_save_aux_pt_regs
+void arch_restore_aux_pt_regs(struct pt_regs *regs);
+#define arch_restore_aux_pt_regs arch_restore_aux_pt_regs
+#endif
+
 #endif
