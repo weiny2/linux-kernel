@@ -6,6 +6,7 @@
 #include <linux/range.h>
 #include <linux/ioport.h>
 #include <linux/percpu-refcount.h>
+#include <linux/pks.h>
 
 struct resource;
 struct device;
@@ -213,5 +214,21 @@ static inline void put_dev_pagemap(struct dev_pagemap *pgmap)
 	if (pgmap)
 		percpu_ref_put(&pgmap->ref);
 }
+
+#ifdef CONFIG_DEVMAP_ACCESS_PROTECTION
+
+static inline bool pgmap_protection_available(void)
+{
+	return pks_available();
+}
+
+#else
+
+static inline bool pgmap_protection_available(void)
+{
+	return false;
+}
+
+#endif /* CONFIG_DEVMAP_ACCESS_PROTECTION */
 
 #endif /* _LINUX_MEMREMAP_H_ */
