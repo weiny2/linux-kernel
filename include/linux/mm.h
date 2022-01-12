@@ -1199,6 +1199,15 @@ static inline bool devmap_protected(struct page *page)
 	return false;
 }
 
+bool pgmap_protection_enabled(void);
+
+#else
+
+static inline bool pgmap_protection_enabled(void)
+{
+	return false;
+}
+
 #endif /* CONFIG_DEVMAP_ACCESS_PROTECTION */
 
 /* 127: arbitrary random number, small enough to assemble well */

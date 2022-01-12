@@ -87,6 +87,12 @@ static void devmap_protection_disable(void)
 	static_branch_dec(&dev_pgmap_protection_static_key);
 }
 
+bool pgmap_protection_enabled(void)
+{
+	return pks_enabled();
+}
+EXPORT_SYMBOL_GPL(pgmap_protection_enabled);
+
 #else /* !CONFIG_DEVMAP_ACCESS_PROTECTION */
 
 static void devmap_protection_enable(void) { }
@@ -361,7 +367,7 @@ void *memremap_pages(struct dev_pagemap *pgmap, int nid)
 		return ERR_PTR(-EINVAL);
 
 	if (pgmap->flags & PGMAP_PROTECTION) {
-		if (!pks_enabled())
+		if (!pgmap_protection_enabled())
 			return ERR_PTR(-EINVAL);
 		devmap_protection_enable();
 	}
