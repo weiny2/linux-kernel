@@ -100,6 +100,7 @@ static inline void test_set_##op(u8 pkey)				\
 
 TEST_SET(readwrite)
 TEST_SET(noaccess)
+TEST_SET(nowrite)
 
 /* Global data protected by test_run_lock */
 struct pks_test_ctx *g_ctx_under_test;
@@ -135,6 +136,7 @@ bool pks_test_fault_callback(struct pt_regs *regs, unsigned long address,
 enum pks_access_mode {
 	PKS_TEST_NO_ACCESS,
 	PKS_TEST_RDWR,
+	PKS_TEST_NOWRITE
 };
 
 #define PKS_WRITE true
@@ -149,6 +151,8 @@ static char *get_mode_str(enum pks_access_mode mode)
 		return "No Access";
 	case PKS_TEST_RDWR:
 		return "Read Write";
+	case PKS_TEST_NOWRITE:
+		return "Write Disabled";
 	}
 
 	return "";
@@ -166,6 +170,9 @@ static struct pks_access_test pkey_test_ary[] = {
 
 	{ PKS_TEST_RDWR,          PKS_WRITE,  PKS_NO_FAULT_EXPECTED },
 	{ PKS_TEST_RDWR,          PKS_READ,   PKS_NO_FAULT_EXPECTED },
+
+	{ PKS_TEST_NOWRITE,       PKS_WRITE,  PKS_FAULT_EXPECTED },
+	{ PKS_TEST_NOWRITE,       PKS_READ,   PKS_NO_FAULT_EXPECTED },
 };
 
 static bool run_access_test(struct pks_test_ctx *ctx,
@@ -178,6 +185,9 @@ static bool run_access_test(struct pks_test_ctx *ctx,
 		break;
 	case PKS_TEST_RDWR:
 		test_set_readwrite(ctx->pkey);
+		break;
+	case PKS_TEST_NOWRITE:
+		test_set_nowrite(ctx->pkey);
 		break;
 	default:
 		pr_debug("BUG in test, invalid mode\n");
