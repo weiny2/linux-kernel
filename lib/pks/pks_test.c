@@ -194,6 +194,7 @@ static bool fault_caught(void)
 enum pks_access_mode {
 	PKS_TEST_NO_ACCESS,
 	PKS_TEST_RDWR,
+	PKS_TEST_RDONLY
 };
 
 #define PKS_WRITE true
@@ -208,6 +209,8 @@ static char *get_mode_str(enum pks_access_mode mode)
 		return "No Access";
 	case PKS_TEST_RDWR:
 		return "Read Write";
+	case PKS_TEST_RDONLY:
+		return "Read Only";
 	default:
 		pr_err("BUG in test invalid mode\n");
 		break;
@@ -228,6 +231,9 @@ static struct pks_access_test pkey_test_ary[] = {
 
 	{ PKS_TEST_RDWR,          PKS_WRITE,  PKS_NO_FAULT_EXPECTED },
 	{ PKS_TEST_RDWR,          PKS_READ,   PKS_NO_FAULT_EXPECTED },
+
+	{ PKS_TEST_RDONLY,        PKS_WRITE,  PKS_FAULT_EXPECTED },
+	{ PKS_TEST_RDONLY,        PKS_READ,   PKS_NO_FAULT_EXPECTED },
 };
 
 static bool arm_access_test(struct pks_test_ctx *ctx,
@@ -239,6 +245,9 @@ static bool arm_access_test(struct pks_test_ctx *ctx,
 		break;
 	case PKS_TEST_RDWR:
 		pks_mk_readwrite(ctx->pkey);
+		break;
+	case PKS_TEST_RDONLY:
+		pks_mk_readonly(ctx->pkey);
 		break;
 	default:
 		pr_err("BUG in test invalid mode\n");
@@ -432,6 +441,9 @@ static struct pks_access_test abandon_test_ary[] = {
 
 	{ PKS_TEST_RDWR,          PKS_WRITE,  PKS_NO_FAULT_EXPECTED },
 	{ PKS_TEST_RDWR,          PKS_READ,   PKS_NO_FAULT_EXPECTED },
+
+	{ PKS_TEST_RDONLY,        PKS_WRITE,  PKS_NO_FAULT_EXPECTED },
+	{ PKS_TEST_RDONLY,        PKS_READ,   PKS_NO_FAULT_EXPECTED },
 };
 
 static DEFINE_SPINLOCK(abandoned_test_lock);
