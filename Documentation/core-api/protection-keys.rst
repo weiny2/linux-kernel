@@ -175,3 +175,6 @@ Testing
 
 .. kernel-doc:: lib/pks/pks_test.c
         :doc: PKS_TEST
+
+.. kernel-doc:: tools/testing/selftests/x86/test_pks.c
+        :doc: PKS_TEST_USER
