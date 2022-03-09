@@ -4,6 +4,11 @@
 
 #ifdef CONFIG_ARCH_ENABLE_SUPERVISOR_PKEYS
 
+#include <linux/pkeys.h>
+#include <linux/pks-keys.h>
+
+#include <asm/cpufeature.h>
+
 DECLARE_PER_CPU(u32, pkrs_cache);
 
 void pks_setup(void);
@@ -38,6 +43,31 @@ static inline void pks_write_pkrs(const u32 new_pkrs)
 		__this_cpu_write(pkrs_cache, new_pkrs);
 		wrmsrl(MSR_IA32_PKRS, new_pkrs);
 	}
+}
+
+/*
+ * See pks_set*()
+ * @pkey: Key for the domain to change
+ * @protection: protection bits to be used
+ *
+ * Protection utilizes the same protection bits specified for User pkeys
+ *     PKEY_DISABLE_ACCESS
+ *     PKEY_DISABLE_WRITE
+ *
+ */
+static inline void arch_pks_update_protection(const u8 pkey,
+					      const u8 protection)
+{
+	u32 pkrs;
+
+	if (!cpu_feature_enabled(X86_FEATURE_PKS))
+		return;
+
+	preempt_disable();
+	pkrs = pkey_update_pkval(current->thread.pkrs, pkey, protection);
+	pks_write_pkrs(pkrs);
+	current->thread.pkrs = pkrs;
+	preempt_enable();
 }
 
 #else /* !CONFIG_ARCH_ENABLE_SUPERVISOR_PKEYS */
