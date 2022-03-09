@@ -6,7 +6,6 @@
 #include <linux/debugfs.h>		/* debugfs_create_u32()		*/
 #include <linux/mm_types.h>             /* mm_struct, vma, etc...       */
 #include <linux/pkeys.h>                /* PKEY_*                       */
-#include <linux/pks-keys.h>
 #include <uapi/asm-generic/mman-common.h>
 
 #include <asm/pks.h>
