@@ -53,9 +53,19 @@ static inline void pks_write_pkrs(const u32 new_pkrs)
 	}
 }
 
-static inline void __pks_update_protection(const u8 pkey, const u8 protection)
+static __always_inline void __pks_update_protection(const u8 pkey,
+						    const u8 protection)
 {
 	u32 pkrs;
+
+#ifndef CONFIG_PKS_TEST_ALL_KEYS
+	/* If all keys are being tested there are no actual security concerns
+	 * which require these checks and the value of pkey is going to be
+	 * changing
+	 */
+	BUILD_BUG_ON(!__builtin_constant_p(pkey));
+	BUILD_BUG_ON(!__builtin_constant_p(protection));
+#endif
 
 	preempt_disable();
 	pkrs = pkey_update_pkval(current->thread.pkrs, pkey, protection);
@@ -74,8 +84,8 @@ static inline void __pks_update_protection(const u8 pkey, const u8 protection)
  *     PKEY_DISABLE_WRITE
  *
  */
-static inline void arch_pks_update_protection(const u8 pkey,
-					      const u8 protection)
+static __always_inline void arch_pks_update_protection(const u8 pkey,
+						       const u8 protection)
 {
 	if (!cpu_feature_enabled(X86_FEATURE_PKS))
 		return;
@@ -91,9 +101,9 @@ static inline void arch_pks_update_protection(const u8 pkey,
  *
  * CONTEXT: Exception
  */
-static inline void arch_pks_update_exception(struct pt_regs *regs,
-					     const u8 pkey,
-					     const u8 protection)
+static __always_inline void arch_pks_update_exception(struct pt_regs *regs,
+						      const u8 pkey,
+						      const u8 protection)
 {
 	struct pt_regs_extended *ept_regs;
 	u32 old;
