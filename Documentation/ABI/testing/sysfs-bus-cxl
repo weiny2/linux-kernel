@@ -37,6 +37,23 @@ Description:
 		identically named field in the Identify Memory Device Output
 		Payload in the CXL-2.0 specification.
 
+What:		/sys/bus/cxl/devices/memX/dc/region_count
+Date:		November, 2023
+KernelVersion:	v6.7
+Contact:	linux-cxl@vger.kernel.org
+Description:
+		(RO) Number of Dynamic Capacity (DC) regions supported on the
+		device.  May be 0 if the device does not support Dynamic
+		Capacity.
+
+What:		/sys/bus/cxl/devices/memX/dc/regionY_size
+Date:		November, 2023
+KernelVersion:	v6.7
+Contact:	linux-cxl@vger.kernel.org
+Description:
+		(RO) Size of the Dynamic Capacity (DC) region Y.  Only
+		available on devices which support DC and only for those
+		region indexes supported by the device.
 
 What:		/sys/bus/cxl/devices/memX/serial
 Date:		January, 2022
