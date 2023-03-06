@@ -939,6 +939,11 @@ static void cxl_event_trace_record(const struct cxl_memdev *cxlmd,
 				(struct cxl_event_mem_module *)record;
 
 		trace_cxl_memory_module(cxlmd, type, rec);
+	} else if (uuid_equal(id, &dc_event_uuid)) {
+		struct dcd_event_dyn_cap *rec =
+				(struct dcd_event_dyn_cap *)record;
+
+		trace_cxl_dynamic_capacity(cxlmd, type, rec);
 	} else {
 		/* For unknown record types print just the header */
 		trace_cxl_generic_event(cxlmd, type, record);
