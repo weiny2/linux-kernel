@@ -488,6 +488,7 @@ struct cxl_region_params {
 enum cxl_partition_mode {
 	CXL_PARTMODE_RAM,
 	CXL_PARTMODE_PMEM,
+	CXL_PARTMODE_DYNAMIC_RAM_A,
 };
 
 /*
