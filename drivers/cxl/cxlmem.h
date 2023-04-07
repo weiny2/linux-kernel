@@ -396,6 +396,7 @@ enum cxl_devtype {
 	CXL_DEVTYPE_CLASSMEM,
 };
 
+#define CXL_MAX_DC_REGION 8
 /**
  * struct cxl_dev_state - The driver device state
  *
@@ -412,6 +413,8 @@ enum cxl_devtype {
  * @dpa_res: Overall DPA resource tree for the device
  * @pmem_res: Active Persistent memory capacity configuration
  * @ram_res: Active Volatile memory capacity configuration
+ * @dc_res: Active Dynamic Capacity memory configuration for each possible
+ *          region
  * @component_reg_phys: register base of component registers
  * @serial: PCIe Device Serial Number
  * @type: Generic Memory Class device or Vendor Specific Memory device
@@ -426,9 +429,21 @@ struct cxl_dev_state {
 	struct resource dpa_res;
 	struct resource pmem_res;
 	struct resource ram_res;
+	struct resource dc_res[CXL_MAX_DC_REGION];
 	resource_size_t component_reg_phys;
 	u64 serial;
 	enum cxl_devtype type;
+};
+
+#define CXL_DC_REGION_STRLEN 7
+struct cxl_dc_region_info {
+	u64 base;
+	u64 decode_len;
+	u64 len;
+	u64 blk_size;
+	u32 dsmad_handle;
+	u8 flags;
+	u8 name[CXL_DC_REGION_STRLEN];
 };
 
 /**
@@ -449,6 +464,8 @@ struct cxl_dev_state {
  * @enabled_cmds: Hardware commands found enabled in CEL.
  * @exclusive_cmds: Commands that are kernel-internal only
  * @total_bytes: sum of all possible capacities
+ * @static_cap: Sum of RAM and PMEM capacities
+ * @dynamic_cap: Complete DPA range occupied by DC regions
  * @volatile_only_bytes: hard volatile capacity
  * @persistent_only_bytes: hard persistent capacity
  * @partition_align_bytes: alignment size for partition-able capacity
@@ -456,6 +473,10 @@ struct cxl_dev_state {
  * @active_persistent_bytes: sum of hard + soft persistent
  * @next_volatile_bytes: volatile capacity change pending device reset
  * @next_persistent_bytes: persistent capacity change pending device reset
+ * @nr_dc_region: number of DC regions implemented in the memory device
+ * @dc_region: array containing info about the DC regions
+ * @dc_event_log_size: The number of events the device can store in the
+ * Dynamic Capacity Event Log before it overflows
  * @event: event log driver state
  * @poison: poison driver state info
  * @fw: firmware upload / activation state
@@ -473,7 +494,10 @@ struct cxl_memdev_state {
 	DECLARE_BITMAP(dcd_cmds, CXL_DCD_ENABLED_MAX);
 	DECLARE_BITMAP(enabled_cmds, CXL_MEM_COMMAND_ID_MAX);
 	DECLARE_BITMAP(exclusive_cmds, CXL_MEM_COMMAND_ID_MAX);
+
 	u64 total_bytes;
+	u64 static_cap;
+	u64 dynamic_cap;
 	u64 volatile_only_bytes;
 	u64 persistent_only_bytes;
 	u64 partition_align_bytes;
@@ -481,6 +505,11 @@ struct cxl_memdev_state {
 	u64 active_persistent_bytes;
 	u64 next_volatile_bytes;
 	u64 next_persistent_bytes;
+
+	u8 nr_dc_region;
+	struct cxl_dc_region_info dc_region[CXL_MAX_DC_REGION];
+	size_t dc_event_log_size;
+
 	struct cxl_event_state event;
 	struct cxl_poison_state poison;
 	struct cxl_security_state security;
@@ -587,6 +616,7 @@ struct cxl_mbox_identify {
 	__le16 inject_poison_limit;
 	u8 poison_caps;
 	u8 qos_telemetry_caps;
+	__le16 dc_event_log_size;
 } __packed;
 
 /*
@@ -741,8 +771,30 @@ struct cxl_mbox_set_partition_info {
 	__le64 volatile_capacity;
 	u8 flags;
 } __packed;
-
 #define  CXL_SET_PARTITION_IMMEDIATE_FLAG	BIT(0)
+
+struct cxl_mbox_get_dc_config {
+	u8 region_count;
+	u8 start_region_index;
+} __packed;
+
+/* See CXL 3.0 Table 125 get dynamic capacity config Output Payload */
+struct cxl_mbox_dynamic_capacity {
+	u8 avail_region_count;
+	u8 rsvd[7];
+	struct cxl_dc_region_config {
+		__le64 region_base;
+		__le64 region_decode_length;
+		__le64 region_length;
+		__le64 region_block_size;
+		__le32 region_dsmad_handle;
+		u8 flags;
+		u8 rsvd[3];
+	} __packed region[];
+} __packed;
+#define CXL_DYNAMIC_CAPACITY_SANITIZE_ON_RELEASE_FLAG BIT(0)
+#define CXL_REGIONS_RETURNED(size_out) \
+	((size_out - 8) / sizeof(struct cxl_dc_region_config))
 
 /* Set Timestamp CXL 3.0 Spec 8.2.9.4.2 */
 struct cxl_mbox_set_timestamp_in {
@@ -867,6 +919,7 @@ enum {
 int cxl_internal_send_cmd(struct cxl_memdev_state *mds,
 			  struct cxl_mbox_cmd *cmd);
 int cxl_dev_state_identify(struct cxl_memdev_state *mds);
+int cxl_dev_dynamic_capacity_identify(struct cxl_memdev_state *mds);
 int cxl_await_media_ready(struct cxl_dev_state *cxlds);
 int cxl_enumerate_cmds(struct cxl_memdev_state *mds);
 int cxl_mem_create_range_info(struct cxl_memdev_state *mds);
