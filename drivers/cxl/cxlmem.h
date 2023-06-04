@@ -96,6 +96,11 @@ struct cxl_endpoint_decoder *cxl_request_dpa(struct cxl_port *endpoint,
 					     enum cxl_decoder_mode mode,
 					     resource_size_t min,
 					     resource_size_t max);
+struct cxl_root_decoder *cxl_hpa_freespace(struct cxl_port *endpoint,
+					   struct device *const *host_bridges,
+					   int interleave_ways,
+					   unsigned long flags,
+					   resource_size_t *max);
 
 static inline struct cxl_ep *cxl_ep_load(struct cxl_port *port,
 					 struct cxl_memdev *cxlmd)

@@ -718,6 +718,11 @@ static inline struct device *cxled_dev(struct cxl_endpoint_decoder *cxled)
 	return &cxled->cxld.dev;
 }
 
+static inline struct device *cxlrd_dev(struct cxl_root_decoder *cxlrd)
+{
+	return &cxlrd->cxlsd.cxld.dev;
+}
+
 bool is_root_decoder(struct device *dev);
 bool is_switch_decoder(struct device *dev);
 bool is_endpoint_decoder(struct device *dev);
