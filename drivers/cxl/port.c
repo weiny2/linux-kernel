@@ -139,6 +139,11 @@ static int cxl_endpoint_port_probe(struct cxl_port *port)
 static int cxl_port_probe(struct device *dev)
 {
 	struct cxl_port *port = to_cxl_port(dev);
+	int rc;
+
+	rc = cxl_probe_link(port);
+	if (rc)
+		return rc;
 
 	if (is_cxl_endpoint(port))
 		return cxl_endpoint_port_probe(port);

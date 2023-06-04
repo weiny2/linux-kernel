@@ -669,6 +669,12 @@ static struct cxl_port *cxl_port_alloc(struct device *uport_dev,
 	} else
 		dev->parent = uport_dev;
 
+	/*
+	 * Assume all CXL link capabilities for root-device-to-host-bridge link,
+	 * cxl_probe_link() will fix this up later in cxl_probe_link() for all
+	 * other ports.
+	 */
+	port->features = CXL_DVSEC_FLEXBUS_ENABLE_MASK;
 	port->component_reg_phys = component_reg_phys;
 	ida_init(&port->decoder_ida);
 	port->hdm_end = -1;

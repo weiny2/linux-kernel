@@ -500,6 +500,90 @@ int cxl_hdm_decode_init(struct cxl_dev_state *cxlds, struct cxl_hdm *cxlhdm,
 }
 EXPORT_SYMBOL_NS_GPL(cxl_hdm_decode_init, CXL);
 
+static struct pci_dev *cxl_port_to_pci(struct cxl_port *port)
+{
+	struct device *dev;
+
+	if (is_cxl_endpoint(port))
+		dev = port->uport_dev->parent;
+	else
+		dev = port->uport_dev;
+
+	if (!dev_is_pci(dev))
+		return NULL;
+
+	return to_pci_dev(dev);
+}
+
+int cxl_probe_link(struct cxl_port *port)
+{
+	struct pci_dev *pdev = cxl_port_to_pci(port);
+	u16 cap, en, parent_features;
+	struct cxl_port *parent_port;
+	struct device *dev;
+	int rc, dvsec;
+	u32 hdr;
+
+	if (!pdev) {
+		/*
+		 * Assume host bridges support all features, the root
+		 * port will dictate the actual enabled set to endpoints.
+		 */
+		return 0;
+	}
+
+	dev = &pdev->dev;
+	dvsec = pci_find_dvsec_capability(pdev, PCI_DVSEC_VENDOR_ID_CXL,
+					  CXL_DVSEC_FLEXBUS_PORT);
+	if (!dvsec) {
+		dev_err(dev, "Failed to enumerate port capabilities\n");
+		return -ENXIO;
+	}
+
+	/*
+	 * Cache the link features for future determination of HDM-D or
+	 * HDM-DB support
+	 */
+	rc = pci_read_config_dword(pdev, dvsec + PCI_DVSEC_HEADER1, &hdr);
+	if (rc)
+		return rc;
+
+	rc = pci_read_config_word(pdev, dvsec + CXL_DVSEC_FLEXBUS_CAP_OFFSET,
+				  &cap);
+	if (rc)
+		return rc;
+
+	rc = pci_read_config_word(pdev, dvsec + CXL_DVSEC_FLEXBUS_STATUS_OFFSET,
+				  &en);
+	if (rc)
+		return rc;
+
+	if (PCI_DVSEC_HEADER1_REV(hdr) < 2)
+		cap &= ~CXL_DVSEC_FLEXBUS_REV2_MASK;
+
+	if (PCI_DVSEC_HEADER1_REV(hdr) < 1)
+		cap &= ~CXL_DVSEC_FLEXBUS_REV1_MASK;
+
+	en &= cap;
+	parent_port = to_cxl_port(port->dev.parent);
+	parent_features = parent_port->features;
+
+	/* Enforce port features are plumbed through to the host bridge */
+	port->features = en & CXL_DVSEC_FLEXBUS_ENABLE_MASK & parent_features;
+
+	dev_dbg(dev, "features:%s%s%s%s%s%s%s\n",
+		en & CXL_DVSEC_FLEXBUS_CACHE_ENABLED ? " cache" : "",
+		en & CXL_DVSEC_FLEXBUS_IO_ENABLED ? " io" : "",
+		en & CXL_DVSEC_FLEXBUS_MEM_ENABLED ? " mem" : "",
+		en & CXL_DVSEC_FLEXBUS_FLIT68_ENABLED ? " flit68" : "",
+		en & CXL_DVSEC_FLEXBUS_MLD_ENABLED ? " mld" : "",
+		en & CXL_DVSEC_FLEXBUS_FLIT256_ENABLED ? " flit256" : "",
+		en & CXL_DVSEC_FLEXBUS_PBR_ENABLED ? " pbr" : "");
+
+	return 0;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_probe_link, CXL);
+
 #define CXL_DOE_TABLE_ACCESS_REQ_CODE		0x000000ff
 #define   CXL_DOE_TABLE_ACCESS_REQ_CODE_READ	0
 #define CXL_DOE_TABLE_ACCESS_TABLE_TYPE		0x0000ff00

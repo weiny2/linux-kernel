@@ -45,8 +45,28 @@
 /* CXL 2.0 8.1.7: GPF DVSEC for CXL Device */
 #define CXL_DVSEC_DEVICE_GPF					5
 
-/* CXL 2.0 8.1.8: PCIe DVSEC for Flex Bus Port */
-#define CXL_DVSEC_PCIE_FLEXBUS_PORT				7
+/* CXL 3.0 8.2.1.3: PCIe DVSEC for Flex Bus Port */
+#define CXL_DVSEC_FLEXBUS_PORT					7
+#define   CXL_DVSEC_FLEXBUS_CAP_OFFSET		0xA
+#define     CXL_DVSEC_FLEXBUS_CACHE_CAPABLE	BIT(0)
+#define     CXL_DVSEC_FLEXBUS_IO_CAPABLE	BIT(1)
+#define     CXL_DVSEC_FLEXBUS_MEM_CAPABLE	BIT(2)
+#define     CXL_DVSEC_FLEXBUS_FLIT68_CAPABLE	BIT(5)
+#define     CXL_DVSEC_FLEXBUS_MLD_CAPABLE	BIT(6)
+#define     CXL_DVSEC_FLEXBUS_REV1_MASK		GENMASK(6, 5)
+#define     CXL_DVSEC_FLEXBUS_FLIT256_CAPABLE	BIT(13)
+#define     CXL_DVSEC_FLEXBUS_PBR_CAPABLE	BIT(14)
+#define     CXL_DVSEC_FLEXBUS_REV2_MASK		GENMASK(14, 13)
+#define   CXL_DVSEC_FLEXBUS_STATUS_OFFSET	0xE
+#define     CXL_DVSEC_FLEXBUS_CACHE_ENABLED	BIT(0)
+#define     CXL_DVSEC_FLEXBUS_IO_ENABLED	BIT(1)
+#define     CXL_DVSEC_FLEXBUS_MEM_ENABLED	BIT(2)
+#define     CXL_DVSEC_FLEXBUS_FLIT68_ENABLED	BIT(5)
+#define     CXL_DVSEC_FLEXBUS_MLD_ENABLED	BIT(6)
+#define     CXL_DVSEC_FLEXBUS_FLIT256_ENABLED	BIT(13)
+#define     CXL_DVSEC_FLEXBUS_PBR_ENABLED	BIT(14)
+#define     CXL_DVSEC_FLEXBUS_ENABLE_MASK \
+	(GENMASK(2, 0) | GENMASK(6, 5) | GENMASK(14, 13))
 
 /* CXL 2.0 8.1.9: Register Locator DVSEC */
 #define CXL_DVSEC_REG_LOCATOR					8
@@ -89,6 +109,7 @@ int devm_cxl_port_enumerate_dports(struct cxl_port *port);
 struct cxl_dev_state;
 int cxl_hdm_decode_init(struct cxl_dev_state *cxlds, struct cxl_hdm *cxlhdm,
 			struct cxl_endpoint_dvsec_info *info);
+int cxl_probe_link(struct cxl_port *port);
 void read_cdat_data(struct cxl_port *port);
 void cxl_cor_error_detected(struct pci_dev *pdev);
 pci_ers_result_t cxl_error_detected(struct pci_dev *pdev,
