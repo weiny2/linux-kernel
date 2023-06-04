@@ -101,6 +101,9 @@ struct cxl_root_decoder *cxl_hpa_freespace(struct cxl_port *endpoint,
 					   int interleave_ways,
 					   unsigned long flags,
 					   resource_size_t *max);
+struct cxl_region *cxl_create_region(struct cxl_root_decoder *cxlrd,
+				     struct cxl_endpoint_decoder **cxled,
+				     int ways);
 
 static inline struct cxl_ep *cxl_ep_load(struct cxl_port *port,
 					 struct cxl_memdev *cxlmd)
