@@ -278,7 +278,7 @@ static struct {
 			},
 			.interleave_ways = 0,
 			.granularity = 4,
-			.restrictions = ACPI_CEDT_CFMWS_RESTRICT_TYPE3 |
+			.restrictions = ACPI_CEDT_CFMWS_RESTRICT_TYPE2 |
 					ACPI_CEDT_CFMWS_RESTRICT_VOLATILE,
 			.qtg_id = 5,
 			.window_size = SZ_256M,
@@ -713,7 +713,19 @@ static void default_mock_decoder(struct cxl_decoder *cxld)
 
 	cxld->interleave_ways = 1;
 	cxld->interleave_granularity = 256;
-	cxld->target_type = CXL_DECODER_HOSTONLYMEM;
+	if (is_endpoint_decoder(&cxld->dev)) {
+		struct cxl_endpoint_decoder *cxled;
+		struct cxl_dev_state *cxlds;
+		struct cxl_memdev *cxlmd;
+
+		cxled = to_cxl_endpoint_decoder(&cxld->dev);
+		cxlmd = cxled_to_memdev(cxled);
+		cxlds = cxlmd->cxlds;
+		if (cxlds->type == CXL_DEVTYPE_CLASSMEM)
+			cxld->target_type = CXL_DECODER_HOSTONLYMEM;
+		else
+			cxld->target_type = CXL_DECODER_DEVMEM;
+	}
 	cxld->commit = mock_decoder_commit;
 	cxld->reset = mock_decoder_reset;
 }

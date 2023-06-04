@@ -1365,11 +1365,21 @@ static void fw_buf_release(void *buf)
 	vfree(buf);
 }
 
+#define CXL_MOCKMEM_RCD BIT(0)
+#define CXL_MOCKMEM_TYPE2 BIT(1)
+
 static bool is_rcd(struct platform_device *pdev)
 {
 	const struct platform_device_id *id = platform_get_device_id(pdev);
 
-	return !!id->driver_data;
+	return !!(id->driver_data & CXL_MOCKMEM_RCD);
+}
+
+static bool is_type2(struct platform_device *pdev)
+{
+	const struct platform_device_id *id = platform_get_device_id(pdev);
+
+	return !!(id->driver_data & CXL_MOCKMEM_TYPE2);
 }
 
 static ssize_t event_trigger_store(struct device *dev,
@@ -1381,7 +1391,7 @@ static ssize_t event_trigger_store(struct device *dev,
 }
 static DEVICE_ATTR_WO(event_trigger);
 
-static int cxl_mock_mem_probe(struct platform_device *pdev)
+static int __cxl_mock_mem_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct cxl_memdev *cxlmd;
@@ -1463,6 +1473,75 @@ static int cxl_mock_mem_probe(struct platform_device *pdev)
 	return 0;
 }
 
+static int cxl_mock_type2_probe(struct platform_device *pdev)
+{
+	struct cxl_endpoint_decoder *cxled;
+	struct device *dev = &pdev->dev;
+	struct cxl_root_decoder *cxlrd;
+	struct cxl_dev_state *cxlds;
+	struct cxl_port *endpoint;
+	struct cxl_memdev *cxlmd;
+	resource_size_t max = 0;
+	int rc;
+
+	cxlds = cxl_accel_state_create(dev);
+	if (IS_ERR(cxlds))
+		return PTR_ERR(cxlds);
+
+	cxlds->serial = pdev->id;
+	cxlds->component_reg_phys = CXL_RESOURCE_NONE;
+	cxlds->dpa_res = DEFINE_RES_MEM(0, DEV_SIZE);
+	cxlds->ram_res = DEFINE_RES_MEM_NAMED(0, DEV_SIZE, "ram");
+	cxlds->pmem_res = DEFINE_RES_MEM_NAMED(DEV_SIZE, 0, "pmem");
+	if (is_rcd(pdev))
+		cxlds->rcd = true;
+
+	rc = request_resource(&cxlds->dpa_res, &cxlds->ram_res);
+	if (rc)
+		return rc;
+
+	cxlmd = devm_cxl_add_memdev(cxlds);
+	if (IS_ERR(cxlmd))
+		return PTR_ERR(cxlmd);
+
+	endpoint = cxl_acquire_endpoint(cxlmd);
+	if (IS_ERR(endpoint))
+		return PTR_ERR(endpoint);
+
+	cxlrd = cxl_hpa_freespace(endpoint, &endpoint->host_bridge, 1,
+				  CXL_DECODER_F_RAM | CXL_DECODER_F_TYPE2,
+				  &max);
+
+	if (IS_ERR(cxlrd)) {
+		rc = PTR_ERR(cxlrd);
+		goto out;
+	}
+
+	cxled = cxl_request_dpa(endpoint, CXL_DECODER_RAM, 0, max);
+	if (IS_ERR(cxled)) {
+		rc = PTR_ERR(cxled);
+		goto out_cxlrd;
+	}
+
+	/* A real driver would do something with the returned region */
+	rc = PTR_ERR_OR_ZERO(cxl_create_region(cxlrd, &cxled, 1));
+
+	put_device(cxled_dev(cxled));
+out_cxlrd:
+	put_device(cxlrd_dev(cxlrd));
+out:
+	cxl_release_endpoint(cxlmd, endpoint);
+
+	return rc;
+}
+
+static int cxl_mock_mem_probe(struct platform_device *pdev)
+{
+	if (is_type2(pdev))
+		return cxl_mock_type2_probe(pdev);
+	return __cxl_mock_mem_probe(pdev);
+}
+
 static ssize_t security_lock_show(struct device *dev,
 				  struct device_attribute *attr, char *buf)
 {
@@ -1536,7 +1615,7 @@ ATTRIBUTE_GROUPS(cxl_mock_mem);
 
 static const struct platform_device_id cxl_mock_mem_ids[] = {
 	{ .name = "cxl_mem", 0 },
-	{ .name = "cxl_rcd", 1 },
+	{ .name = "cxl_rcd", CXL_MOCKMEM_RCD | CXL_MOCKMEM_TYPE2 },
 	{ },
 };
 MODULE_DEVICE_TABLE(platform, cxl_mock_mem_ids);
