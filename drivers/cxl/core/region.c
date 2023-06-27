@@ -2130,6 +2130,7 @@ static struct cxl_region *devm_cxl_add_region(struct cxl_root_decoder *cxlrd,
 	switch (mode) {
 	case CXL_REGION_RAM:
 	case CXL_REGION_PMEM:
+	case CXL_REGION_DC:
 		break;
 	default:
 		dev_err(&cxlrd->cxlsd.cxld.dev, "unsupported mode %s\n",
@@ -2238,6 +2239,32 @@ static ssize_t create_ram_region_store(struct device *dev,
 	return len;
 }
 DEVICE_ATTR_RW(create_ram_region);
+
+static ssize_t create_dc_region_show(struct device *dev,
+				     struct device_attribute *attr, char *buf)
+{
+	return __create_region_show(to_cxl_root_decoder(dev), buf);
+}
+
+static ssize_t create_dc_region_store(struct device *dev,
+				      struct device_attribute *attr,
+				      const char *buf, size_t len)
+{
+	struct cxl_root_decoder *cxlrd = to_cxl_root_decoder(dev);
+	struct cxl_region *cxlr;
+	int rc, id;
+
+	rc = sscanf(buf, "region%d\n", &id);
+	if (rc != 1)
+		return -EINVAL;
+
+	cxlr = __create_region(cxlrd, CXL_REGION_DC, id);
+	if (IS_ERR(cxlr))
+		return PTR_ERR(cxlr);
+
+	return len;
+}
+DEVICE_ATTR_RW(create_dc_region);
 
 static ssize_t region_show(struct device *dev, struct device_attribute *attr,
 			   char *buf)
@@ -2683,7 +2710,7 @@ static void cxlr_dax_unregister(void *_cxlr_dax)
 	device_unregister(&cxlr_dax->dev);
 }
 
-static int devm_cxl_add_dax_region(struct cxl_region *cxlr)
+static int __devm_cxl_add_dax_region(struct cxl_region *cxlr)
 {
 	struct cxl_dax_region *cxlr_dax;
 	struct device *dev;
@@ -2710,6 +2737,21 @@ static int devm_cxl_add_dax_region(struct cxl_region *cxlr)
 err:
 	put_device(dev);
 	return rc;
+}
+
+static int devm_cxl_add_dax_region(struct cxl_region *cxlr)
+{
+	return __devm_cxl_add_dax_region(cxlr);
+}
+
+static int devm_cxl_add_dc_dax_region(struct cxl_region *cxlr)
+{
+	if (cxlr->params.interleave_ways != 1) {
+		dev_err(&cxlr->dev, "Interleaving DC not supported\n");
+		return -EINVAL;
+	}
+
+	return __devm_cxl_add_dax_region(cxlr);
 }
 
 static int match_decoder_by_range(struct device *dev, void *data)
@@ -2931,6 +2973,19 @@ static int is_system_ram(struct resource *res, void *arg)
 	return 1;
 }
 
+/*
+ * The region can not be manged by CXL if any portion of
+ * it is already online as 'System RAM'
+ */
+static bool region_is_system_ram(struct cxl_region *cxlr,
+				 struct cxl_region_params *p)
+{
+	return (walk_iomem_res_desc(IORES_DESC_NONE,
+				    IORESOURCE_SYSTEM_RAM | IORESOURCE_BUSY,
+				    p->res->start, p->res->end, cxlr,
+				    is_system_ram) > 0);
+}
+
 static int cxl_region_probe(struct device *dev)
 {
 	struct cxl_region *cxlr = to_cxl_region(dev);
@@ -2970,16 +3025,13 @@ out:
 	case CXL_REGION_PMEM:
 		return devm_cxl_add_pmem_region(cxlr);
 	case CXL_REGION_RAM:
-		/*
-		 * The region can not be manged by CXL if any portion of
-		 * it is already online as 'System RAM'
-		 */
-		if (walk_iomem_res_desc(IORES_DESC_NONE,
-					IORESOURCE_SYSTEM_RAM | IORESOURCE_BUSY,
-					p->res->start, p->res->end, cxlr,
-					is_system_ram) > 0)
+		if (region_is_system_ram(cxlr, p))
 			return 0;
 		return devm_cxl_add_dax_region(cxlr);
+	case CXL_REGION_DC:
+		if (region_is_system_ram(cxlr, p))
+			return 0;
+		return devm_cxl_add_dc_dax_region(cxlr);
 	default:
 		dev_dbg(&cxlr->dev, "unsupported region mode: %s\n",
 			cxl_region_mode_name(cxlr->mode));
