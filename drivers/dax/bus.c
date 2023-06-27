@@ -169,6 +169,11 @@ static bool is_static(struct dax_region *dax_region)
 	return (dax_region->res.flags & IORESOURCE_DAX_STATIC) != 0;
 }
 
+static bool is_sparse(struct dax_region *dax_region)
+{
+	return (dax_region->res.flags & IORESOURCE_DAX_SPARSE_CAP) != 0;
+}
+
 bool static_dev_dax(struct dev_dax *dev_dax)
 {
 	return is_static(dev_dax->region);
@@ -284,6 +289,9 @@ static unsigned long long dax_region_avail_size(struct dax_region *dax_region)
 	struct resource *res;
 
 	device_lock_assert(dax_region->dev);
+
+	if (is_sparse(dax_region))
+		return 0;
 
 	for_each_dax_region_resource(dax_region, res)
 		size -= resource_size(res);
