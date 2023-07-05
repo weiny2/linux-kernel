@@ -209,6 +209,22 @@ static ssize_t mode_store(struct device *dev, struct device_attribute *attr,
 		mode = CXL_DECODER_PMEM;
 	else if (sysfs_streq(buf, "ram"))
 		mode = CXL_DECODER_RAM;
+	else if (sysfs_streq(buf, "dc0"))
+		mode = CXL_DECODER_DC0;
+	else if (sysfs_streq(buf, "dc1"))
+		mode = CXL_DECODER_DC1;
+	else if (sysfs_streq(buf, "dc2"))
+		mode = CXL_DECODER_DC2;
+	else if (sysfs_streq(buf, "dc3"))
+		mode = CXL_DECODER_DC3;
+	else if (sysfs_streq(buf, "dc4"))
+		mode = CXL_DECODER_DC4;
+	else if (sysfs_streq(buf, "dc5"))
+		mode = CXL_DECODER_DC5;
+	else if (sysfs_streq(buf, "dc6"))
+		mode = CXL_DECODER_DC6;
+	else if (sysfs_streq(buf, "dc7"))
+		mode = CXL_DECODER_DC7;
 	else
 		return -EINVAL;
 
