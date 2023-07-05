@@ -255,6 +255,14 @@ static void devm_cxl_dpa_release(struct cxl_endpoint_decoder *cxled)
 	__cxl_dpa_release(cxled);
 }
 
+static int dc_mode_to_region_index(enum cxl_decoder_mode mode)
+{
+	if (mode < CXL_DECODER_DC0 || CXL_DECODER_DC7 < mode)
+		return -EINVAL;
+
+	return mode - CXL_DECODER_DC0;
+}
+
 static int __cxl_dpa_reserve(struct cxl_endpoint_decoder *cxled,
 			     resource_size_t base, resource_size_t len,
 			     resource_size_t skipped)
@@ -411,6 +419,7 @@ int cxl_dpa_set_mode(struct cxl_endpoint_decoder *cxled,
 	struct cxl_memdev *cxlmd = cxled_to_memdev(cxled);
 	struct cxl_dev_state *cxlds = cxlmd->cxlds;
 	struct device *dev = &cxled->cxld.dev;
+	int rc;
 
 	guard(rwsem_write)(&cxl_dpa_rwsem);
 	if (cxled->cxld.flags & CXL_DECODER_F_ENABLE)
@@ -430,6 +439,16 @@ int cxl_dpa_set_mode(struct cxl_endpoint_decoder *cxled,
 	case CXL_DECODER_PMEM:
 		if (!resource_size(&cxlds->pmem_res)) {
 			dev_dbg(dev, "no available pmem capacity\n");
+			return -ENXIO;
+		}
+		break;
+	case CXL_DECODER_DC0 ... CXL_DECODER_DC7:
+		rc = dc_mode_to_region_index(mode);
+		if (rc < 0)
+			return rc;
+
+		if (resource_size(&cxlds->dc_res[rc]) == 0) {
+			dev_dbg(dev, "no available dynamic capacity\n");
 			return -ENXIO;
 		}
 		break;
