@@ -930,6 +930,10 @@ static int cxl_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	if (rc)
 		dev_dbg(&pdev->dev, "No RAS reporting unmasked\n");
 
+	rc = cxl_dev_get_dynamic_capacity_extents(mds);
+	if (rc)
+		return rc;
+
 	pci_save_state(pdev);
 
 	return rc;
