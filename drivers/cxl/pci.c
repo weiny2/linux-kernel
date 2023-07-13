@@ -925,9 +925,21 @@ static int cxl_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	if (rc)
 		dev_dbg(&pdev->dev, "No RAS reporting unmasked\n");
 
+	rc = cxl_dev_store_dynamic_capacity_extents(mds);
+	if (rc)
+		return rc;
+
 	pci_save_state(pdev);
 
 	return rc;
+}
+
+static void cxl_pci_remove(struct pci_dev *pdev)
+{
+	struct cxl_dev_state *cxlds = pci_get_drvdata(pdev);
+	struct cxl_memdev_state *mds = to_cxl_memdev_state(cxlds);
+
+	cxl_dev_rm_dynamic_capacity_extents(mds);
 }
 
 static const struct pci_device_id cxl_mem_pci_tbl[] = {
@@ -972,6 +984,7 @@ static struct pci_driver cxl_pci_driver = {
 	.name			= KBUILD_MODNAME,
 	.id_table		= cxl_mem_pci_tbl,
 	.probe			= cxl_pci_probe,
+	.remove			= cxl_pci_remove,
 	.err_handler		= &cxl_error_handlers,
 	.driver	= {
 		.probe_type	= PROBE_PREFER_ASYNCHRONOUS,

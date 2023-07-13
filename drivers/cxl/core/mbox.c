@@ -869,6 +869,58 @@ out:
 }
 EXPORT_SYMBOL_NS_GPL(cxl_enumerate_cmds, CXL);
 
+static int cxl_store_dc_extent(struct cxl_memdev_state *mds,
+			       struct cxl_dc_extent *dc_extent)
+{
+	struct device *dev = mds->cxlds.dev;
+	struct cxl_dc_extent_data *extent;
+	uint64_t start, len;
+	bool valid = false;
+	int rc;
+
+	start = le64_to_cpu(dc_extent->start_dpa);
+	len = le64_to_cpu(dc_extent->length);
+
+	/* Extents must not cross region boundary's */
+	for (int i = 0; i < mds->nr_dc_region; i++) {
+		struct cxl_dc_region_info *dcr = &mds->dc_region[i];
+
+		if (dcr->base <= start &&
+		    (start + len) <= (dcr->base + dcr->decode_len)) {
+			dev_dbg(dev, "DC extent DPA:%#llx LEN:%#llx (DCR:%d:%#llx)\n",
+				start, len, i, start - dcr->base);
+			valid = true;
+			break;
+		}
+	}
+
+	if (!valid) {
+		dev_err(dev, "DC extent DPA:%#llx LEN:%#llx is not in any DC region\n",
+			start, len);
+		return -EINVAL;
+	}
+
+	extent = devm_kzalloc(dev, sizeof(*extent), GFP_KERNEL);
+	if (!extent)
+		return -ENOMEM;
+
+	extent->dpa_start = start;
+	extent->length = len;
+	memcpy(extent->tag, dc_extent->tag, sizeof(extent->tag));
+	extent->shared_extent_seq = le16_to_cpu(dc_extent->shared_extn_seq);
+
+	rc = xa_insert(&mds->dc_extent_list, extent->dpa_start, extent,
+			 GFP_KERNEL);
+	if (rc) {
+		if (rc == -EBUSY)
+			dev_err(dev, "Duplicate extent DPA:%#llx LEN:%#llx\n",
+				extent->dpa_start, extent->length);
+		devm_kfree(dev, extent);
+	}
+
+	return rc;
+}
+
 /*
  * General Media Event Record
  * CXL rev 3.0 Section 8.2.9.2.1.1; Table 8-43
@@ -984,6 +1036,59 @@ static int cxl_clear_event_record(struct cxl_memdev_state *mds,
 free_pl:
 	kvfree(payload);
 	return rc;
+}
+
+static int cxl_send_dc_cap_response(struct cxl_memdev_state *mds,
+				    struct range *extent, int opcode)
+{
+	struct cxl_mbox_dc_response *dc_res __free(kfree);
+	struct cxl_mbox_cmd mbox_cmd;
+	size_t size;
+
+	if (!extent)
+		size = struct_size(dc_res, extent_list, 0);
+	else
+		size = struct_size(dc_res, extent_list, 1);
+
+	dc_res = kzalloc(size, GFP_KERNEL);
+	if (!dc_res)
+		return -ENOMEM;
+
+	if (extent) {
+		dc_res->extent_list[0].dpa_start = cpu_to_le64(extent->start);
+		memset(dc_res->extent_list[0].reserved, 0, 8);
+		dc_res->extent_list[0].length = cpu_to_le64(range_len(extent));
+	}
+
+	dc_res->extent_list_size = cpu_to_le32(1);
+	mbox_cmd = (struct cxl_mbox_cmd) {
+		.opcode = opcode,
+		.size_in = size,
+		.payload_in = dc_res,
+	};
+
+	return cxl_internal_send_cmd(mds, &mbox_cmd);
+}
+
+static void cxl_release_dc_extent(struct cxl_memdev_state *mds,
+				  struct cxl_dc_extent_data *extent)
+{
+	struct range rel_range = (struct range) {
+		.start = extent->dpa_start,
+		.end = extent->dpa_start + extent->length - 1,
+	};
+	struct device *dev = mds->cxlds.dev;
+	int rc;
+
+	dev_dbg(dev, "DC extent DPA:%#llx LEN:%#llx\n",
+		extent->dpa_start, extent->length);
+
+	rc = cxl_send_dc_cap_response(mds, &rel_range, CXL_MBOX_OP_RELEASE_DC);
+	if (rc)
+		dev_dbg(dev, "Failed to respond releasing extent DPA %pa-%pa; %d\n",
+			&rel_range.start, &rel_range.end, rc);
+
+	devm_kfree(dev, extent);
 }
 
 static void cxl_mem_get_records_log(struct cxl_memdev_state *mds,
@@ -1387,6 +1492,158 @@ int cxl_dev_dynamic_capacity_identify(struct cxl_memdev_state *mds)
 }
 EXPORT_SYMBOL_NS_GPL(cxl_dev_dynamic_capacity_identify, CXL);
 
+static int cxl_dev_get_dc_extent_cnt(struct cxl_memdev_state *mds,
+				     unsigned int *extent_gen_num)
+{
+	struct cxl_mbox_get_dc_extent_in get_dc_extent;
+	struct cxl_mbox_get_dc_extent_out dc_extents;
+	struct cxl_mbox_cmd mbox_cmd;
+	unsigned int count;
+	int rc;
+
+	get_dc_extent = (struct cxl_mbox_get_dc_extent_in) {
+		.extent_cnt = cpu_to_le32(0),
+		.start_extent_index = cpu_to_le32(0),
+	};
+
+	mbox_cmd = (struct cxl_mbox_cmd) {
+		.opcode = CXL_MBOX_OP_GET_DC_EXTENT_LIST,
+		.payload_in = &get_dc_extent,
+		.size_in = sizeof(get_dc_extent),
+		.size_out = sizeof(dc_extents),
+		.payload_out = &dc_extents,
+		.min_out = 1,
+	};
+
+	rc = cxl_internal_send_cmd(mds, &mbox_cmd);
+	if (rc < 0)
+		return rc;
+
+	count = le32_to_cpu(dc_extents.total_extent_cnt);
+	*extent_gen_num = le32_to_cpu(dc_extents.extent_list_num);
+
+	return count;
+}
+
+static int cxl_dev_get_dc_extents(struct cxl_memdev_state *mds,
+				  unsigned int start_gen_num,
+				  unsigned int exp_cnt)
+{
+	struct cxl_mbox_get_dc_extent_out *dc_extents __free(kfree) =
+				kvmalloc(mds->payload_size, GFP_KERNEL);
+	unsigned int start_index, total_read;
+	struct device *dev = mds->cxlds.dev;
+	struct cxl_mbox_cmd mbox_cmd;
+
+	if (!dc_extents)
+		return -ENOMEM;
+
+	total_read = 0;
+	start_index = 0;
+	do {
+		unsigned int nr_ext, total_extent_cnt, gen_num;
+		struct cxl_mbox_get_dc_extent_in get_dc_extent;
+		int rc;
+
+		get_dc_extent = (struct cxl_mbox_get_dc_extent_in) {
+			.extent_cnt = exp_cnt - start_index,
+			.start_extent_index = start_index,
+		};
+
+		mbox_cmd = (struct cxl_mbox_cmd) {
+			.opcode = CXL_MBOX_OP_GET_DC_EXTENT_LIST,
+			.payload_in = &get_dc_extent,
+			.size_in = sizeof(get_dc_extent),
+			.size_out = mds->payload_size,
+			.payload_out = dc_extents,
+			.min_out = 1,
+		};
+
+		rc = cxl_internal_send_cmd(mds, &mbox_cmd);
+		if (rc < 0)
+			return rc;
+
+		nr_ext = le32_to_cpu(dc_extents->ret_extent_cnt);
+		total_read += nr_ext;
+		total_extent_cnt = le32_to_cpu(dc_extents->total_extent_cnt);
+		gen_num = le32_to_cpu(dc_extents->extent_list_num);
+
+		dev_dbg(dev, "Get extent list count:%d generation Num:%d\n",
+			total_extent_cnt, gen_num);
+
+		if (gen_num != start_gen_num || exp_cnt != total_extent_cnt) {
+			dev_err(dev, "Possible incomplete extent list; gen %u != %u : cnt %u != %u\n",
+				gen_num, start_gen_num, exp_cnt, total_extent_cnt);
+			return -EIO;
+		}
+
+		for (int i = 0; i < nr_ext ; i++) {
+			dev_dbg(dev, "Storing extent %d/%d\n",
+				start_index + i, exp_cnt);
+			rc = cxl_store_dc_extent(mds, &dc_extents->extent[i]);
+			if (rc)
+				return rc;
+		}
+
+		start_index += nr_ext;
+	} while (exp_cnt > total_read);
+
+	return 0;
+}
+
+/**
+ * cxl_dev_store_dynamic_capacity_extents() - Reads the dynamic capacity
+ *					 extent list.
+ * @mds: The memory device state
+ *
+ * Issue the Get Dynamic Capacity Extent List command to the device
+ * and add existing extents to the host managed extent list.
+ *
+ * WARNING: This call _does_ _not_ handle resolving duplicate extents which may
+ * already be tracked by the mds.  It is only intended to be called when a new
+ * memdev device is discovered.
+ *
+ * Return: 0 if command was executed successfully, -ERRNO on error.
+ */
+int cxl_dev_store_dynamic_capacity_extents(struct cxl_memdev_state *mds)
+{
+	struct device *dev = mds->cxlds.dev;
+	unsigned int extent_gen_num;
+	int rc;
+
+	if (!cxl_dcd_supported(mds)) {
+		dev_dbg(dev, "DCD unsupported\n");
+		return 0;
+	}
+
+	rc = cxl_dev_get_dc_extent_cnt(mds, &extent_gen_num);
+	dev_dbg(mds->cxlds.dev, "Extent count: %d Generation Num: %d\n",
+		rc, extent_gen_num);
+	if (rc <= 0) /* 0 == no records found */
+		return rc;
+
+	return cxl_dev_get_dc_extents(mds, extent_gen_num, rc);
+}
+EXPORT_SYMBOL_NS_GPL(cxl_dev_store_dynamic_capacity_extents, CXL);
+
+/**
+ * cxl_dev_rm_dynamic_capacity_extents() - remove all dynamic capacity extents
+ * @mds: The memory device state
+ *
+ * This will release all dynamic capcity extents for the mds specified.
+ */
+void cxl_dev_rm_dynamic_capacity_extents(struct cxl_memdev_state *mds)
+{
+	struct cxl_dc_extent_data *extent;
+	unsigned long index;
+
+	xa_for_each(&mds->dc_extent_list, index, extent) {
+		xa_erase(&mds->dc_extent_list, extent->dpa_start);
+		cxl_release_dc_extent(mds, extent);
+	}
+}
+EXPORT_SYMBOL_NS_GPL(cxl_dev_rm_dynamic_capacity_extents, CXL);
+
 static int add_dpa_res(struct device *dev, struct resource *parent,
 		       struct resource *res, resource_size_t start,
 		       resource_size_t size, const char *type)
@@ -1579,9 +1836,17 @@ int cxl_poison_state_init(struct cxl_memdev_state *mds)
 }
 EXPORT_SYMBOL_NS_GPL(cxl_poison_state_init, CXL);
 
+static void cxl_destroy_mds(void *_mds)
+{
+	struct cxl_memdev_state *mds = _mds;
+
+	xa_destroy(&mds->dc_extent_list);
+}
+
 struct cxl_memdev_state *cxl_memdev_state_create(struct device *dev)
 {
 	struct cxl_memdev_state *mds;
+	int rc;
 
 	mds = devm_kzalloc(dev, sizeof(*mds), GFP_KERNEL);
 	if (!mds) {
@@ -1593,6 +1858,13 @@ struct cxl_memdev_state *cxl_memdev_state_create(struct device *dev)
 	mutex_init(&mds->event.log_lock);
 	mds->cxlds.dev = dev;
 	mds->cxlds.type = CXL_DEVTYPE_CLASSMEM;
+	xa_init(&mds->dc_extent_list);
+
+	rc = devm_add_action_or_reset(dev, cxl_destroy_mds, mds);
+	if (rc) {
+		dev_err(dev, "Failed to set up memdev state; %d\n", rc);
+		return ERR_PTR(rc);
+	}
 
 	return mds;
 }
