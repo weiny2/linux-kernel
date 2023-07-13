@@ -1553,6 +1553,13 @@ static int cxl_region_validate_position(struct cxl_region *cxlr,
 	return 0;
 }
 
+/* Callers are expected to ensure cxled has been attached to a region */
+int cxl_ed_add_one_extent(struct cxl_endpoint_decoder *cxled,
+			  struct cxl_dc_extent *dc_extent)
+{
+	return 0;
+}
+
 static int cxl_region_attach_position(struct cxl_region *cxlr,
 				      struct cxl_root_decoder *cxlrd,
 				      struct cxl_endpoint_decoder *cxled,
@@ -2924,6 +2931,22 @@ err_bridge:
 	return rc;
 }
 
+static int cxl_region_read_extents(struct cxl_region *cxlr)
+{
+	struct cxl_region_params *p = &cxlr->params;
+	int i;
+
+	for (i = 0; i < p->nr_targets; i++) {
+		int rc;
+
+		rc = cxl_read_dc_extents(p->targets[i]);
+		if (rc)
+			return rc;
+	}
+
+	return 0;
+}
+
 static void cxlr_dax_unregister(void *_cxlr_dax)
 {
 	struct cxl_dax_region *cxlr_dax = _cxlr_dax;
@@ -2957,6 +2980,12 @@ static int devm_cxl_add_dax_region(struct cxl_region *cxlr)
 
 	dev_dbg(&cxlr->dev, "%s: register %s\n", dev_name(dev->parent),
 		dev_name(dev));
+
+	if (cxlr->mode == CXL_REGION_DC) {
+		rc = cxl_region_read_extents(cxlr);
+		if (rc)
+			goto err;
+	}
 
 	return devm_add_action_or_reset(&cxlr->dev, cxlr_dax_unregister,
 					cxlr_dax);
