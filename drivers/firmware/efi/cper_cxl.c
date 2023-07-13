@@ -8,6 +8,7 @@
  */
 
 #include <linux/cper.h>
+#include <linux/cxl-event.h>
 #include "cper_cxl.h"
 
 #define PROT_ERR_VALID_AGENT_TYPE		BIT_ULL(0)
@@ -187,3 +188,48 @@ void cper_print_prot_err(const char *pfx, const struct cper_sec_prot_err *prot_e
 			       sizeof(cxl_ras->header_log), 0);
 	}
 }
+
+static DECLARE_RWSEM(cxl_cper_rw_sem);
+static cxl_cper_notifier cper_notifier;
+
+void cxl_cper_post_event(const char *pfx, guid_t *sec_type,
+			 struct cxl_cper_event_rec *rec)
+{
+	enum cxl_event_type event_type;
+
+	if (!(rec->hdr.validation_bits & CPER_CXL_COMP_EVENT_LOG_VALID)) {
+		pr_err(FW_WARN "cxl event no Component Event Log present\n");
+		return;
+	}
+
+	if (guid_equal(sec_type, &CPER_SEC_CXL_GEN_MEDIA_GUID))
+		event_type = CXL_CPER_EVENT_GEN_MEDIA;
+	else if (guid_equal(sec_type, &CPER_SEC_CXL_DRAM_GUID))
+		event_type = CXL_CPER_EVENT_DRAM;
+	else if (guid_equal(sec_type, &CPER_SEC_CXL_MEM_MODULE_GUID))
+		event_type = CXL_CPER_EVENT_MEM_MODULE;
+
+	guard(rwsem_read)(&cxl_cper_rw_sem);
+	if (cper_notifier)
+		cper_notifier(event_type, rec);
+}
+
+int cxl_cper_register_notifier(cxl_cper_notifier notifier)
+{
+	guard(rwsem_write)(&cxl_cper_rw_sem);
+	if (cper_notifier)
+		return -EINVAL;
+	cper_notifier = notifier;
+	return 0;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_cper_register_notifier, CXL);
+
+int cxl_cper_unregister_notifier(cxl_cper_notifier notifier)
+{
+	guard(rwsem_write)(&cxl_cper_rw_sem);
+	if (notifier != cper_notifier)
+		return -EINVAL;
+	cper_notifier = NULL;
+	return 0;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_cper_unregister_notifier, CXL);

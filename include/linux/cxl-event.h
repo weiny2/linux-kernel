@@ -108,4 +108,54 @@ struct cxl_event_record_raw {
 	union cxl_event event;
 } __packed;
 
+enum cxl_event_type {
+	CXL_CPER_EVENT_GEN_MEDIA,
+	CXL_CPER_EVENT_DRAM,
+	CXL_CPER_EVENT_MEM_MODULE,
+};
+
+#define CPER_CXL_DEVICE_ID_VALID		BIT(0)
+#define CPER_CXL_DEVICE_SN_VALID		BIT(1)
+#define CPER_CXL_COMP_EVENT_LOG_VALID		BIT(2)
+struct cxl_cper_event_rec {
+	struct {
+		u32 length;
+		u64 validation_bits;
+		struct cper_cxl_event_devid {
+			u16 vendor_id;
+			u16 device_id;
+			u8 func_num;
+			u8 device_num;
+			u8 bus_num;
+			u16 segment_num;
+			u16 slot_num; /* bits 2:0 reserved */
+			u8 reserved;
+		} device_id __packed;
+		struct cper_cxl_event_sn {
+			u32 lower_dw;
+			u32 upper_dw;
+		} dev_serial_num __packed;
+	} hdr __packed;
+
+	union cxl_event event;
+} __packed;
+
+typedef void (*cxl_cper_notifier)(enum cxl_event_type type,
+				  struct cxl_cper_event_rec *rec);
+
+#ifdef CONFIG_UEFI_CPER
+int cxl_cper_register_notifier(cxl_cper_notifier notifier);
+int cxl_cper_unregister_notifier(cxl_cper_notifier notifier);
+#else
+static inline int cxl_cper_register_notifier(cxl_cper_notifier notifier)
+{
+	return 0;
+}
+
+static inline int cxl_cper_unregister_notifier(cxl_cper_notifier notifier)
+{
+	return 0;
+}
+#endif
+
 #endif /* _LINUX_CXL_EVENT_H */
