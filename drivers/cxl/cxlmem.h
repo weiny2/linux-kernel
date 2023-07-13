@@ -6,6 +6,7 @@
 #include <linux/cdev.h>
 #include <linux/uuid.h>
 #include <linux/rcuwait.h>
+#include <linux/xarray.h>
 #include "cxl.h"
 
 /* CXL 2.0 8.2.8.5.1.1 Memory Device Status Register */
@@ -508,6 +509,7 @@ struct cxl_memdev_state {
 
 	u8 nr_dc_region;
 	struct cxl_dc_region_info dc_region[CXL_MAX_DC_REGION];
+	struct xarray dc_extent_list;
 
 	struct cxl_event_state event;
 	struct cxl_poison_state poison;
@@ -578,6 +580,20 @@ enum cxl_opcode {
 #define DEFINE_CXL_VENDOR_DEBUG_UUID                                           \
 	UUID_INIT(0xe1819d9, 0x11a9, 0x400c, 0x81, 0x1f, 0xd6, 0x07, 0x19,     \
 		  0x40, 0x3d, 0x86)
+
+/*
+ * Add Dyanmic Capacity Response
+ * CXL rev 3.0 section 8.2.9.8.9.3; Table 8-129
+ */
+struct cxl_mbox_dc_response {
+	__le32 extent_list_size;
+	u8 reserved[4];
+	struct updated_extent_list {
+		__le64 dpa_start;
+		__le64 length;
+		u8 reserved[8];
+	} __packed extent_list[];
+} __packed;
 
 struct cxl_mbox_get_supported_logs {
 	__le16 entries;
@@ -747,6 +763,25 @@ struct cxl_event_mem_module {
 	u8 reserved[0x3d];
 } __packed;
 
+#define CXL_DC_EXTENT_TAG_LEN 0x10
+struct cxl_dc_extent_data {
+	u64 dpa_start;
+	u64 length;
+	u8 tag[CXL_DC_EXTENT_TAG_LEN];
+	u16 shared_extent_seq;
+};
+
+/*
+ * CXL rev 3.0 section 8.2.9.2.1.5; Table 8-48
+ */
+struct cxl_dc_extent {
+	__le64 start_dpa;
+	__le64 length;
+	u8 tag[CXL_DC_EXTENT_TAG_LEN];
+	__le16 shared_extn_seq;
+	u8 reserved[6];
+} __packed;
+
 struct cxl_mbox_get_partition_info {
 	__le64 active_volatile_cap;
 	__le64 active_persistent_cap;
@@ -794,6 +829,27 @@ struct cxl_mbox_get_dc_config_out {
 #define CXL_DYNAMIC_CAPACITY_SANITIZE_ON_RELEASE_FLAG BIT(0)
 #define CXL_REGIONS_RETURNED(size_out) \
 	((size_out - 8) / sizeof(struct cxl_dc_region_config))
+
+/*
+ * Get Dynamic Capacity Extent List; Input Payload
+ * CXL rev 3.0 section 8.2.9.8.9.2; Table 8-127
+ */
+struct cxl_mbox_get_dc_extent_in {
+	__le32 extent_cnt;
+	__le32 start_extent_index;
+} __packed;
+
+/*
+ * Get Dynamic Capacity Extent List; Output Payload
+ * CXL rev 3.0 section 8.2.9.8.9.2; Table 8-128
+ */
+struct cxl_mbox_get_dc_extents_out {
+	__le32 ret_extent_cnt;
+	__le32 total_extent_cnt;
+	__le32 extent_list_num;
+	u8 rsvd[4];
+	struct cxl_dc_extent extent[];
+} __packed;
 
 /* Set Timestamp CXL 3.0 Spec 8.2.9.4.2 */
 struct cxl_mbox_set_timestamp_in {
@@ -919,6 +975,8 @@ int cxl_internal_send_cmd(struct cxl_memdev_state *mds,
 			  struct cxl_mbox_cmd *cmd);
 int cxl_dev_state_identify(struct cxl_memdev_state *mds);
 int cxl_dev_dynamic_capacity_identify(struct cxl_memdev_state *mds);
+int cxl_dev_store_dynamic_capacity_extents(struct cxl_memdev_state *mds);
+void cxl_dev_rm_dynamic_capacity_extents(struct cxl_memdev_state *mds);
 int cxl_await_media_ready(struct cxl_dev_state *cxlds);
 int cxl_enumerate_cmds(struct cxl_memdev_state *mds);
 int cxl_mem_create_range_info(struct cxl_memdev_state *mds);
