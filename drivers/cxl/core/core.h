@@ -4,6 +4,8 @@
 #ifndef __CXL_CORE_H__
 #define __CXL_CORE_H__
 
+#include <cxlmem.h>
+
 extern const struct device_type cxl_nvdimm_bridge_type;
 extern const struct device_type cxl_nvdimm_type;
 extern const struct device_type cxl_pmu_type;
@@ -28,6 +30,8 @@ void cxl_decoder_kill_region(struct cxl_endpoint_decoder *cxled);
 int cxl_region_init(void);
 void cxl_region_exit(void);
 int cxl_get_poison_by_endpoint(struct cxl_port *port);
+int cxl_ed_add_one_extent(struct cxl_endpoint_decoder *cxled,
+			  struct cxl_dc_extent *dc_extent);
 #else
 static inline int cxl_get_poison_by_endpoint(struct cxl_port *port)
 {
@@ -42,6 +46,11 @@ static inline int cxl_region_init(void)
 }
 static inline void cxl_region_exit(void)
 {
+}
+static inline int cxl_ed_add_one_extent(struct cxl_endpoint_decoder *cxled,
+					struct cxl_dc_extent *dc_extent)
+{
+	return 0;
 }
 #define CXL_REGION_ATTR(x) NULL
 #define CXL_REGION_TYPE(x) NULL
