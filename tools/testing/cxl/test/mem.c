@@ -18,6 +18,7 @@
 #define FW_SLOTS 3
 #define DEV_SIZE SZ_2G
 #define EFFECT(x) (1U << x)
+#define BASE_DYNAMIC_CAP_DPA DEV_SIZE
 
 #define MOCK_INJECT_DEV_MAX 8
 #define MOCK_INJECT_TEST_MAX 128
@@ -89,6 +90,22 @@ static struct cxl_cel_entry mock_cel[] = {
 		.effect = cpu_to_le16(EFFECT(CONF_CHANGE_COLD_RESET) |
 				      EFFECT(CONF_CHANGE_IMMEDIATE)),
 	},
+	{
+		.opcode = cpu_to_le16(CXL_MBOX_OP_GET_DC_CONFIG),
+		.effect = CXL_CMD_EFFECT_NONE,
+	},
+	{
+		.opcode = cpu_to_le16(CXL_MBOX_OP_GET_DC_EXTENT_LIST),
+		.effect = CXL_CMD_EFFECT_NONE,
+	},
+	{
+		.opcode = cpu_to_le16(CXL_MBOX_OP_ADD_DC_RESPONSE),
+		.effect = cpu_to_le16(EFFECT(CONF_CHANGE_IMMEDIATE)),
+	},
+	{
+		.opcode = cpu_to_le16(CXL_MBOX_OP_RELEASE_DC),
+		.effect = cpu_to_le16(EFFECT(CONF_CHANGE_IMMEDIATE)),
+	},
 };
 
 /* See CXL 2.0 Table 181 Get Health Info Output Payload */
@@ -147,6 +164,7 @@ struct mock_event_store {
 	u32 ev_status;
 };
 
+#define NUM_MOCK_DC_REGIONS 2
 struct cxl_mockmem_data {
 	void *lsa;
 	void *fw;
@@ -161,6 +179,10 @@ struct cxl_mockmem_data {
 	struct mock_event_store mes;
 	u8 event_buf[SZ_4K];
 	u64 timestamp;
+	struct cxl_dc_region_config dc_regions[NUM_MOCK_DC_REGIONS];
+	u32 dc_ext_generation;
+	struct xarray dc_extents;
+	struct xarray dc_accepted_exts;
 };
 
 static struct mock_event_log *event_find_log(struct device *dev, int log_type)
@@ -527,6 +549,98 @@ static void cxl_mock_event_trigger(struct device *dev)
 
 	cxl_mock_add_event_logs(mdata);
 	cxl_mem_get_event_records(mes->mds, mes->ev_status);
+}
+
+static int devm_add_extent(struct device *dev, u64 start, u64 length,
+			   const char *tag)
+{
+	struct cxl_mockmem_data *mdata = dev_get_drvdata(dev);
+	struct cxl_dc_extent_data *extent;
+
+	extent = devm_kzalloc(dev, sizeof(*extent), GFP_KERNEL);
+	if (!extent) {
+		dev_dbg(dev, "Failed to allocate extent\n");
+		return -ENOMEM;
+	}
+	extent->dpa_start = start;
+	extent->length = length;
+	memcpy(extent->tag, tag, min(sizeof(extent->tag), strlen(tag)));
+
+	if (xa_insert(&mdata->dc_extents, start, extent, GFP_KERNEL)) {
+		devm_kfree(dev, extent);
+		dev_err(dev, "Failed xarry insert %llx\n", start);
+		return -EINVAL;
+	}
+	mdata->dc_ext_generation++;
+
+	return 0;
+}
+
+static int dc_accept_extent(struct device *dev, u64 start)
+{
+	struct cxl_mockmem_data *mdata = dev_get_drvdata(dev);
+
+	dev_dbg(dev, "Accepting extent 0x%llx\n", start);
+	return xa_insert(&mdata->dc_accepted_exts, start, (void *)start,
+			 GFP_KERNEL);
+}
+
+static void release_dc_ext(void *md)
+{
+	struct cxl_mockmem_data *mdata = md;
+
+	xa_destroy(&mdata->dc_extents);
+	xa_destroy(&mdata->dc_accepted_exts);
+}
+
+static int cxl_mock_dc_region_setup(struct device *dev)
+{
+#define DUMMY_EXT_OFFSET SZ_256M
+#define DUMMY_EXT_LENGTH SZ_256M
+	struct cxl_mockmem_data *mdata = dev_get_drvdata(dev);
+	u64 base_dpa = BASE_DYNAMIC_CAP_DPA;
+	u32 dsmad_handle = 0xFADE;
+	u64 decode_length = SZ_2G;
+	u64 block_size = SZ_512;
+	/* For testing make this smaller than decode length */
+	u64 length = SZ_1G;
+	int rc;
+
+	xa_init(&mdata->dc_extents);
+	xa_init(&mdata->dc_accepted_exts);
+
+	rc = devm_add_action_or_reset(dev, release_dc_ext, mdata);
+	if (rc)
+		return rc;
+
+	for (int i = 0; i < NUM_MOCK_DC_REGIONS; i++) {
+		struct cxl_dc_region_config *conf = &mdata->dc_regions[i];
+
+		dev_dbg(dev, "Creating DC region DC%d DPA:%llx LEN:%llx\n",
+			i, base_dpa, length);
+
+		conf->region_base = cpu_to_le64(base_dpa);
+		conf->region_decode_length = cpu_to_le64(decode_length /
+						CXL_CAPACITY_MULTIPLIER);
+		conf->region_length = cpu_to_le64(length);
+		conf->region_block_size = cpu_to_le64(block_size);
+		conf->region_dsmad_handle = cpu_to_le32(dsmad_handle);
+		dsmad_handle++;
+
+		/* Pretend we have some previous accepted extents */
+		rc = devm_add_extent(dev, base_dpa + DUMMY_EXT_OFFSET,
+				     DUMMY_EXT_LENGTH, "CXL-TEST");
+		if (rc)
+			return rc;
+
+		rc = dc_accept_extent(dev, base_dpa + DUMMY_EXT_OFFSET);
+		if (rc)
+			return rc;
+
+		base_dpa += decode_length;
+	}
+
+	return 0;
 }
 
 static int mock_gsl(struct cxl_mbox_cmd *cmd)
@@ -1315,6 +1429,148 @@ static int mock_activate_fw(struct cxl_mockmem_data *mdata,
 	return -EINVAL;
 }
 
+static int mock_get_dc_config(struct device *dev,
+			      struct cxl_mbox_cmd *cmd)
+{
+	struct cxl_mbox_get_dc_config *dc_config = cmd->payload_in;
+	struct cxl_mockmem_data *mdata = dev_get_drvdata(dev);
+	u8 region_requested, region_start_idx, region_ret_cnt;
+	struct cxl_mbox_dynamic_capacity *resp;
+
+	region_requested = dc_config->region_count;
+	if (NUM_MOCK_DC_REGIONS < region_requested)
+		region_requested = NUM_MOCK_DC_REGIONS;
+
+	if (cmd->size_out < struct_size(resp, region, region_requested))
+		return -EINVAL;
+
+	memset(cmd->payload_out, 0, cmd->size_out);
+	resp = cmd->payload_out;
+
+	region_start_idx = dc_config->start_region_index;
+	region_ret_cnt = 0;
+	for (int i = 0; i < NUM_MOCK_DC_REGIONS; i++) {
+		if (i >= region_start_idx) {
+			memcpy(&resp->region[region_ret_cnt],
+				&mdata->dc_regions[i],
+				sizeof(resp->region[region_ret_cnt]));
+			region_ret_cnt++;
+		}
+	}
+	resp->avail_region_count = region_ret_cnt;
+
+	dev_dbg(dev, "Returning %d dc regions\n", region_ret_cnt);
+	return 0;
+}
+
+
+static int mock_get_dc_extent_list(struct device *dev,
+				   struct cxl_mbox_cmd *cmd)
+{
+	struct cxl_mockmem_data *mdata = dev_get_drvdata(dev);
+	struct cxl_mbox_get_dc_extent *get = cmd->payload_in;
+	struct cxl_mbox_dc_extents *resp = cmd->payload_out;
+	u32 total_avail = 0, total_ret = 0;
+	struct cxl_dc_extent_data *ext;
+	u32 ext_count, start_idx;
+	unsigned long i;
+
+	ext_count = le32_to_cpu(get->extent_cnt);
+	start_idx = le32_to_cpu(get->start_extent_index);
+
+	memset(resp, 0, sizeof(*resp));
+
+	/*
+	 * Total available needs to be calculated and returned regardless of
+	 * how many can actually be returned.
+	 */
+	xa_for_each(&mdata->dc_extents, i, ext)
+		total_avail++;
+
+	if (start_idx > total_avail)
+		return -EINVAL;
+
+	xa_for_each(&mdata->dc_extents, i, ext) {
+		if (total_ret >= ext_count)
+			break;
+
+		if (total_ret >= start_idx) {
+			resp->extent[total_ret].start_dpa =
+						cpu_to_le64(ext->dpa_start);
+			resp->extent[total_ret].length =
+						cpu_to_le64(ext->length);
+			memcpy(&resp->extent[total_ret].tag, ext->tag,
+					sizeof(resp->extent[total_ret]));
+			resp->extent[total_ret].shared_extn_seq =
+					cpu_to_le16(ext->shared_extent_seq);
+			total_ret++;
+		}
+	}
+
+	resp->ret_extent_cnt = cpu_to_le32(total_ret);
+	resp->total_extent_cnt = cpu_to_le32(total_avail);
+	resp->extent_list_num = cpu_to_le32(mdata->dc_ext_generation);
+
+	dev_dbg(dev, "Returning %d extents of %d total\n",
+		total_ret, total_avail);
+
+	return 0;
+}
+
+static int mock_add_dc_response(struct device *dev,
+				struct cxl_mbox_cmd *cmd)
+{
+	struct cxl_mbox_dc_response *req = cmd->payload_in;
+	u32 list_size = le32_to_cpu(req->extent_list_size);
+
+	for (int i = 0; i < list_size; i++) {
+		u64 start = le64_to_cpu(req->extent_list[i].dpa_start);
+		int rc;
+
+		dev_dbg(dev, "Extent 0x%llx accepted by HOST\n", start);
+		rc = dc_accept_extent(dev, start);
+		if (rc)
+			return rc;
+	}
+
+	return 0;
+}
+
+static int dc_delete_extent(struct device *dev, unsigned long long start)
+{
+	struct cxl_mockmem_data *mdata = dev_get_drvdata(dev);
+	void *ext;
+
+	dev_dbg(dev, "Deleting extent at %llx\n", start);
+
+	ext = xa_erase(&mdata->dc_extents, start);
+	if (!ext) {
+		dev_err(dev, "No extent found at %llx\n", start);
+		return -EINVAL;
+	}
+	devm_kfree(dev, ext);
+	mdata->dc_ext_generation++;
+
+	return 0;
+}
+
+static int mock_dc_release(struct device *dev,
+			   struct cxl_mbox_cmd *cmd)
+{
+	struct cxl_mockmem_data *mdata = dev_get_drvdata(dev);
+	struct cxl_mbox_dc_response *req = cmd->payload_in;
+	u32 list_size = le32_to_cpu(req->extent_list_size);
+
+	for (int i = 0; i < list_size; i++) {
+		u64 start = le64_to_cpu(req->extent_list[i].dpa_start);
+
+		dev_dbg(dev, "Extent 0x%llx released by HOST\n", start);
+		xa_erase(&mdata->dc_accepted_exts, start);
+	}
+
+	return 0;
+}
+
 static int cxl_mock_mbox_send(struct cxl_memdev_state *mds,
 			      struct cxl_mbox_cmd *cmd)
 {
@@ -1399,6 +1655,18 @@ static int cxl_mock_mbox_send(struct cxl_memdev_state *mds,
 	case CXL_MBOX_OP_ACTIVATE_FW:
 		rc = mock_activate_fw(mdata, cmd);
 		break;
+	case CXL_MBOX_OP_GET_DC_CONFIG:
+		rc = mock_get_dc_config(dev, cmd);
+		break;
+	case CXL_MBOX_OP_GET_DC_EXTENT_LIST:
+		rc = mock_get_dc_extent_list(dev, cmd);
+		break;
+	case CXL_MBOX_OP_ADD_DC_RESPONSE:
+		rc = mock_add_dc_response(dev, cmd);
+		break;
+	case CXL_MBOX_OP_RELEASE_DC:
+		rc = mock_dc_release(dev, cmd);
+		break;
 	default:
 		break;
 	}
@@ -1467,6 +1735,10 @@ static int __cxl_mock_mem_probe(struct platform_device *pdev)
 		return -ENOMEM;
 	dev_set_drvdata(dev, mdata);
 
+	rc = cxl_mock_dc_region_setup(dev);
+	if (rc)
+		return rc;
+
 	mdata->lsa = vmalloc(LSA_SIZE);
 	if (!mdata->lsa)
 		return -ENOMEM;
@@ -1515,6 +1787,10 @@ static int __cxl_mock_mem_probe(struct platform_device *pdev)
 	if (rc)
 		return rc;
 
+	rc = cxl_dev_dynamic_capacity_identify(mds);
+	if (rc)
+		return rc;
+
 	rc = cxl_mem_create_range_info(mds);
 	if (rc)
 		return rc;
@@ -1527,6 +1803,10 @@ static int __cxl_mock_mem_probe(struct platform_device *pdev)
 	cxlmd = devm_cxl_add_memdev(cxlds);
 	if (IS_ERR(cxlmd))
 		return PTR_ERR(cxlmd);
+
+	rc = cxl_dev_get_dynamic_capacity_extents(mds);
+	if (rc)
+		return rc;
 
 	rc = cxl_memdev_setup_fw_upload(mds);
 	if (rc)
@@ -1669,10 +1949,179 @@ static ssize_t fw_buf_checksum_show(struct device *dev,
 
 static DEVICE_ATTR_RO(fw_buf_checksum);
 
+/* Returns if the proposed extent is valid */
+static bool new_extent_valid(struct device *dev, size_t new_start,
+			     size_t new_len)
+{
+	struct cxl_mockmem_data *mdata = dev_get_drvdata(dev);
+	struct cxl_dc_extent_data *extent;
+	size_t new_end, i;
+
+	if (!new_len)
+		return -EINVAL;
+
+	new_end = new_start + new_len;
+
+	dev_dbg(dev, "New extent %zx-%zx\n", new_start, new_end);
+
+	/* Overlap with other extent? */
+	xa_for_each(&mdata->dc_extents, i, extent) {
+		size_t ext_end = extent->dpa_start + extent->length;
+
+		if (extent->dpa_start <= new_start && new_start < ext_end) {
+			dev_err(dev, "Extent overlap: Start %llu ?<= %zx ?<= %zx\n",
+				extent->dpa_start, new_start, ext_end);
+			return false;
+		}
+		if (extent->dpa_start <= new_end && new_end < ext_end) {
+			dev_err(dev, "Extent overlap: End %llx ?<= %zx ?<= %zx\n",
+				extent->dpa_start, new_end, ext_end);
+			return false;
+		}
+	}
+
+	/* Ensure it is in a region and is valid for that regions block size */
+	for (int i = 0; i < NUM_MOCK_DC_REGIONS; i++) {
+		struct cxl_dc_region_config *dc_region = &mdata->dc_regions[i];
+		size_t reg_start, reg_end;
+
+		reg_start = le64_to_cpu(dc_region->region_base);
+		reg_end = le64_to_cpu(dc_region->region_length);
+		reg_end += reg_start;
+
+		dev_dbg(dev, "Region %d: %zx-%zx\n", i, reg_start, reg_end);
+
+		if (reg_start >= new_start && new_end < reg_end) {
+			u64 block_size = le64_to_cpu(dc_region->region_block_size);
+
+			if (new_start % block_size || new_len % block_size) {
+				dev_err(dev, "Extent not aligned to block size: start %zx; len %zx; block_size 0x%llx\n",
+					new_start, new_len, block_size);
+				return false;
+			}
+
+			dev_dbg(dev, "Extent in region %d\n", i);
+			return true;
+		}
+	}
+
+	return false;
+}
+
+/*
+ * Format <start>:<length>:<tag>
+ *
+ * start and length must be a multiple of the configured region block size.
+ * Tag can be any string up to 16 bytes.
+ *
+ * Extents must be exclusive of other extents
+ */
+static ssize_t dc_inject_extent_store(struct device *dev,
+				      struct device_attribute *attr,
+				      const char *buf, size_t count)
+{
+	char *start_str __free(kfree) = kstrdup(buf, GFP_KERNEL);
+	unsigned long long start, length;
+	char *len_str, *tag_str;
+	size_t buf_len = count;
+	int rc;
+
+	if (!start_str)
+		return -ENOMEM;
+
+	len_str = strnchr(start_str, buf_len, ':');
+	if (!len_str) {
+		dev_err(dev, "Extent failed to find len_str: %s\n", start_str);
+		return -EINVAL;
+	}
+
+	*len_str = '\0';
+	len_str += 1;
+	buf_len -= strlen(start_str);
+
+	tag_str = strnchr(len_str, buf_len, ':');
+	if (!tag_str) {
+		dev_err(dev, "Extent failed to find tag_str: %s\n", len_str);
+		return -EINVAL;
+	}
+	*tag_str = '\0';
+	tag_str += 1;
+
+	if (kstrtoull(start_str, 0, &start)) {
+		dev_err(dev, "Extent failed to parse start: %s\n", start_str);
+		return -EINVAL;
+	}
+	if (kstrtoull(len_str, 0, &length)) {
+		dev_err(dev, "Extent failed to parse length: %s\n", len_str);
+		return -EINVAL;
+	}
+
+	if (!new_extent_valid(dev, start, length))
+		return -EINVAL;
+
+	rc = devm_add_extent(dev, start, length, tag_str);
+	if (rc)
+		return rc;
+
+	return count;
+}
+static DEVICE_ATTR_WO(dc_inject_extent);
+
+static ssize_t dc_del_extent_store(struct device *dev,
+				   struct device_attribute *attr,
+				   const char *buf, size_t count)
+{
+	unsigned long long start;
+	int rc;
+
+	if (kstrtoull(buf, 0, &start)) {
+		dev_err(dev, "Extent failed to parse start value\n");
+		return -EINVAL;
+	}
+
+	rc = dc_delete_extent(dev, start);
+	if (rc)
+		return rc;
+
+	return count;
+}
+static DEVICE_ATTR_WO(dc_del_extent);
+
+static ssize_t dc_force_del_extent_store(struct device *dev,
+					 struct device_attribute *attr,
+					 const char *buf, size_t count)
+{
+	struct cxl_mockmem_data *mdata = dev_get_drvdata(dev);
+	unsigned long long start;
+	void *ext;
+	int rc;
+
+	if (kstrtoull(buf, 0, &start)) {
+		dev_err(dev, "Extent failed to parse start value\n");
+		return -EINVAL;
+	}
+
+	ext = xa_erase(&mdata->dc_accepted_exts, start);
+	if (ext)
+		dev_dbg(dev, "Forcing remove of accepted extent: %llx\n",
+			start);
+
+	dev_dbg(dev, "Forcing delete of extent at %llx\n", start);
+	rc = dc_delete_extent(dev, start);
+	if (rc)
+		return rc;
+
+	return count;
+}
+static DEVICE_ATTR_WO(dc_force_del_extent);
+
 static struct attribute *cxl_mock_mem_attrs[] = {
 	&dev_attr_security_lock.attr,
 	&dev_attr_event_trigger.attr,
 	&dev_attr_fw_buf_checksum.attr,
+	&dev_attr_dc_inject_extent.attr,
+	&dev_attr_dc_del_extent.attr,
+	&dev_attr_dc_force_del_extent.attr,
 	NULL
 };
 ATTRIBUTE_GROUPS(cxl_mock_mem);
