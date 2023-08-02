@@ -2008,6 +2008,41 @@ static bool new_extent_valid(struct device *dev, size_t new_start,
 	return false;
 }
 
+struct dcd_event_dyn_cap dcd_event_rec_template = {
+	.hdr = {
+		.id = UUID_INIT(0xca95afa7, 0xf183, 0x4018,
+				0x8c, 0x2f, 0x95, 0x26, 0x8e, 0x10, 0x1a, 0x2a),
+		.length = sizeof(struct dcd_event_dyn_cap),
+	},
+};
+
+static int send_dc_event(struct mock_event_store *mes, enum dc_event type,
+			 u64 start, u64 length, const char *tag_str)
+{
+	struct device *dev = mes->mds->cxlds.dev;
+	struct dcd_event_dyn_cap *dcd_event_rec;
+
+	dcd_event_rec = devm_kzalloc(dev, sizeof(*dcd_event_rec), GFP_KERNEL);
+	if (!dcd_event_rec)
+		return -ENOMEM;
+
+	memcpy(dcd_event_rec, &dcd_event_rec_template, sizeof(*dcd_event_rec));
+	dcd_event_rec->data.event_type = type;
+	dcd_event_rec->data.extent.start_dpa = cpu_to_le64(start);
+	dcd_event_rec->data.extent.length = cpu_to_le64(length);
+	memcpy(dcd_event_rec->data.extent.tag, tag_str,
+	       min(sizeof(dcd_event_rec->data.extent.tag),
+		   strlen(tag_str)));
+
+	mes_add_event(mes, CXL_EVENT_TYPE_DCD,
+		      (struct cxl_event_record_raw *)dcd_event_rec);
+
+	/* Fake the irq */
+	cxl_mem_get_event_records(mes->mds, CXLDEV_EVENT_STATUS_DCD);
+
+	return 0;
+}
+
 /*
  * Format <start>:<length>:<tag>
  *
@@ -2021,6 +2056,7 @@ static ssize_t dc_inject_extent_store(struct device *dev,
 				      const char *buf, size_t count)
 {
 	char *start_str __free(kfree) = kstrdup(buf, GFP_KERNEL);
+	struct cxl_mockmem_data *mdata = dev_get_drvdata(dev);
 	unsigned long long start, length;
 	char *len_str, *tag_str;
 	size_t buf_len = count;
@@ -2063,6 +2099,13 @@ static ssize_t dc_inject_extent_store(struct device *dev,
 	if (rc)
 		return rc;
 
+	rc = send_dc_event(&mdata->mes, DCD_ADD_CAPACITY, start, length,
+			   tag_str);
+	if (rc) {
+		dev_err(dev, "Failed to add event %d\n", rc);
+		return rc;
+	}
+
 	return count;
 }
 static DEVICE_ATTR_WO(dc_inject_extent);
@@ -2071,6 +2114,7 @@ static ssize_t dc_del_extent_store(struct device *dev,
 				   struct device_attribute *attr,
 				   const char *buf, size_t count)
 {
+	struct cxl_mockmem_data *mdata = dev_get_drvdata(dev);
 	unsigned long long start;
 	int rc;
 
@@ -2082,6 +2126,12 @@ static ssize_t dc_del_extent_store(struct device *dev,
 	rc = dc_delete_extent(dev, start);
 	if (rc)
 		return rc;
+
+	rc = send_dc_event(&mdata->mes, DCD_RELEASE_CAPACITY, start, 0, "");
+	if (rc) {
+		dev_err(dev, "Failed to add event %d\n", rc);
+		return rc;
+	}
 
 	return count;
 }
@@ -2110,6 +2160,13 @@ static ssize_t dc_force_del_extent_store(struct device *dev,
 	rc = dc_delete_extent(dev, start);
 	if (rc)
 		return rc;
+
+	rc = send_dc_event(&mdata->mes, DCD_FORCED_CAPACITY_RELEASE,
+			      start, 0, "");
+	if (rc) {
+		dev_err(dev, "Failed to add event %d\n", rc);
+		return rc;
+	}
 
 	return count;
 }
