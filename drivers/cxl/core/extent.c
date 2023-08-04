@@ -118,6 +118,10 @@ int dax_region_create_ext(struct cxl_dax_region *cxlr_dax,
 	if (rc)
 		goto err;
 
+	rc = cxl_region_notify_extent(cxled->cxld.region, DCD_ADD_CAPACITY, dr_extent);
+	if (rc)
+		goto err;
+
 	dev_dbg(dev, "DAX region extent HPA %#llx - %#llx\n",
 		dr_extent->hpa_range.start, dr_extent->hpa_range.end);
 

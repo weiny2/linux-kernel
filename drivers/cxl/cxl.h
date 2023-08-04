@@ -10,6 +10,7 @@
 #include <linux/log2.h>
 #include <linux/node.h>
 #include <linux/io.h>
+#include <linux/cxl-event.h>
 
 /**
  * DOC: cxl objects
@@ -613,6 +614,14 @@ struct cxl_pmem_region {
 	struct cxl_pmem_region_mapping mapping[];
 };
 
+/* See CXL 3.0 8.2.9.2.1.5 */
+enum dc_event {
+	DCD_ADD_CAPACITY,
+	DCD_RELEASE_CAPACITY,
+	DCD_FORCED_CAPACITY_RELEASE,
+	DCD_REGION_CONFIGURATION_UPDATED,
+};
+
 struct cxl_dax_region {
 	struct device dev;
 	struct cxl_region *cxlr;
@@ -645,6 +654,8 @@ struct dr_extent {
 	struct cxl_ed_extent ed_ext;
 };
 
+int cxl_region_notify_extent(struct cxl_region *cxlr, enum dc_event event,
+			     struct dr_extent *dr_extent);
 int dax_region_create_ext(struct cxl_dax_region *cxlr_dax,
 			  struct range *hpa_range,
 			  const char *label,
@@ -891,10 +902,18 @@ bool is_cxl_region(struct device *dev);
 
 extern struct bus_type cxl_bus_type;
 
+/* Driver Notifier Data */
+struct cxl_drv_nd {
+	enum dc_event event;
+	struct cxl_dc_extent *dc_extent;
+	struct dr_extent *dr_ext;
+};
+
 struct cxl_driver {
 	const char *name;
 	int (*probe)(struct device *dev);
 	void (*remove)(struct device *dev);
+	int (*notify)(struct device *dev, struct cxl_drv_nd *nd);
 	struct device_driver drv;
 	int id;
 };
@@ -940,6 +959,10 @@ struct cxl_pmem_region *to_cxl_pmem_region(struct device *dev);
 int cxl_add_to_region(struct cxl_port *root,
 		      struct cxl_endpoint_decoder *cxled);
 struct cxl_dax_region *to_cxl_dax_region(struct device *dev);
+bool cxl_dc_extent_in_ed(struct cxl_endpoint_decoder *cxled,
+			 struct cxl_dc_extent *extent);
+int cxl_ed_notify_extent(struct cxl_endpoint_decoder *cxled,
+			 struct cxl_drv_nd *nd);
 #else
 static inline bool is_cxl_pmem_region(struct device *dev)
 {
@@ -957,6 +980,16 @@ static inline int cxl_add_to_region(struct cxl_port *root,
 static inline struct cxl_dax_region *to_cxl_dax_region(struct device *dev)
 {
 	return NULL;
+}
+static inline bool cxl_dc_extent_in_ed(struct cxl_endpoint_decoder *cxled,
+				       struct cxl_dc_extent *extent)
+{
+	return false;
+}
+static inline int cxl_ed_notify_extent(struct cxl_endpoint_decoder *cxled,
+				       struct cxl_drv_nd *nd)
+{
+	return 0;
 }
 #endif
 
