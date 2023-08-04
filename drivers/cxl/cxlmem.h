@@ -682,6 +682,7 @@ enum cxl_event_log_type {
 	CXL_EVENT_TYPE_WARN,
 	CXL_EVENT_TYPE_FAIL,
 	CXL_EVENT_TYPE_FATAL,
+	CXL_EVENT_TYPE_DCD,
 	CXL_EVENT_TYPE_MAX
 };
 
@@ -772,6 +773,8 @@ struct cxl_dc_extent_data {
 	u64 length;
 	u8 tag[CXL_DC_EXTENT_TAG_LEN];
 	u16 shared_extent_seq;
+	struct cxl_memdev_state *mds;
+	struct kref region_ref;
 };
 
 /*
@@ -783,6 +786,21 @@ struct cxl_dc_extent {
 	u8 tag[CXL_DC_EXTENT_TAG_LEN];
 	__le16 shared_extn_seq;
 	u8 reserved[6];
+} __packed;
+
+/*
+ * Dynamic Capacity Event Record
+ * CXL rev 3.0 section 8.2.9.2.1.5; Table 8-47
+ */
+struct cxl_event_dcd {
+	struct cxl_event_record_hdr hdr;
+	u8 event_type;
+	u8 reserved;
+	__le16 host_id;
+	u8 region_index;
+	u8 reserved1[3];
+	struct cxl_dc_extent extent;
+	u8 reserved2[32];
 } __packed;
 
 struct cxl_mbox_get_partition_info {
@@ -997,6 +1015,8 @@ int cxl_mem_get_poison(struct cxl_memdev *cxlmd, u64 offset, u64 len,
 int cxl_trigger_poison_list(struct cxl_memdev *cxlmd);
 int cxl_inject_poison(struct cxl_memdev *cxlmd, u64 dpa);
 int cxl_clear_poison(struct cxl_memdev *cxlmd, u64 dpa);
+
+void cxl_dc_extent_put(struct cxl_dc_extent_data *extent);
 
 #ifdef CONFIG_CXL_SUSPEND
 void cxl_mem_active_inc(void);

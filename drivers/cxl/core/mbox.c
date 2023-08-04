@@ -908,6 +908,8 @@ static int cxl_store_dc_extent(struct cxl_memdev_state *mds,
 	extent->length = len;
 	memcpy(extent->tag, dc_extent->tag, sizeof(extent->tag));
 	extent->shared_extent_seq = le16_to_cpu(dc_extent->shared_extn_seq);
+	kref_init(&extent->region_ref);
+	extent->mds = mds;
 
 	rc = xa_insert(&mds->dc_extent_list, extent->dpa_start, extent,
 			 GFP_KERNEL);
@@ -944,6 +946,14 @@ static const uuid_t dram_event_uuid =
 static const uuid_t mem_mod_event_uuid =
 	UUID_INIT(0xfe927475, 0xdd59, 0x4339,
 		  0xa5, 0x86, 0x79, 0xba, 0xb1, 0x13, 0xb7, 0x74);
+
+/*
+ * Dynamic Capacity Event Record
+ * CXL rev 3.0 section 8.2.9.2.1.3; Table 8-45
+ */
+static const uuid_t dc_event_uuid =
+	UUID_INIT(0xca95afa7, 0xf183, 0x4018, 0x8c,
+		  0x2f, 0x95, 0x26, 0x8e, 0x10, 0x1a, 0x2a);
 
 static void cxl_event_trace_record(const struct cxl_memdev *cxlmd,
 				   enum cxl_event_log_type type,
@@ -1091,6 +1101,95 @@ static void cxl_release_dc_extent(struct cxl_memdev_state *mds,
 	devm_kfree(dev, extent);
 }
 
+static void cxl_release_extent(struct kref *kref)
+{
+	struct cxl_dc_extent_data *extent = container_of(kref,
+						struct cxl_dc_extent_data,
+						region_ref);
+	struct cxl_memdev_state *mds = extent->mds;
+
+	cxl_release_dc_extent(mds, extent);
+}
+
+void cxl_dc_extent_put(struct cxl_dc_extent_data *extent)
+{
+	kref_put(&extent->region_ref, cxl_release_extent);
+}
+EXPORT_SYMBOL_NS_GPL(cxl_dc_extent_put, CXL);
+
+static int cxl_handle_dcd_release_event(struct cxl_memdev_state *mds,
+					struct cxl_dc_extent *rel_extent)
+{
+	struct device *dev = mds->cxlds.dev;
+	struct cxl_dc_extent_data *extent;
+	u64 dpa, size;
+
+	dpa = le64_to_cpu(rel_extent->start_dpa);
+	size = le64_to_cpu(rel_extent->length);
+	dev_dbg(dev, "Release DC extent DPA:%#llx LEN:%#llx\n",
+		dpa, size);
+
+	extent = xa_erase(&mds->dc_extent_list, dpa);
+	if (!extent) {
+		dev_err(dev, "No extent found with DPA:%#llx\n", dpa);
+		return -EINVAL;
+	}
+	cxl_dc_extent_put(extent);
+	return 0;
+}
+
+static int cxl_handle_dcd_add_event(struct cxl_memdev_state *mds,
+				    struct cxl_dc_extent *add_extent)
+{
+	struct range alloc_range, *resp_range;
+	struct device *dev = mds->cxlds.dev;
+	int rc;
+
+	dev_dbg(dev, "Add DC extent DPA:%#llx LEN:%#llx\n",
+		le64_to_cpu(add_extent->start_dpa),
+		le64_to_cpu(add_extent->length));
+
+	alloc_range = (struct range){
+		.start = le64_to_cpu(add_extent->start_dpa),
+		.end = le64_to_cpu(add_extent->start_dpa) +
+			le64_to_cpu(add_extent->length) - 1,
+	};
+	resp_range = &alloc_range;
+
+	rc = cxl_store_dc_extent(mds, add_extent);
+	if (rc) {
+		dev_dbg(dev, "unconsumed DC extent DPA:%#llx LEN:%#llx\n",
+			le64_to_cpu(add_extent->start_dpa),
+			le64_to_cpu(add_extent->length));
+		resp_range = NULL;
+	}
+
+	return cxl_send_dc_cap_response(mds, resp_range,
+					CXL_MBOX_OP_ADD_DC_RESPONSE);
+}
+
+static int cxl_handle_dcd_event_records(struct cxl_memdev_state *mds,
+					struct cxl_event_record_raw *rec)
+{
+	struct cxl_event_dcd *record = (struct cxl_event_dcd *)rec;
+	uuid_t *id = &rec->hdr.id;
+
+	if (!uuid_equal(id, &dc_event_uuid))
+		return -EINVAL;
+
+	switch (record->event_type) {
+	case DCD_ADD_CAPACITY:
+		return cxl_handle_dcd_add_event(mds, &record->extent);
+	case DCD_RELEASE_CAPACITY:
+	case DCD_FORCED_CAPACITY_RELEASE:
+		return cxl_handle_dcd_release_event(mds, &record->extent);
+	default:
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 static void cxl_mem_get_records_log(struct cxl_memdev_state *mds,
 				    enum cxl_event_log_type type)
 {
@@ -1134,6 +1233,13 @@ static void cxl_mem_get_records_log(struct cxl_memdev_state *mds,
 				le16_to_cpu(payload->records[i].hdr.handle));
 			cxl_event_trace_record(cxlmd, type,
 					       &payload->records[i]);
+			if (type == CXL_EVENT_TYPE_DCD) {
+				rc = cxl_handle_dcd_event_records(mds,
+								  &payload->records[i]);
+				if (rc)
+					dev_err_ratelimited(dev, "dcd event failed: %d\n",
+							    rc);
+			}
 		}
 
 		if (payload->flags & CXL_GET_EVENT_FLAG_OVERFLOW)
@@ -1165,6 +1271,9 @@ static void cxl_mem_get_records_log(struct cxl_memdev_state *mds,
 void cxl_mem_get_event_records(struct cxl_memdev_state *mds, u32 status)
 {
 	dev_dbg(mds->cxlds.dev, "Reading event logs: %x\n", status);
+
+	if (cxl_dcd_supported(mds) && (status & CXLDEV_EVENT_STATUS_DCD))
+		cxl_mem_get_records_log(mds, CXL_EVENT_TYPE_DCD);
 
 	if (!mds->event.os_mem_events)
 		return;
