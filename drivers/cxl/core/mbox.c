@@ -839,6 +839,8 @@ static int cxl_store_dc_extent(struct cxl_memdev_state *mds,
 	extent->length = le64_to_cpu(dc_extent->length);
 	memcpy(extent->tag, dc_extent->tag, sizeof(extent->tag));
 	extent->shared_extent_seq = le16_to_cpu(dc_extent->shared_extn_seq);
+	kref_init(&extent->region_ref);
+	extent->mds = mds;
 
 	dev_dbg(dev, "dynamic capacity extent DPA:0x%llx LEN:%llx\n",
 		extent->dpa_start, extent->length);
@@ -878,6 +880,14 @@ static const uuid_t dram_event_uuid =
 static const uuid_t mem_mod_event_uuid =
 	UUID_INIT(0xfe927475, 0xdd59, 0x4339,
 		  0xa5, 0x86, 0x79, 0xba, 0xb1, 0x13, 0xb7, 0x74);
+
+/* 
+ * Dynamic Capacity Event Record
+ * CXL rev 3.0 section 8.2.9.2.1.3; Table 8-45
+ */
+static const uuid_t dc_event_uuid =
+	UUID_INIT(0xca95afa7, 0xf183, 0x4018, 0x8c,
+		  0x2f, 0x95, 0x26, 0x8e, 0x10, 0x1a, 0x2a);
 
 static void cxl_event_trace_record(const struct cxl_memdev *cxlmd,
 				   enum cxl_event_log_type type,
@@ -973,6 +983,171 @@ free_pl:
 	return rc;
 }
 
+static int cxl_send_dc_cap_response(struct cxl_memdev_state *mds,
+				struct cxl_mbox_dc_response *res,
+				int extent_cnt, int opcode)
+{
+	struct cxl_mbox_cmd mbox_cmd;
+	size_t size;
+
+	size = struct_size(res, extent_list, extent_cnt);
+	res->extent_list_size = cpu_to_le32(extent_cnt);
+
+	mbox_cmd = (struct cxl_mbox_cmd) {
+		.opcode = opcode,
+		.size_in = size,
+		.payload_in = res,
+	};
+
+	return cxl_internal_send_cmd(mds, &mbox_cmd);
+}
+
+static int cxl_prepare_ext_list(struct cxl_mbox_dc_response **res,
+				int *n, struct range *extent)
+{
+	struct cxl_mbox_dc_response *dc_res;
+	unsigned int size;
+
+	if (!extent)
+		size = struct_size(dc_res, extent_list, 0);
+	else
+		size = struct_size(dc_res, extent_list, *n + 1);
+
+	dc_res = krealloc(*res, size, GFP_KERNEL);
+	if (!dc_res)
+		return -ENOMEM;
+
+	if (extent) {
+		dc_res->extent_list[*n].dpa_start = cpu_to_le64(extent->start);
+		memset(dc_res->extent_list[*n].reserved, 0, 8);
+		dc_res->extent_list[*n].length = cpu_to_le64(range_len(extent));
+		(*n)++;
+	}
+
+	*res = dc_res;
+	return 0;
+}
+
+static void dc_extent_release(struct kref *kref)
+{
+	struct cxl_dc_extent_data *extent = container_of(kref,
+						struct cxl_dc_extent_data,
+						region_ref);
+	struct cxl_memdev_state *mds = extent->mds;
+	struct cxl_mbox_dc_response *dc_res = NULL;
+	struct range rel_range = (struct range) {
+		.start = extent->dpa_start,
+		.end = extent->dpa_start + extent->length - 1,
+	};
+	struct device *dev = mds->cxlds.dev;
+	int extent_cnt = 0, rc;
+
+	rc = cxl_prepare_ext_list(&dc_res, &extent_cnt, &rel_range);
+	if (rc < 0) {
+		dev_err(dev, "Failed to create release response %d\n", rc);
+		goto free_extent;
+	}
+	rc = cxl_send_dc_cap_response(mds, dc_res, extent_cnt,
+				      CXL_MBOX_OP_RELEASE_DC);
+	kfree(dc_res);
+
+free_extent:
+	kfree(extent);
+}
+
+void cxl_dc_extent_put(struct cxl_dc_extent_data *extent)
+{
+	kref_put(&extent->region_ref, dc_extent_release);
+}
+EXPORT_SYMBOL_NS_GPL(cxl_dc_extent_put, CXL);
+
+static int cxl_handle_dcd_release_event(struct cxl_memdev_state *mds,
+					struct cxl_dc_extent *rel_extent)
+{
+	struct device *dev = mds->cxlds.dev;
+	struct cxl_dc_extent_data *extent;
+	resource_size_t dpa, size;
+
+	dpa = le64_to_cpu(rel_extent->start_dpa);
+	size = le64_to_cpu(rel_extent->length);
+	dev_dbg(dev, "Release DC extent DPA:0x%llx LEN:%llx\n",
+		dpa, size);
+
+	extent = xa_erase(&mds->dc_extent_list, dpa);
+	if (!extent) {
+		dev_err(dev, "No extent found with DPA:0x%llx\n", dpa);
+		return -EINVAL;
+	}
+	cxl_dc_extent_put(extent);
+	return 0;
+}
+
+static int cxl_handle_dcd_add_event(struct cxl_memdev_state *mds,
+				    struct cxl_dc_extent *add_extent)
+{
+	struct cxl_mbox_dc_response *dc_res = NULL;
+	struct range alloc_range, *resp_range;
+	struct device *dev = mds->cxlds.dev;
+	int extent_cnt = 0;
+	int rc;
+
+	dev_dbg(dev, "Add DC extent DPA:0x%llx LEN:%llx\n",
+		le64_to_cpu(add_extent->start_dpa),
+		le64_to_cpu(add_extent->length));
+
+	alloc_range = (struct range){
+		.start = le64_to_cpu(add_extent->start_dpa),
+		.end = le64_to_cpu(add_extent->start_dpa) +
+			le64_to_cpu(add_extent->length) - 1,
+	};
+	resp_range = &alloc_range;
+
+	rc = cxl_store_dc_extent(mds, add_extent);
+	if (rc) {
+		dev_dbg(dev, "unconsumed DC extent DPA:0x%llx LEN:%llx\n",
+			le64_to_cpu(add_extent->start_dpa),
+			le64_to_cpu(add_extent->length));
+		resp_range = NULL;
+	}
+
+	rc = cxl_prepare_ext_list(&dc_res, &extent_cnt, resp_range);
+	if (rc < 0) {
+		dev_err(dev, "Couldn't create extent list %d\n", rc);
+		return rc;
+	}
+
+	rc = cxl_send_dc_cap_response(mds, dc_res, extent_cnt,
+				      CXL_MBOX_OP_ADD_DC_RESPONSE);
+	kfree(dc_res);
+	return rc;
+}
+
+/* Returns 0 if the event was handled successfully. */
+static int cxl_handle_dcd_event_records(struct cxl_memdev_state *mds,
+					struct cxl_event_record_raw *rec)
+{
+	struct dcd_event_dyn_cap *record = (struct dcd_event_dyn_cap *)rec;
+	uuid_t *id = &rec->hdr.id;
+	int rc;
+
+	if (!uuid_equal(id, &dc_event_uuid))
+		return -EINVAL;
+
+	switch (record->data.event_type) {
+	case DCD_ADD_CAPACITY:
+		rc = cxl_handle_dcd_add_event(mds, &record->data.extent);
+		break;
+	case DCD_RELEASE_CAPACITY:
+        case DCD_FORCED_CAPACITY_RELEASE:
+		rc = cxl_handle_dcd_release_event(mds, &record->data.extent);
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return rc;
+}
+
 static void cxl_mem_get_records_log(struct cxl_memdev_state *mds,
 				    enum cxl_event_log_type type)
 {
@@ -1016,6 +1191,13 @@ static void cxl_mem_get_records_log(struct cxl_memdev_state *mds,
 				le16_to_cpu(payload->records[i].hdr.handle));
 			cxl_event_trace_record(cxlmd, type,
 					       &payload->records[i]);
+			if (type == CXL_EVENT_TYPE_DCD) {
+				rc = cxl_handle_dcd_event_records(mds,
+								  &payload->records[i]);
+				if (rc) 
+					dev_err_ratelimited(dev, "dcd event failed: %d\n",
+							    rc);
+			}
 		}
 
 		if (payload->flags & CXL_GET_EVENT_FLAG_OVERFLOW)
@@ -1056,6 +1238,8 @@ void cxl_mem_get_event_records(struct cxl_memdev_state *mds, u32 status)
 		cxl_mem_get_records_log(mds, CXL_EVENT_TYPE_WARN);
 	if (status & CXLDEV_EVENT_STATUS_INFO)
 		cxl_mem_get_records_log(mds, CXL_EVENT_TYPE_INFO);
+	if (status & CXLDEV_EVENT_STATUS_DCD)
+		cxl_mem_get_records_log(mds, CXL_EVENT_TYPE_DCD);
 }
 EXPORT_SYMBOL_NS_GPL(cxl_mem_get_event_records, CXL);
 
@@ -1712,7 +1896,7 @@ static void cxl_destroy_mds(void *_mds)
 
 	xa_for_each(&mds->dc_extent_list, index, extent) {
 		xa_erase(&mds->dc_extent_list, index);
-		kfree(extent);
+		cxl_dc_extent_put(extent);
 	}
 	xa_destroy(&mds->dc_extent_list);
 }

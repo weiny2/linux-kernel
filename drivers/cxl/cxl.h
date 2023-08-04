@@ -163,6 +163,7 @@ static inline int ways_to_eiw(unsigned int ways, u8 *eiw)
 #define CXLDEV_EVENT_STATUS_WARN		BIT(1)
 #define CXLDEV_EVENT_STATUS_FAIL		BIT(2)
 #define CXLDEV_EVENT_STATUS_FATAL		BIT(3)
+#define CXLDEV_EVENT_STATUS_DCD                 BIT(4)
 
 #define CXLDEV_EVENT_STATUS_ALL (CXLDEV_EVENT_STATUS_INFO |	\
 				 CXLDEV_EVENT_STATUS_WARN |	\
@@ -599,6 +600,14 @@ struct cxl_pmem_region {
 	struct range hpa_range;
 	int nr_mappings;
 	struct cxl_pmem_region_mapping mapping[];
+};
+
+/* See CXL 3.0 8.2.9.2.1.5 */
+enum dc_event {
+        DCD_ADD_CAPACITY,
+        DCD_RELEASE_CAPACITY,
+        DCD_FORCED_CAPACITY_RELEASE,
+        DCD_REGION_CONFIGURATION_UPDATED,
 };
 
 struct cxl_dax_region {
