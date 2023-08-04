@@ -103,6 +103,50 @@ static int cxl_debugfs_poison_clear(void *data, u64 dpa)
 DEFINE_DEBUGFS_ATTRIBUTE(cxl_poison_clear_fops, NULL,
 			 cxl_debugfs_poison_clear, "%llx\n");
 
+static int match_ep_decoder_by_range(struct device *dev, void *data)
+{
+	struct cxl_dc_extent *dc_extent = data;
+	struct cxl_endpoint_decoder *cxled;
+
+	if (!is_endpoint_decoder(dev))
+		return 0;
+
+	cxled = to_cxl_endpoint_decoder(dev);
+	if (!cxled->cxld.region)
+		return 0;
+
+	return cxl_dc_extent_in_endpoint_decoder(cxled, dc_extent);
+}
+
+static int cxl_mem_notify(struct device *dev, struct cxl_drv_nd *nd)
+{
+	struct cxl_memdev *cxlmd = to_cxl_memdev(dev);
+	struct cxl_port *endpoint = cxlmd->endpoint;
+	struct cxl_endpoint_decoder *cxled;
+	struct cxl_dc_extent *dc_extent;
+	struct device *ep_dev;
+	int rc;
+
+	dc_extent = nd->dc_extent;
+	dev_dbg(dev, "notify DC action %d DPA:%#llx LEN:%#llx\n",
+		nd->event, le64_to_cpu(dc_extent->start_dpa),
+		le64_to_cpu(dc_extent->length));
+
+	ep_dev = device_find_child(&endpoint->dev, dc_extent,
+				   match_ep_decoder_by_range);
+	if (!ep_dev) {
+		dev_dbg(dev, "Extent DPA:%#llx LEN:%#llx not mapped; evt %d\n",
+			le64_to_cpu(dc_extent->start_dpa),
+			le64_to_cpu(dc_extent->length), nd->event);
+		return -ENXIO;
+	}
+
+	cxled = to_cxl_endpoint_decoder(ep_dev);
+	rc = cxl_ed_notify_extent(cxled, nd);
+	put_device(ep_dev);
+	return rc;
+}
+
 static int cxl_mem_probe(struct device *dev)
 {
 	struct cxl_memdev *cxlmd = to_cxl_memdev(dev);
@@ -244,6 +288,7 @@ __ATTRIBUTE_GROUPS(cxl_mem);
 static struct cxl_driver cxl_mem_driver = {
 	.name = "cxl_mem",
 	.probe = cxl_mem_probe,
+	.notify = cxl_mem_notify,
 	.id = CXL_DEVICE_MEMORY_EXPANDER,
 	.drv = {
 		.dev_groups = cxl_mem_groups,

@@ -42,6 +42,27 @@ static void cxl_dax_region_add_extents(struct cxl_dax_region *cxlr_dax,
 	device_for_each_child(&cxlr_dax->dev, dax_region, cxl_dax_region_add_extent);
 }
 
+static int cxl_dax_region_notify(struct device *dev,
+				 struct cxl_drv_nd *nd)
+{
+	struct cxl_dax_region *cxlr_dax = to_cxl_dax_region(dev);
+	struct dax_region *dax_region = dev_get_drvdata(dev);
+	struct region_extent *reg_ext = nd->reg_ext;
+
+	switch (nd->event) {
+	case DCD_ADD_CAPACITY:
+		return __cxl_dax_region_add_extent(dax_region, reg_ext);
+	case DCD_RELEASE_CAPACITY:
+		return 0;
+	case DCD_FORCED_CAPACITY_RELEASE:
+	default:
+		dev_err(&cxlr_dax->dev, "Unknown DC event %d\n", nd->event);
+		break;
+	}
+
+	return -ENXIO;
+}
+
 static int cxl_dax_region_probe(struct device *dev)
 {
 	struct cxl_dax_region *cxlr_dax = to_cxl_dax_region(dev);
@@ -85,6 +106,7 @@ static int cxl_dax_region_probe(struct device *dev)
 static struct cxl_driver cxl_dax_region_driver = {
 	.name = "cxl_dax_region",
 	.probe = cxl_dax_region_probe,
+	.notify = cxl_dax_region_notify,
 	.id = CXL_DEVICE_DAX_REGION,
 	.drv = {
 		.suppress_bind_attrs = true,
