@@ -620,18 +620,6 @@ struct cxl_mbox_dc_response {
 } __packed;
 
 /*
- * CXL rev 3.1 section 8.2.9.2.1.6; Table 8-51
- */
-#define CXL_DC_EXTENT_TAG_LEN 0x10
-struct cxl_dc_extent {
-	__le64 start_dpa;
-	__le64 length;
-	u8 tag[CXL_DC_EXTENT_TAG_LEN];
-	__le16 shared_extn_seq;
-	u8 reserved[6];
-} __packed;
-
-/*
  * Get Dynamic Capacity Extent List; Input Payload
  * CXL rev 3.1 section 8.2.9.9.9.2; Table 8-166
  */
@@ -715,6 +703,14 @@ struct cxl_mbox_identify {
 		  0x13, 0xb7, 0x74)
 
 /*
+ * Dynamic Capacity Event Record
+ * CXL rev 3.1 section 8.2.9.2.1; Table 8-43
+ */
+#define CXL_EVENT_DC_EVENT_UUID                                             \
+	UUID_INIT(0xca95afa7, 0xf183, 0x4018, 0x8c, 0x2f, 0x95, 0x26, 0x8e, \
+		  0x10, 0x1a, 0x2a)
+
+/*
  * Get Event Records output payload
  * CXL rev 3.0 section 8.2.9.2.2; Table 8-50
  */
@@ -739,6 +735,7 @@ enum cxl_event_log_type {
 	CXL_EVENT_TYPE_WARN,
 	CXL_EVENT_TYPE_FAIL,
 	CXL_EVENT_TYPE_FATAL,
+	CXL_EVENT_TYPE_DCD,
 	CXL_EVENT_TYPE_MAX
 };
 
