@@ -1025,6 +1025,7 @@ int cxl_memdev_security_state_init(struct cxl_memdev_state *mds)
 
 	return devm_add_action_or_reset(cxlds->dev, put_sanitize, mds);
 }
+EXPORT_SYMBOL_NS_GPL(cxl_memdev_security_state_init, CXL);
 
 struct cxl_memdev *devm_cxl_add_memdev(struct cxl_dev_state *cxlds)
 {
