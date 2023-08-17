@@ -90,8 +90,11 @@ int dax_region_ext_create_dev(struct dax_region *dax_region,
 			      resource_size_t offset,
 			      resource_size_t length,
 			      const char *label);
+void dax_region_ext_del_dev(struct dax_region *dax_region,
+			    struct dax_reg_ext_dev *dr_reg_ext_dev);
 #define to_dr_ext_dev(dev)	\
 	container_of(dev, struct dax_reg_ext_dev, dev)
+bool is_dr_ext_dev(struct device *dev);
 
 struct dax_mapping {
 	struct device dev;

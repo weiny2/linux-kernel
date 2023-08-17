@@ -824,6 +824,35 @@ out:
 }
 EXPORT_SYMBOL_NS_GPL(cxl_enumerate_cmds, CXL);
 
+static int cxl_notify_dc_extent(struct cxl_memdev_state *mds,
+				enum dc_event event,
+				struct cxl_dc_extent_data *extent)
+{
+	struct cxl_drv_nd nd = (struct cxl_drv_nd) {
+		.event = event,
+		.extent = extent
+	};
+	struct device *dev;
+	int rc = 0;
+
+	dev = &mds->cxlds.cxlmd->dev;
+	dev_dbg(dev, "Trying notify: type %d DPA:%llx LEN:%llx\n",
+		event, extent->dpa_start, extent->length);
+
+	device_lock(dev);
+	if (dev->driver) {
+		struct cxl_driver *mem_drv = to_cxl_drv(dev->driver);
+
+		if (mem_drv->notify) {
+			dev_dbg(dev, "Notify: type %d DPA:%llx LEN:%llx\n",
+				event, extent->dpa_start, extent->length);
+			rc = mem_drv->notify(dev, &nd);
+		}
+	}
+	device_unlock(dev);
+	return rc;
+}
+
 static int cxl_store_dc_extent(struct cxl_memdev_state *mds,
 			       struct cxl_dc_extent *dc_extent)
 {
@@ -852,9 +881,10 @@ static int cxl_store_dc_extent(struct cxl_memdev_state *mds,
 			dev_warn_once(dev, "Duplicate extent DPA:%llx LEN:%llx\n",
 				      extent->dpa_start, extent->length);
 		kfree(extent);
+		return rc;
 	}
 
-	return rc;
+	return cxl_notify_dc_extent(mds, DCD_ADD_CAPACITY, extent);
 }
 
 /*
@@ -1074,7 +1104,8 @@ void cxl_dc_extent_put(struct cxl_dc_extent_data *extent)
 EXPORT_SYMBOL_NS_GPL(cxl_dc_extent_put, CXL);
 
 static int cxl_handle_dcd_release_event(struct cxl_memdev_state *mds,
-					struct cxl_dc_extent *rel_extent)
+					struct cxl_dc_extent *rel_extent,
+					enum dc_event event)
 {
 	struct device *dev = mds->cxlds.dev;
 	struct cxl_dc_extent_data *extent;
@@ -1090,6 +1121,7 @@ static int cxl_handle_dcd_release_event(struct cxl_memdev_state *mds,
 		dev_err(dev, "No extent found with DPA:0x%llx\n", dpa);
 		return -EINVAL;
 	}
+	cxl_notify_dc_extent(mds, event, extent);
 	cxl_dc_extent_put(extent);
 	return 0;
 }
@@ -1151,7 +1183,8 @@ static int cxl_handle_dcd_event_records(struct cxl_memdev_state *mds,
 		break;
 	case DCD_RELEASE_CAPACITY:
         case DCD_FORCED_CAPACITY_RELEASE:
-		rc = cxl_handle_dcd_release_event(mds, &record->data.extent);
+		rc = cxl_handle_dcd_release_event(mds, &record->data.extent,
+						  record->data.event_type);
 		break;
 	default:
 		return -EINVAL;

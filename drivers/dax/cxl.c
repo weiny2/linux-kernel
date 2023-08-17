@@ -59,6 +59,29 @@ static int cxl_dax_region_create_extent(struct dax_region *dax_region,
 	return 0;
 }
 
+static int cxl_dax_region_add_extent(struct cxl_dax_region *cxlr_dax,
+				     struct cxl_dr_extent *cxl_dr_ext)
+{
+	/*
+	 * get not zero is important because this is racing with the
+	 * region driver which is racing with the memory device which
+	 * could be removing the extent at the same time.
+	 */
+	if (cxl_dr_extent_get_not_zero(cxl_dr_ext)) {
+		struct dax_region *dax_region;
+		int rc;
+
+		dax_region = dev_get_drvdata(&cxlr_dax->dev);
+		dev_dbg(&cxlr_dax->dev, "Creating HPA:%llx LEN:%llx\n",
+			cxl_dr_ext->hpa_offset, cxl_dr_ext->hpa_length);
+		rc = cxl_dax_region_create_extent(dax_region, cxl_dr_ext);
+		cxl_dr_extent_put(cxl_dr_ext);
+		if (rc)
+			return rc;
+	}
+	return 0;
+}
+
 static int cxl_dax_region_create_extents(struct cxl_dax_region *cxlr_dax)
 {
 	struct cxl_dr_extent *cxl_dr_ext;
@@ -66,25 +89,66 @@ static int cxl_dax_region_create_extents(struct cxl_dax_region *cxlr_dax)
 
 	dev_dbg(&cxlr_dax->dev, "Adding extents\n");
 	xa_for_each(&cxlr_dax->extents, index, cxl_dr_ext) {
-		/*
-		 * get not zero is important because this is racing with the
-		 * region driver which is racing with the memory device which
-		 * could be removing the extent at the same time.
-		 */
-		if (cxl_dr_extent_get_not_zero(cxl_dr_ext)) {
-			struct dax_region *dax_region;
-			int rc;
+		int rc;
 
-			dax_region = dev_get_drvdata(&cxlr_dax->dev);
-			dev_dbg(&cxlr_dax->dev, "Found OFF:%llx LEN:%llx\n",
-				cxl_dr_ext->hpa_offset, cxl_dr_ext->hpa_length);
-			rc = cxl_dax_region_create_extent(dax_region, cxl_dr_ext);
-			cxl_dr_extent_put(cxl_dr_ext);
-			if (rc)
-				return rc;
-		}
+		rc = cxl_dax_region_add_extent(cxlr_dax, cxl_dr_ext);
+		if (rc)
+			return rc;
 	}
 	return 0;
+}
+
+static int match_cxl_dr_extent(struct device *dev, void *data)
+{
+	struct dax_reg_ext_dev *dr_reg_ext_dev;
+	struct dax_region_extent *dr_extent;
+
+	if (!is_dr_ext_dev(dev))
+		return 0;
+
+	dr_reg_ext_dev = to_dr_ext_dev(dev);
+	dr_extent = dr_reg_ext_dev->dr_extent;
+	return data == dr_extent->private_data;
+}
+
+static int cxl_dax_region_rm_extent(struct cxl_dax_region *cxlr_dax,
+				    struct cxl_dr_extent *cxl_dr_ext)
+{
+	struct dax_reg_ext_dev *dr_reg_ext_dev;
+	struct dax_region *dax_region;
+	struct device *dev;
+
+	dev = device_find_child(&cxlr_dax->dev, cxl_dr_ext,
+				match_cxl_dr_extent);
+	if (!dev)
+		return -EINVAL;
+	dr_reg_ext_dev = to_dr_ext_dev(dev);
+	put_device(dev);
+	dax_region = dev_get_drvdata(&cxlr_dax->dev);
+	dax_region_ext_del_dev(dax_region, dr_reg_ext_dev);
+	return 0;
+}
+
+static int cxl_dax_region_notify(struct device *dev,
+				 struct cxl_drv_nd *nd)
+{
+	struct cxl_dax_region *cxlr_dax = to_cxl_dax_region(dev);
+	struct cxl_dr_extent *cxl_dr_ext = nd->cxl_dr_ext;
+	int rc = 0;
+
+	switch (nd->event) {
+	case DCD_ADD_CAPACITY:
+		rc = cxl_dax_region_add_extent(cxlr_dax, cxl_dr_ext);
+		break;
+	case DCD_RELEASE_CAPACITY:
+	case DCD_FORCED_CAPACITY_RELEASE:
+		rc = cxl_dax_region_rm_extent(cxlr_dax, cxl_dr_ext);
+		break;
+	default:
+		dev_err(&cxlr_dax->dev, "Unknown DC event %d\n", nd->event);
+		break;
+	}
+	return rc;
 }
 
 static int cxl_dax_region_probe(struct device *dev)
@@ -134,6 +198,7 @@ static int cxl_dax_region_probe(struct device *dev)
 static struct cxl_driver cxl_dax_region_driver = {
 	.name = "cxl_dax_region",
 	.probe = cxl_dax_region_probe,
+	.notify = cxl_dax_region_notify,
 	.id = CXL_DEVICE_DAX_REGION,
 	.drv = {
 		.suppress_bind_attrs = true,
