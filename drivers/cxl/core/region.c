@@ -1410,8 +1410,8 @@ static int cxl_region_validate_position(struct cxl_region *cxlr,
 	return 0;
 }
 
-static bool cxl_dc_extent_in_ed(struct cxl_endpoint_decoder *cxled,
-				struct cxl_dc_extent_data *extent)
+bool cxl_dc_extent_in_ed(struct cxl_endpoint_decoder *cxled,
+			 struct cxl_dc_extent_data *extent)
 {
 	struct range dpa_range = (struct range){
 		.start = extent->dpa_start,
@@ -1429,14 +1429,66 @@ static bool cxl_dc_extent_in_ed(struct cxl_endpoint_decoder *cxled,
 	return (cxled->dpa_res->start <= dpa_range.start &&
 		dpa_range.end <= cxled->dpa_res->end);
 }
+EXPORT_SYMBOL_NS_GPL(cxl_dc_extent_in_ed, CXL);
+
+static int cxl_region_notify_extent(struct cxl_endpoint_decoder *cxled,
+				    enum dc_event event,
+				    struct cxl_dr_extent *cxl_dr_ext)
+{
+	struct cxl_dax_region *cxlr_dax;
+	struct device *dev;
+	int rc = 0;
+
+	cxlr_dax = cxled->cxld.region->cxlr_dax;
+	dev = &cxlr_dax->dev;
+	dev_dbg(dev, "Trying notify: type %d HPA offset:%#llx LEN:%#llx\n",
+		event, cxl_dr_ext->hpa_offset, cxl_dr_ext->hpa_length);
+
+	device_lock(dev);
+	if (dev->driver) {
+		struct cxl_driver *reg_drv = to_cxl_drv(dev->driver);
+		struct cxl_drv_nd nd = (struct cxl_drv_nd) {
+			.event = event,
+			.cxl_dr_ext = cxl_dr_ext,
+		};
+
+		if (reg_drv->notify) {
+			dev_dbg(dev, "Notify: type %d HPA offset:%#llx LEN:%#llx\n",
+				event, cxl_dr_ext->hpa_offset,
+				cxl_dr_ext->hpa_length);
+			rc = reg_drv->notify(dev, &nd);
+		}
+	}
+	device_unlock(dev);
+	return rc;
+}
+
+static resource_size_t
+cxl_dc_extent_to_hpa_offset(struct cxl_endpoint_decoder *cxled,
+			    struct cxl_dc_extent_data *extent)
+{
+	struct cxl_dax_region *cxlr_dax;
+	resource_size_t dpa_offset, hpa;
+	struct range *ed_hpa_range;
+
+	cxlr_dax = cxled->cxld.region->cxlr_dax;
+
+	/*
+	 * Without interleave...
+	 * HPA offset == DPA offset
+	 * ... but do the math anyway
+	 */
+	dpa_offset = extent->dpa_start - cxled->dpa_res->start;
+	ed_hpa_range = &cxled->cxld.hpa_range;
+	hpa = ed_hpa_range->start + dpa_offset;
+	return hpa - cxlr_dax->hpa_range.start;
+}
 
 static int cxl_ed_add_one_extent(struct cxl_endpoint_decoder *cxled,
 				 struct cxl_dc_extent_data *extent)
 {
 	struct cxl_dr_extent *cxl_dr_ext;
 	struct cxl_dax_region *cxlr_dax;
-	resource_size_t dpa_offset, hpa;
-	struct range *ed_hpa_range;
 	struct device *dev;
 	int rc;
 
@@ -1463,15 +1515,7 @@ static int cxl_ed_add_one_extent(struct cxl_endpoint_decoder *cxled,
 	cxl_dr_ext->extent = extent;
 	kref_init(&cxl_dr_ext->region_ref);
 
-	/*
-	 * Without interleave...
-	 * HPA offset == DPA offset
-	 * ... but do the math anyway
-	 */
-	dpa_offset = extent->dpa_start - cxled->dpa_res->start;
-	ed_hpa_range = &cxled->cxld.hpa_range;
-	hpa = ed_hpa_range->start + dpa_offset;
-	cxl_dr_ext->hpa_offset = hpa - cxlr_dax->hpa_range.start;
+	cxl_dr_ext->hpa_offset = cxl_dc_extent_to_hpa_offset(cxled, extent);
 
 	/* Without interleave carry length and label through */
 	cxl_dr_ext->hpa_length = extent->length;
@@ -1488,6 +1532,7 @@ static int cxl_ed_add_one_extent(struct cxl_endpoint_decoder *cxled,
 	}
 	/* Put in cxl_dr_release() */
 	cxl_dc_extent_get(cxl_dr_ext->extent);
+	cxl_region_notify_extent(cxled, DCD_ADD_CAPACITY, cxl_dr_ext);
 	return 0;
 }
 
@@ -1524,6 +1569,57 @@ static int cxl_ed_add_extents(struct cxl_endpoint_decoder *cxled)
 	}
 	return 0;
 }
+
+static int cxl_ed_rm_dc_extent(struct cxl_endpoint_decoder *cxled,
+			       enum dc_event event,
+			       struct cxl_dc_extent_data *extent)
+{
+	struct cxl_region *cxlr = cxled->cxld.region;
+	struct cxl_dax_region *cxlr_dax = cxlr->cxlr_dax;
+	struct cxl_dr_extent *cxl_dr_ext;
+	resource_size_t hpa_offset;
+
+	hpa_offset = cxl_dc_extent_to_hpa_offset(cxled, extent);
+
+	/*
+	 * NOTE on Interleaving: There is no need to 'break up' the cxl_dr_ext.
+	 * If one of the extents comprising it is gone it should be removed
+	 * from the region to prevent future use.  Later code may save other
+	 * extents for future processing.  But for now the corelation is 1:1:1
+	 * so just erase the extent.
+	 */
+	cxl_dr_ext = xa_erase(&cxlr_dax->extents, hpa_offset);
+
+	dev_dbg(&cxlr_dax->dev, "Remove DAX region ext HPA offset:%#llx\n",
+		cxl_dr_ext->hpa_offset);
+	cxl_region_notify_extent(cxled, event, cxl_dr_ext);
+	cxl_dr_extent_put(cxl_dr_ext);
+	return 0;
+}
+
+int cxl_ed_notify_extent(struct cxl_endpoint_decoder *cxled,
+			 struct cxl_drv_nd *nd)
+{
+	int rc = 0;
+
+	switch (nd->event) {
+	case DCD_ADD_CAPACITY:
+		if (cxl_dc_extent_get_not_zero(nd->extent)) {
+			rc = cxl_ed_add_one_extent(cxled, nd->extent);
+			cxl_dc_extent_put(nd->extent);
+		}
+		break;
+	case DCD_RELEASE_CAPACITY:
+	case DCD_FORCED_CAPACITY_RELEASE:
+		rc = cxl_ed_rm_dc_extent(cxled, nd->event, nd->extent);
+		break;
+	default:
+		dev_err(&cxled->cxld.dev, "Unknown DC event %d\n", nd->event);
+		break;
+	}
+	return rc;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_ed_notify_extent, CXL);
 
 static int cxl_region_attach_position(struct cxl_region *cxlr,
 				      struct cxl_root_decoder *cxlrd,

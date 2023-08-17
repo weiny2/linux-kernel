@@ -60,6 +60,12 @@ const struct device_type dr_extent_type = {
 	.groups = dr_extent_attribute_groups,
 };
 
+bool is_dr_extent(struct device *dev)
+{
+	return dev->type == &dr_extent_type;
+}
+EXPORT_SYMBOL_GPL(is_dr_extent);
+
 void dr_extent_get(struct dr_extent *dr_extent)
 {
 	kref_get(&dr_extent->ref);
@@ -137,3 +143,10 @@ err:
 	return rc;
 }
 EXPORT_SYMBOL_GPL(dax_region_ext_create_dev);
+
+void dax_region_ext_del(struct dax_region *dax_region,
+			struct dr_extent *dr_extent)
+{
+	devm_release_action(dax_region->dev, dr_ext_reg_put, dr_extent);
+}
+EXPORT_SYMBOL_GPL(dax_region_ext_del);

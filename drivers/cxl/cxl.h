@@ -825,10 +825,18 @@ bool is_cxl_region(struct device *dev);
 
 extern struct bus_type cxl_bus_type;
 
+/* Driver Notifier Data */
+struct cxl_drv_nd {
+	enum dc_event event;
+	struct cxl_dc_extent_data *extent;
+	struct cxl_dr_extent *cxl_dr_ext;
+};
+
 struct cxl_driver {
 	const char *name;
 	int (*probe)(struct device *dev);
 	void (*remove)(struct device *dev);
+	int (*notify)(struct device *dev, struct cxl_drv_nd *nd);
 	struct device_driver drv;
 	int id;
 };
@@ -874,6 +882,10 @@ struct cxl_pmem_region *to_cxl_pmem_region(struct device *dev);
 int cxl_add_to_region(struct cxl_port *root,
 		      struct cxl_endpoint_decoder *cxled);
 struct cxl_dax_region *to_cxl_dax_region(struct device *dev);
+bool cxl_dc_extent_in_ed(struct cxl_endpoint_decoder *cxled,
+			 struct cxl_dc_extent_data *extent);
+int cxl_ed_notify_extent(struct cxl_endpoint_decoder *cxled,
+			 struct cxl_drv_nd *nd);
 #else
 static inline bool is_cxl_pmem_region(struct device *dev)
 {
@@ -891,6 +903,16 @@ static inline int cxl_add_to_region(struct cxl_port *root,
 static inline struct cxl_dax_region *to_cxl_dax_region(struct device *dev)
 {
 	return NULL;
+}
+static inline bool cxl_dc_extent_in_ed(struct cxl_endpoint_decoder *cxled,
+				       struct cxl_dc_extent_data *extent)
+{
+	return false;
+}
+static inline int cxl_ed_notify_extent(struct cxl_endpoint_decoder *cxled,
+				       struct cxl_drv_nd *nd)
+{
+	return 0;
 }
 #endif
 

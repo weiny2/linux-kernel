@@ -74,6 +74,9 @@ int dax_region_ext_create_dev(struct dax_region *dax_region,
 #define to_dr_extent(dev) container_of(dev, struct dr_extent, dev)
 void dr_extent_get(struct dr_extent *dr_extent);
 void dr_extent_put(struct dr_extent *dr_extent);
+void dax_region_ext_del(struct dax_region *dax_region,
+			struct dr_extent *dr_extent);
+bool is_dr_extent(struct device *dev);
 
 struct dax_mapping {
 	struct device dev;

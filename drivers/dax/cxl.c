@@ -71,6 +71,57 @@ static int cxl_dax_region_create_extents(struct cxl_dax_region *cxlr_dax)
 	return 0;
 }
 
+static int match_cxl_dr_extent(struct device *dev, void *data)
+{
+	struct dr_extent *dr_extent;
+
+	if (!is_dr_extent(dev))
+		return 0;
+
+	dr_extent = to_dr_extent(dev);
+	return data == dr_extent->private_data;
+}
+
+static int cxl_dax_region_rm_extent(struct cxl_dax_region *cxlr_dax,
+				    struct cxl_dr_extent *cxl_dr_ext)
+{
+	struct dr_extent *dr_extent;
+	struct dax_region *dax_region;
+	struct device *dev;
+
+	dev = device_find_child(&cxlr_dax->dev, cxl_dr_ext,
+				match_cxl_dr_extent);
+	if (!dev)
+		return -EINVAL;
+
+	dr_extent = to_dr_extent(dev);
+	put_device(dev);
+	dax_region = dev_get_drvdata(&cxlr_dax->dev);
+	dax_region_ext_del(dax_region, dr_extent);
+
+	return 0;
+}
+
+static int cxl_dax_region_notify(struct device *dev,
+				 struct cxl_drv_nd *nd)
+{
+	struct cxl_dax_region *cxlr_dax = to_cxl_dax_region(dev);
+	struct cxl_dr_extent *cxl_dr_ext = nd->cxl_dr_ext;
+
+	switch (nd->event) {
+	case DCD_ADD_CAPACITY:
+		return cxl_dax_region_add_extent(cxlr_dax, cxl_dr_ext);
+	case DCD_RELEASE_CAPACITY:
+	case DCD_FORCED_CAPACITY_RELEASE:
+		return cxl_dax_region_rm_extent(cxlr_dax, cxl_dr_ext);
+	default:
+		dev_err(&cxlr_dax->dev, "Unknown DC event %d\n", nd->event);
+		break;
+	}
+
+	return 0;
+}
+
 static int cxl_dax_region_probe(struct device *dev)
 {
 	struct cxl_dax_region *cxlr_dax = to_cxl_dax_region(dev);
@@ -118,6 +169,7 @@ static int cxl_dax_region_probe(struct device *dev)
 static struct cxl_driver cxl_dax_region_driver = {
 	.name = "cxl_dax_region",
 	.probe = cxl_dax_region_probe,
+	.notify = cxl_dax_region_notify,
 	.id = CXL_DEVICE_DAX_REGION,
 	.drv = {
 		.suppress_bind_attrs = true,
