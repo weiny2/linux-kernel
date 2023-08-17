@@ -1055,6 +1055,18 @@ free_extent:
 	kfree(extent);
 }
 
+int __must_check cxl_dc_extent_get_not_zero(struct cxl_dc_extent_data *extent)
+{
+	return kref_get_unless_zero(&extent->region_ref);
+}
+EXPORT_SYMBOL_NS_GPL(cxl_dc_extent_get_not_zero, CXL);
+
+void cxl_dc_extent_get(struct cxl_dc_extent_data *extent)
+{
+	kref_get(&extent->region_ref);
+}
+EXPORT_SYMBOL_NS_GPL(cxl_dc_extent_get, CXL);
+
 void cxl_dc_extent_put(struct cxl_dc_extent_data *extent)
 {
 	kref_put(&extent->region_ref, dc_extent_release);

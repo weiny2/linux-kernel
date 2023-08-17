@@ -555,6 +555,7 @@ struct cxl_region_params {
  * @type: Endpoint decoder target type
  * @cxl_nvb: nvdimm bridge for coordinating @cxlr_pmem setup / shutdown
  * @cxlr_pmem: (for pmem regions) cached copy of the nvdimm bridge
+ * @cxlr_dax: (for DC regions) cached copy of CXL DAX bridge
  * @flags: Region state flags
  * @params: active + config params for the region
  */
@@ -565,6 +566,7 @@ struct cxl_region {
 	enum cxl_decoder_type type;
 	struct cxl_nvdimm_bridge *cxl_nvb;
 	struct cxl_pmem_region *cxlr_pmem;
+	struct cxl_dax_region *cxlr_dax;
 	unsigned long flags;
 	struct cxl_region_params params;
 };
@@ -614,7 +616,21 @@ struct cxl_dax_region {
 	struct device dev;
 	struct cxl_region *cxlr;
 	struct range hpa_range;
+	struct xarray extents;
 };
+
+/* Interleave will manage multiple cxl_dc_extent_data objects */
+#define CXL_EXTENT_LABEL_LEN 64
+struct cxl_dr_extent {
+	struct kref region_ref;
+	u64 hpa_offset;
+	u64 hpa_length;
+	char label[CXL_EXTENT_LABEL_LEN];
+	struct cxl_dc_extent_data *extent;
+};
+int cxl_dr_extent_get_not_zero(struct cxl_dr_extent *cxl_dr_ext);
+void cxl_dr_extent_get(struct cxl_dr_extent *cxl_dr_ext);
+void cxl_dr_extent_put(struct cxl_dr_extent *cxl_dr_ext);
 
 /**
  * struct cxl_port - logical collection of upstream port devices and
