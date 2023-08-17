@@ -1410,6 +1410,121 @@ static int cxl_region_validate_position(struct cxl_region *cxlr,
 	return 0;
 }
 
+static bool cxl_dc_extent_in_ed(struct cxl_endpoint_decoder *cxled,
+				struct cxl_dc_extent_data *extent)
+{
+	struct range dpa_range = (struct range){
+		.start = extent->dpa_start,
+		.end = extent->dpa_start + extent->length - 1,
+	};
+	struct device *dev = &cxled->cxld.dev;
+
+	dev_dbg(dev, "Checking extent DPA:%#llx LEN:%#llx\n",
+		extent->dpa_start, extent->length);
+
+	if (!cxled->cxld.region || !cxled->dpa_res)
+		return false;
+
+	dev_dbg(dev, "Cxled resource %pr\n", cxled->dpa_res);
+	return (cxled->dpa_res->start <= dpa_range.start &&
+		dpa_range.end <= cxled->dpa_res->end);
+}
+
+static int cxl_ed_add_one_extent(struct cxl_endpoint_decoder *cxled,
+				 struct cxl_dc_extent_data *extent)
+{
+	struct cxl_dr_extent *cxl_dr_ext;
+	struct cxl_dax_region *cxlr_dax;
+	resource_size_t dpa_offset, hpa;
+	struct range *ed_hpa_range;
+	struct device *dev;
+	int rc;
+
+	cxlr_dax = cxled->cxld.region->cxlr_dax;
+	dev = &cxlr_dax->dev;
+	dev_dbg(dev, "Adding DC extent DPA:%#llx LEN:%#llx\n",
+		extent->dpa_start, extent->length);
+
+	/*
+	 * Interleave ways == 1 means this coresponds to a 1:1 mapping between
+	 * device extents and DAX region extents.  Future implementations
+	 * should hold DC region extents here until the full dax region extent
+	 * can be realized.
+	 */
+	if (cxlr_dax->cxlr->params.interleave_ways != 1) {
+		dev_err(dev, "Interleaving DC not supported\n");
+		return -EINVAL;
+	}
+
+	cxl_dr_ext = kzalloc(sizeof(*cxl_dr_ext), GFP_KERNEL);
+	if (!cxl_dr_ext)
+		return -ENOMEM;
+
+	cxl_dr_ext->extent = extent;
+	kref_init(&cxl_dr_ext->region_ref);
+
+	/*
+	 * Without interleave...
+	 * HPA offset == DPA offset
+	 * ... but do the math anyway
+	 */
+	dpa_offset = extent->dpa_start - cxled->dpa_res->start;
+	ed_hpa_range = &cxled->cxld.hpa_range;
+	hpa = ed_hpa_range->start + dpa_offset;
+	cxl_dr_ext->hpa_offset = hpa - cxlr_dax->hpa_range.start;
+
+	/* Without interleave carry length and label through */
+	cxl_dr_ext->hpa_length = extent->length;
+	snprintf(cxl_dr_ext->label, CXL_EXTENT_LABEL_LEN, "%s",
+		 extent->tag);
+
+	dev_dbg(dev, "Inserting at HPA offset:%#llx\n", cxl_dr_ext->hpa_offset);
+	rc = xa_insert(&cxlr_dax->extents, cxl_dr_ext->hpa_offset, cxl_dr_ext,
+		       GFP_KERNEL);
+	if (rc) {
+		dev_err(dev, "Failed to insert extent %d\n", rc);
+		kfree(cxl_dr_ext);
+		return rc;
+	}
+	/* Put in cxl_dr_release() */
+	cxl_dc_extent_get(cxl_dr_ext->extent);
+	return 0;
+}
+
+static int cxl_ed_add_extents(struct cxl_endpoint_decoder *cxled)
+{
+	struct cxl_memdev *cxlmd = cxled_to_memdev(cxled);
+	struct cxl_dev_state *cxlds = cxlmd->cxlds;
+	struct cxl_memdev_state *mds = container_of(cxlds,
+						    struct cxl_memdev_state,
+						    cxlds);
+	struct device *dev = &cxled->cxld.dev;
+	struct cxl_dc_extent_data *extent;
+	unsigned long index;
+
+	dev_dbg(dev, "Searching for DC extents\n");
+	xa_for_each(&mds->dc_extent_list, index, extent) {
+		/*
+		 * get not zero is important because this is racing with the
+		 * memory device which could be removing the extent at the same
+		 * time.
+		 */
+		if (cxl_dc_extent_get_not_zero(extent)) {
+			int rc = 0;
+
+			if (cxl_dc_extent_in_ed(cxled, extent)) {
+				dev_dbg(dev, "Found extent DPA:%#llx LEN:%#llx\n",
+					extent->dpa_start, extent->length);
+				rc = cxl_ed_add_one_extent(cxled, extent);
+			}
+			cxl_dc_extent_put(extent);
+			if (rc)
+				return rc;
+		}
+	}
+	return 0;
+}
+
 static int cxl_region_attach_position(struct cxl_region *cxlr,
 				      struct cxl_root_decoder *cxlrd,
 				      struct cxl_endpoint_decoder *cxled,
@@ -2550,10 +2665,44 @@ out:
 	return cxlr_pmem;
 }
 
+int __must_check cxl_dr_extent_get_not_zero(struct cxl_dr_extent *cxl_dr_ext)
+{
+	return kref_get_unless_zero(&cxl_dr_ext->region_ref);
+}
+EXPORT_SYMBOL_NS_GPL(cxl_dr_extent_get_not_zero, CXL);
+
+void cxl_dr_extent_get(struct cxl_dr_extent *cxl_dr_ext)
+{
+	return kref_get(&cxl_dr_ext->region_ref);
+}
+EXPORT_SYMBOL_NS_GPL(cxl_dr_extent_get, CXL);
+
+static void cxl_dr_release(struct kref *kref)
+{
+	struct cxl_dr_extent *cxl_dr_ext = container_of(kref,
+						struct cxl_dr_extent,
+						region_ref);
+
+	cxl_dc_extent_put(cxl_dr_ext->extent);
+	kfree(cxl_dr_ext);
+}
+
+void cxl_dr_extent_put(struct cxl_dr_extent *cxl_dr_ext)
+{
+	kref_put(&cxl_dr_ext->region_ref, cxl_dr_release);
+}
+EXPORT_SYMBOL_NS_GPL(cxl_dr_extent_put, CXL);
+
 static void cxl_dax_region_release(struct device *dev)
 {
 	struct cxl_dax_region *cxlr_dax = to_cxl_dax_region(dev);
+	struct cxl_dr_extent *cxl_dr_ext;
+	unsigned long index;
 
+	xa_for_each(&cxlr_dax->extents, index, cxl_dr_ext) {
+		xa_erase(&cxlr_dax->extents, index);
+		cxl_dr_extent_put(cxl_dr_ext);
+	}
 	kfree(cxlr_dax);
 }
 
@@ -2604,6 +2753,7 @@ static struct cxl_dax_region *cxl_dax_region_alloc(struct cxl_region *cxlr)
 
 	cxlr_dax->hpa_range.start = p->res->start;
 	cxlr_dax->hpa_range.end = p->res->end;
+	xa_init(&cxlr_dax->extents);
 
 	dev = &cxlr_dax->dev;
 	cxlr_dax->cxlr = cxlr;
@@ -2710,7 +2860,18 @@ static void cxlr_dax_unregister(void *_cxlr_dax)
 	device_unregister(&cxlr_dax->dev);
 }
 
-static int __devm_cxl_add_dax_region(struct cxl_region *cxlr)
+static int cxl_region_add_dc_extents(struct cxl_region *cxlr)
+{
+	for (int i = 0; i < cxlr->params.nr_targets; i++) {
+		int rc = cxl_ed_add_extents(cxlr->params.targets[i]);
+
+		if (rc)
+			return rc;
+	}
+	return 0;
+}
+
+static int __devm_cxl_add_dax_region(struct cxl_region *cxlr, bool is_dc)
 {
 	struct cxl_dax_region *cxlr_dax;
 	struct device *dev;
@@ -2724,6 +2885,17 @@ static int __devm_cxl_add_dax_region(struct cxl_region *cxlr)
 	rc = dev_set_name(dev, "dax_region%d", cxlr->id);
 	if (rc)
 		goto err;
+
+	cxlr->cxlr_dax = cxlr_dax;
+	if (is_dc) {
+		/*
+		 * Process device extents prior to surfacing the device to
+		 * ensure the cxl_dax_region driver has access to prior extents
+		 */
+		rc = cxl_region_add_dc_extents(cxlr);
+		if (rc)
+			goto err;
+	}
 
 	rc = device_add(dev);
 	if (rc)
@@ -2741,7 +2913,7 @@ err:
 
 static int devm_cxl_add_dax_region(struct cxl_region *cxlr)
 {
-	return __devm_cxl_add_dax_region(cxlr);
+	return __devm_cxl_add_dax_region(cxlr, false);
 }
 
 static int devm_cxl_add_dc_dax_region(struct cxl_region *cxlr)
@@ -2750,8 +2922,7 @@ static int devm_cxl_add_dc_dax_region(struct cxl_region *cxlr)
 		dev_err(&cxlr->dev, "Interleaving DC not supported\n");
 		return -EINVAL;
 	}
-
-	return __devm_cxl_add_dax_region(cxlr);
+	return __devm_cxl_add_dax_region(cxlr, true);
 }
 
 static int match_decoder_by_range(struct device *dev, void *data)
