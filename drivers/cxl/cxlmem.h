@@ -1016,6 +1016,8 @@ int cxl_trigger_poison_list(struct cxl_memdev *cxlmd);
 int cxl_inject_poison(struct cxl_memdev *cxlmd, u64 dpa);
 int cxl_clear_poison(struct cxl_memdev *cxlmd, u64 dpa);
 
+int cxl_dc_extent_get_not_zero(struct cxl_dc_extent_data *extent);
+void cxl_dc_extent_get(struct cxl_dc_extent_data *extent);
 void cxl_dc_extent_put(struct cxl_dc_extent_data *extent);
 
 #ifdef CONFIG_CXL_SUSPEND
