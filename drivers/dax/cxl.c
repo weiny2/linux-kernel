@@ -12,6 +12,17 @@ static void dax_reg_ext_get(struct dax_region_extent *dr_extent)
 	kref_get(&dr_extent->ref);
 }
 
+
+static void dax_region_rm_resource(struct dax_region_extent *dr_extent)
+{
+	struct dax_region *dax_region = dr_extent->region;
+	struct resource *res = dr_extent->res;
+	
+	dev_dbg(dax_region->dev, "Extent release resource %pR\n",
+		dr_extent->res);
+	__release_region(&dax_region->res, res->start, resource_size(res));
+}
+
 static void dr_release(struct kref *kref)
 {
 	struct dax_region_extent *dr_extent;
@@ -19,6 +30,7 @@ static void dr_release(struct kref *kref)
 
 	dr_extent = container_of(kref, struct dax_region_extent, ref);
 	cxl_dr_ext = dr_extent->private_data;
+	dax_region_rm_resource(dr_extent);
 	cxl_dr_extent_put(cxl_dr_ext);
 	kfree(dr_extent);
 }
@@ -26,6 +38,29 @@ static void dr_release(struct kref *kref)
 static void dax_reg_ext_put(struct dax_region_extent *dr_extent)
 {
 	kref_put(&dr_extent->ref, dr_release);
+}
+
+static int dax_region_add_resource(struct dax_region *dax_region,
+				   struct dax_region_extent *dr_extent,
+				   resource_size_t offset,
+				   resource_size_t length)
+{
+	resource_size_t start = dax_region->res.start + offset;
+	struct resource *ext_res;
+
+	dev_dbg(dax_region->dev, "DAX region resource %pR\n", &dax_region->res);
+	ext_res = __request_region(&dax_region->res, start, length, "extent", 0);
+	if (!ext_res) {
+		dev_err(dax_region->dev, "Failed to add extent s:%llx l:%llx\n",
+			start, length);
+		return -ENOSPC;
+	}
+
+	dr_extent->region = dax_region;
+	dr_extent->res = ext_res;
+	dev_dbg(dax_region->dev, "Extent add resource %pR\n", ext_res);
+
+	return 0;
 }
 
 static int cxl_dax_region_create_extent(struct dax_region *dax_region,
@@ -45,11 +80,20 @@ static int cxl_dax_region_create_extent(struct dax_region *dax_region,
 	/* device manages the dr_extent on success */
 	kref_init(&dr_extent->ref);
 
+	rc = dax_region_add_resource(dax_region, dr_extent,
+				     cxl_dr_ext->hpa_offset,
+				     cxl_dr_ext->hpa_length);
+	if (rc) {
+		kfree(dr_extent);
+		return rc;
+	}
+
 	rc = dax_region_ext_create_dev(dax_region, dr_extent,
 				       cxl_dr_ext->hpa_offset,
 				       cxl_dr_ext->hpa_length,
 				       cxl_dr_ext->label);
 	if (rc) {
+		dax_region_rm_resource(dr_extent);
 		kfree(dr_extent);
 		return rc;
 	}

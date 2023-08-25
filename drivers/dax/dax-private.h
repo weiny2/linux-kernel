@@ -44,12 +44,16 @@ struct dax_region {
 /*
  * struct dax_region_extent - extent data defined by the low level region
  * driver.
+ * @region: cache of dax_region
+ * @res: cache of resource tree for this extent
  * @private_data: lower level region driver data
  * @ref: track number of dax devices which are using this extent
  * @get: get reference to low level data
  * @put: put reference to low level data
  */
 struct dax_region_extent {
+	struct dax_region *region;
+	struct resource *res;
 	void *private_data;
 	struct kref ref;
 	void (*get)(struct dax_region_extent *dr_extent);
@@ -131,6 +135,7 @@ struct dev_dax {
 		unsigned long pgoff;
 		struct range range;
 		struct dax_mapping *mapping;
+		struct dax_region_extent *dr_extent;
 	} *ranges;
 };
 
