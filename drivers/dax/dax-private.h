@@ -50,6 +50,8 @@ struct dax_region {
  * @ref: track number of devices [dax dev, dax regions] which are using this
  *       extent
  * @release: release private_data
+ * @region: cache of dax_region
+ * @res: cache of resource tree for this extent
  * @dr_ext_data: reference back to private extent data
  * @offset: offset of this extent
  * @length: size of this extent
@@ -60,6 +62,8 @@ struct dr_extent {
 	void *private_data;
 	struct kref ref;
 	void (*release)(void *private_data);
+	struct dax_region *region;
+	struct resource *res;
 	resource_size_t offset;
 	resource_size_t length;
 	char label[DAX_EXTENT_LABEL_LEN];
@@ -100,6 +104,7 @@ struct dax_mapping {
  * @pgoff: page offset
  * @range: resource-span
  * @mapping: device to assist in interrogating the range layout
+ * @dr_extent: if not NULL; dax region extent referenced by this range
  */
 struct dev_dax {
 	struct dax_region *region;
@@ -116,6 +121,7 @@ struct dev_dax {
 		unsigned long pgoff;
 		struct range range;
 		struct dax_mapping *mapping;
+		struct dr_extent *dr_extent;
 	} *ranges;
 };
 

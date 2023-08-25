@@ -66,6 +66,16 @@ bool is_dr_extent(struct device *dev)
 }
 EXPORT_SYMBOL_GPL(is_dr_extent);
 
+static void dax_extent_rm_resource(struct dr_extent *dr_extent)
+{
+	struct dax_region *dax_region = dr_extent->region;
+	struct resource *res = dr_extent->res;
+
+	dev_dbg(dax_region->dev, "Extent release resource %pr\n",
+		dr_extent->res);
+	__release_region(&dax_region->res, res->start, resource_size(res));
+}
+
 void dr_extent_get(struct dr_extent *dr_extent)
 {
 	kref_get(&dr_extent->ref);
@@ -80,6 +90,7 @@ static void dr_release(struct kref *kref)
 		dr_extent->release(dr_extent->private_data);
 	dev_dbg(&dr_extent->dev, "Unregister DAX region ext OFF:%#llx L:%s\n",
 		dr_extent->offset, dr_extent->label);
+	dax_extent_rm_resource(dr_extent);
 	device_unregister(&dr_extent->dev);
 }
 
@@ -93,6 +104,29 @@ void dr_ext_reg_put(void *data)
 	struct dr_extent *dr_extent = data;
 
 	dr_extent_put(dr_extent);
+}
+
+static int dax_region_add_resource(struct dax_region *dax_region,
+				   struct dr_extent *dr_extent,
+				   resource_size_t offset,
+				   resource_size_t length)
+{
+	resource_size_t start = dax_region->res.start + offset;
+	struct resource *ext_res;
+
+	dev_dbg(dax_region->dev, "DAX region resource %pr\n", &dax_region->res);
+	ext_res = __request_region(&dax_region->res, start, length, "extent", 0);
+	if (!ext_res) {
+		dev_err(dax_region->dev, "Failed to add extent s:%pa l:%pa\n",
+			&start, &length);
+		return -ENOSPC;
+	}
+
+	dr_extent->region = dax_region;
+	dr_extent->res = ext_res;
+	dev_dbg(dax_region->dev, "Extent add resource %pr\n", ext_res);
+
+	return 0;
 }
 
 int dax_region_ext_create_dev(struct dax_region *dax_region,
@@ -117,6 +151,10 @@ int dax_region_ext_create_dev(struct dax_region *dax_region,
 	dr_extent->private_data = private_data;
 	dr_extent->release = release;
 	kref_init(&dr_extent->ref);
+
+	rc = dax_region_add_resource(dax_region, dr_extent, offset, length);
+	if (rc)
+		return rc;
 
 	dev = &dr_extent->dev;
 	device_initialize(dev);
