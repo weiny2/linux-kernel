@@ -411,44 +411,35 @@ int cxl_dpa_set_mode(struct cxl_endpoint_decoder *cxled,
 	struct cxl_memdev *cxlmd = cxled_to_memdev(cxled);
 	struct cxl_dev_state *cxlds = cxlmd->cxlds;
 	struct device *dev = &cxled->cxld.dev;
-	int rc;
 
+	guard(rwsem_write)(&cxl_dpa_rwsem);
+	if (cxled->cxld.flags & CXL_DECODER_F_ENABLE)
+		return -EBUSY;
+
+	/*
+	 * Check that the mode is supported by the current partition
+	 * configuration
+	 */
 	switch (mode) {
 	case CXL_DECODER_RAM:
+		if (!resource_size(&cxlds->ram_res)) {
+			dev_dbg(dev, "no available ram capacity\n");
+			return -ENXIO;
+		}
+		break;
 	case CXL_DECODER_PMEM:
+		if (!resource_size(&cxlds->pmem_res)) {
+			dev_dbg(dev, "no available pmem capacity\n");
+			return -ENXIO;
+		}
 		break;
 	default:
 		dev_dbg(dev, "unsupported mode: %d\n", mode);
 		return -EINVAL;
 	}
 
-	down_write(&cxl_dpa_rwsem);
-	if (cxled->cxld.flags & CXL_DECODER_F_ENABLE) {
-		rc = -EBUSY;
-		goto out;
-	}
-
-	/*
-	 * Only allow modes that are supported by the current partition
-	 * configuration
-	 */
-	if (mode == CXL_DECODER_PMEM && !resource_size(&cxlds->pmem_res)) {
-		dev_dbg(dev, "no available pmem capacity\n");
-		rc = -ENXIO;
-		goto out;
-	}
-	if (mode == CXL_DECODER_RAM && !resource_size(&cxlds->ram_res)) {
-		dev_dbg(dev, "no available ram capacity\n");
-		rc = -ENXIO;
-		goto out;
-	}
-
 	cxled->mode = mode;
-	rc = 0;
-out:
-	up_write(&cxl_dpa_rwsem);
-
-	return rc;
+	return 0;
 }
 
 int cxl_dpa_alloc(struct cxl_endpoint_decoder *cxled, unsigned long long size)
