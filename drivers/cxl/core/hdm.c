@@ -424,15 +424,6 @@ int cxl_dpa_set_mode(struct cxl_endpoint_decoder *cxled,
 	struct device *dev = &cxled->cxld.dev;
 	int rc;
 
-	switch (mode) {
-	case CXL_DECODER_RAM:
-	case CXL_DECODER_PMEM:
-		break;
-	default:
-		dev_dbg(dev, "unsupported mode: %d\n", mode);
-		return -EINVAL;
-	}
-
 	down_write(&cxl_dpa_rwsem);
 	if (cxled->cxld.flags & CXL_DECODER_F_ENABLE) {
 		rc = -EBUSY;
@@ -440,17 +431,27 @@ int cxl_dpa_set_mode(struct cxl_endpoint_decoder *cxled,
 	}
 
 	/*
-	 * Only allow modes that are supported by the current partition
+	 * Check that the mode is supported by the current partition
 	 * configuration
 	 */
-	if (mode == CXL_DECODER_PMEM && !resource_size(&cxlds->pmem_res)) {
-		dev_dbg(dev, "no available pmem capacity\n");
-		rc = -ENXIO;
-		goto out;
-	}
-	if (mode == CXL_DECODER_RAM && !resource_size(&cxlds->ram_res)) {
-		dev_dbg(dev, "no available ram capacity\n");
-		rc = -ENXIO;
+	switch (mode) {
+	case CXL_DECODER_RAM:
+		if (resource_size(&cxlds->pmem_res) == 0) {
+			dev_dbg(dev, "no available pmem capacity\n");
+			rc = -ENXIO;
+			goto out;
+		}
+		break;
+	case CXL_DECODER_PMEM:
+		if (resource_size(&cxlds->ram_res) == 0) {
+			dev_dbg(dev, "no available ram capacity\n");
+			rc = -ENXIO;
+			goto out;
+		}
+		break;
+	default:
+		dev_dbg(dev, "unsupported mode: %d\n", mode);
+		rc = -EINVAL;
 		goto out;
 	}
 
