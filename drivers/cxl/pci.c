@@ -678,19 +678,32 @@ static int cxl_event_config_msgnums(struct cxl_memdev_state *mds,
 				    struct cxl_event_interrupt_policy *policy)
 {
 	struct cxl_mbox_cmd mbox_cmd;
+	size_t size_in;
 	int rc;
 
-	*policy = (struct cxl_event_interrupt_policy) {
-		.info_settings = CXL_INT_MSI_MSIX,
-		.warn_settings = CXL_INT_MSI_MSIX,
-		.failure_settings = CXL_INT_MSI_MSIX,
-		.fatal_settings = CXL_INT_MSI_MSIX,
-	};
+	if (!mds->event.os_mem_events && !cxl_dcd_supported(mds))
+		return 0;
+
+	if (mds->event.os_mem_events) {
+		*policy = (struct cxl_event_interrupt_policy) {
+			.info_settings = CXL_INT_MSI_MSIX,
+			.warn_settings = CXL_INT_MSI_MSIX,
+			.failure_settings = CXL_INT_MSI_MSIX,
+			.fatal_settings = CXL_INT_MSI_MSIX,
+			.dcd_settings = 0,
+		};
+	}
+	size_in = CXL_EVENT_INT_POLICY_BASE_SIZE;
+
+	if (cxl_dcd_supported(mds)) {
+		policy->dcd_settings = CXL_INT_MSI_MSIX,
+		size_in += sizeof(policy->dcd_settings);
+	}
 
 	mbox_cmd = (struct cxl_mbox_cmd) {
 		.opcode = CXL_MBOX_OP_SET_EVT_INT_POLICY,
 		.payload_in = policy,
-		.size_in = sizeof(*policy),
+		.size_in = size_in,
 	};
 
 	rc = cxl_internal_send_cmd(mds, &mbox_cmd);
@@ -744,45 +757,67 @@ static bool cxl_event_int_is_fw(u8 setting)
 	return mode == CXL_INT_FW;
 }
 
+static void cxl_event_validate_int_policy(struct cxl_memdev_state *mds,
+					  struct cxl_event_interrupt_policy *policy)
+{
+	if (!mds->event.os_mem_events)
+		return;
+
+	if (cxl_event_int_is_fw(policy->info_settings) ||
+	    cxl_event_int_is_fw(policy->warn_settings) ||
+	    cxl_event_int_is_fw(policy->failure_settings) ||
+	    cxl_event_int_is_fw(policy->fatal_settings)) {
+		dev_err(mds->cxlds.dev,
+			"FW still in control of Event Logs despite _OSC settings\n");
+		mds->event.os_mem_events = false;
+	}
+}
+
 static int cxl_event_config(struct pci_host_bridge *host_bridge,
 			    struct cxl_memdev_state *mds)
 {
 	struct cxl_event_interrupt_policy policy = { 0 };
+	bool events_active = false;
 	int rc;
 
 	/*
 	 * When BIOS maintains CXL error reporting control, it will process
 	 * event records.  Only one agent can do so.
 	 */
-	if (!host_bridge->native_cxl_error)
-		return 0;
-
-	rc = cxl_mem_alloc_event_buf(mds);
-	if (rc)
-		return rc;
+	if (host_bridge->native_cxl_error)
+		mds->event.os_mem_events = true;
 
 	rc = cxl_event_get_int_policy(mds, &policy);
 	if (rc)
 		return rc;
 
-	if (cxl_event_int_is_fw(policy.info_settings) ||
-	    cxl_event_int_is_fw(policy.warn_settings) ||
-	    cxl_event_int_is_fw(policy.failure_settings) ||
-	    cxl_event_int_is_fw(policy.fatal_settings)) {
-		dev_err(mds->cxlds.dev,
-			"FW still in control of Event Logs despite _OSC settings\n");
-		return -EBUSY;
-	}
+	cxl_event_validate_int_policy(mds, &policy);
 
 	rc = cxl_event_config_msgnums(mds, &policy);
 	if (rc)
 		return rc;
 
-	rc = cxl_event_irqsetup(mds, &policy);
-	if (rc)
-		return rc;
+	if (mds->event.os_mem_events && !cxl_event_irqsetup(mds, &policy))
+		events_active = true;
 
-	cxl_mem_get_event_records(mds, CXLDEV_EVENT_STATUS_ALL);
+	if (cxl_dcd_supported(mds)) {
+		struct cxl_dev_state *cxlds = &mds->cxlds;
+
+		rc = cxl_event_req_irq(cxlds, policy.dcd_settings);
+		if (rc) {
+			dev_err(cxlds->dev, "Failed to get interrupt for DCD event log\n");
+			return rc;
+		}
+		events_active = true;
+	}
+
+	if (events_active) {
+		rc = cxl_mem_alloc_event_buf(mds);
+		if (rc)
+			return rc;
+		
+		cxl_mem_get_event_records(mds, CXLDEV_EVENT_STATUS_ALL);
+	}
 
 	return 0;
 }
