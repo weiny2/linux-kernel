@@ -1314,10 +1314,17 @@ static int cxl_get_dc_config(struct cxl_memdev_state *mds, u8 start_region,
 	return rc;
 }
 
-static bool cxl_dcd_supported(struct cxl_memdev_state *mds)
+bool cxl_dcd_supported(struct cxl_memdev_state *mds)
 {
 	return test_bit(CXL_DCD_ENABLED_GET_CONFIG, mds->dcd_cmds);
 }
+EXPORT_SYMBOL_NS_GPL(cxl_dcd_supported, CXL);
+
+void cxl_disable_dcd(struct cxl_memdev_state *mds)
+{
+	clear_bit(CXL_DCD_ENABLED_GET_CONFIG, mds->dcd_cmds);
+}
+EXPORT_SYMBOL_NS_GPL(cxl_disable_dcd, CXL);
 
 /**
  * cxl_dev_dynamic_capacity_identify() - Reads the dynamic capacity
