@@ -5,6 +5,71 @@
 
 #include "../cxl/cxl.h"
 #include "bus.h"
+#include "dax-private.h"
+
+static void cxl_dr_ext_release(void *pd)
+{
+	struct cxl_dr_extent *cxl_dr_ext = pd;
+
+	cxl_dr_extent_put(cxl_dr_ext);
+}
+
+static int cxl_dax_region_create_extent(struct dax_region *dax_region,
+					struct cxl_dr_extent *cxl_dr_ext)
+{
+	int rc;
+
+	rc = dax_region_ext_create_dev(dax_region,
+				       cxl_dr_ext,
+				       cxl_dr_ext_release,
+				       cxl_dr_ext->hpa_offset,
+				       cxl_dr_ext->hpa_length,
+				       cxl_dr_ext->label);
+	if (rc)
+		return rc;
+
+	/* extent accepted */
+	cxl_dr_extent_get(cxl_dr_ext);
+	return 0;
+}
+
+static int cxl_dax_region_add_extent(struct cxl_dax_region *cxlr_dax,
+				     struct cxl_dr_extent *cxl_dr_ext)
+{
+	struct dax_region *dax_region;
+	int rc;
+
+	/*
+	 * get not zero is important because this is racing with the
+	 * region driver which is racing with the memory device which
+	 * could be removing the extent at the same time.
+	 */
+	if (!cxl_dr_extent_get_not_zero(cxl_dr_ext))
+		return 0;
+
+	dax_region = dev_get_drvdata(&cxlr_dax->dev);
+	dev_dbg(&cxlr_dax->dev, "Adding extent HPA offset:%#llx LEN:%#llx\n",
+		cxl_dr_ext->hpa_offset, cxl_dr_ext->hpa_length);
+	rc = cxl_dax_region_create_extent(dax_region, cxl_dr_ext);
+	cxl_dr_extent_put(cxl_dr_ext);
+	return rc;
+}
+
+static int cxl_dax_region_create_extents(struct cxl_dax_region *cxlr_dax)
+{
+	struct cxl_dr_extent *cxl_dr_ext;
+	unsigned long index;
+
+	dev_dbg(&cxlr_dax->dev, "Adding extents\n");
+	xa_for_each(&cxlr_dax->extents, index, cxl_dr_ext) {
+		int rc;
+
+		rc = cxl_dax_region_add_extent(cxlr_dax, cxl_dr_ext);
+		if (rc)
+			return rc;
+	}
+	return 0;
+}
 
 static int cxl_dax_region_probe(struct device *dev)
 {
@@ -19,19 +84,27 @@ static int cxl_dax_region_probe(struct device *dev)
 	if (nid == NUMA_NO_NODE)
 		nid = memory_add_physaddr_to_nid(cxlr_dax->hpa_range.start);
 
-	dev_size = range_len(&cxlr_dax->hpa_range);
-
 	flags = IORESOURCE_DAX_KMEM;
-	if (cxlr->mode == CXL_REGION_DC) {
-		/* Add empty seed dax device */
-		dev_size = 0;
+	if (cxlr->mode == CXL_REGION_DC)
 		flags |= IORESOURCE_DAX_SPARSE_CAP;
-	}
 
 	dax_region = alloc_dax_region(dev, cxlr->id, &cxlr_dax->hpa_range, nid,
 				      PMD_SIZE, flags);
 	if (!dax_region)
 		return -ENOMEM;
+
+	dev_size = range_len(&cxlr_dax->hpa_range);
+	if (cxlr->mode == CXL_REGION_DC) {
+		int rc;
+
+		/* NOTE: Depends on dax_region being set in driver data */
+		rc = cxl_dax_region_create_extents(cxlr_dax);
+		if (rc)
+			return rc;
+
+		/* Add empty seed dax device */
+		dev_size = 0;
+	}
 
 	data = (struct dev_dax_data) {
 		.dax_region = dax_region,

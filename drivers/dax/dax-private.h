@@ -5,6 +5,7 @@
 #ifndef __DAX_PRIVATE_H__
 #define __DAX_PRIVATE_H__
 
+#include <linux/pgtable.h>
 #include <linux/device.h>
 #include <linux/cdev.h>
 #include <linux/idr.h>
@@ -39,6 +40,40 @@ struct dax_region {
 	struct device *seed;
 	struct device *youngest;
 };
+
+#define DAX_EXTENT_LABEL_LEN 64
+
+/**
+ * struct dr_extent - DAX region extent
+ * @dev: device representing this extent
+ * @private_data: region driver data
+ * @ref: track number of devices [dax dev, dax regions] which are using this
+ *       extent
+ * @release: release private_data
+ * @dr_ext_data: reference back to private extent data
+ * @offset: offset of this extent
+ * @length: size of this extent
+ * @label: identifier to group extents
+ */
+struct dr_extent {
+	struct device dev;
+	void *private_data;
+	struct kref ref;
+	void (*release)(void *private_data);
+	resource_size_t offset;
+	resource_size_t length;
+	char label[DAX_EXTENT_LABEL_LEN];
+};
+
+int dax_region_ext_create_dev(struct dax_region *dax_region,
+			      void *private_data,
+			      void (*release)(void *private_data),
+			      resource_size_t offset,
+			      resource_size_t length,
+			      const char *label);
+#define to_dr_extent(dev) container_of(dev, struct dr_extent, dev)
+void dr_extent_get(struct dr_extent *dr_extent);
+void dr_extent_put(struct dr_extent *dr_extent);
 
 struct dax_mapping {
 	struct device dev;
