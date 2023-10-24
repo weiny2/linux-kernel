@@ -1500,7 +1500,7 @@ static int cxl_dev_get_dc_extent_cnt(struct cxl_memdev_state *mds,
 				     unsigned int *extent_gen_num)
 {
 	struct cxl_mbox_get_dc_extent_in get_dc_extent;
-	struct cxl_mbox_get_dc_extents_out dc_extents;
+	struct cxl_mbox_get_dc_extent_out dc_extents;
 	struct cxl_mbox_cmd mbox_cmd;
 	unsigned int count;
 	int rc;
@@ -1533,7 +1533,7 @@ static int cxl_dev_get_dc_extents(struct cxl_memdev_state *mds,
 				  unsigned int start_gen_num,
 				  unsigned int exp_cnt)
 {
-	struct cxl_mbox_get_dc_extents_out *dc_extents __free(kfree) =
+	struct cxl_mbox_get_dc_extent_out *dc_extents __free(kfree) =
 				kvmalloc(mds->payload_size, GFP_KERNEL);
 	unsigned int start_index, total_read;
 	struct device *dev = mds->cxlds.dev;

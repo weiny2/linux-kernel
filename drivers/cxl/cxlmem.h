@@ -843,7 +843,7 @@ struct cxl_mbox_get_dc_extent_in {
  * Get Dynamic Capacity Extent List; Output Payload
  * CXL rev 3.0 section 8.2.9.8.9.2; Table 8-128
  */
-struct cxl_mbox_get_dc_extents_out {
+struct cxl_mbox_get_dc_extent_out {
 	__le32 ret_extent_cnt;
 	__le32 total_extent_cnt;
 	__le32 extent_list_num;
