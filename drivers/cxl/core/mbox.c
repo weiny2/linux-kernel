@@ -836,10 +836,6 @@ out:
 }
 EXPORT_SYMBOL_NS_GPL(cxl_enumerate_cmds, CXL);
 
-static const uuid_t gen_media_event_uuid = CXL_EVENT_GEN_MEDIA_UUID;
-static const uuid_t dram_event_uuid = CXL_EVENT_DRAM_UUID;
-static const uuid_t mem_mod_event_uuid = CXL_EVENT_MEM_MODULE_UUID;
-
 static void cxl_event_trace_record(const struct cxl_memdev *cxlmd,
 				   enum cxl_event_log_type type,
 				   struct cxl_event_record_raw *record)
@@ -847,12 +843,12 @@ static void cxl_event_trace_record(const struct cxl_memdev *cxlmd,
 	union cxl_event *evt = &record->event;
 	uuid_t *id = &record->id;
 
-	if (uuid_equal(id, &gen_media_event_uuid))
-		trace_cxl_general_media(cxlmd, type, id, &evt->gen_media);
-	else if (uuid_equal(id, &dram_event_uuid))
-		trace_cxl_dram(cxlmd, type, id, &evt->dram);
-	else if (uuid_equal(id, &mem_mod_event_uuid))
-		trace_cxl_memory_module(cxlmd, type, id, &evt->mem_module);
+	if (uuid_equal(id, &CXL_EVENT_GEN_MEDIA_UUID))
+		trace_cxl_general_media(cxlmd, type, &evt->gen_media);
+	else if (uuid_equal(id, &CXL_EVENT_DRAM_UUID))
+		trace_cxl_dram(cxlmd, type, &evt->dram);
+	else if (uuid_equal(id, &CXL_EVENT_MEM_MODULE_UUID))
+		trace_cxl_memory_module(cxlmd, type, &evt->mem_module);
 	else
 		trace_cxl_generic_event(cxlmd, type, id, &evt->generic);
 }
