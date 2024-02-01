@@ -756,10 +756,6 @@ static int cxl_event_config(struct pci_host_bridge *host_bridge,
 		return 0;
 	}
 
-	rc = cxl_mem_alloc_event_buf(mds);
-	if (rc)
-		return rc;
-
 	rc = cxl_event_get_int_policy(mds, &policy);
 	if (rc)
 		return rc;
@@ -774,6 +770,10 @@ static int cxl_event_config(struct pci_host_bridge *host_bridge,
 	}
 
 	rc = cxl_event_config_msgnums(mds, &policy);
+	if (rc)
+		return rc;
+
+	rc = cxl_mem_alloc_event_buf(mds);
 	if (rc)
 		return rc;
 
