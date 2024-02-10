@@ -66,6 +66,12 @@ const struct device_type dr_extent_type = {
 	.groups = dr_extent_attribute_groups,
 };
 
+bool is_dr_extent(struct device *dev)
+{
+	return dev->type == &dr_extent_type;
+}
+EXPORT_SYMBOL_NS_GPL(is_dr_extent, CXL);
+
 static void dr_extent_unregister(void *ext)
 {
 	struct dr_extent *dr_extent = ext;
