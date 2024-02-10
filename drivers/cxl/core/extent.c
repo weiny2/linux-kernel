@@ -66,6 +66,12 @@ static const struct device_type region_extent_type = {
 	.groups = region_extent_attribute_groups,
 };
 
+bool is_region_extent(struct device *dev)
+{
+	return dev->type == &region_extent_type;
+}
+EXPORT_SYMBOL_NS_GPL(is_region_extent, CXL);
+
 static void region_extent_unregister(void *ext)
 {
 	struct region_extent *reg_ext = ext;

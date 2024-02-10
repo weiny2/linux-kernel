@@ -17,6 +17,16 @@ int dax_bus_init(void);
 void dax_bus_exit(void);
 
 /**
+ * struct dax_extent - For sparse regions; an active extent
+ * @region: dax_region this resources is in
+ * @res: resource this extent covers
+ */
+struct dax_extent {
+	struct dax_region *region;
+	struct resource *res;
+};
+
+/**
  * struct dax_region - mapping infrastructure for dax devices
  * @id: kernel-wide unique region for a memory range
  * @target_node: effective numa node if this memory range is onlined

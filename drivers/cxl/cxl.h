@@ -651,6 +651,7 @@ int dax_region_create_ext(struct cxl_dax_region *cxlr_dax,
 			  struct range *dpa_range,
 			  struct cxl_endpoint_decoder *cxled);
 
+bool is_region_extent(struct device *dev);
 #define to_region_extent(dev) container_of(dev, struct region_extent, dev)
 
 /**
