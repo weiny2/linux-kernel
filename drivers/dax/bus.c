@@ -186,6 +186,61 @@ static bool is_sparse(struct dax_region *dax_region)
 	return (dax_region->res.flags & IORESOURCE_DAX_SPARSE_CAP) != 0;
 }
 
+static int dax_region_add_resource(struct dax_region *dax_region,
+				   struct dax_extent *dax_ext,
+				   resource_size_t start,
+				   resource_size_t length)
+{
+	struct resource *ext_res;
+
+	dev_dbg(dax_region->dev, "DAX region resource %pr\n", &dax_region->res);
+	ext_res = __request_region(&dax_region->res, start, length, "extent", 0);
+	if (!ext_res) {
+		dev_err(dax_region->dev, "Failed to add region s:%pa l:%pa\n",
+			&start, &length);
+		return -ENOSPC;
+	}
+
+	dax_ext->region = dax_region;
+	dax_ext->res = ext_res;
+	dev_dbg(dax_region->dev, "Extent add resource %pr\n", ext_res);
+
+	return 0;
+}
+
+static void dax_region_release_extent(void *ext)
+{
+	struct dax_extent *dax_ext = ext;
+	struct dax_region *dax_region = dax_ext->region;
+
+	dev_dbg(dax_region->dev, "Extent release resource %pr\n", dax_ext->res);
+	if (dax_ext->res)
+		__release_region(&dax_region->res, dax_ext->res->start,
+				 resource_size(dax_ext->res));
+
+	kfree(dax_ext);
+}
+
+int dax_region_add_extent(struct dax_region *dax_region, struct device *ext_dev,
+			  resource_size_t start, resource_size_t length)
+{
+	int rc;
+
+	struct dax_extent *dax_ext __free(kfree) = kzalloc(sizeof(*dax_ext),
+							   GFP_KERNEL);
+	if (!dax_ext)
+		return -ENOMEM;
+
+	guard(rwsem_write)(&dax_region_rwsem);
+	rc = dax_region_add_resource(dax_region, dax_ext, start, length);
+	if (rc)
+		return rc;
+
+	return devm_add_action_or_reset(ext_dev, dax_region_release_extent,
+					no_free_ptr(dax_ext));
+}
+EXPORT_SYMBOL_GPL(dax_region_add_extent);
+
 bool static_dev_dax(struct dev_dax *dev_dax)
 {
 	return is_static(dev_dax->region);
