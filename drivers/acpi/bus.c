@@ -1448,6 +1448,7 @@ static int __init acpi_init(void)
 	acpi_debugger_init();
 	acpi_setup_sb_notify_handler();
 	acpi_viot_init();
+	ghes_debugfs_init();
 	return 0;
 }
 

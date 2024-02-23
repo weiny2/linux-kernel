@@ -33,6 +33,15 @@ config ACPI_APEI_GHES
 	  by firmware to produce more valuable hardware error
 	  information for Linux.
 
+config ACPI_APEI_GHES_DEBUG
+	bool "APEI GHES debug and testing"
+	depends on DEBUG_FS && ACPI_APEI_GHES
+	help
+	  Error reporting code paths can be difficult to test through APEI
+	  without special hardware.  This option adds debugfs entries to the
+	  ghes code to inject GHES messages for debugging and testing.  If in
+	  doubt say 'no'.
+
 config ACPI_APEI_PCIEAER
 	bool "APEI PCIe AER logging/recovering support"
 	depends on ACPI_APEI && PCIEAER

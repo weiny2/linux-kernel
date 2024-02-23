@@ -8,6 +8,7 @@
 #define APEI_INTERNAL_H
 
 #include <linux/acpi.h>
+#include <linux/cxl-event.h>
 
 struct apei_exec_context;
 
@@ -148,4 +149,7 @@ int einj_validate_error_type(u64 type);
 #define ACPI_EINJ_CXL_MEM_FATAL             BIT(17)
 #endif
 
+void cxl_cper_post_event(enum cxl_event_type event_type,
+			 struct cxl_cper_event_rec *rec);
+void ghes_debug_init(void);
 #endif

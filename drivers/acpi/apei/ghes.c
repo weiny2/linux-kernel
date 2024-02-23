@@ -160,7 +160,7 @@ static DEFINE_MUTEX(ghes_devs_mutex);
  * This spinlock is used to prevent the fixmap entry from being used
  * simultaneously.
  */
-static DEFINE_SPINLOCK(ghes_notify_lock_irq);
+DEFINE_SPINLOCK(ghes_notify_lock_irq);
 
 struct ghes_vendor_record_entry {
 	struct work_struct work;
@@ -710,8 +710,8 @@ DEFINE_KFIFO(cxl_cper_fifo, struct cxl_cper_work_data, CXL_CPER_FIFO_DEPTH);
 static DEFINE_SPINLOCK(cxl_cper_work_lock);
 struct work_struct *cxl_cper_work;
 
-static void cxl_cper_post_event(enum cxl_event_type event_type,
-				struct cxl_cper_event_rec *rec)
+void cxl_cper_post_event(enum cxl_event_type event_type,
+			 struct cxl_cper_event_rec *rec)
 {
 	struct cxl_cper_work_data wd;
 
