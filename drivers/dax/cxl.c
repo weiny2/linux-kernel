@@ -7,69 +7,19 @@
 #include "bus.h"
 #include "dax-private.h"
 
-static void release_extent_reg(struct dax_extent *dax_ext)
-{
-	struct dax_region *dax_region = dax_ext->region;
-
-	dev_dbg(dax_region->dev, "Extent release resource %pr\n", dax_ext->res);
-	if (dax_ext->res)
-		__release_region(&dax_region->res, dax_ext->res->start,
-				 resource_size(dax_ext->res));
-	dax_ext->res = NULL;
-}
-
-static void dax_region_rm_resource(void *ext)
-{
-	struct dax_extent *dax_ext = ext;
-
-	release_extent_reg(dax_ext);
-	kfree(dax_ext);
-}
-
-static int dax_region_add_resource(struct dax_region *dax_region,
-				   struct dax_extent *dax_ext,
-				   struct region_extent *reg_ext)
-{
-	resource_size_t start = dax_region->res.start + reg_ext->hpa_range.start;
-	resource_size_t length = reg_ext->hpa_range.end -
-				 reg_ext->hpa_range.start + 1;
-	struct resource *ext_res;
-
-	dev_dbg(dax_region->dev, "DAX region resource %pr\n", &dax_region->res);
-	ext_res = __request_region(&dax_region->res, start, length, "extent", 0);
-	if (!ext_res) {
-		dev_err(dax_region->dev, "Failed to add region s:%pa l:%pa\n",
-			&start, &length);
-		return -ENOSPC;
-	}
-
-	dax_ext->region = dax_region;
-	dax_ext->res = ext_res;
-	dev_dbg(dax_region->dev, "Extent add resource %pr\n", ext_res);
-
-	return 0;
-}
-
 static int __cxl_dax_region_add_extent(struct dax_region *dax_region,
 				       struct region_extent *reg_ext)
 {
-	struct dax_extent *dax_ext __free(kfree) = NULL;
-	struct device *dev __free(put_device) = get_device(&reg_ext->dev);
-	int rc;
+	struct device *ext_dev = &reg_ext->dev;
+	resource_size_t start, length;
 
 	dev_dbg(dax_region->dev, "Adding extent HPA %#llx - %#llx\n",
 		reg_ext->hpa_range.start, reg_ext->hpa_range.end);
 
-	dax_ext = kzalloc(sizeof(*dax_ext), GFP_KERNEL);
-	if (!dax_ext)
-		return 0;
+	start = dax_region->res.start + reg_ext->hpa_range.start;
+	length = reg_ext->hpa_range.end - reg_ext->hpa_range.start + 1;
 
-	rc = dax_region_add_resource(dax_region, dax_ext, reg_ext);
-	if (rc)
-		return rc;
-
-	return devm_add_action_or_reset(dev, dax_region_rm_resource,
-					no_free_ptr(dax_ext));
+	return dax_region_add_extent(dax_region, ext_dev, start, length);
 }
 
 static int cxl_dax_region_add_extent(struct device *dev, void *data)
@@ -98,13 +48,13 @@ static int cxl_dax_region_notify(struct device *dev,
 	struct cxl_dax_region *cxlr_dax = to_cxl_dax_region(dev);
 	struct dax_region *dax_region = dev_get_drvdata(dev);
 	struct region_extent *reg_ext = nd->reg_ext;
+	struct dax_extent *dax_ext = dev_get_drvdata(&reg_ext->dev);
 
 	switch (nd->event) {
 	case DCD_ADD_CAPACITY:
 		return __cxl_dax_region_add_extent(dax_region, reg_ext);
 	case DCD_RELEASE_CAPACITY:
-		/* Nothing to be done until extent device is released */
-		return 0;
+		return dax_region_rm_extent(dax_region, dax_ext);
 	case DCD_FORCED_CAPACITY_RELEASE:
 	default:
 		dev_err(&cxlr_dax->dev, "Unknown DC event %d\n", nd->event);
@@ -113,6 +63,57 @@ static int cxl_dax_region_notify(struct device *dev,
 
 	return -ENXIO;
 }
+
+struct match_data {
+	match_cb match_fn;
+	resource_size_t *size_avail;
+};
+
+static int cxl_dax_match_ext(struct device *dev, void *data)
+{
+	struct match_data *md = data;
+
+	if (!is_region_extent(dev))
+		return 0;
+
+	return md->match_fn(dev, md->size_avail);
+}
+
+/**
+ * find_ext - Match Extent callback
+ * @dax_region: region which contains the extent we are looking for
+ * @size_avail: the available size if an extent is found
+ * @match_fn: match function
+ *
+ * Callback to itterate through the child devices of the DAX region calling
+ * match_fn only on those devices which are extents.
+ *
+ * If a match is found match_fn is responsible for locking or reference
+ * counting dax_ext as needed.
+ */
+static struct dax_extent *find_ext(struct dax_region *dax_region,
+				    resource_size_t *size_avail,
+				    match_cb match_fn)
+{
+	struct dax_extent *dax_ext;
+	struct device *ext_dev;
+	struct match_data md = {
+		.match_fn = match_fn,
+		.size_avail = size_avail,
+	};
+
+	ext_dev = device_find_child(dax_region->dev, &md, cxl_dax_match_ext);
+
+	if (!ext_dev)
+		return NULL;
+	dax_ext = to_dax_extent(ext_dev);
+	put_device(ext_dev);
+	return dax_ext;
+}
+
+struct dax_reg_sparse_ops sparse_ops = {
+	.find_ext = find_ext,
+};
 
 static int cxl_dax_region_probe(struct device *dev)
 {
@@ -132,7 +133,7 @@ static int cxl_dax_region_probe(struct device *dev)
 		flags |= IORESOURCE_DAX_SPARSE_CAP;
 
 	dax_region = alloc_dax_region(dev, cxlr->id, &cxlr_dax->hpa_range, nid,
-				      PMD_SIZE, flags);
+				      PMD_SIZE, flags, &sparse_ops);
 	if (!dax_region)
 		return -ENOMEM;
 
