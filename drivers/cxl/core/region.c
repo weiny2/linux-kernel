@@ -1543,6 +1543,7 @@ int cxl_ed_add_one_extent(struct cxl_endpoint_decoder *cxled,
 static void cxl_ed_rm_dr_extent(struct cxl_region *cxlr,
 				struct dr_extent *dr_extent)
 {
+	cxl_put_dr_ext(dr_extent);
 	cxl_region_notify_extent(cxlr, DCD_RELEASE_CAPACITY, dr_extent);
 }
 

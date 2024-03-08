@@ -645,6 +645,7 @@ void cxl_release_ed_extent(struct cxl_ed_extent *extent);
  * @hpa_range: HPA range of this extent
  * @label: label of the extent
  * @ed_ext: Endpoint decoder extent which backs this extent
+ * @kref: track uses of this extent
  */
 #define DAX_EXTENT_LABEL_LEN 64
 struct dr_extent {
@@ -652,6 +653,7 @@ struct dr_extent {
 	struct range hpa_range;
 	char label[DAX_EXTENT_LABEL_LEN];
 	struct cxl_ed_extent ed_ext;
+	struct kref kref;
 };
 
 int cxl_region_notify_extent(struct cxl_region *cxlr, enum dc_event event,
@@ -661,6 +663,8 @@ int dax_region_create_ext(struct cxl_dax_region *cxlr_dax,
 			  const char *label,
 			  struct range *dpa_range,
 			  struct cxl_endpoint_decoder *cxled);
+int cxl_put_dr_ext(struct dr_extent *dr_extent);
+int cxl_get_dr_ext_not_zero(struct dr_extent *dr_extent);
 
 bool is_dr_extent(struct device *dev);
 #define to_dr_extent(dev) container_of(dev, struct dr_extent, dev)

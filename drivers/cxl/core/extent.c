@@ -81,6 +81,26 @@ static void dr_extent_unregister(void *ext)
 	device_unregister(&dr_extent->dev);
 }
 
+int cxl_get_dr_ext_not_zero(struct dr_extent *dr_ext)
+{
+	return kref_get_unless_zero(&dr_ext->kref);
+}
+EXPORT_SYMBOL_NS_GPL(cxl_get_dr_ext_not_zero, CXL);
+
+static void dr_ext_release(struct kref *kref)
+{
+	struct dr_extent *dr_ext = container_of(kref, struct dr_extent, kref);
+	struct device *region_dev = dr_ext->dev.parent;
+
+	devm_release_action(region_dev, dr_extent_unregister, dr_ext);
+}
+
+int cxl_put_dr_ext(struct dr_extent *dr_ext)
+{
+	return kref_put(&dr_ext->kref, dr_ext_release);
+}
+EXPORT_SYMBOL_NS_GPL(cxl_put_dr_ext, CXL);
+
 int dax_region_create_ext(struct cxl_dax_region *cxlr_dax,
 			  struct range *hpa_range,
 			  const char *label,
@@ -102,6 +122,7 @@ int dax_region_create_ext(struct cxl_dax_region *cxlr_dax,
 	dr_extent->hpa_range = *hpa_range;
 	dr_extent->ed_ext.dpa_range = *dpa_range;
 	dr_extent->ed_ext.cxled = cxled;
+	kref_init(&dr_extent->kref);
 	snprintf(dr_extent->label, DAX_EXTENT_LABEL_LEN, "%s", label);
 
 	dev = &dr_extent->dev;

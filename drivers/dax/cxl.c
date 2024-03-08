@@ -50,6 +50,57 @@ static int dax_region_add_resource(struct dax_region *dax_region,
 	return 0;
 }
 
+static int get_dax_ext_not_zero(struct dax_extent *dax_ext)
+{
+	struct dr_extent *dr_ext = dax_ext->private_data;
+
+	return cxl_get_dr_ext_not_zero(dr_ext);
+}
+
+static int put_dax_ext(struct dax_extent *dax_ext)
+{
+	struct dr_extent *dr_ext = dax_ext->private_data;
+
+	return cxl_put_dr_ext(dr_ext);
+}
+
+static int match_avail_size_extent(struct device *dev, void *data)
+{
+	resource_size_t *size_avail = data;
+	resource_size_t extent_max;
+	struct dax_extent *dax_ext;
+
+	if (!is_dr_extent(dev))
+		return 0;
+
+	dax_ext = dev_get_drvdata(dev);
+	extent_max = dax_extent_avail_size(dax_ext->res);
+	if (extent_max && get_dax_ext_not_zero(dax_ext)) {
+		*size_avail = extent_max;
+		return 1;
+	}
+
+	return 0;
+}
+
+static struct dax_extent *get_dax_ext(struct dax_region *dax_region,
+				      resource_size_t *size_avail)
+{
+	struct device *ext_dev;
+
+	*size_avail = 0;
+
+	ext_dev = device_find_child(dax_region->dev, size_avail,
+				    match_avail_size_extent);
+
+	if (!ext_dev)
+		return NULL;
+
+	/* kref held */
+	put_device(ext_dev);
+	return dev_get_drvdata(ext_dev);
+}
+
 static int __cxl_dax_region_add_extent(struct dax_region *dax_region,
 				       struct dr_extent *dr_extent)
 {
@@ -64,10 +115,13 @@ static int __cxl_dax_region_add_extent(struct dax_region *dax_region,
 	if (!dax_ext)
 		return 0;
 
+	dax_ext->private_data = dr_extent;
+
 	rc = dax_region_add_resource(dax_region, dax_ext, dr_extent);
 	if (rc)
 		return rc;
 
+	dev_set_drvdata(&dr_extent->dev, dax_ext);
 	return devm_add_action_or_reset(dev, dax_region_rm_resource,
 					no_free_ptr(dax_ext));
 }
@@ -114,6 +168,11 @@ static int cxl_dax_region_notify(struct device *dev,
 	return -ENXIO;
 }
 
+struct dax_reg_sparse_ops sparse_ops = {
+	.get_ext = get_dax_ext,
+	.put_ext = put_dax_ext,
+};
+
 static int cxl_dax_region_probe(struct device *dev)
 {
 	struct cxl_dax_region *cxlr_dax = to_cxl_dax_region(dev);
@@ -132,7 +191,7 @@ static int cxl_dax_region_probe(struct device *dev)
 		flags |= IORESOURCE_DAX_SPARSE_CAP;
 
 	dax_region = alloc_dax_region(dev, cxlr->id, &cxlr_dax->hpa_range, nid,
-				      PMD_SIZE, flags);
+				      PMD_SIZE, flags, &sparse_ops);
 	if (!dax_region)
 		return -ENOMEM;
 
