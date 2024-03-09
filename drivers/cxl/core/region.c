@@ -1454,7 +1454,51 @@ static int cxl_region_validate_position(struct cxl_region *cxlr,
 int cxl_ed_add_one_extent(struct cxl_endpoint_decoder *cxled,
 			  struct cxl_dc_extent *dc_extent)
 {
-	return 0;
+	struct cxl_region *cxlr = cxled->cxld.region;
+	struct range ext_dpa_range, ext_hpa_range;
+	struct device *dev = &cxlr->dev;
+	resource_size_t dpa_offset, hpa;
+
+	/*
+	 * Interleave ways == 1 means this coresponds to a 1:1 mapping between
+	 * device extents and DAX region extents.  Future implementations
+	 * should hold DC region extents here until the full dax region extent
+	 * can be realized.
+	 */
+	if (cxlr->params.interleave_ways != 1) {
+		dev_err(dev, "Interleaving DC not supported\n");
+		return -EINVAL;
+	}
+
+	ext_dpa_range = (struct range) {
+		.start = le64_to_cpu(dc_extent->start_dpa),
+		.end = le64_to_cpu(dc_extent->start_dpa) +
+			le64_to_cpu(dc_extent->length) - 1,
+	};
+
+	dev_dbg(dev, "Adding DC extent DPA %#llx - %#llx\n",
+		ext_dpa_range.start, ext_dpa_range.end);
+
+	/*
+	 * Without interleave...
+	 * HPA offset == DPA offset
+	 * ... but do the math anyway
+	 */
+	dpa_offset = ext_dpa_range.start - cxled->dpa_res->start;
+	hpa = cxled->cxld.hpa_range.start + dpa_offset;
+
+	ext_hpa_range = (struct range) {
+		.start = hpa - cxlr->cxlr_dax->hpa_range.start,
+		.end = ext_hpa_range.start + range_len(&ext_dpa_range) - 1,
+	};
+
+	dev_dbg(dev, "Realizing region extent at HPA %#llx - %#llx\n",
+		ext_hpa_range.start, ext_hpa_range.end);
+
+	return dax_region_create_ext(cxlr->cxlr_dax, &ext_hpa_range,
+				     (char *)dc_extent->tag,
+				     &ext_dpa_range,
+				     cxled);
 }
 
 static int cxl_region_attach_position(struct cxl_region *cxlr,
@@ -2684,6 +2728,7 @@ static struct cxl_dax_region *cxl_dax_region_alloc(struct cxl_region *cxlr)
 
 	dev = &cxlr_dax->dev;
 	cxlr_dax->cxlr = cxlr;
+	cxlr->cxlr_dax = cxlr_dax;
 	device_initialize(dev);
 	lockdep_set_class(&dev->mutex, &cxl_dax_region_key);
 	device_set_pm_not_required(dev);
@@ -2799,7 +2844,10 @@ static int cxl_region_read_extents(struct cxl_region *cxlr)
 static void cxlr_dax_unregister(void *_cxlr_dax)
 {
 	struct cxl_dax_region *cxlr_dax = _cxlr_dax;
+	struct cxl_region *cxlr = cxlr_dax->cxlr;
 
+	cxlr->cxlr_dax = NULL;
+	cxlr_dax->cxlr = NULL;
 	device_unregister(&cxlr_dax->dev);
 }
 
