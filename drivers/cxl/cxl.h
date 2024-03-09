@@ -567,6 +567,7 @@ struct cxl_region_params {
  * @type: Endpoint decoder target type
  * @cxl_nvb: nvdimm bridge for coordinating @cxlr_pmem setup / shutdown
  * @cxlr_pmem: (for pmem regions) cached copy of the nvdimm bridge
+ * @cxlr_dax: (for DC regions) cached copy of CXL DAX bridge
  * @flags: Region state flags
  * @params: active + config params for the region
  * @coord: QoS access coordinates for the region
@@ -579,6 +580,7 @@ struct cxl_region {
 	enum cxl_decoder_type type;
 	struct cxl_nvdimm_bridge *cxl_nvb;
 	struct cxl_pmem_region *cxlr_pmem;
+	struct cxl_dax_region *cxlr_dax;
 	unsigned long flags;
 	struct cxl_region_params params;
 	struct access_coordinate coord[ACCESS_COORDINATE_MAX];
@@ -623,6 +625,41 @@ struct cxl_dax_region {
 	struct cxl_region *cxlr;
 	struct range hpa_range;
 };
+
+/**
+ * struct cxl_ed_extent - Extent within an endpoint decoder
+ * @dpa_range: DPA range this extent covers within the decoder
+ * @cxled: reference to the endpoint decoder
+ */
+struct cxl_ed_extent {
+	struct range dpa_range;
+	struct cxl_endpoint_decoder *cxled;
+};
+void cxl_release_ed_extent(struct cxl_ed_extent *extent);
+
+/**
+ * struct region_extent - CXL DAX region extent
+ * @dev: device representing this extent
+ * @hpa_range: HPA range of this extent
+ * @label: label of the extent
+ * @ed_ext: Endpoint decoder extent which backs this extent
+ */
+#define DAX_EXTENT_LABEL_LEN 64
+struct region_extent {
+	struct device dev;
+	struct range hpa_range;
+	char label[DAX_EXTENT_LABEL_LEN];
+	struct cxl_ed_extent ed_ext;
+};
+
+int dax_region_create_ext(struct cxl_dax_region *cxlr_dax,
+			  struct range *hpa_range,
+			  const char *label,
+			  struct range *dpa_range,
+			  struct cxl_endpoint_decoder *cxled);
+
+bool is_region_extent(struct device *dev);
+#define to_region_extent(dev) container_of(dev, struct region_extent, dev)
 
 /**
  * struct cxl_port - logical collection of upstream port devices and

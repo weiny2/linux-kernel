@@ -1025,6 +1025,32 @@ free_pl:
 	return rc;
 }
 
+static int cxl_send_dc_cap_response(struct cxl_memdev_state *mds,
+				    struct range *extent, int opcode)
+{
+	struct cxl_mbox_cmd mbox_cmd;
+	size_t size;
+
+	struct cxl_mbox_dc_response *dc_res __free(kfree);
+	size = struct_size(dc_res, extent_list, 1);
+	dc_res = kzalloc(size, GFP_KERNEL);
+	if (!dc_res)
+		return -ENOMEM;
+
+	dc_res->extent_list[0].dpa_start = cpu_to_le64(extent->start);
+	memset(dc_res->extent_list[0].reserved, 0, 8);
+	dc_res->extent_list[0].length = cpu_to_le64(range_len(extent));
+	dc_res->extent_list_size = cpu_to_le32(1);
+
+	mbox_cmd = (struct cxl_mbox_cmd) {
+		.opcode = opcode,
+		.size_in = size,
+		.payload_in = dc_res,
+	};
+
+	return cxl_internal_send_cmd(mds, &mbox_cmd);
+}
+
 static struct cxl_memdev_state *
 cxled_to_mds(struct cxl_endpoint_decoder *cxled)
 {
@@ -1033,6 +1059,23 @@ cxled_to_mds(struct cxl_endpoint_decoder *cxled)
 
 	return container_of(cxlds, struct cxl_memdev_state, cxlds);
 }
+
+void cxl_release_ed_extent(struct cxl_ed_extent *extent)
+{
+	struct cxl_endpoint_decoder *cxled = extent->cxled;
+	struct cxl_memdev_state *mds = cxled_to_mds(cxled);
+	struct device *dev = mds->cxlds.dev;
+	int rc;
+
+	dev_dbg(dev, "Releasing DC extent DPA %#llx - %#llx\n",
+		extent->dpa_range.start, extent->dpa_range.end);
+
+	rc = cxl_send_dc_cap_response(mds, &extent->dpa_range, CXL_MBOX_OP_RELEASE_DC);
+	if (rc)
+		dev_dbg(dev, "Failed to respond releasing extent DPA %#llx - %#llx; %d\n",
+			extent->dpa_range.start, extent->dpa_range.end, rc);
+}
+EXPORT_SYMBOL_NS_GPL(cxl_release_ed_extent, CXL);
 
 static void cxl_mem_get_records_log(struct cxl_memdev_state *mds,
 				    enum cxl_event_log_type type)
