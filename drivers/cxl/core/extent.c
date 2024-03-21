@@ -81,6 +81,14 @@ static void region_extent_unregister(void *ext)
 	device_unregister(&reg_ext->dev);
 }
 
+void dax_reg_ext_release(struct region_extent *reg_ext)
+{
+	struct device *region_dev = reg_ext->dev.parent;
+
+	devm_release_action(region_dev, region_extent_unregister, reg_ext);
+}
+EXPORT_SYMBOL_NS_GPL(dax_reg_ext_release, CXL);
+
 int dax_region_create_ext(struct cxl_dax_region *cxlr_dax,
 			  struct range *hpa_range,
 			  const char *label,

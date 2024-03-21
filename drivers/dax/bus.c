@@ -236,10 +236,31 @@ int dax_region_add_extent(struct dax_region *dax_region, struct device *ext_dev,
 	if (rc)
 		return rc;
 
-	return devm_add_action_or_reset(ext_dev, dax_region_release_extent,
+	/* Assume the devm action will be configured without error */
+	dev_set_drvdata(ext_dev, dax_ext);
+	rc = devm_add_action_or_reset(ext_dev, dax_region_release_extent,
 					no_free_ptr(dax_ext));
+	if (rc)
+		dev_set_drvdata(ext_dev, NULL);
+	return rc;
 }
 EXPORT_SYMBOL_GPL(dax_region_add_extent);
+
+int dax_region_rm_extent(struct dax_region *dax_region,
+			 struct device *ext_dev)
+{
+	struct dax_extent *dax_ext;
+
+	guard(rwsem_write)(&dax_region_rwsem);
+
+	dax_ext = dev_get_drvdata(ext_dev);
+	if (!dax_ext || dax_ext->use_cnt == 0)
+		return 0; /* extent not in use */
+
+	dax_ext->invalid = true;
+	return -EINVAL;
+}
+EXPORT_SYMBOL_GPL(dax_region_rm_extent);
 
 bool static_dev_dax(struct dev_dax *dev_dax)
 {
@@ -354,19 +375,44 @@ static ssize_t region_align_show(struct device *dev,
 static struct device_attribute dev_attr_region_align =
 		__ATTR(align, 0400, region_align_show, NULL);
 
+#define for_each_extent_resource(extent, res) \
+	for (res = (extent)->child; res; res = res->sibling)
+
+unsigned long long
+dax_extent_avail_size(struct resource *ext_res)
+{
+	unsigned long long rc;
+	struct resource *used_res;
+
+	rc = resource_size(ext_res);
+	for_each_extent_resource(ext_res, used_res)
+		rc -= resource_size(used_res);
+	return rc;
+}
+EXPORT_SYMBOL_GPL(dax_extent_avail_size);
+
 #define for_each_dax_region_resource(dax_region, res) \
 	for (res = (dax_region)->res.child; res; res = res->sibling)
 
 static unsigned long long dax_region_avail_size(struct dax_region *dax_region)
 {
-	resource_size_t size = resource_size(&dax_region->res);
+	resource_size_t size;
 	struct resource *res;
 
 	WARN_ON_ONCE(!rwsem_is_locked(&dax_region_rwsem));
 
-	if (is_sparse(dax_region))
-		return 0;
+	if (is_sparse(dax_region)) {
+		/*
+		 * Children of a sparse region represent available space not
+		 * used space.
+		 */
+		size = 0;
+		for_each_dax_region_resource(dax_region, res)
+			size += dax_extent_avail_size(res);
+		return size;
+	}
 
+	size = resource_size(&dax_region->res);
 	for_each_dax_region_resource(dax_region, res)
 		size -= resource_size(res);
 	return size;
@@ -507,15 +553,26 @@ EXPORT_SYMBOL_GPL(kill_dev_dax);
 static void trim_dev_dax_range(struct dev_dax *dev_dax)
 {
 	int i = dev_dax->nr_range - 1;
-	struct range *range = &dev_dax->ranges[i].range;
+	struct dev_dax_range *dev_range = &dev_dax->ranges[i];
+	struct range *range = &dev_range->range;
 	struct dax_region *dax_region = dev_dax->region;
+	struct resource *res = &dax_region->res;
 
 	WARN_ON_ONCE(!rwsem_is_locked(&dax_region_rwsem));
 	dev_dbg(&dev_dax->dev, "delete range[%d]: %#llx:%#llx\n", i,
 		(unsigned long long)range->start,
 		(unsigned long long)range->end);
 
-	__release_region(&dax_region->res, range->start, range_len(range));
+	if (dev_range->dax_ext) {
+		res = dev_range->dax_ext->res;
+		dev_dbg(&dev_dax->dev, "Trim sparse extent %pr\n", res);
+	}
+
+	__release_region(res, range->start, range_len(range));
+
+	if (dev_range->dax_ext)
+		dev_range->dax_ext->use_cnt--;
+
 	if (--dev_dax->nr_range == 0) {
 		kfree(dev_dax->ranges);
 		dev_dax->ranges = NULL;
@@ -711,7 +768,7 @@ static void dax_region_unregister(void *region)
 
 struct dax_region *alloc_dax_region(struct device *parent, int region_id,
 		struct range *range, int target_node, unsigned int align,
-		unsigned long flags)
+		unsigned long flags, struct dax_reg_sparse_ops *sparse_ops)
 {
 	struct dax_region *dax_region;
 
@@ -729,12 +786,16 @@ struct dax_region *alloc_dax_region(struct device *parent, int region_id,
 			|| !IS_ALIGNED(range_len(range), align))
 		return NULL;
 
+	if (!sparse_ops && (flags & IORESOURCE_DAX_SPARSE_CAP))
+		return NULL;
+
 	dax_region = kzalloc(sizeof(*dax_region), GFP_KERNEL);
 	if (!dax_region)
 		return NULL;
 
 	dev_set_drvdata(parent, dax_region);
 	kref_init(&dax_region->kref);
+	dax_region->sparse_ops = sparse_ops;
 	dax_region->id = region_id;
 	dax_region->align = align;
 	dax_region->dev = parent;
@@ -929,7 +990,8 @@ static int devm_register_dax_mapping(struct dev_dax *dev_dax, int range_id)
 }
 
 static int alloc_dev_dax_range(struct resource *parent, struct dev_dax *dev_dax,
-			       u64 start, resource_size_t size)
+			       u64 start, resource_size_t size,
+			       struct dax_extent *dax_ext)
 {
 	struct device *dev = &dev_dax->dev;
 	struct dev_dax_range *ranges;
@@ -968,6 +1030,7 @@ static int alloc_dev_dax_range(struct resource *parent, struct dev_dax *dev_dax,
 			.start = alloc->start,
 			.end = alloc->end,
 		},
+		.dax_ext = dax_ext,
 	};
 
 	dev_dbg(dev, "alloc range[%d]: %pa:%pa\n", dev_dax->nr_range - 1,
@@ -1050,7 +1113,8 @@ static int dev_dax_shrink(struct dev_dax *dev_dax, resource_size_t size)
 	int i;
 
 	for (i = dev_dax->nr_range - 1; i >= 0; i--) {
-		struct range *range = &dev_dax->ranges[i].range;
+		struct dev_dax_range *dev_range = &dev_dax->ranges[i];
+		struct range *range = &dev_range->range;
 		struct dax_mapping *mapping = dev_dax->ranges[i].mapping;
 		struct resource *adjust = NULL, *res;
 		resource_size_t shrink;
@@ -1066,12 +1130,21 @@ static int dev_dax_shrink(struct dev_dax *dev_dax, resource_size_t size)
 			continue;
 		}
 
-		for_each_dax_region_resource(dax_region, res)
-			if (strcmp(res->name, dev_name(dev)) == 0
-					&& res->start == range->start) {
-				adjust = res;
-				break;
-			}
+		if (dev_range->dax_ext) {
+			for_each_extent_resource(dev_range->dax_ext->res, res)
+				if (strcmp(res->name, dev_name(dev)) == 0
+						&& res->start == range->start) {
+					adjust = res;
+					break;
+				}
+		} else {
+			for_each_dax_region_resource(dax_region, res)
+				if (strcmp(res->name, dev_name(dev)) == 0
+						&& res->start == range->start) {
+					adjust = res;
+					break;
+				}
+		}
 
 		if (dev_WARN_ONCE(dev, !adjust || i != dev_dax->nr_range - 1,
 					"failed to find matching resource\n"))
@@ -1109,19 +1182,21 @@ static bool adjust_ok(struct dev_dax *dev_dax, struct resource *res)
 }
 
 /**
- * dev_dax_resize_static - Expand the device into the unused portion of the
- * region. This may involve adjusting the end of an existing resource, or
- * allocating a new resource.
+ * __dev_dax_resize - Expand the device into the unused portion of the region.
+ * This may involve adjusting the end of an existing resource, or allocating a
+ * new resource.
  *
  * @parent: parent resource to allocate this range in
  * @dev_dax: DAX device to be expanded
  * @to_alloc: amount of space to alloc; must be <= space available in @parent
+ * @dax_ext: if sparse; the extent containing parent
  *
  * Return the amount of space allocated or -ERRNO on failure
  */
-static ssize_t dev_dax_resize_static(struct resource *parent,
-				     struct dev_dax *dev_dax,
-				     resource_size_t to_alloc)
+static ssize_t __dev_dax_resize(struct resource *parent,
+				struct dev_dax *dev_dax,
+				resource_size_t to_alloc,
+				struct dax_extent *dax_ext)
 {
 	struct resource *res, *first;
 	int rc;
@@ -1129,7 +1204,8 @@ static ssize_t dev_dax_resize_static(struct resource *parent,
 	first = parent->child;
 	if (!first) {
 		rc = alloc_dev_dax_range(parent, dev_dax,
-					   parent->start, to_alloc);
+					   parent->start, to_alloc,
+					   dax_ext);
 		if (rc)
 			return rc;
 		return to_alloc;
@@ -1143,7 +1219,8 @@ static ssize_t dev_dax_resize_static(struct resource *parent,
 		if (res == first && res->start > parent->start) {
 			alloc = min(res->start - parent->start, to_alloc);
 			rc = alloc_dev_dax_range(parent, dev_dax,
-						 parent->start, alloc);
+						 parent->start, alloc,
+						 dax_ext);
 			if (rc)
 				return rc;
 			return alloc;
@@ -1167,7 +1244,8 @@ static ssize_t dev_dax_resize_static(struct resource *parent,
 				return rc;
 			return alloc;
 		}
-		rc = alloc_dev_dax_range(parent, dev_dax, res->end + 1, alloc);
+		rc = alloc_dev_dax_range(parent, dev_dax, res->end + 1, alloc,
+					 dax_ext);
 		if (rc)
 			return rc;
 		return alloc;
@@ -1176,6 +1254,56 @@ static ssize_t dev_dax_resize_static(struct resource *parent,
 	/* available was already calculated and should never be an issue */
 	dev_WARN_ONCE(&dev_dax->dev, 1, "space not found?");
 	return 0;
+}
+
+static ssize_t dev_dax_resize_static(struct dax_region *dax_region,
+				     struct dev_dax *dev_dax,
+				     resource_size_t to_alloc)
+{
+	return __dev_dax_resize(&dax_region->res, dev_dax, to_alloc, NULL);
+}
+
+static int dax_ext_match_avail_size(struct device *dev, resource_size_t *size_avail)
+{
+	resource_size_t extent_max;
+	struct dax_extent *dax_ext;
+
+	dax_ext = dev_get_drvdata(dev);
+	if (!dax_ext || dax_ext->invalid)
+		return 0;
+
+	extent_max = dax_extent_avail_size(dax_ext->res);
+	if (!extent_max)
+		return 0;
+
+	*size_avail = extent_max;
+	dax_ext->use_cnt++;
+	return 1;
+}
+
+static ssize_t dev_dax_resize_sparse(struct dax_region *dax_region,
+				     struct dev_dax *dev_dax,
+				     resource_size_t to_alloc)
+{
+	struct dax_extent *dax_ext;
+	resource_size_t extent_max;
+	struct device *ext_dev;
+	ssize_t alloc;
+
+	ext_dev = dax_region->sparse_ops->find_ext(dax_region, &extent_max,
+						   dax_ext_match_avail_size);
+	if (!ext_dev)
+		return -ENOSPC;
+
+	dax_ext = dev_get_drvdata(ext_dev);
+	if (!dax_ext)
+		return -ENOSPC;
+
+	to_alloc = min(extent_max, to_alloc);
+	alloc = __dev_dax_resize(dax_ext->res, dev_dax, to_alloc, dax_ext);
+	if (alloc < 0)
+		dax_ext->use_cnt--;
+	return alloc;
 }
 
 static ssize_t dev_dax_resize(struct dax_region *dax_region,
@@ -1201,7 +1329,10 @@ static ssize_t dev_dax_resize(struct dax_region *dax_region,
 		return -ENXIO;
 
 retry:
-	alloc = dev_dax_resize_static(&dax_region->res, dev_dax, to_alloc);
+	if (is_sparse(dax_region))
+		alloc = dev_dax_resize_sparse(dax_region, dev_dax, to_alloc);
+	else
+		alloc = dev_dax_resize_static(dax_region, dev_dax, to_alloc);
 	if (alloc <= 0)
 		return alloc;
 	to_alloc -= alloc;
@@ -1311,7 +1442,7 @@ static ssize_t mapping_store(struct device *dev, struct device_attribute *attr,
 	to_alloc = range_len(&r);
 	if (alloc_is_aligned(dev_dax, to_alloc))
 		rc = alloc_dev_dax_range(&dax_region->res, dev_dax, r.start,
-					 to_alloc);
+					 to_alloc, NULL);
 	up_write(&dax_dev_rwsem);
 	up_write(&dax_region_rwsem);
 
@@ -1579,8 +1710,14 @@ static struct dev_dax *__devm_create_dev_dax(struct dev_dax_data *data)
 	device_initialize(dev);
 	dev_set_name(dev, "dax%d.%d", dax_region->id, dev_dax->id);
 
+	if (is_sparse(dax_region) && data->size) {
+		dev_err(parent, "Sparse DAX region devices are created initially with 0 size");
+		rc = -EINVAL;
+		goto err_id;
+	}
+
 	rc = alloc_dev_dax_range(&dax_region->res, dev_dax, dax_region->res.start,
-				 data->size);
+				 data->size, NULL);
 	if (rc)
 		goto err_range;
 

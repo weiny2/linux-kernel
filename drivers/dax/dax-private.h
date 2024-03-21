@@ -20,13 +20,32 @@ void dax_bus_exit(void);
  * struct dax_extent - For sparse regions; an active extent
  * @region: dax_region this resources is in
  * @res: resource this extent covers
+ * @invalid: extent is invalid and going away
+ * @use_cnt: count the number of uses of this extent
  */
 struct dax_extent {
 	struct dax_region *region;
 	struct resource *res;
+	bool invalid;
+	unsigned int use_cnt;
 };
 int dax_region_add_extent(struct dax_region *dax_region, struct device *ext_dev,
 			  resource_size_t start, resource_size_t length);
+int dax_region_rm_extent(struct dax_region *dax_region,
+			 struct device *ext_dev);
+unsigned long long dax_extent_avail_size(struct resource *ext_res);
+
+typedef int (*match_cb)(struct device *dev, resource_size_t *size_avail);
+
+/**
+ * struct dax_reg_sparse_ops - Operations for sparse regions
+ * @find_ext: Find the extent matched with match_fn
+ */
+struct dax_reg_sparse_ops {
+	struct device *(*find_ext)(struct dax_region *dax_region,
+				   resource_size_t *size_avail,
+				   match_cb match_fn);
+};
 
 /**
  * struct dax_region - mapping infrastructure for dax devices
@@ -39,6 +58,7 @@ int dax_region_add_extent(struct dax_region *dax_region, struct device *ext_dev,
  * @res: resource tree to track instance allocations
  * @seed: allow userspace to find the first unbound seed device
  * @youngest: allow userspace to find the most recently created device
+ * @sparse_ops: operations required for sparce regions
  */
 struct dax_region {
 	int id;
@@ -50,6 +70,7 @@ struct dax_region {
 	struct resource res;
 	struct device *seed;
 	struct device *youngest;
+	struct dax_reg_sparse_ops *sparse_ops;
 };
 
 struct dax_mapping {
@@ -74,6 +95,7 @@ struct dax_mapping {
  * @pgoff: page offset
  * @range: resource-span
  * @mapping: device to assist in interrogating the range layout
+ * @dax_ext: if not NULL; dax region extent referenced by this range
  */
 struct dev_dax {
 	struct dax_region *region;
@@ -91,6 +113,7 @@ struct dev_dax {
 		unsigned long pgoff;
 		struct range range;
 		struct dax_mapping *mapping;
+		struct dax_extent *dax_ext;
 	} *ranges;
 };
 
