@@ -53,7 +53,7 @@ static int cxl_dax_region_notify(struct device *dev,
 	case DCD_ADD_CAPACITY:
 		return __cxl_dax_region_add_extent(dax_region, reg_ext);
 	case DCD_RELEASE_CAPACITY:
-		return 0;
+		return dax_region_rm_extent(dax_region, &reg_ext->dev);
 	case DCD_FORCED_CAPACITY_RELEASE:
 	default:
 		dev_err(&cxlr_dax->dev, "Unknown DC event %d\n", nd->event);
@@ -62,6 +62,57 @@ static int cxl_dax_region_notify(struct device *dev,
 
 	return -ENXIO;
 }
+
+struct match_data {
+	match_cb match_fn;
+	resource_size_t *size_avail;
+};
+
+static int cxl_dax_match_ext(struct device *dev, void *data)
+{
+	struct match_data *md = data;
+
+	if (!is_region_extent(dev))
+		return 0;
+
+	return md->match_fn(dev, md->size_avail);
+}
+
+/**
+ * find_ext - Match Extent callback
+ * @dax_region: region to search
+ * @size_avail: the available size if an extent is found
+ * @match_fn: match function
+ *
+ * Callback to itterate through the child devices of the DAX region calling
+ * match_fn only on those devices which are extents.
+ *
+ * If a match is found match_fn is responsible for locking or reference
+ * counting dax_ext as needed.
+ */
+static struct device *find_ext(struct dax_region *dax_region,
+			       resource_size_t *size_avail,
+			       match_cb match_fn)
+{
+	struct match_data md = {
+		.match_fn = match_fn,
+		.size_avail = size_avail,
+	};
+	struct device *ext_dev;
+
+	ext_dev = device_find_child(dax_region->dev, &md, cxl_dax_match_ext);
+
+	if (!ext_dev)
+		return NULL;
+
+	/* caller must hold a count on extent data */
+	put_device(ext_dev);
+	return ext_dev;
+}
+
+struct dax_reg_sparse_ops sparse_ops = {
+	.find_ext = find_ext,
+};
 
 static int cxl_dax_region_probe(struct device *dev)
 {
@@ -81,7 +132,7 @@ static int cxl_dax_region_probe(struct device *dev)
 		flags |= IORESOURCE_DAX_SPARSE_CAP;
 
 	dax_region = alloc_dax_region(dev, cxlr->id, &cxlr_dax->hpa_range, nid,
-				      PMD_SIZE, flags);
+				      PMD_SIZE, flags, &sparse_ops);
 	if (!dax_region)
 		return -ENOMEM;
 

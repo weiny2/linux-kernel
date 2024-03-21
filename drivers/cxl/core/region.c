@@ -1695,7 +1695,11 @@ int cxl_ed_add_one_extent(struct cxl_endpoint_decoder *cxled,
 static void cxl_ed_rm_region_extent(struct cxl_region *cxlr,
 				    struct region_extent *reg_ext)
 {
-	cxl_region_notify_extent(cxlr, DCD_RELEASE_CAPACITY, reg_ext);
+	if (cxl_region_notify_extent(cxlr, DCD_RELEASE_CAPACITY, reg_ext))
+		return;
+
+	/* Extent not in use, release it */
+	dax_reg_ext_release(reg_ext);
 }
 
 struct rm_data {
