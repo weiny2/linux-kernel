@@ -327,9 +327,9 @@ Description:
 		memory) range, or Dynamic Capacity (DC) range. The 'mode'
 		attribute emits one of 'ram', 'pmem', 'dcY', 'mixed', or
 		'none'. The 'mixed' indication is for error cases when a
-		decoder straddles the volatile/persistent partition boundary,
-		and 'none' indicates the decoder is not actively decoding, or
-		no DPA allocation policy has been set.
+		decoder straddles partition boundaries, and 'none' indicates
+		the decoder is not actively decoding, or no DPA allocation
+		policy has been set.
 
 		'mode' can be written, when the decoder is in the 'disabled'
 		state, with 'ram', 'pmem', or 'dcY' to set the boundaries for
