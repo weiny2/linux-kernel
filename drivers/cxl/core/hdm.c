@@ -257,7 +257,7 @@ static void devm_cxl_dpa_release(struct cxl_endpoint_decoder *cxled)
 
 static int dc_mode_to_region_index(enum cxl_decoder_mode mode)
 {
-	if (mode < CXL_DECODER_DC0 || CXL_DECODER_DC7 < mode)
+	if (mode < CXL_DECODER_DC0 || mode > CXL_DECODER_DC7)
 		return -EINVAL;
 
 	return mode - CXL_DECODER_DC0;
@@ -447,7 +447,7 @@ int cxl_dpa_set_mode(struct cxl_endpoint_decoder *cxled,
 		if (rc < 0)
 			return rc;
 
-		if (resource_size(&cxlds->dc_res[rc]) == 0) {
+		if (!resource_size(&cxlds->dc_res[rc])) {
 			dev_dbg(dev, "no available dynamic capacity\n");
 			return -ENXIO;
 		}
