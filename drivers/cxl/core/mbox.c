@@ -1123,7 +1123,7 @@ int cxl_dev_state_identify(struct cxl_memdev_state *mds)
 	if (rc < 0)
 		return rc;
 
-	mds->static_cap =
+	mds->static_bytes =
 		le64_to_cpu(id.total_capacity) * CXL_CAPACITY_MULTIPLIER;
 	mds->volatile_only_bytes =
 		le64_to_cpu(id.volatile_capacity) * CXL_CAPACITY_MULTIPLIER;
@@ -1380,11 +1380,11 @@ int cxl_dev_dynamic_capacity_identify(struct cxl_memdev_state *mds)
 
 	} while (mds->nr_dc_region < dc_resp->avail_region_count);
 
-	mds->dynamic_cap =
+	mds->dynamic_bytes =
 		mds->dc_region[mds->nr_dc_region - 1].base +
 		mds->dc_region[mds->nr_dc_region - 1].decode_len -
 		mds->dc_region[0].base;
-	dev_dbg(dev, "Total dynamic capacity: %#llx\n", mds->dynamic_cap);
+	dev_dbg(dev, "Total dynamic capacity: %#llx\n", mds->dynamic_bytes);
 
 	return 0;
 }
@@ -1423,8 +1423,9 @@ int cxl_mem_create_range_info(struct cxl_memdev_state *mds)
 	size_t untenanted_mem;
 	int rc;
 
-	untenanted_mem = mds->dc_region[0].base - mds->static_cap;
-	mds->total_bytes = mds->static_cap + untenanted_mem + mds->dynamic_cap;
+	untenanted_mem = mds->dc_region[0].base - mds->static_bytes;
+	mds->total_bytes = mds->static_bytes + untenanted_mem +
+			   mds->dynamic_bytes;
 
 	if (!cxlds->media_ready) {
 		cxlds->dpa_res = DEFINE_RES_MEM(0, 0);
