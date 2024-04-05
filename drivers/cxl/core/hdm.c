@@ -444,9 +444,6 @@ int cxl_dpa_set_mode(struct cxl_endpoint_decoder *cxled,
 		break;
 	case CXL_DECODER_DC0 ... CXL_DECODER_DC7:
 		rc = dc_mode_to_region_index(mode);
-		if (rc < 0)
-			return rc;
-
 		if (!resource_size(&cxlds->dc_res[rc])) {
 			dev_dbg(dev, "no available dynamic capacity\n");
 			return -ENXIO;
