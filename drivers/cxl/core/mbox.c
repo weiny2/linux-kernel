@@ -897,11 +897,11 @@ static int cxl_validate_extent(struct cxl_memdev_state *mds,
 	return -EINVAL;
 }
 
-static bool cxl_dc_extent_in_ed(struct cxl_endpoint_decoder *cxled,
-				struct cxl_dc_extent *extent)
+static bool cxl_dc_extent_in_endpoint_decoder(struct cxl_endpoint_decoder *cxled,
+					      struct cxl_dc_extent *extent)
 {
-	uint64_t start = le64_to_cpu(extent->start_dpa);
-	uint64_t length = le64_to_cpu(extent->length);
+	u64 start = le64_to_cpu(extent->start_dpa);
+	u64 length = le64_to_cpu(extent->length);
 	struct range ext_range = (struct range){
 		.start = start,
 		.end = start + length - 1,
@@ -1441,8 +1441,8 @@ int cxl_dev_dynamic_capacity_identify(struct cxl_memdev_state *mds)
 }
 EXPORT_SYMBOL_NS_GPL(cxl_dev_dynamic_capacity_identify, CXL);
 
-static int cxl_dev_get_dc_extent_cnt(struct cxl_memdev_state *mds,
-				     unsigned int *extent_gen_num)
+static int cxl_dev_get_dc_extent_count(struct cxl_memdev_state *mds,
+				       unsigned int *extent_gen_num)
 {
 	struct cxl_mbox_get_dc_extent_in get_dc_extent;
 	struct cxl_mbox_get_dc_extent_out dc_extents;
@@ -1536,7 +1536,7 @@ static int cxl_dev_get_dc_extents(struct cxl_endpoint_decoder *cxled,
 			rc = cxl_validate_extent(mds, &dc_extents->extent[i]);
 			if (rc)
 				continue;
-			if (!cxl_dc_extent_in_ed(cxled, &dc_extents->extent[i]))
+			if (!cxl_dc_extent_in_endpoint_decoder(cxled, &dc_extents->extent[i]))
 				continue;
 			rc = cxl_ed_add_one_extent(cxled, &dc_extents->extent[i]);
 			if (rc)
@@ -1572,7 +1572,7 @@ int cxl_read_dc_extents(struct cxl_endpoint_decoder *cxled)
 	}
 
 	do {
-		rc = cxl_dev_get_dc_extent_cnt(mds, &extent_gen_num);
+		rc = cxl_dev_get_dc_extent_count(mds, &extent_gen_num);
 		dev_dbg(mds->cxlds.dev, "Extent count: %d Generation Num: %d\n",
 			rc, extent_gen_num);
 		if (rc <= 0) /* 0 == no records found */
