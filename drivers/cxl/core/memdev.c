@@ -541,7 +541,7 @@ static struct attribute *cxl_memdev_dc_attributes[] = {
 	NULL,
 };
 
-static umode_t cxl_dc_visible(struct kobject *kobj, struct attribute *a, int n)
+static umode_t cxl_memdev_dc_attr_visible(struct kobject *kobj, struct attribute *a, int n)
 {
 	struct device *dev = kobj_to_dev(kobj);
 	struct cxl_memdev *cxlmd = to_cxl_memdev(dev);
@@ -560,6 +560,26 @@ static umode_t cxl_dc_visible(struct kobject *kobj, struct attribute *a, int n)
 
 	return 0;
 }
+
+static bool cxl_memdev_dc_group_visible(struct kobject *kobj)
+{
+	struct device *dev = kobj_to_dev(kobj);
+	struct cxl_memdev *cxlmd = to_cxl_memdev(dev);
+	struct cxl_memdev_state *mds = to_cxl_memdev_state(cxlmd->cxlds);
+
+	/* No DC regions */
+	if (!mds || mds->nr_dc_region == 0)
+		return false;
+	return true;
+}
+
+DEFINE_SYSFS_GROUP_VISIBLE(cxl_memdev_dc);
+
+static struct attribute_group cxl_memdev_dc_group = {
+	.name = "dc",
+	.attrs = cxl_memdev_dc_attributes,
+	.is_visible = SYSFS_GROUP_VISIBLE(cxl_memdev_dc),
+};
 
 static umode_t cxl_memdev_visible(struct kobject *kobj, struct attribute *a,
 				  int n)
@@ -636,18 +656,12 @@ static struct attribute_group cxl_memdev_security_attribute_group = {
 	.is_visible = cxl_memdev_security_visible,
 };
 
-static struct attribute_group cxl_memdev_dc_attribute_group = {
-	.name = "dc",
-	.attrs = cxl_memdev_dc_attributes,
-	.is_visible = cxl_dc_visible,
-};
-
 static const struct attribute_group *cxl_memdev_attribute_groups[] = {
 	&cxl_memdev_attribute_group,
 	&cxl_memdev_ram_attribute_group,
 	&cxl_memdev_pmem_attribute_group,
 	&cxl_memdev_security_attribute_group,
-	&cxl_memdev_dc_attribute_group,
+	&cxl_memdev_dc_group,
 	NULL,
 };
 
