@@ -528,6 +528,10 @@ REGION_SIZE_ATTR_RO(5);
 REGION_SIZE_ATTR_RO(6);
 REGION_SIZE_ATTR_RO(7);
 
+/*
+ * RegionX attributes must be listed in order and first in this array to
+ * support the visbility checks.
+ */
 static struct attribute *cxl_memdev_dc_attributes[] = {
 	&dev_attr_region0_size.attr,
 	&dev_attr_region1_size.attr,
@@ -554,7 +558,10 @@ static umode_t cxl_memdev_dc_attr_visible(struct kobject *kobj, struct attribute
 	if (a == &dev_attr_region_count.attr)
 		return a->mode;
 
-	/* Show only the regions supported */
+	/*
+	 * Show only the regions supported, regionX attributes are first in the
+	 * list
+	 */
 	if (n < mds->nr_dc_region)
 		return a->mode;
 

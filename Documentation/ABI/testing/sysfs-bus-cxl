@@ -60,17 +60,15 @@ KernelVersion:	v6.10
 Contact:	linux-cxl@vger.kernel.org
 Description:
 		(RO) Number of Dynamic Capacity (DC) regions supported on the
-		device.  May be 0 if the device does not support Dynamic
-		Capacity.
+		device.
 
 What:		/sys/bus/cxl/devices/memX/dc/regionY_size
 Date:		June, 2024
 KernelVersion:	v6.10
 Contact:	linux-cxl@vger.kernel.org
 Description:
-		(RO) Size of the Dynamic Capacity (DC) region Y.  Only
-		available on devices which support DC and only for those
-		region indexes supported by the device.
+		(RO) Size in bytes of the Dynamic Capacity (DC) region Y.  Only
+		available for those region indexes supported by the device.
 
 What:		/sys/bus/cxl/devices/memX/pmem/qos_class
 Date:		May, 2023
