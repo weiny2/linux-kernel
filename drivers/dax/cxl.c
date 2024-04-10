@@ -28,10 +28,11 @@ static int cxl_dax_region_probe(struct device *dev)
 	if (!dax_region)
 		return -ENOMEM;
 
-	dev_size = range_len(&cxlr_dax->hpa_range);
 	/* Add empty seed dax device */
 	if (cxlr->mode == CXL_REGION_DC)
 		dev_size = 0;
+	else
+		dev_size = range_len(&cxlr_dax->hpa_range);
 
 	data = (struct dev_dax_data) {
 		.dax_region = dax_region,
