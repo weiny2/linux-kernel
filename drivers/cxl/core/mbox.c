@@ -874,26 +874,31 @@ static int cxl_validate_extent(struct cxl_memdev_state *mds,
 			       struct cxl_dc_extent *dc_extent)
 {
 	struct device *dev = mds->cxlds.dev;
-	uint64_t start, len;
-
-	start = le64_to_cpu(dc_extent->start_dpa);
-	len = le64_to_cpu(dc_extent->length);
+	u64 start = le64_to_cpu(dc_extent->start_dpa);
+	u64 length = le64_to_cpu(dc_extent->length);
+	struct range ext_range = (struct range){
+		.start = start,
+		.end = start + length - 1,
+	};
 
 	/* Extents must not cross region boundary's */
 	for (int i = 0; i < mds->nr_dc_region; i++) {
 		struct cxl_dc_region_info *dcr = &mds->dc_region[i];
+		struct range region_range = (struct range) {
+			.start = dcr->base,
+			.end = dcr->base + dcr->decode_len - 1,
+		};
 
-		if (dcr->base <= start &&
-		    (start + len) <= (dcr->base + dcr->decode_len)) {
+		if (range_contains(&region_range, &ext_range)) {
 			dev_dbg(dev, "DC extent DPA %#llx - %#llx (DCR:%d:%#llx)\n",
-				start, start + len - 1, i, start - dcr->base);
+				ext_range.start, ext_range.end, i, start - dcr->base);
 			return 0;
 		}
 	}
 
 	dev_err_ratelimited(dev,
 			    "DC extent DPA %#llx - %#llx is not in any DC region\n",
-			    start, start + len - 1);
+			    ext_range.start, ext_range.end);
 	return -EINVAL;
 }
 
