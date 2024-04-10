@@ -836,8 +836,9 @@ static int cxl_event_config(struct pci_host_bridge *host_bridge,
 
 	cxl_mem_get_event_records(mds, CXLDEV_EVENT_STATUS_ALL);
 
-	dev_dbg(mds->cxlds.dev, "Event config : %d %d\n",
-		native_cxl, cxl_dcd_supported(mds));
+	dev_dbg(mds->cxlds.dev, "Event config : %s DCD %s\n",
+		native_cxl ? "OS" : "BIOS",
+		cxl_dcd_supported(mds) ? "supported" : "not supported");
 
 	return 0;
 }
