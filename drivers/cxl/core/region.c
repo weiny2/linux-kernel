@@ -2488,19 +2488,7 @@ static ssize_t create_dc_region_store(struct device *dev,
 				      struct device_attribute *attr,
 				      const char *buf, size_t len)
 {
-	struct cxl_root_decoder *cxlrd = to_cxl_root_decoder(dev);
-	struct cxl_region *cxlr;
-	int rc, id;
-
-	rc = sscanf(buf, "region%d\n", &id);
-	if (rc != 1)
-		return -EINVAL;
-
-	cxlr = __create_region(cxlrd, CXL_REGION_DC, id);
-	if (IS_ERR(cxlr))
-		return PTR_ERR(cxlr);
-
-	return len;
+	return create_region_store(dev, buf, len, CXL_REGION_DC);
 }
 DEVICE_ATTR_RW(create_dc_region);
 
