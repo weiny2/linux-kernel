@@ -1553,6 +1553,28 @@ static int cxl_region_validate_position(struct cxl_region *cxlr,
 	return 0;
 }
 
+static int extent_check_contains(struct device *dev, void *arg)
+{
+	struct range *new_range = arg;
+	struct region_extent *ext;
+
+	if (!is_region_extent(dev))
+		return 0;
+
+	ext = to_region_extent(dev);
+	return range_contains(&ext->hpa_range, new_range);
+}
+
+static bool extents_contain(struct cxl_dax_region *cxlr_dax,
+			    struct range *hpa_range)
+{
+	struct device *dev __free(put_device) =
+		device_find_child(&cxlr_dax->dev, hpa_range,
+				  extent_check_contains);
+
+	return dev != NULL;
+}
+
 static int extent_check_overlap(struct device *dev, void *arg)
 {
 	struct range *new_range = arg;
@@ -1565,15 +1587,13 @@ static int extent_check_overlap(struct device *dev, void *arg)
 	return range_overlaps(&ext->hpa_range, new_range);
 }
 
-static int extent_overlaps(struct cxl_dax_region *cxlr_dax,
-			   struct range *hpa_range)
+static bool extents_overlap(struct cxl_dax_region *cxlr_dax,
+			    struct range *hpa_range)
 {
 	struct device *dev __free(put_device) =
 		device_find_child(&cxlr_dax->dev, hpa_range, extent_check_overlap);
 
-	if (dev)
-		return -EINVAL;
-	return 0;
+	return dev != NULL;
 }
 
 /* Callers are expected to ensure cxled has been attached to a region */
@@ -1618,7 +1638,10 @@ int cxl_ed_add_one_extent(struct cxl_endpoint_decoder *cxled,
 		.end = ext_hpa_range.start + range_len(&ext_dpa_range) - 1,
 	};
 
-	if (extent_overlaps(cxlr->cxlr_dax, &ext_hpa_range))
+	if (extents_contain(cxlr->cxlr_dax, &ext_hpa_range))
+		return 0;
+
+	if (extents_overlap(cxlr->cxlr_dax, &ext_hpa_range))
 		return -EINVAL;
 
 	dev_dbg(dev, "Realizing region extent at HPA %#llx - %#llx\n",
