@@ -1474,6 +1474,9 @@ static int cxl_dev_get_dc_extent_cnt(struct cxl_memdev_state *mds,
 	return count;
 }
 
+/*
+ * Return -EAGAIN if the extent list changes while reading the full list
+ */
 static int cxl_dev_get_dc_extents(struct cxl_endpoint_decoder *cxled,
 				  unsigned int start_gen_num,
 				  unsigned int exp_cnt)
@@ -1518,13 +1521,13 @@ static int cxl_dev_get_dc_extents(struct cxl_endpoint_decoder *cxled,
 		total_extent_cnt = le32_to_cpu(dc_extents->total_extent_cnt);
 		gen_num = le32_to_cpu(dc_extents->extent_list_num);
 
-		dev_dbg(dev, "Get extent list count:%d generation Num:%d\n",
-			total_extent_cnt, gen_num);
+		dev_dbg(dev, "Got extent list %d-%d of %d generation Num:%d\n",
+			start_index, total_read, total_extent_cnt, gen_num);
 
 		if (gen_num != start_gen_num || exp_cnt != total_extent_cnt) {
 			dev_err(dev, "Possible incomplete extent list; gen %u != %u : cnt %u != %u\n",
 				gen_num, start_gen_num, exp_cnt, total_extent_cnt);
-			return -EIO;
+			return -EAGAIN;
 		}
 
 		for (int i = 0; i < nr_ext ; i++) {
@@ -1560,6 +1563,7 @@ int cxl_read_dc_extents(struct cxl_endpoint_decoder *cxled)
 	struct cxl_memdev_state *mds = cxled_to_mds(cxled);
 	struct device *dev = mds->cxlds.dev;
 	unsigned int extent_gen_num;
+	int retry = 10;
 	int rc;
 
 	if (!cxl_dcd_supported(mds)) {
@@ -1567,13 +1571,17 @@ int cxl_read_dc_extents(struct cxl_endpoint_decoder *cxled)
 		return 0;
 	}
 
-	rc = cxl_dev_get_dc_extent_cnt(mds, &extent_gen_num);
-	dev_dbg(mds->cxlds.dev, "Extent count: %d Generation Num: %d\n",
-		rc, extent_gen_num);
-	if (rc <= 0) /* 0 == no records found */
-		return rc;
+	do {
+		rc = cxl_dev_get_dc_extent_cnt(mds, &extent_gen_num);
+		dev_dbg(mds->cxlds.dev, "Extent count: %d Generation Num: %d\n",
+			rc, extent_gen_num);
+		if (rc <= 0) /* 0 == no records found */
+			return rc;
 
-	return cxl_dev_get_dc_extents(cxled, extent_gen_num, rc);
+		rc = cxl_dev_get_dc_extents(cxled, extent_gen_num, rc);
+	} while (rc == -EAGAIN && retry--);
+
+	return rc;
 }
 EXPORT_SYMBOL_NS_GPL(cxl_read_dc_extents, CXL);
 
