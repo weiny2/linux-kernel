@@ -1700,7 +1700,7 @@ static int cxl_dev_get_dc_extents(struct cxl_endpoint_decoder *cxled,
 		gen_num = le32_to_cpu(dc_extents->extent_list_num);
 
 		dev_dbg(dev, "Got extent list %d-%d of %d generation Num:%d\n",
-			start_index, total_read, total_extent_cnt, gen_num);
+			start_index, total_read - 1, total_extent_cnt, gen_num);
 
 		if (gen_num != start_gen_num || exp_cnt != total_extent_cnt) {
 			dev_err(dev, "Possible incomplete extent list; gen %u != %u : cnt %u != %u\n",
