@@ -4,6 +4,8 @@
 #define _LINUX_CXL_EVENT_H
 
 #include <linux/workqueue_types.h>
+#include <linux/types.h>
+#include <linux/uuid.h>
 
 /*
  * Common Event Record Format
