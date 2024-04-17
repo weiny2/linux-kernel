@@ -719,17 +719,57 @@ static void release_dc_ext(void *md)
 	xa_destroy(&mdata->dc_accepted_exts);
 }
 
+/* Pretend to have some previous accepted extents */
+struct pre_ext_info {
+	u64 offset;
+	u64 length;
+} pre_ext_info[] = {
+	{
+		.offset = SZ_128M,
+		.length = SZ_64M,
+	},
+	{
+		.offset = SZ_256M,
+		.length = SZ_64M,
+	},
+};
+
+static int inject_prev_extents(struct device *dev, u64 base_dpa)
+{
+	int rc;
+
+	dev_dbg(dev, "Adding %ld pre-extents for testing\n",
+		ARRAY_SIZE(pre_ext_info));
+
+	for (int i = 0; i < ARRAY_SIZE(pre_ext_info); i++) {
+		u64 ext_dpa = base_dpa + pre_ext_info[i].offset;
+		u64 ext_len = pre_ext_info[i].length;
+
+		dev_dbg(dev, "Adding pre-extent DPA:%#llx LEN:%#llx\n",
+			ext_dpa, ext_len);
+
+		rc = devm_add_extent(dev, ext_dpa, ext_len, "CXL-TEST");
+		if (rc) {
+			dev_err(dev, "Failed to add pre-extent DPA:%#llx LEN:%#llx; %d\n",
+				ext_dpa, ext_len, rc);
+			return rc;
+		}
+
+		rc = dc_accept_extent(dev, ext_dpa, ext_len);
+		if (rc)
+			return rc;
+	}
+	return 0;
+}
+
 static int cxl_mock_dc_region_setup(struct device *dev)
 {
-#define DUMMY_EXT_OFFSET SZ_256M
-#define DUMMY_EXT_LENGTH SZ_256M
 	struct cxl_mockmem_data *mdata = dev_get_drvdata(dev);
 	u64 base_dpa = BASE_DYNAMIC_CAP_DPA;
 	u32 dsmad_handle = 0xFADE;
-	u64 decode_length = SZ_1G;
+	u64 decode_length = SZ_512M;
 	u64 block_size = SZ_512;
-	/* For testing make this smaller than decode length */
-	u64 length = SZ_1G;
+	u64 length = SZ_512M;
 	int rc;
 
 	mutex_init(&mdata->ext_lock);
@@ -754,20 +794,11 @@ static int cxl_mock_dc_region_setup(struct device *dev)
 		conf->region_dsmad_handle = cpu_to_le32(dsmad_handle);
 		dsmad_handle++;
 
-		/* Pretend to have some previous accepted extents */
-		rc = devm_add_extent(dev, base_dpa + DUMMY_EXT_OFFSET,
-				     DUMMY_EXT_LENGTH, "CXL-TEST");
+		rc = inject_prev_extents(dev, base_dpa);
 		if (rc) {
-			dev_err(dev, "Failed to add extent DC%d DPA:%#llx LEN:%#x; %d\n",
-				i, base_dpa + DUMMY_EXT_OFFSET,
-				DUMMY_EXT_LENGTH, rc);
+			dev_err(dev, "Failed to add pre-extents for DC%d\n", i);
 			return rc;
 		}
-
-		rc = dc_accept_extent(dev, base_dpa + DUMMY_EXT_OFFSET,
-				      DUMMY_EXT_LENGTH);
-		if (rc)
-			return rc;
 
 		base_dpa += decode_length;
 	}
