@@ -1321,6 +1321,7 @@ static int cxl_dc_check(struct device *dev, struct cxl_dc_partition_info *part_a
 	part_array[index].start = le64_to_cpu(dev_part->base);
 	part_array[index].size = le64_to_cpu(dev_part->decode_length);
 	part_array[index].size *= CXL_CAPACITY_MULTIPLIER;
+	part_array[index].handle = le32_to_cpu(dev_part->dsmad_handle) & 0xFF;
 	len = le64_to_cpu(dev_part->length);
 	blk_size = le64_to_cpu(dev_part->block_size);
 
@@ -1453,6 +1454,7 @@ int cxl_dev_dc_identify(struct cxl_mailbox *mbox,
 	/* Return 1st partition */
 	dc_info->start = partitions[0].start;
 	dc_info->size = partitions[0].size;
+	dc_info->handle = partitions[0].handle;
 	dev_dbg(dev, "Returning partition 0 %zu size %zu\n",
 		dc_info->start, dc_info->size);
 
