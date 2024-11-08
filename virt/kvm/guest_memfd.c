@@ -14,7 +14,12 @@ static struct vfsmount *kvm_gmem_mnt;
 
 struct kvm_gmem_inode {
 	u64 flags;
+	unsigned long prepared[];
 };
+
+#define KVM_GMEM_INODE_SIZE(size)                      \
+	struct_size_t(struct kvm_gmem_inode, prepared,  \
+		      DIV_ROUND_UP(size, PAGE_SIZE * BITS_PER_LONG))
 
 struct kvm_gmem {
 	struct kvm *kvm;
@@ -51,18 +56,110 @@ static int __kvm_gmem_prepare_folio(struct kvm *kvm, struct kvm_memory_slot *slo
 	return 0;
 }
 
+/* 
+ * The bitmap of prepared pages has to be accessed atomically, because
+ * preparation is not protected by any guest.  This unfortunately means
+ * that we cannot use regular bitmap operations.
+ *
+ * The logic becomes a bit simpler for set and test, which operate a
+ * folio at a time and therefore can assume that the range is naturally
+ * aligned (meaning that either it is smaller than a word, or it is does
+ * not include fractions of a word).  For punch-hole operations however
+ * there is all the complexity.
+ */
+
+static void bitmap_set_atomic_word(unsigned long *p, unsigned long start, unsigned long len)
+{
+	unsigned long mask_to_set =
+		BITMAP_FIRST_WORD_MASK(start) & BITMAP_LAST_WORD_MASK(start + len);
+
+	atomic_long_or(mask_to_set, (atomic_long_t *)p);
+}
+
+static void bitmap_clear_atomic_word(unsigned long *p, unsigned long start, unsigned long len)
+{
+	unsigned long mask_to_set =
+		BITMAP_FIRST_WORD_MASK(start) & BITMAP_LAST_WORD_MASK(start + len);
+
+	atomic_long_andnot(mask_to_set, (atomic_long_t *)p);
+}
+
+static bool bitmap_test_allset_word(unsigned long *p, unsigned long start, unsigned long len)
+{
+	unsigned long mask_to_set =
+		BITMAP_FIRST_WORD_MASK(start) & BITMAP_LAST_WORD_MASK(start + len);
+
+	return (*p & mask_to_set) == mask_to_set;
+}
+
 static void kvm_gmem_mark_prepared(struct file *file, pgoff_t index, struct folio *folio)
 {
-	folio_mark_uptodate(folio);
+	struct kvm_gmem_inode *i_gmem = file->f_inode->i_private;
+	unsigned long *p = i_gmem->prepared + BIT_WORD(index);
+	unsigned long npages = folio_nr_pages(folio);
+
+	/*  Folios must be naturally aligned */
+	WARN_ON_ONCE(index & (npages - 1));
+	index &= ~(npages - 1);
+
+	/*  Clear page before updating bitmap.  */
+	smp_wmb();
+
+	if (npages < BITS_PER_LONG) {
+		bitmap_set_atomic_word(p, index, npages);
+	} else {
+		BUILD_BUG_ON(BITS_PER_LONG != 64);
+		memset64((u64 *)p, ~0, BITS_TO_LONGS(npages));
+	}
 }
 
 static void kvm_gmem_mark_range_unprepared(struct inode *inode, pgoff_t index, pgoff_t npages)
 {
+	struct kvm_gmem_inode *i_gmem = inode->i_private;
+	unsigned long *p = i_gmem->prepared + BIT_WORD(index);
+
+	index &= BITS_PER_LONG - 1;
+	if (index) {
+		int first_word_count = min(npages, BITS_PER_LONG - index);
+		bitmap_clear_atomic_word(p, index, first_word_count);
+		npages -= first_word_count;
+		p++;
+	}
+
+	if (npages > BITS_PER_LONG) {
+		BUILD_BUG_ON(BITS_PER_LONG != 64);
+		memset64((u64 *)p, 0, BITS_TO_LONGS(npages));
+		p += BIT_WORD(npages);
+		npages &= BITS_PER_LONG - 1;
+	}
+
+	if (npages)
+		bitmap_clear_atomic_word(p++, 0, npages);
 }
 
 static bool kvm_gmem_is_prepared(struct file *file, pgoff_t index, struct folio *folio)
 {
-	return folio_test_uptodate(folio);
+	struct kvm_gmem_inode *i_gmem = file->f_inode->i_private;
+	unsigned long *p = i_gmem->prepared + BIT_WORD(index);
+	unsigned long npages = folio_nr_pages(folio);
+	bool ret;
+
+	/*  Folios must be naturally aligned */
+	WARN_ON_ONCE(index & (npages - 1));
+	index &= ~(npages - 1);
+
+	if (npages < BITS_PER_LONG) {
+		ret = bitmap_test_allset_word(p, index, npages);
+	} else {
+		for (; npages > 0; npages -= BITS_PER_LONG)
+			if (*p++ != ~0)
+				break;
+		ret = (npages == 0);
+	}
+
+	/*  Synchronize with kvm_gmem_mark_prepared().  */
+	smp_rmb();
+	return ret;
 }
 
 /*
@@ -420,8 +517,9 @@ static vm_fault_t kvm_gmem_fault_shared(struct vm_fault *vmf)
 	}
 
 	if (!folio_test_uptodate(folio)) {
-		clear_highpage(folio_page(folio, 0));
-		kvm_gmem_mark_prepared(file, 0, folio);
+/* FIXME IKW this pgoff may be wrong. */
+		clear_highpage(folio_page(folio, vmf->pgoff));
+		kvm_gmem_mark_prepared(file, vmf->pgoff, folio);
 	}
 
 	vmf->page = folio_file_page(folio, vmf->pgoff);
@@ -578,7 +676,7 @@ static struct inode *kvm_gmem_inode_make_secure_inode(const char *name,
 	int err;
 
 	struct kvm_gmem_inode *ginode __free(kfree) =
-			kvzalloc(sizeof(*ginode), GFP_KERNEL);
+			kvzalloc(KVM_GMEM_INODE_SIZE(size), GFP_KERNEL);
 	if (!ginode)
 		return ERR_PTR(-ENOMEM);
 
