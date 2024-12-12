@@ -98,6 +98,8 @@ static void kvm_gmem_mark_prepared(struct file *file, pgoff_t index, int order)
 	unsigned long npages = (1ul << order);
 	unsigned long *p;
 
+	rwsem_assert_held(&file->f_mapping->invalidate_lock);
+
 	/* The index isn't necessarily aligned to the requested order. */
 	index &= ~(npages - 1);
 	p = i_gmem->prepared + BIT_WORD(index);
@@ -117,6 +119,8 @@ static void kvm_gmem_mark_range_unprepared(struct inode *inode, pgoff_t index, p
 {
 	struct kvm_gmem_inode *i_gmem = inode->i_private;
 	unsigned long *p = i_gmem->prepared + BIT_WORD(index);
+
+	rwsem_assert_held(&inode->i_mapping->invalidate_lock);
 
 	index &= BITS_PER_LONG - 1;
 	if (index) {
@@ -143,6 +147,8 @@ static bool kvm_gmem_is_prepared(struct file *file, pgoff_t index, int order)
 	unsigned long npages = (1ul << order);
 	unsigned long *p;
 	bool ret;
+
+	rwsem_assert_held(&file->f_mapping->invalidate_lock);
 
 	/* The index isn't necessarily aligned to the requested order. */
 	index &= ~(npages - 1);
@@ -175,6 +181,8 @@ static int kvm_gmem_prepare_folio(struct kvm *kvm, struct file *file,
 	unsigned long nr_pages, i;
 	pgoff_t index, aligned_index;
 	int r;
+
+	rwsem_assert_held(&file->f_mapping->invalidate_lock);
 
 	index = gfn - slot->base_gfn + slot->gmem.pgoff;
 	nr_pages = (1ull << max_order);
@@ -966,12 +974,16 @@ int kvm_gmem_get_pfn(struct kvm *kvm, struct kvm_memory_slot *slot,
 {
 	pgoff_t index = kvm_gmem_get_index(slot, gfn);
 	struct file *file = kvm_gmem_get_file(slot);
+	struct address_space *mapping;
 	int max_order_local;
 	struct folio *folio;
 	int r = 0;
 
 	if (!file)
 		return -EFAULT;
+
+	mapping = file->f_inode->i_mapping;
+	filemap_invalidate_lock_shared(mapping);
 
 	/* 
 	 * The caller might pass a NULL 'max_order', but internally this
@@ -985,6 +997,7 @@ int kvm_gmem_get_pfn(struct kvm *kvm, struct kvm_memory_slot *slot,
 	folio = __kvm_gmem_get_pfn(file, slot, index, pfn, &max_order_local);
 	if (IS_ERR(folio)) {
 		r = PTR_ERR(folio);
+		filemap_invalidate_unlock_shared(mapping);
 		goto out;
 	}
 
@@ -992,6 +1005,7 @@ int kvm_gmem_get_pfn(struct kvm *kvm, struct kvm_memory_slot *slot,
 		r = kvm_gmem_prepare_folio(kvm, file, slot, gfn, folio, max_order_local);
 
 	folio_unlock(folio);
+	filemap_invalidate_unlock_shared(mapping);
 
 	if (!r)
 		*page = folio_file_page(folio, index);
