@@ -482,6 +482,7 @@ struct cxl_region_params {
 	resource_size_t cache_size;
 };
 
+/* Modes should be in the implied DPA order */
 enum cxl_partition_mode {
 	CXL_PARTMODE_RAM,
 	CXL_PARTMODE_PMEM,
