@@ -12,6 +12,10 @@
 
 static struct vfsmount *kvm_gmem_mnt;
 
+struct kvm_gmem_inode {
+	u64 flags;
+};
+
 struct kvm_gmem {
 	struct kvm *kvm;
 	struct xarray bindings;
@@ -330,7 +334,15 @@ static inline struct file *kvm_gmem_get_file(struct kvm_memory_slot *slot)
 	return get_file_active(&slot->gmem.file);
 }
 
+static void gmem_evict_inode(struct inode *inode)
+{
+	kvfree(inode->i_private);
+	truncate_inode_pages_final(&inode->i_data);
+	clear_inode(inode);
+}
+
 static const struct super_operations kvm_gmem_super_operations = {
+	.evict_inode	= gmem_evict_inode,
 	.statfs         = simple_statfs,
 };
 
@@ -371,9 +383,9 @@ static pgoff_t kvm_gmem_get_index(struct kvm_memory_slot *slot, gfn_t gfn)
 
 static bool kvm_gmem_supports_shared(struct inode *inode)
 {
-	uint64_t flags = (uint64_t)inode->i_private;
+	struct kvm_gmem_inode *ginode = inode->i_private;
 
-	return flags & GUEST_MEMFD_FLAG_SUPPORT_SHARED;
+	return ginode->flags & GUEST_MEMFD_FLAG_SUPPORT_SHARED;
 }
 
 static vm_fault_t kvm_gmem_fault_shared(struct vm_fault *vmf)
@@ -565,6 +577,11 @@ static struct inode *kvm_gmem_inode_make_secure_inode(const char *name,
 	struct inode *inode;
 	int err;
 
+	struct kvm_gmem_inode *ginode __free(kfree) =
+			kvzalloc(sizeof(*ginode), GFP_KERNEL);
+	if (!ginode)
+		return ERR_PTR(-ENOMEM);
+
 	inode = alloc_anon_inode(kvm_gmem_mnt->mnt_sb);
 	if (IS_ERR(inode))
 		return inode;
@@ -575,7 +592,6 @@ static struct inode *kvm_gmem_inode_make_secure_inode(const char *name,
 		return ERR_PTR(err);
 	}
 
-	inode->i_private = (void *)(unsigned long)flags;
 	inode->i_op = &kvm_gmem_iops;
 	inode->i_mapping->a_ops = &kvm_gmem_aops;
 	inode->i_mode |= S_IFREG;
@@ -584,6 +600,9 @@ static struct inode *kvm_gmem_inode_make_secure_inode(const char *name,
 	mapping_set_inaccessible(inode->i_mapping);
 	/*  Unmovable mappings are supposed to be marked unevictable as well. */
 	WARN_ON_ONCE(!mapping_unevictable(inode->i_mapping));
+
+	ginode->flags = flags;
+	inode->i_private = no_free_ptr(ginode);
 
 	return inode;
 }
