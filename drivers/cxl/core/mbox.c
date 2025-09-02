@@ -1453,6 +1453,7 @@ int cxl_dev_dc_identify(struct cxl_mailbox *mbox,
 	/* Read and check all partition information for validity and potential
 	 * debugging; see debug output in cxl_dc_check() */
 	start_partition = 0;
+	num_partitions = 0;
 	do {
 		int rc, i, j;
 
