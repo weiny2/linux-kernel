@@ -243,7 +243,7 @@ int cxl_rm_extent(struct cxl_memdev_state *mds, struct cxl_extent *extent)
 		.end = start_dpa + le64_to_cpu(extent->length) - 1,
 	};
 
-	guard(rwsem_read)(&cxl_region_rwsem);
+	guard(rwsem_read)(&cxl_rwsem.region);
 	cxlr = cxl_dpa_to_region(cxlmd, start_dpa, &cxled);
 	if (!cxlr) {
 		/*
@@ -316,7 +316,7 @@ int cxl_add_extent(struct cxl_memdev_state *mds, struct cxl_extent *extent)
 		.end = start_dpa + le64_to_cpu(extent->length) - 1,
 	};
 
-	guard(rwsem_read)(&cxl_region_rwsem);
+	guard(rwsem_read)(&cxl_rwsem.region);
 	cxlr = cxl_dpa_to_region(cxlmd, start_dpa, &cxled);
 	if (!cxlr)
 		return -ENXIO;
